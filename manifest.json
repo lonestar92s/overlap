@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Flight Match Finder",
+  "version": "1.0",
+  "description": "Shows Premier League matches during your flight dates on Google Flights",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.google.com/travel/flights*",
+    "https://api.football-data.org/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.football-data.org;"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "images/icon.svg"
+  },
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "icons": {
+    "128": "images/icon.svg"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/travel/flights*"
+      ],
+      "js": ["js/content.js"]
+    }
+  ]
+} 
