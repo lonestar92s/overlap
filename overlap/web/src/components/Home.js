@@ -68,7 +68,7 @@ const Home = () => {
                             fontSize: { xs: '2.5rem', md: '3.5rem' }
                         }}
                     >
-                        Find Premier League Matches
+                        Overlap
                         <Typography
                             variant="h2"
                             component="span"
@@ -79,7 +79,7 @@ const Home = () => {
                                 fontWeight: 700
                             }}
                         >
-                            During Your Trip
+                           
                         </Typography>
                     </Typography>
 
