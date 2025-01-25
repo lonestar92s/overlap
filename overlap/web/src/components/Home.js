@@ -1,36 +1,76 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { 
     Container, 
     Paper, 
-    TextField, 
     Button, 
     Typography,
     Box,
-    Grid
+    Grid,
+    CircularProgress
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import format from 'date-fns/format';
 import startOfToday from 'date-fns/startOfToday';
+import isAfter from 'date-fns/isAfter';
+import Matches from './Matches';
 
 const Home = () => {
-    const navigate = useNavigate();
     const [dates, setDates] = useState({
         departure: null,
         return: null
     });
+    const [matches, setMatches] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     const today = startOfToday();
 
-    const handleSearch = () => {
+    const handleDepartureDateChange = (newValue) => {
+        setDates(prev => {
+            // If return date exists and is before the new departure date, clear it
+            const newReturn = prev.return && isAfter(newValue, prev.return) ? null : prev.return;
+            return {
+                departure: newValue,
+                return: newReturn
+            };
+        });
+    };
+
+    const handleReturnDateChange = (newValue) => {
+        setDates(prev => ({
+            ...prev,
+            return: newValue
+        }));
+    };
+
+    const handleSearch = async () => {
         if (dates.departure && dates.return) {
+            setLoading(true);
+            setError(null);
             const formattedDates = {
                 departure: format(dates.departure, 'yyyy-MM-dd'),
                 return: format(dates.return, 'yyyy-MM-dd')
             };
-            navigate('/matches', { state: { dates: formattedDates } });
+            
+            try {
+                const response = await axios.get(
+                    `/v4/competitions/PL/matches?dateFrom=${formattedDates.departure}&dateTo=${formattedDates.return}`,
+                    {
+                        headers: {
+                            'X-Auth-Token': '2a9e46d07879477e9e4b1506101a299f'
+                        }
+                    }
+                );
+                setMatches(response.data.matches || []);
+            } catch (err) {
+                setError('Failed to fetch matches. Please try again.');
+                console.error('Error fetching matches:', err);
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -41,10 +81,7 @@ const Home = () => {
                     minHeight: '100vh',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
                     py: 4,
-                    // background: 'linear-gradient(to bottom, #FF385C, #E61E4D)'
                 }}
             >
                 <Paper 
@@ -54,7 +91,8 @@ const Home = () => {
                         width: '100%',
                         maxWidth: 800,
                         borderRadius: 4,
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        mx: 'auto'
                     }}
                 >
                     <Typography 
@@ -79,7 +117,7 @@ const Home = () => {
                                 fontWeight: 700
                             }}
                         >
-                           
+                            Find Premier League matches during your trip
                         </Typography>
                     </Typography>
 
@@ -92,20 +130,13 @@ const Home = () => {
                                             <DatePicker
                                                 label="Departure Date"
                                                 value={dates.departure}
-                                                onChange={(newValue) => {
-                                                    setDates(prev => ({
-                                                        ...prev,
-                                                        departure: newValue,
-                                                        return: prev.return && newValue && prev.return < newValue ? null : prev.return
-                                                    }));
-                                                }}
+                                                onChange={handleDepartureDateChange}
                                                 minDate={today}
-                                                slotProps={{ 
-                                                    textField: { 
-                                                        fullWidth: true,
-                                                        error: false,
-                                                        helperText: '' 
-                                                    } 
+                                                sx={{ width: '100%' }}
+                                                slotProps={{
+                                                    textField: {
+                                                        helperText: 'Select your departure date'
+                                                    }
                                                 }}
                                             />
                                         </Grid>
@@ -113,20 +144,14 @@ const Home = () => {
                                             <DatePicker
                                                 label="Return Date"
                                                 value={dates.return}
-                                                onChange={(newValue) => {
-                                                    setDates(prev => ({
-                                                        ...prev,
-                                                        return: newValue
-                                                    }));
-                                                }}
+                                                onChange={handleReturnDateChange}
                                                 minDate={dates.departure || today}
                                                 disabled={!dates.departure}
-                                                slotProps={{ 
-                                                    textField: { 
-                                                        fullWidth: true,
-                                                        error: false,
-                                                        helperText: !dates.departure ? 'Select departure date first' : '' 
-                                                    } 
+                                                sx={{ width: '100%' }}
+                                                slotProps={{
+                                                    textField: {
+                                                        helperText: dates.departure ? 'Select your return date' : 'Select departure date first'
+                                                    }
                                                 }}
                                             />
                                         </Grid>
@@ -136,32 +161,68 @@ const Home = () => {
                             <Grid item xs={12}>
                                 <Button
                                     variant="contained"
-                                    color="primary"
-                                    fullWidth
-                                    size="large"
                                     onClick={handleSearch}
-                                    disabled={!dates.departure || !dates.return}
+                                    disabled={!dates.departure || !dates.return || loading}
                                     sx={{
-                                        py: 2,
                                         mt: 2,
+                                        py: 1.5,
+                                        px: 6,
+                                        borderRadius: 2,
                                         backgroundColor: '#FF385C',
-                                        fontSize: '1.1rem',
-                                        fontWeight: 600,
                                         '&:hover': {
                                             backgroundColor: '#E61E4D'
-                                        },
-                                        '&.Mui-disabled': {
-                                            backgroundColor: '#FFB3C0',
-                                            color: '#FFF'
                                         }
                                     }}
                                 >
-                                    Search Matches
+                                    {loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
                                 </Button>
                             </Grid>
                         </Grid>
                     </Box>
                 </Paper>
+
+                {error && (
+                    <Box sx={{ mt: 4, textAlign: 'center' }}>
+                        <Typography color="error">{error}</Typography>
+                    </Box>
+                )}
+
+                {!loading && matches.length === 0 && dates.departure && dates.return && !error && (
+                    <Box sx={{ mt: 4, textAlign: 'center' }}>
+                        <Paper 
+                            elevation={1}
+                            sx={{ 
+                                p: 4, 
+                                borderRadius: 2,
+                                backgroundColor: '#FFF8F9'
+                            }}
+                        >
+                            <Typography 
+                                variant="h6"
+                                sx={{ 
+                                    color: '#666',
+                                    fontWeight: 500
+                                }}
+                            >
+                                No Premier League matches are scheduled between {format(dates.departure, 'MMMM d')} and {format(dates.return, 'MMMM d, yyyy')}.
+                            </Typography>
+                            <Typography 
+                                sx={{ 
+                                    mt: 1,
+                                    color: '#888'
+                                }}
+                            >
+                                Try selecting different dates to find matches.
+                            </Typography>
+                        </Paper>
+                    </Box>
+                )}
+
+                {matches.length > 0 && (
+                    <Box sx={{ mt: 4 }}>
+                        <Matches matches={matches} />
+                    </Box>
+                )}
             </Box>
         </Container>
     );

@@ -1,11 +1,7 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import Home from './components/Home';
-import Matches from './components/Matches';
 
-// Create a theme instance
 const theme = createTheme({
   palette: {
     primary: {
@@ -17,11 +13,12 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: [
-      'Circular',
       '-apple-system',
       'BlinkMacSystemFont',
+      'Segoe UI',
       'Roboto',
       'Helvetica Neue',
+      'Arial',
       'sans-serif',
     ].join(','),
   },
@@ -30,14 +27,6 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           textTransform: 'none',
-          borderRadius: 8,
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
         },
       },
     },
@@ -48,12 +37,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/matches" element={<Matches />} />
-        </Routes>
-      </Router>
+      <Home />
     </ThemeProvider>
   );
 }
