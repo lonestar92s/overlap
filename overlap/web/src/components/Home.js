@@ -7,21 +7,25 @@ import {
     Typography,
     Box,
     Grid,
-    CircularProgress
+    CircularProgress,
+    IconButton
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { TuneRounded } from '@mui/icons-material';
 import format from 'date-fns/format';
 import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
 import Matches from './Matches';
+import LocationAutocomplete from './LocationAutocomplete';
 
 const Home = () => {
     const [dates, setDates] = useState({
         departure: null,
         return: null
     });
+    const [selectedLocation, setSelectedLocation] = useState(null);
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -44,6 +48,10 @@ const Home = () => {
             ...prev,
             return: newValue
         }));
+    };
+
+    const handleLocationChange = (newValue) => {
+        setSelectedLocation(newValue);
     };
 
     const handleSearch = async () => {
@@ -123,6 +131,14 @@ const Home = () => {
 
                     <Box sx={{ mt: 6 }}>
                         <Grid container spacing={3}>
+                            <Grid item xs={12}>
+                                <Box sx={{ mb: 3 }}>
+                                    <LocationAutocomplete
+                                        value={selectedLocation}
+                                        onChange={handleLocationChange}
+                                    />
+                                </Box>
+                            </Grid>
                             <Grid item xs={12}>
                                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                                     <Grid container spacing={2}>
@@ -220,6 +236,22 @@ const Home = () => {
 
                 {matches.length > 0 && (
                     <Box sx={{ mt: 4 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                            <Button
+                                variant="outlined"
+                                startIcon={<TuneRounded />}
+                                sx={{
+                                    borderColor: '#DDD',
+                                    color: '#666',
+                                    '&:hover': {
+                                        borderColor: '#999',
+                                        backgroundColor: '#F5F5F5'
+                                    }
+                                }}
+                            >
+                                Filters
+                            </Button>
+                        </Box>
                         <Matches matches={matches} />
                     </Box>
                 )}
