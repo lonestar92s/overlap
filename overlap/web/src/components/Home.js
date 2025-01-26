@@ -19,6 +19,7 @@ import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
+import Map from './Map';
 
 const Home = () => {
     const [dates, setDates] = useState({
@@ -125,7 +126,7 @@ const Home = () => {
                                 fontWeight: 700
                             }}
                         >
-
+                            Find Premier League matches during your trip
                         </Typography>
                     </Typography>
 
@@ -138,6 +139,7 @@ const Home = () => {
                                         onChange={handleLocationChange}
                                     />
                                 </Box>
+                                <Map />
                             </Grid>
                             <Grid item xs={12}>
                                 <LocalizationProvider dateAdapter={AdapterDateFns}>
