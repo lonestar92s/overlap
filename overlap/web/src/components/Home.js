@@ -125,7 +125,7 @@ const Home = () => {
                                 fontWeight: 700
                             }}
                         >
-                            Find Premier League matches during your trip
+
                         </Typography>
                     </Typography>
 
