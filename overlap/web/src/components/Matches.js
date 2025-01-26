@@ -5,7 +5,6 @@ import {
     CardContent, 
     Typography, 
     Box,
-    Chip,
     Avatar
 } from '@mui/material';
 import { Stadium, AccessTime, LocationOn } from '@mui/icons-material';
@@ -59,18 +58,11 @@ const Matches = ({ matches }) => {
                                         }}
                                     >
                                         <CardContent>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                    <AccessTime sx={{ mr: 1, color: '#666' }} />
-                                                    <Typography variant="subtitle1" color="textSecondary">
-                                                        {format(parseISO(match.utcDate), 'h:mm a')}
-                                                    </Typography>
-                                                </Box>
-                                                <Chip 
-                                                    label={match.status} 
-                                                    size="small"
-                                                    color={match.status === 'SCHEDULED' ? 'primary' : 'default'}
-                                                />
+                                            <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', mb: 3 }}>
+                                                <AccessTime sx={{ mr: 1, color: '#666' }} />
+                                                <Typography variant="subtitle1" color="textSecondary">
+                                                    {format(parseISO(match.utcDate), 'h:mm a')}
+                                                </Typography>
                                             </Box>
                                             
                                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
