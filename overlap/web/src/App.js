@@ -1,8 +1,9 @@
-import React from 'react';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useState } from 'react';
+import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './components/Home';
 import MapPage from './components/MapPage';
+import HeaderNav from './components/HeaderNav';
 
 const theme = createTheme({
   palette: {
@@ -35,15 +36,44 @@ const theme = createTheme({
   },
 });
 
+// Wrapper component to handle state and navigation
+const AppContent = () => {
+  const navigate = useNavigate();
+  const [searchState, setSearchState] = useState({
+    location: null,
+    dates: { departure: null, return: null },
+    matches: []
+  });
+
+  const handleReset = () => {
+    setSearchState({
+      location: null,
+      dates: { departure: null, return: null },
+      matches: []
+    });
+    navigate('/');
+  };
+
+  return (
+    <Box sx={{ minHeight: '100vh' }}>
+      <HeaderNav onHomeClick={handleReset} />
+      <Routes>
+        <Route path="/" element={<Home 
+          searchState={searchState} 
+          setSearchState={setSearchState} 
+        />} />
+        <Route path="/map" element={<MapPage />} />
+      </Routes>
+    </Box>
+  );
+};
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/map" element={<MapPage />} />
-        </Routes>
+        <AppContent />
       </Router>
     </ThemeProvider>
   );

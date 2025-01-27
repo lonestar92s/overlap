@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import axios from 'axios';
 import { 
     Container, 
@@ -7,8 +7,7 @@ import {
     Typography,
     Box,
     Grid,
-    CircularProgress,
-    IconButton
+    CircularProgress
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -22,58 +21,54 @@ import LocationAutocomplete from './LocationAutocomplete';
 import HeaderNav from './HeaderNav';
 // import Map from './Map'; // Keeping import commented for later use
 
-const Home = () => {
-    const [dates, setDates] = useState({
-        departure: null,
-        return: null
-    });
-    const [selectedLocation, setSelectedLocation] = useState(null);
-    const [matches, setMatches] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-
+const Home = ({ searchState, setSearchState }) => {
     const today = startOfToday();
 
-    const handleReset = () => {
-        setDates({
-            departure: null,
-            return: null
-        });
-        setSelectedLocation(null);
-        setMatches([]);
-        setError(null);
-    };
-
     const handleDepartureDateChange = (newValue) => {
-        setDates(prev => {
-            // If return date exists and is before the new departure date, clear it
-            const newReturn = prev.return && isAfter(newValue, prev.return) ? null : prev.return;
-            return {
+        setSearchState(prev => ({
+            ...prev,
+            dates: {
                 departure: newValue,
-                return: newReturn
-            };
-        });
+                return: prev.dates.return && isAfter(newValue, prev.dates.return) ? null : prev.dates.return
+            }
+        }));
     };
 
     const handleReturnDateChange = (newValue) => {
-        setDates(prev => ({
+        setSearchState(prev => ({
             ...prev,
-            return: newValue
+            dates: {
+                ...prev.dates,
+                return: newValue
+            }
         }));
     };
 
     const handleLocationChange = (newValue) => {
-        setSelectedLocation(newValue);
+        setSearchState(prev => ({
+            ...prev,
+            location: newValue
+        }));
     };
 
     const handleSearch = async () => {
-        if (dates.departure && dates.return) {
-            setLoading(true);
-            setError(null);
+        if (searchState.dates.departure && searchState.dates.return) {
+            setSearchState(prev => ({ ...prev, loading: true, error: null }));
             const formattedDates = {
-                departure: format(dates.departure, 'yyyy-MM-dd'),
-                return: format(dates.return, 'yyyy-MM-dd')
+                departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
+                return: format(searchState.dates.return, 'yyyy-MM-dd')
             };
+            
+            // Log search parameters
+            console.log('Performing search with:', {
+                location: searchState.location ? {
+                    city: searchState.location.city,
+                    region: searchState.location.region,
+                    country: searchState.location.country,
+                    coordinates: [searchState.location.lon, searchState.location.lat]
+                } : 'No location selected',
+                dates: formattedDates
+            });
             
             try {
                 const response = await axios.get(
@@ -84,19 +79,35 @@ const Home = () => {
                         }
                     }
                 );
-                setMatches(response.data.matches || []);
+                setSearchState(prev => ({
+                    ...prev,
+                    matches: response.data.matches || [],
+                    loading: false
+                }));
             } catch (err) {
-                setError('Failed to fetch matches. Please try again.');
+                setSearchState(prev => ({
+                    ...prev,
+                    error: 'Failed to fetch matches. Please try again.',
+                    loading: false
+                }));
                 console.error('Error fetching matches:', err);
-            } finally {
-                setLoading(false);
             }
         }
     };
 
     return (
         <>
-            <HeaderNav onHomeClick={handleReset} />
+            <HeaderNav onHomeClick={() => setSearchState(prev => ({
+                ...prev,
+                dates: {
+                    departure: null,
+                    return: null
+                },
+                location: null,
+                matches: [],
+                loading: false,
+                error: null
+            }))} />
             <Container maxWidth="lg">
                 <Box
                     sx={{
@@ -149,7 +160,7 @@ const Home = () => {
                                 <Grid item xs={12}>
                                     <Box sx={{ mb: 3 }}>
                                         <LocationAutocomplete
-                                            value={selectedLocation}
+                                            value={searchState.location}
                                             onChange={handleLocationChange}
                                         />
                                     </Box>
@@ -161,7 +172,7 @@ const Home = () => {
                                             <Grid item xs={12} sm={6}>
                                                 <DatePicker
                                                     label="Departure Date"
-                                                    value={dates.departure}
+                                                    value={searchState.dates.departure}
                                                     onChange={handleDepartureDateChange}
                                                     minDate={today}
                                                     sx={{ width: '100%' }}
@@ -175,14 +186,14 @@ const Home = () => {
                                             <Grid item xs={12} sm={6}>
                                                 <DatePicker
                                                     label="Return Date"
-                                                    value={dates.return}
+                                                    value={searchState.dates.return}
                                                     onChange={handleReturnDateChange}
-                                                    minDate={dates.departure || today}
-                                                    disabled={!dates.departure}
+                                                    minDate={searchState.dates.departure || today}
+                                                    disabled={!searchState.dates.departure}
                                                     sx={{ width: '100%' }}
                                                     slotProps={{
                                                         textField: {
-                                                            helperText: dates.departure ? 'Select your return date' : 'Select departure date first'
+                                                            helperText: searchState.dates.departure ? 'Select your return date' : 'Select departure date first'
                                                         }
                                                     }}
                                                 />
@@ -194,7 +205,7 @@ const Home = () => {
                                     <Button
                                         variant="contained"
                                         onClick={handleSearch}
-                                        disabled={!dates.departure || !dates.return || loading}
+                                        disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
                                         sx={{
                                             mt: 2,
                                             py: 1.5,
@@ -206,20 +217,20 @@ const Home = () => {
                                             }
                                         }}
                                     >
-                                        {loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
+                                        {searchState.loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
                                     </Button>
                                 </Grid>
                             </Grid>
                         </Box>
                     </Paper>
 
-                    {error && (
+                    {searchState.error && (
                         <Box sx={{ mt: 4, textAlign: 'center' }}>
-                            <Typography color="error">{error}</Typography>
+                            <Typography color="error">{searchState.error}</Typography>
                         </Box>
                     )}
 
-                    {!loading && matches.length === 0 && dates.departure && dates.return && !error && (
+                    {!searchState.loading && searchState.matches.length === 0 && searchState.dates.departure && searchState.dates.return && !searchState.error && (
                         <Box sx={{ mt: 4, textAlign: 'center' }}>
                             <Paper 
                                 elevation={1}
@@ -236,7 +247,7 @@ const Home = () => {
                                         fontWeight: 500
                                     }}
                                 >
-                                    No Premier League matches are scheduled between {format(dates.departure, 'MMMM d')} and {format(dates.return, 'MMMM d, yyyy')}.
+                                    No Premier League matches are scheduled between {format(searchState.dates.departure, 'MMMM d')} and {format(searchState.dates.return, 'MMMM d, yyyy')}.
                                 </Typography>
                                 <Typography 
                                     sx={{ 
@@ -250,7 +261,7 @@ const Home = () => {
                         </Box>
                     )}
 
-                    {matches.length > 0 && (
+                    {searchState.matches.length > 0 && (
                         <Box sx={{ mt: 4 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                                 <Button
@@ -268,7 +279,7 @@ const Home = () => {
                                     Filters
                                 </Button>
                             </Box>
-                            <Matches matches={matches} />
+                            <Matches matches={searchState.matches} />
                         </Box>
                     )}
                 </Box>

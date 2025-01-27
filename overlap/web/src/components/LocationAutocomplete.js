@@ -57,9 +57,12 @@ const LocationAutocomplete = ({ value, onChange }) => {
                 const country = nameParts[nameParts.length - 1];
                 const region = nameParts.slice(1, -1).join(', ');
                 
+                // Create a more unique identifier that includes all location components
+                const uniqueId = `${item.place_id}-${item.lat}-${item.lon}-${city}-${region}-${country}`;
+                
                 return {
-                    place_id: `${item.place_id}-${item.lat}-${item.lon}`,
-                    description: `${city}, ${country}`,
+                    place_id: uniqueId,
+                    description: `${city}${region ? `, ${region}` : ''}, ${country}`,
                     structured_formatting: {
                         main_text: city,
                         secondary_text: region ? `${region}, ${country}` : country
@@ -72,9 +75,14 @@ const LocationAutocomplete = ({ value, onChange }) => {
                 };
             });
             
+            // Filter out duplicates based on exact coordinates and full location details
             const uniqueSuggestions = suggestions.filter((suggestion, index, self) =>
                 index === self.findIndex((s) => (
-                    s.lat === suggestion.lat && s.lon === suggestion.lon
+                    s.lat === suggestion.lat && 
+                    s.lon === suggestion.lon &&
+                    s.city === suggestion.city &&
+                    s.region === suggestion.region &&
+                    s.country === suggestion.country
                 ))
             );
             
@@ -162,22 +170,30 @@ const LocationAutocomplete = ({ value, onChange }) => {
                     }}
                 />
             )}
-            renderOption={(props, option) => (
-                <li {...props}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', py: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {option.structured_formatting.main_text}
-                        </Typography>
-                        <Typography 
-                            variant="body2" 
-                            color="text.secondary"
-                            sx={{ fontSize: '0.875rem' }}
-                        >
-                            {option.structured_formatting.secondary_text}
-                        </Typography>
-                    </Box>
-                </li>
-            )}
+            renderOption={(props, option) => {
+                // Extract key from props and create a new props object without it
+                const { key, ...otherProps } = props;
+                return (
+                    <li
+                        {...otherProps}
+                        // Use place_id as key, which now includes all location components
+                        key={option.place_id}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', py: 1 }}>
+                            <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                                {option.structured_formatting.main_text}
+                            </Typography>
+                            <Typography 
+                                variant="body2" 
+                                color="text.secondary"
+                                sx={{ fontSize: '0.875rem' }}
+                            >
+                                {option.structured_formatting.secondary_text}
+                            </Typography>
+                        </Box>
+                    </li>
+                );
+            }}
             loading={loading}
         />
     );
