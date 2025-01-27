@@ -8,12 +8,44 @@ const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 // Set the access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const Map = () => {
+const Map = ({ location }) => {
     const mapContainer = useRef(null);
     const mapInstance = useRef(null);
     const [mapError, setMapError] = useState(null);
     const [loading, setLoading] = useState(true);
     const timeoutRef = useRef(null);
+    const markerRef = useRef(null);
+
+    // Handle location changes
+    useEffect(() => {
+        console.log('Map location update:', location ? {
+            city: location.city,
+            region: location.region,
+            country: location.country,
+            coordinates: [location.lon, location.lat]
+        } : 'No location set');
+
+        if (location && mapInstance.current) {
+            // Remove existing marker if any
+            if (markerRef.current) {
+                markerRef.current.remove();
+            }
+
+            // Add new marker
+            markerRef.current = new mapboxgl.Marker()
+                .setLngLat([location.lon, location.lat])
+                .addTo(mapInstance.current);
+
+            // Fly to location
+            mapInstance.current.flyTo({
+                center: [location.lon, location.lat],
+                zoom: 10,
+                essential: true
+            });
+
+            console.log('Map updated with new location');
+        }
+    }, [location]);
 
     // Clear the map container
     useEffect(() => {
@@ -111,22 +143,12 @@ const Map = () => {
             
             if (map) {
                 try {
-                    // Remove all controls
-                    const controls = map.getControls();
-                    if (controls) {
-                        controls.forEach(control => {
-                            if (control instanceof mapboxgl.NavigationControl) {
-                                map.removeControl(control);
-                            }
-                        });
-                    }
-                    
                     // Remove event listeners
                     map.off('load');
                     map.off('error');
                     map.off('style.load');
                     
-                    // Finally remove the map
+                    // Remove the map instance
                     map.remove();
                 } catch (error) {
                     console.error('Error cleaning up map:', error);
@@ -140,7 +162,7 @@ const Map = () => {
                 mapContainer.current.innerHTML = '';
             }
         };
-    }, []); // Only run on mount
+    }, []); // Empty dependency array since we only want this to run once
 
     if (mapError) {
         return (

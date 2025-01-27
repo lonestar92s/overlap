@@ -2,7 +2,9 @@ import React from 'react';
 import { Container, Typography, Box } from '@mui/material';
 import Map from './Map';
 
-const MapPage = () => {
+const MapPage = ({ searchState }) => {
+    console.log('MapPage received searchState:', searchState);
+    
     return (
         <Container maxWidth="lg">
             <Box
@@ -25,7 +27,7 @@ const MapPage = () => {
                 >
                     Map View
                 </Typography>
-                <Map />
+                <Map location={searchState?.location} />
             </Box>
         </Container>
     );
