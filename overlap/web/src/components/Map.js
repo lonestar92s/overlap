@@ -16,11 +16,10 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
     const [mapError, setMapError] = useState(null);
     const [loading, setLoading] = useState(true);
     const timeoutRef = useRef(null);
-    const markerRefs = useRef({}); // Change to use a plain object
+    const markerRefs = useRef({});
 
-    // Clear the map container and initialize map
+    // Initialize map
     useEffect(() => {
-        // Debug logging
         console.log('Map initialization started');
         
         if (mapInstance.current) {
@@ -39,9 +38,6 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
             setLoading(false);
             return;
         }
-
-        // Clear container before initialization
-        mapContainer.current.innerHTML = '';
 
         let map = null;
 
@@ -62,7 +58,6 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                 console.log('Map loaded successfully');
                 setLoading(false);
                 mapInstance.current = map;
-                // Clear timeout on successful load
                 if (timeoutRef.current) {
                     clearTimeout(timeoutRef.current);
                     timeoutRef.current = null;
@@ -73,11 +68,14 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                 console.error('Mapbox error:', e);
                 setMapError(`Error loading map: ${e.error?.message || 'Unknown error'}`);
                 setLoading(false);
-                // Clear timeout on error
                 if (timeoutRef.current) {
                     clearTimeout(timeoutRef.current);
                     timeoutRef.current = null;
                 }
+            });
+
+            map.on('style.load', () => {
+                console.log('Map style loaded');
             });
 
             // Set timeout for map load
@@ -86,7 +84,7 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                     console.error('Map load timeout');
                     setMapError('Map took too long to load');
                     setLoading(false);
-                    if (map) {
+                    if (map && !map._removed) {
                         map.remove();
                     }
                 }
@@ -109,8 +107,22 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                 timeoutRef.current = null;
             }
             
-            if (map) {
+            if (map && !map._removed) {
                 try {
+                    // Remove event listeners
+                    map.off('load');
+                    map.off('error');
+                    map.off('style.load');
+                    
+                    // Remove markers first
+                    Object.values(markerRefs.current).forEach(marker => {
+                        if (marker && marker.remove) {
+                            marker.remove();
+                        }
+                    });
+                    markerRefs.current = {};
+                    
+                    // Remove the map instance
                     map.remove();
                 } catch (error) {
                     console.error('Error cleaning up map:', error);
@@ -130,14 +142,13 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
         };
     };
 
-    // Create styled popup HTML
-    const createPopupHTML = (venue, match) => {
-        const { date, time } = formatMatchDateTime(match.utcDate);
+    // Create styled popup HTML for multiple matches at the same venue
+    const createVenuePopupHTML = (venue, matches) => {
         return `
             <div style="
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
                 padding: 8px;
-                min-width: 220px;
+                min-width: 250px;
             ">
                 <div style="
                     font-weight: 600;
@@ -149,49 +160,58 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                 ">
                     ${venue.stadium}
                 </div>
-                <div style="
-                    font-size: 13px;
-                    color: #666;
-                    margin-bottom: 8px;
-                ">
-                    ${date} at ${time}
-                </div>
-                <div style="
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    margin-top: 12px;
-                ">
-                    <div style="
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    ">
-                        <img 
-                            src="${match.homeTeam.crest}" 
-                            alt="${match.homeTeam.name}"
-                            style="width: 20px; height: 20px; object-fit: contain;"
-                        />
-                        <span style="font-size: 13px; color: #333;">${match.homeTeam.name}</span>
-                    </div>
-                    <div style="
-                        font-size: 12px;
-                        color: #666;
-                        margin: 0 8px;
-                    ">vs</div>
-                    <div style="
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    ">
-                        <span style="font-size: 13px; color: #333;">${match.awayTeam.name}</span>
-                        <img 
-                            src="${match.awayTeam.crest}" 
-                            alt="${match.awayTeam.name}"
-                            style="width: 20px; height: 20px; object-fit: contain;"
-                        />
-                    </div>
-                </div>
+                ${matches.map(match => {
+                    const { date, time } = formatMatchDateTime(match.utcDate);
+                    return `
+                        <div style="
+                            padding: 8px 0;
+                            ${matches.length > 1 ? 'border-bottom: 1px solid #f5f5f5;' : ''}
+                        ">
+                            <div style="
+                                font-size: 13px;
+                                color: #666;
+                                margin-bottom: 8px;
+                            ">
+                                ${date} at ${time}
+                            </div>
+                            <div style="
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                            ">
+                                <div style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 8px;
+                                ">
+                                    <img 
+                                        src="${match.homeTeam.crest}" 
+                                        alt="${match.homeTeam.name}"
+                                        style="width: 20px; height: 20px; object-fit: contain;"
+                                    />
+                                    <span style="font-size: 13px; color: #333;">${match.homeTeam.name}</span>
+                                </div>
+                                <div style="
+                                    font-size: 12px;
+                                    color: #666;
+                                    margin: 0 8px;
+                                ">vs</div>
+                                <div style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 8px;
+                                ">
+                                    <span style="font-size: 13px; color: #333;">${match.awayTeam.name}</span>
+                                    <img 
+                                        src="${match.awayTeam.crest}" 
+                                        alt="${match.awayTeam.name}"
+                                        style="width: 20px; height: 20px; object-fit: contain;"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         `;
     };
@@ -200,7 +220,12 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
     useEffect(() => {
         if (setActiveMarker) {
             setActiveMarker((match) => {
-                const marker = markerRefs.current[match.id];
+                const venue = getVenueForTeam(match.homeTeam.name);
+                if (!venue || !venue.coordinates) return;
+
+                const venueKey = `${venue.stadium}-${venue.coordinates.join(',')}`;
+                const marker = markerRefs.current[venueKey];
+                
                 if (marker) {
                     marker.togglePopup();
                     
@@ -217,7 +242,6 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
 
     // Handle location and matches changes
     useEffect(() => {
-        // Skip if map is not initialized or loading
         if (!mapInstance.current || loading) {
             console.log('Skipping marker update - map not ready');
             return;
@@ -230,51 +254,63 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
             matchCount: matches?.length || 0 
         });
 
-        // Always reset if not showing location
+        // Remove all existing markers first
+        Object.values(markerRefs.current).forEach(marker => {
+            if (marker && marker.remove) {
+                marker.remove();
+            }
+        });
+        markerRefs.current = {};
+
+        // Reset view if not showing location
         if (!showLocation) {
             mapInstance.current.flyTo({
-                center: [-0.118092, 51.509865], // London coordinates
+                center: [-0.118092, 51.509865],
                 zoom: 8,
                 essential: true
             });
-            
-            // Remove all existing markers
-            Object.values(markerRefs.current).forEach(marker => marker.remove());
-            markerRefs.current = {};
             return;
         }
-
-        // Remove all existing markers
-        Object.values(markerRefs.current).forEach(marker => marker.remove());
-        markerRefs.current = {};
 
         const bounds = new mapboxgl.LngLatBounds();
         let hasMarkers = false;
 
-        // Add match venue markers first
+        // Group matches by venue
         if (matches && matches.length > 0) {
-            console.log('Adding match markers:', matches.length);
-            matches.forEach(match => {
+            const venueMatches = matches.reduce((acc, match) => {
                 const venue = getVenueForTeam(match.homeTeam.name);
-                if (!venue || !venue.coordinates) return false;
+                if (!venue || !venue.coordinates) return acc;
 
-                // Create popup but don't add it to map yet
+                const venueKey = `${venue.stadium}-${venue.coordinates.join(',')}`;
+                if (!acc[venueKey]) {
+                    acc[venueKey] = {
+                        venue,
+                        matches: []
+                    };
+                }
+                acc[venueKey].matches.push(match);
+                return acc;
+            }, {});
+
+            // Create markers for each venue
+            Object.entries(venueMatches).forEach(([venueKey, { venue, matches: venueMatches }]) => {
+                // Create popup with all matches at this venue
                 const popup = new mapboxgl.Popup({
                     offset: 25,
                     closeButton: false,
                     maxWidth: '300px'
-                }).setHTML(createPopupHTML(venue, match));
+                }).setHTML(createVenuePopupHTML(venue, venueMatches));
 
                 // Create and add venue marker with popup
                 const venueMarker = new mapboxgl.Marker({
                     color: '#4CAF50'
                 })
                     .setLngLat(venue.coordinates)
-                    .setPopup(popup) // Attach popup to marker
+                    .setPopup(popup)
                     .addTo(mapInstance.current);
 
-                // Store marker reference with match ID
-                markerRefs.current[match.id] = venueMarker;
+                // Store marker reference with venue key
+                markerRefs.current[venueKey] = venueMarker;
                 bounds.extend(venue.coordinates);
                 hasMarkers = true;
             });
@@ -338,123 +374,6 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
 
         console.log('Map updated with locations and matches');
     }, [location, matches, showLocation, loading]);
-
-    // Clear the map container
-    useEffect(() => {
-        if (mapContainer.current) {
-            mapContainer.current.innerHTML = '';
-        }
-    }, []);
-
-    useEffect(() => {
-        // Debug logging
-        console.log('Mapbox Token:', MAPBOX_TOKEN);
-        console.log('Container ref:', mapContainer.current);
-
-        if (!MAPBOX_TOKEN) {
-            setMapError('Mapbox token is not configured');
-            setLoading(false);
-            return;
-        }
-
-        if (!mapContainer.current) {
-            setMapError('Map container not found');
-            setLoading(false);
-            return;
-        }
-
-        let map = null;
-
-        try {
-            console.log('Initializing map...');
-            map = new mapboxgl.Map({
-                container: mapContainer.current,
-                style: 'mapbox://styles/mapbox/streets-v12',
-                center: [-0.118092, 51.509865], // London coordinates
-                zoom: 3,
-                interactive: true,
-                attributionControl: true,
-            });
-
-            map.addControl(new mapboxgl.NavigationControl());
-
-            map.on('load', () => {
-                console.log('Map loaded successfully');
-                setLoading(false);
-                mapInstance.current = map;
-                // Clear timeout on successful load
-                if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current);
-                    timeoutRef.current = null;
-                }
-            });
-
-            map.on('error', (e) => {
-                console.error('Mapbox error:', e);
-                setMapError(`Error loading map: ${e.error?.message || 'Unknown error'}`);
-                setLoading(false);
-                // Clear timeout on error
-                if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current);
-                    timeoutRef.current = null;
-                }
-            });
-
-            // Set timeout before style load
-            timeoutRef.current = setTimeout(() => {
-                if (loading && !mapInstance.current) {
-                    console.error('Map load timeout');
-                    setMapError('Map took too long to load');
-                    setLoading(false);
-                    if (map) {
-                        map.remove();
-                    }
-                }
-            }, 10000);
-
-            map.on('style.load', () => {
-                console.log('Map style loaded');
-            });
-
-        } catch (error) {
-            console.error('Error initializing map:', error);
-            setMapError(`Error initializing map: ${error.message}`);
-            setLoading(false);
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-                timeoutRef.current = null;
-            }
-        }
-
-        // Cleanup function
-        return () => {
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-                timeoutRef.current = null;
-            }
-            
-            if (map) {
-                try {
-                    // Remove event listeners
-                    map.off('load');
-                    map.off('error');
-                    map.off('style.load');
-                    
-                    // Remove the map instance
-                    map.remove();
-                } catch (error) {
-                    console.error('Error cleaning up map:', error);
-                }
-            }
-            
-            mapInstance.current = null;
-            
-            // Clear container on cleanup
-            if (mapContainer.current) {
-                mapContainer.current.innerHTML = '';
-            }
-        };
-    }, []); // Empty dependency array since we only want this to run once
 
     if (mapError) {
         return (
