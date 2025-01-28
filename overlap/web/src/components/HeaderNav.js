@@ -4,19 +4,12 @@ import {
     Toolbar, 
     IconButton,
     Box,
-    Button
 } from '@mui/material';
-import { Home, AccountCircle, Map as MapIcon } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Home, AccountCircle } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 const HeaderNav = ({ onHomeClick }) => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const isMapPage = location.pathname === '/map';
-
-    const handleMapClick = () => {
-        navigate('/map');
-    };
 
     const handleHomeClick = () => {
         onHomeClick();
@@ -47,19 +40,6 @@ const HeaderNav = ({ onHomeClick }) => {
                     >
                         <Home />
                     </IconButton>
-
-                    <Button
-                        startIcon={<MapIcon />}
-                        onClick={handleMapClick}
-                        sx={{ 
-                            color: isMapPage ? '#FF385C' : '#666',
-                            '&:hover': {
-                                backgroundColor: 'rgba(255, 56, 92, 0.04)'
-                            }
-                        }}
-                    >
-                        Map
-                    </Button>
                 </Box>
 
                 <IconButton

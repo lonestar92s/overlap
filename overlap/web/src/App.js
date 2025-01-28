@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './components/Home';
-import MapPage from './components/MapPage';
 import HeaderNav from './components/HeaderNav';
 
 const theme = createTheme({
@@ -62,7 +61,6 @@ const AppContent = () => {
           searchState={searchState} 
           setSearchState={setSearchState} 
         />} />
-        <Route path="/map" element={<MapPage />} />
       </Routes>
     </Box>
   );
