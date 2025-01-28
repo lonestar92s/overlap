@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import { 
     Container, 
@@ -19,10 +19,11 @@ import isAfter from 'date-fns/isAfter';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import HeaderNav from './HeaderNav';
-// import Map from './Map'; // Keeping import commented for later use
+import Map from './Map'; // Uncomment Map import
 
 const Home = ({ searchState, setSearchState }) => {
     const today = startOfToday();
+    const [hasSearched, setHasSearched] = useState(false);
 
     const handleDepartureDateChange = (newValue) => {
         setSearchState(prev => ({
@@ -79,35 +80,52 @@ const Home = ({ searchState, setSearchState }) => {
                         }
                     }
                 );
+                
+                // Update all state at once to prevent multiple rerenders
                 setSearchState(prev => ({
                     ...prev,
                     matches: response.data.matches || [],
-                    loading: false
+                    loading: false,
+                    error: null
                 }));
+                setHasSearched(true); // Set this after the search state is updated
+                
+                console.log('Search completed:', {
+                    matchCount: response.data.matches?.length || 0,
+                    hasLocation: !!searchState.location
+                });
             } catch (err) {
                 setSearchState(prev => ({
                     ...prev,
                     error: 'Failed to fetch matches. Please try again.',
-                    loading: false
+                    loading: false,
+                    matches: [] // Clear matches on error
                 }));
+                setHasSearched(true); // Still set this so error message shows
                 console.error('Error fetching matches:', err);
             }
         }
     };
 
+    // Reset hasSearched when resetting the form
+    const handleReset = () => {
+        setHasSearched(false);
+        setSearchState(prev => ({
+            ...prev,
+            dates: {
+                departure: null,
+                return: null
+            },
+            location: null,
+            matches: [],
+            loading: false,
+            error: null
+        }));
+    };
+
     return (
         <>
-            <HeaderNav onHomeClick={() => setSearchState(prev => ({
-                ...prev,
-                dates: {
-                    departure: null,
-                    return: null
-                },
-                location: null,
-                matches: [],
-                loading: false,
-                error: null
-            }))} />
+            <HeaderNav onHomeClick={handleReset} />
             <Container maxWidth="lg">
                 <Box
                     sx={{
@@ -164,7 +182,6 @@ const Home = ({ searchState, setSearchState }) => {
                                             onChange={handleLocationChange}
                                         />
                                     </Box>
-                                    {/* Map component removed but kept in codebase for later */}
                                 </Grid>
                                 <Grid item xs={12}>
                                     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -224,13 +241,13 @@ const Home = ({ searchState, setSearchState }) => {
                         </Box>
                     </Paper>
 
-                    {searchState.error && (
+                    {searchState.error && hasSearched && (
                         <Box sx={{ mt: 4, textAlign: 'center' }}>
                             <Typography color="error">{searchState.error}</Typography>
                         </Box>
                     )}
 
-                    {!searchState.loading && searchState.matches.length === 0 && searchState.dates.departure && searchState.dates.return && !searchState.error && (
+                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
                         <Box sx={{ mt: 4, textAlign: 'center' }}>
                             <Paper 
                                 elevation={1}
@@ -261,26 +278,35 @@ const Home = ({ searchState, setSearchState }) => {
                         </Box>
                     )}
 
-                    {searchState.matches.length > 0 && (
-                        <Box sx={{ mt: 4 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                                <Button
-                                    variant="outlined"
-                                    startIcon={<TuneRounded />}
-                                    sx={{
-                                        borderColor: '#DDD',
-                                        color: '#666',
-                                        '&:hover': {
-                                            borderColor: '#999',
-                                            backgroundColor: '#F5F5F5'
-                                        }
-                                    }}
-                                >
-                                    Filters
-                                </Button>
+                    {searchState.matches.length > 0 && hasSearched && (
+                        <>
+                            <Box sx={{ mt: 4 }}>
+                                <Map 
+                                    location={searchState.location} 
+                                    showLocation={hasSearched && searchState.matches.length > 0}
+                                    matches={searchState.matches}
+                                />
                             </Box>
-                            <Matches matches={searchState.matches} />
-                        </Box>
+                            <Box sx={{ mt: 4 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<TuneRounded />}
+                                        sx={{
+                                            borderColor: '#DDD',
+                                            color: '#666',
+                                            '&:hover': {
+                                                borderColor: '#999',
+                                                backgroundColor: '#F5F5F5'
+                                            }
+                                        }}
+                                    >
+                                        Filters
+                                    </Button>
+                                </Box>
+                                <Matches matches={searchState.matches} />
+                            </Box>
+                        </>
                     )}
                 </Box>
             </Container>
