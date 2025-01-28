@@ -3,19 +3,20 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { getVenueForTeam } from '../data/venues';
+import { format } from 'date-fns';
 
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 
 // Set the access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const Map = ({ location, showLocation, matches }) => {
+const Map = ({ location, showLocation, matches, setActiveMarker }) => {
     const mapContainer = useRef(null);
     const mapInstance = useRef(null);
     const [mapError, setMapError] = useState(null);
     const [loading, setLoading] = useState(true);
     const timeoutRef = useRef(null);
-    const markerRefs = useRef([]);
+    const markerRefs = useRef({}); // Change to use a plain object
 
     // Clear the map container and initialize map
     useEffect(() => {
@@ -120,6 +121,100 @@ const Map = ({ location, showLocation, matches }) => {
         };
     }, []); // Empty dependency array since we only want this to run once
 
+    // Format match date and time
+    const formatMatchDateTime = (utcDate) => {
+        const date = new Date(utcDate);
+        return {
+            date: format(date, 'EEE, MMM d'),
+            time: format(date, 'h:mm a')
+        };
+    };
+
+    // Create styled popup HTML
+    const createPopupHTML = (venue, match) => {
+        const { date, time } = formatMatchDateTime(match.utcDate);
+        return `
+            <div style="
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+                padding: 8px;
+                min-width: 220px;
+            ">
+                <div style="
+                    font-weight: 600;
+                    font-size: 14px;
+                    color: #444;
+                    margin-bottom: 8px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #eee;
+                ">
+                    ${venue.stadium}
+                </div>
+                <div style="
+                    font-size: 13px;
+                    color: #666;
+                    margin-bottom: 8px;
+                ">
+                    ${date} at ${time}
+                </div>
+                <div style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-top: 12px;
+                ">
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    ">
+                        <img 
+                            src="${match.homeTeam.crest}" 
+                            alt="${match.homeTeam.name}"
+                            style="width: 20px; height: 20px; object-fit: contain;"
+                        />
+                        <span style="font-size: 13px; color: #333;">${match.homeTeam.name}</span>
+                    </div>
+                    <div style="
+                        font-size: 12px;
+                        color: #666;
+                        margin: 0 8px;
+                    ">vs</div>
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    ">
+                        <span style="font-size: 13px; color: #333;">${match.awayTeam.name}</span>
+                        <img 
+                            src="${match.awayTeam.crest}" 
+                            alt="${match.awayTeam.name}"
+                            style="width: 20px; height: 20px; object-fit: contain;"
+                        />
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    // Expose method to trigger popup for a specific match
+    useEffect(() => {
+        if (setActiveMarker) {
+            setActiveMarker((match) => {
+                const marker = markerRefs.current[match.id];
+                if (marker) {
+                    marker.togglePopup();
+                    
+                    // Center the map on the marker
+                    mapInstance.current?.flyTo({
+                        center: marker.getLngLat(),
+                        zoom: 12,
+                        essential: true
+                    });
+                }
+            });
+        }
+    }, [setActiveMarker]);
+
     // Handle location and matches changes
     useEffect(() => {
         // Skip if map is not initialized or loading
@@ -144,14 +239,14 @@ const Map = ({ location, showLocation, matches }) => {
             });
             
             // Remove all existing markers
-            markerRefs.current.forEach(marker => marker.remove());
-            markerRefs.current = [];
+            Object.values(markerRefs.current).forEach(marker => marker.remove());
+            markerRefs.current = {};
             return;
         }
 
         // Remove all existing markers
-        markerRefs.current.forEach(marker => marker.remove());
-        markerRefs.current = [];
+        Object.values(markerRefs.current).forEach(marker => marker.remove());
+        markerRefs.current = {};
 
         const bounds = new mapboxgl.LngLatBounds();
         let hasMarkers = false;
@@ -161,29 +256,27 @@ const Map = ({ location, showLocation, matches }) => {
             console.log('Adding match markers:', matches.length);
             matches.forEach(match => {
                 const venue = getVenueForTeam(match.homeTeam.name);
-                if (venue && venue.coordinates) {
-                    // Create popup but don't add it to map yet
-                    const popup = new mapboxgl.Popup({
-                        offset: 25,
-                        closeButton: false
-                    }).setHTML(`
-                        <strong>${venue.stadium}</strong><br>
-                        ${match.homeTeam.name} vs ${match.awayTeam.name}<br>
-                        ${venue.location}
-                    `);
+                if (!venue || !venue.coordinates) return false;
 
-                    // Create and add venue marker with popup
-                    const venueMarker = new mapboxgl.Marker({
-                        color: '#4CAF50'
-                    })
-                        .setLngLat(venue.coordinates)
-                        .setPopup(popup) // Attach popup to marker
-                        .addTo(mapInstance.current);
+                // Create popup but don't add it to map yet
+                const popup = new mapboxgl.Popup({
+                    offset: 25,
+                    closeButton: false,
+                    maxWidth: '300px'
+                }).setHTML(createPopupHTML(venue, match));
 
-                    markerRefs.current.push(venueMarker);
-                    bounds.extend(venue.coordinates);
-                    hasMarkers = true;
-                }
+                // Create and add venue marker with popup
+                const venueMarker = new mapboxgl.Marker({
+                    color: '#4CAF50'
+                })
+                    .setLngLat(venue.coordinates)
+                    .setPopup(popup) // Attach popup to marker
+                    .addTo(mapInstance.current);
+
+                // Store marker reference with match ID
+                markerRefs.current[match.id] = venueMarker;
+                bounds.extend(venue.coordinates);
+                hasMarkers = true;
             });
         }
 
@@ -201,10 +294,23 @@ const Map = ({ location, showLocation, matches }) => {
                 offset: 25,
                 closeButton: false
             }).setHTML(`
-                <strong>Your Location</strong><br>
-                ${location.city}<br>
-                ${location.region ? location.region + '<br>' : ''}
-                ${location.country}
+                <div style="
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+                    padding: 8px;
+                ">
+                    <div style="
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: #444;
+                        margin-bottom: 4px;
+                    ">
+                        Your Location
+                    </div>
+                    <div style="font-size: 13px; color: #666;">
+                        ${location.city}${location.region ? `, ${location.region}` : ''}<br>
+                        ${location.country}
+                    </div>
+                </div>
             `);
 
             // Create and add user location marker with popup
@@ -215,7 +321,8 @@ const Map = ({ location, showLocation, matches }) => {
                 .setPopup(popup) // Attach popup to marker
                 .addTo(mapInstance.current);
 
-            markerRefs.current.push(userMarker);
+            // Store marker reference with location ID
+            markerRefs.current['user-location'] = userMarker;
             bounds.extend([location.lon, location.lat]);
             hasMarkers = true;
         }

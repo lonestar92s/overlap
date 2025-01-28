@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { 
     Container, 
@@ -7,12 +7,14 @@ import {
     Typography,
     Box,
     Grid,
-    CircularProgress
+    CircularProgress,
+    Fab,
+    Zoom
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { TuneRounded } from '@mui/icons-material';
+import { TuneRounded, KeyboardArrowUp } from '@mui/icons-material';
 import format from 'date-fns/format';
 import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
@@ -20,10 +22,50 @@ import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import HeaderNav from './HeaderNav';
 import Map from './Map'; // Uncomment Map import
+import Filters from './Filters';
+import { getVenueForTeam } from '../data/venues';
+
+// Helper function to calculate distance between two points using Haversine formula
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in miles
+};
 
 const Home = ({ searchState, setSearchState }) => {
     const today = startOfToday();
     const [hasSearched, setHasSearched] = useState(false);
+    const mapRef = useRef(null);
+    const [showBackToTop, setShowBackToTop] = useState(false);
+    const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [selectedDistance, setSelectedDistance] = useState(null);
+    const activeMarkerRef = useRef(null);
+
+    // Add scroll listener to show/hide back to top button
+    React.useEffect(() => {
+        const handleScroll = () => {
+            setShowBackToTop(window.pageYOffset > 300);
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    const scrollToMap = () => {
+        if (mapRef.current) {
+            mapRef.current.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+        }
+    };
+
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     const handleDepartureDateChange = (newValue) => {
         setSearchState(prev => ({
@@ -88,7 +130,12 @@ const Home = ({ searchState, setSearchState }) => {
                     loading: false,
                     error: null
                 }));
-                setHasSearched(true); // Set this after the search state is updated
+                setHasSearched(true);
+                
+                // Scroll to map after a short delay to ensure it's rendered
+                if (response.data.matches?.length > 0) {
+                    setTimeout(scrollToMap, 100);
+                }
                 
                 console.log('Search completed:', {
                     matchCount: response.data.matches?.length || 0,
@@ -99,9 +146,9 @@ const Home = ({ searchState, setSearchState }) => {
                     ...prev,
                     error: 'Failed to fetch matches. Please try again.',
                     loading: false,
-                    matches: [] // Clear matches on error
+                    matches: []
                 }));
-                setHasSearched(true); // Still set this so error message shows
+                setHasSearched(true);
                 console.error('Error fetching matches:', err);
             }
         }
@@ -123,10 +170,53 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
+    // Filter matches based on selected distance
+    const filteredMatches = useMemo(() => {
+        if (!selectedDistance || !searchState.location) {
+            return searchState.matches;
+        }
+
+        return searchState.matches.filter(match => {
+            const venue = getVenueForTeam(match.homeTeam.name);
+            if (!venue || !venue.coordinates) return false;
+
+            const distance = calculateDistance(
+                searchState.location.lat,
+                searchState.location.lon,
+                venue.coordinates[1], // Venue latitude
+                venue.coordinates[0]  // Venue longitude
+            );
+
+            return distance <= selectedDistance;
+        });
+    }, [searchState.matches, searchState.location, selectedDistance]);
+
+    const handleFiltersOpen = () => {
+        setIsFiltersOpen(true);
+    };
+
+    const handleFiltersClose = () => {
+        setIsFiltersOpen(false);
+    };
+
+    const handleDistanceChange = (distance) => {
+        setSelectedDistance(distance);
+    };
+
+    const handleMatchClick = (match) => {
+        if (activeMarkerRef.current) {
+            activeMarkerRef.current(match);
+            // On mobile, scroll to map when a match is clicked
+            if (window.innerWidth < 900) { // md breakpoint
+                mapRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    };
+
     return (
         <>
             <HeaderNav onHomeClick={handleReset} />
-            <Container maxWidth="lg">
+            <Container maxWidth="xl">
                 <Box
                     sx={{
                         minHeight: '100vh',
@@ -136,110 +226,113 @@ const Home = ({ searchState, setSearchState }) => {
                         mt: 8 // Add margin top to account for fixed header
                     }}
                 >
-                    <Paper 
-                        elevation={3}
-                        sx={{
-                            p: 6,
-                            width: '100%',
-                            maxWidth: 800,
-                            borderRadius: 4,
-                            textAlign: 'center',
-                            mx: 'auto'
-                        }}
-                    >
-                        <Typography 
-                            variant="h2" 
-                            component="h1" 
-                            gutterBottom
-                            sx={{ 
-                                fontWeight: 800,
-                                mb: 4,
-                                color: '#222222',
-                                fontSize: { xs: '2.5rem', md: '3.5rem' }
+                    {/* Search Form */}
+                    <Box sx={{ mb: searchState.matches.length > 0 && hasSearched ? 4 : 0 }}>
+                        <Paper 
+                            elevation={3}
+                            sx={{
+                                p: 6,
+                                width: '100%',
+                                maxWidth: 800,
+                                borderRadius: 4,
+                                textAlign: 'center',
+                                mx: 'auto'
                             }}
                         >
-                            Overlap
-                            <Typography
-                                variant="h2"
-                                component="span"
-                                sx={{
-                                    display: 'block',
-                                    color: '#FF385C',
-                                    fontSize: { xs: '2rem', md: '3rem' },
-                                    fontWeight: 700
+                            <Typography 
+                                variant="h2" 
+                                component="h1" 
+                                gutterBottom
+                                sx={{ 
+                                    fontWeight: 800,
+                                    mb: 4,
+                                    color: '#222222',
+                                    fontSize: { xs: '2.5rem', md: '3.5rem' }
                                 }}
                             >
-                                Find Premier League matches during your trip
+                                Overlap
+                                <Typography
+                                    variant="h2"
+                                    component="span"
+                                    sx={{
+                                        display: 'block',
+                                        color: '#FF385C',
+                                        fontSize: { xs: '2rem', md: '3rem' },
+                                        fontWeight: 700
+                                    }}
+                                >
+                                    
+                                </Typography>
                             </Typography>
-                        </Typography>
 
-                        <Box sx={{ mt: 6 }}>
-                            <Grid container spacing={3}>
-                                <Grid item xs={12}>
-                                    <Box sx={{ mb: 3 }}>
-                                        <LocationAutocomplete
-                                            value={searchState.location}
-                                            onChange={handleLocationChange}
-                                        />
-                                    </Box>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                        <Grid container spacing={2}>
-                                            <Grid item xs={12} sm={6}>
-                                                <DatePicker
-                                                    label="Departure Date"
-                                                    value={searchState.dates.departure}
-                                                    onChange={handleDepartureDateChange}
-                                                    minDate={today}
-                                                    sx={{ width: '100%' }}
-                                                    slotProps={{
-                                                        textField: {
-                                                            helperText: 'Select your departure date'
-                                                        }
-                                                    }}
-                                                />
+                            <Box sx={{ mt: 6 }}>
+                                <Grid container spacing={3}>
+                                    <Grid item xs={12}>
+                                        <Box sx={{ mb: 3 }}>
+                                            <LocationAutocomplete
+                                                value={searchState.location}
+                                                onChange={handleLocationChange}
+                                            />
+                                        </Box>
+                                    </Grid>
+                                    <Grid item xs={12}>
+                                        <LocalizationProvider dateAdapter={AdapterDateFns}>
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12} sm={6}>
+                                                    <DatePicker
+                                                        label="Departure Date"
+                                                        value={searchState.dates.departure}
+                                                        onChange={handleDepartureDateChange}
+                                                        minDate={today}
+                                                        sx={{ width: '100%' }}
+                                                        slotProps={{
+                                                            textField: {
+                                                                helperText: 'Select your departure date'
+                                                            }
+                                                        }}
+                                                    />
+                                                </Grid>
+                                                <Grid item xs={12} sm={6}>
+                                                    <DatePicker
+                                                        label="Return Date"
+                                                        value={searchState.dates.return}
+                                                        onChange={handleReturnDateChange}
+                                                        minDate={searchState.dates.departure || today}
+                                                        disabled={!searchState.dates.departure}
+                                                        sx={{ width: '100%' }}
+                                                        slotProps={{
+                                                            textField: {
+                                                                helperText: searchState.dates.departure ? 'Select your return date' : 'Select departure date first'
+                                                            }
+                                                        }}
+                                                    />
+                                                </Grid>
                                             </Grid>
-                                            <Grid item xs={12} sm={6}>
-                                                <DatePicker
-                                                    label="Return Date"
-                                                    value={searchState.dates.return}
-                                                    onChange={handleReturnDateChange}
-                                                    minDate={searchState.dates.departure || today}
-                                                    disabled={!searchState.dates.departure}
-                                                    sx={{ width: '100%' }}
-                                                    slotProps={{
-                                                        textField: {
-                                                            helperText: searchState.dates.departure ? 'Select your return date' : 'Select departure date first'
-                                                        }
-                                                    }}
-                                                />
-                                            </Grid>
-                                        </Grid>
-                                    </LocalizationProvider>
+                                        </LocalizationProvider>
+                                    </Grid>
+                                    <Grid item xs={12}>
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleSearch}
+                                            disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
+                                            sx={{
+                                                mt: 2,
+                                                py: 1.5,
+                                                px: 6,
+                                                borderRadius: 2,
+                                                backgroundColor: '#FF385C',
+                                                '&:hover': {
+                                                    backgroundColor: '#E61E4D'
+                                                }
+                                            }}
+                                        >
+                                            {searchState.loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
+                                        </Button>
+                                    </Grid>
                                 </Grid>
-                                <Grid item xs={12}>
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleSearch}
-                                        disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
-                                        sx={{
-                                            mt: 2,
-                                            py: 1.5,
-                                            px: 6,
-                                            borderRadius: 2,
-                                            backgroundColor: '#FF385C',
-                                            '&:hover': {
-                                                backgroundColor: '#E61E4D'
-                                            }
-                                        }}
-                                    >
-                                        {searchState.loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
-                                    </Button>
-                                </Grid>
-                            </Grid>
-                        </Box>
-                    </Paper>
+                            </Box>
+                        </Paper>
+                    </Box>
 
                     {searchState.error && hasSearched && (
                         <Box sx={{ mt: 4, textAlign: 'center' }}>
@@ -280,36 +373,139 @@ const Home = ({ searchState, setSearchState }) => {
 
                     {searchState.matches.length > 0 && hasSearched && (
                         <>
-                            <Box sx={{ mt: 4 }}>
-                                <Map 
-                                    location={searchState.location} 
-                                    showLocation={hasSearched && searchState.matches.length > 0}
-                                    matches={searchState.matches}
-                                />
+                            {/* Mobile Map Toggle */}
+                            <Box 
+                                sx={{ 
+                                    display: { xs: 'block', md: 'none' },
+                                    mb: 2 
+                                }}
+                            >
+                                <Button
+                                    fullWidth
+                                    variant="outlined"
+                                    onClick={() => mapRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                                    sx={{
+                                        borderColor: '#DDD',
+                                        color: '#666',
+                                        py: 1.5,
+                                        '&:hover': {
+                                            borderColor: '#999',
+                                            backgroundColor: '#F5F5F5'
+                                        }
+                                    }}
+                                >
+                                    Show Map
+                                </Button>
                             </Box>
-                            <Box sx={{ mt: 4 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={<TuneRounded />}
-                                        sx={{
-                                            borderColor: '#DDD',
-                                            color: '#666',
-                                            '&:hover': {
-                                                borderColor: '#999',
-                                                backgroundColor: '#F5F5F5'
-                                            }
-                                        }}
-                                    >
-                                        Filters
-                                    </Button>
+
+                            {/* Results Grid */}
+                            <Box 
+                                sx={{ 
+                                    display: 'grid',
+                                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                                    gap: 3,
+                                    height: { xs: 'auto', md: 'calc(100vh - 220px)' },
+                                    position: { xs: 'static', md: 'sticky' },
+                                    top: 100
+                                }}
+                            >
+                                {/* Left side - Match Results */}
+                                <Box 
+                                    sx={{ 
+                                        overflowY: { xs: 'visible', md: 'auto' },
+                                        pr: 2,
+                                        height: { xs: 'auto', md: '100%' },
+                                        order: { xs: 2, md: 1 }
+                                    }}
+                                >
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center', 
+                                        mb: 2,
+                                        position: { xs: 'static', md: 'sticky' },
+                                        top: 0,
+                                        backgroundColor: '#fff',
+                                        zIndex: 1,
+                                        py: 2
+                                    }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {selectedDistance ? `Showing matches within ${selectedDistance} miles` : 'Showing all matches'}
+                                        </Typography>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<TuneRounded />}
+                                            onClick={handleFiltersOpen}
+                                            sx={{
+                                                borderColor: '#DDD',
+                                                color: '#666',
+                                                '&:hover': {
+                                                    borderColor: '#999',
+                                                    backgroundColor: '#F5F5F5'
+                                                }
+                                            }}
+                                        >
+                                            Filters
+                                        </Button>
+                                    </Box>
+                                    <Matches 
+                                        matches={filteredMatches} 
+                                        onMatchClick={handleMatchClick}
+                                    />
                                 </Box>
-                                <Matches matches={searchState.matches} />
+
+                                {/* Right side - Map */}
+                                <Box 
+                                    ref={mapRef}
+                                    sx={{ 
+                                        position: { xs: 'relative', md: 'sticky' },
+                                        top: 0,
+                                        height: { xs: '400px', md: '100%' },
+                                        order: { xs: 1, md: 2 }
+                                    }}
+                                >
+                                    <Map 
+                                        location={searchState.location} 
+                                        showLocation={hasSearched && searchState.matches.length > 0}
+                                        matches={filteredMatches}
+                                        setActiveMarker={(callback) => {
+                                            activeMarkerRef.current = callback;
+                                        }}
+                                    />
+                                </Box>
                             </Box>
                         </>
                     )}
                 </Box>
             </Container>
+
+            <Filters 
+                open={isFiltersOpen}
+                onClose={handleFiltersClose}
+                selectedDistance={selectedDistance}
+                onDistanceChange={handleDistanceChange}
+            />
+
+            {/* Back to top button */}
+            <Zoom in={showBackToTop}>
+                <Fab 
+                    color="primary" 
+                    size="medium" 
+                    aria-label="scroll back to top"
+                    onClick={scrollToTop}
+                    sx={{
+                        position: 'fixed',
+                        bottom: 16,
+                        right: 16,
+                        backgroundColor: '#FF385C',
+                        '&:hover': {
+                            backgroundColor: '#E61E4D'
+                        }
+                    }}
+                >
+                    <KeyboardArrowUp />
+                </Fab>
+            </Zoom>
         </>
     );
 };
