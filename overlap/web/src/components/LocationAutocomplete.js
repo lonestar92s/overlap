@@ -4,7 +4,8 @@ import {
     Autocomplete, 
     Box,
     Typography,
-    CircularProgress
+    CircularProgress,
+    Paper
 } from '@mui/material';
 import { LocationOn } from '@mui/icons-material';
 import axios from 'axios';
@@ -12,7 +13,7 @@ import { debounce } from 'lodash';
 
 const LOCATIONIQ_API_KEY = process.env.REACT_APP_LOCATIONIQ_API_KEY;
 
-const LocationAutocomplete = ({ value, onChange }) => {
+const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinations" }) => {
     const [inputValue, setInputValue] = useState('');
     const [options, setOptions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -111,6 +112,11 @@ const LocationAutocomplete = ({ value, onChange }) => {
         };
     }, [debouncedFetchSuggestions]);
 
+    const handleInputChange = (event, newInputValue) => {
+        setInputValue(newInputValue);
+        debouncedFetchSuggestions(newInputValue);
+    };
+
     if (!LOCATIONIQ_API_KEY) {
         return (
             <TextField
@@ -129,72 +135,86 @@ const LocationAutocomplete = ({ value, onChange }) => {
 
     return (
         <Autocomplete
-            id="location-autocomplete"
-            fullWidth
-            options={options}
-            autoComplete
-            includeInputInList
-            filterSelectedOptions
             value={value}
             onChange={(event, newValue) => {
                 onChange(newValue);
-                setError(null);
             }}
-            onInputChange={(event, newInputValue) => {
-                setInputValue(newInputValue);
-                debouncedFetchSuggestions(newInputValue);
-            }}
+            onInputChange={handleInputChange}
+            options={options}
             getOptionLabel={(option) => 
-                typeof option === 'string' ? option : option.description
+                option ? `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}` : ''
             }
-            isOptionEqualToValue={(option, value) =>
-                option?.place_id === value?.place_id
-            }
+            loading={loading}
+            filterOptions={(x) => x}
+            freeSolo
             renderInput={(params) => (
                 <TextField
                     {...params}
-                    placeholder="Where are you going?"
-                    error={!!error}
-                    helperText={error}
+                    placeholder={placeholder}
+                    variant="standard"
                     InputProps={{
                         ...params.InputProps,
-                        startAdornment: (
-                            <LocationOn sx={{ color: '#666', ml: 1, mr: -0.5 }} />
-                        ),
+                        disableUnderline: true,
                         endAdornment: (
                             <>
-                                {loading && <CircularProgress color="inherit" size={20} />}
+                                {loading ? <CircularProgress color="inherit" size={20} /> : null}
                                 {params.InputProps.endAdornment}
                             </>
-                        )
+                        ),
+                    }}
+                    sx={{
+                        '& .MuiInputBase-root': {
+                            padding: '0 !important'
+                        },
+                        '& .MuiInputBase-input': {
+                            padding: '0 !important',
+                            color: '#222222',
+                            '&::placeholder': {
+                                color: '#717171',
+                                opacity: 1
+                            }
+                        }
                     }}
                 />
             )}
-            renderOption={(props, option) => {
-                // Extract key from props and create a new props object without it
-                const { key, ...otherProps } = props;
-                return (
-                    <li
-                        {...otherProps}
-                        // Use place_id as key, which now includes all location components
-                        key={option.place_id}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', py: 1 }}>
-                            <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                {option.structured_formatting.main_text}
-                            </Typography>
-                            <Typography 
-                                variant="body2" 
-                                color="text.secondary"
-                                sx={{ fontSize: '0.875rem' }}
-                            >
-                                {option.structured_formatting.secondary_text}
-                            </Typography>
-                        </Box>
-                    </li>
-                );
-            }}
-            loading={loading}
+            renderOption={(props, option) => (
+                <Box 
+                    component="li" 
+                    {...props}
+                    sx={{ 
+                        py: 1,
+                        px: 2,
+                        '&:hover': {
+                            backgroundColor: '#F7F7F7'
+                        }
+                    }}
+                >
+                    <LocationOn sx={{ color: '#717171', mr: 2 }} />
+                    <Box>
+                        <Typography variant="body1" color="#222222">
+                            {option.city}
+                            {option.region && `, ${option.region}`}
+                        </Typography>
+                        <Typography variant="body2" color="#717171">
+                            {option.country}
+                        </Typography>
+                    </Box>
+                </Box>
+            )}
+            PaperComponent={({ children, ...props }) => (
+                <Paper 
+                    {...props} 
+                    elevation={3}
+                    sx={{ 
+                        mt: 1,
+                        borderRadius: 4,
+                        border: '1px solid #DDDDDD',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
+                    }}
+                >
+                    {children}
+                </Paper>
+            )}
         />
     );
 };

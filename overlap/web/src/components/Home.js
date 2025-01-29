@@ -46,6 +46,7 @@ const Home = ({ searchState, setSearchState }) => {
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
     const activeMarkerRef = useRef(null);
+    const [selectedMatch, setSelectedMatch] = useState(null);
 
     // Add scroll listener to show/hide back to top button
     React.useEffect(() => {
@@ -114,31 +115,61 @@ const Home = ({ searchState, setSearchState }) => {
             });
             
             try {
-                const response = await axios.get(
-                    `/v4/competitions/PL/matches?dateFrom=${formattedDates.departure}&dateTo=${formattedDates.return}`,
-                    {
-                        headers: {
-                            'X-Auth-Token': '2a9e46d07879477e9e4b1506101a299f'
+                // Define leagues to fetch
+                const leagues = [
+                    { id: 'PL', name: 'Premier League' },
+                    { id: 'FL1', name: 'Ligue 1' }
+                ];
+
+                // Fetch matches from all leagues in parallel
+                const responses = await Promise.all(
+                    leagues.map(league => 
+                        axios.get(
+                            `/v4/competitions/${league.id}/matches?dateFrom=${formattedDates.departure}&dateTo=${formattedDates.return}`,
+                            {
+                                headers: {
+                                    'X-Auth-Token': '2a9e46d07879477e9e4b1506101a299f'
+                                }
+                            }
+                        )
+                    )
+                );
+
+                // Combine matches from all leagues
+                const allMatches = responses.reduce((acc, response, index) => {
+                    const matches = response.data.matches || [];
+                    // Add league information to each match
+                    const matchesWithLeague = matches.map(match => ({
+                        ...match,
+                        competition: {
+                            ...match.competition,
+                            leagueName: leagues[index].name
                         }
-                    }
+                    }));
+                    return [...acc, ...matchesWithLeague];
+                }, []);
+
+                // Sort matches by date
+                const sortedMatches = allMatches.sort((a, b) => 
+                    new Date(a.utcDate) - new Date(b.utcDate)
                 );
                 
                 // Update all state at once to prevent multiple rerenders
                 setSearchState(prev => ({
                     ...prev,
-                    matches: response.data.matches || [],
+                    matches: sortedMatches,
                     loading: false,
                     error: null
                 }));
                 setHasSearched(true);
                 
                 // Scroll to map after a short delay to ensure it's rendered
-                if (response.data.matches?.length > 0) {
+                if (sortedMatches.length > 0) {
                     setTimeout(scrollToMap, 100);
                 }
                 
                 console.log('Search completed:', {
-                    matchCount: response.data.matches?.length || 0,
+                    matchCount: sortedMatches.length,
                     hasLocation: !!searchState.location
                 });
             } catch (err) {
@@ -200,10 +231,12 @@ const Home = ({ searchState, setSearchState }) => {
     };
 
     const handleDistanceChange = (distance) => {
+        console.log('Distance changed:', distance); // Add logging
         setSelectedDistance(distance);
     };
 
     const handleMatchClick = (match) => {
+        setSelectedMatch(match);
         if (activeMarkerRef.current) {
             activeMarkerRef.current(match);
             // On mobile, scroll to map when a match is clicked
@@ -211,6 +244,11 @@ const Home = ({ searchState, setSearchState }) => {
                 mapRef.current?.scrollIntoView({ behavior: 'smooth' });
             }
         }
+    };
+
+    // Add handler for map marker clicks
+    const handleMarkerClick = (match) => {
+        setSelectedMatch(match);
     };
 
     return (
@@ -231,106 +269,150 @@ const Home = ({ searchState, setSearchState }) => {
                         <Paper 
                             elevation={3}
                             sx={{
-                                p: 6,
+                                p: 2,
                                 width: '100%',
-                                maxWidth: 800,
-                                borderRadius: 4,
-                                textAlign: 'center',
-                                mx: 'auto'
+                                maxWidth: 900,
+                                borderRadius: 50,
+                                mx: 'auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                border: '1px solid #DDDDDD',
+                                '&:hover': {
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
+                                }
                             }}
                         >
-                            <Typography 
-                                variant="h2" 
-                                component="h1" 
-                                gutterBottom
+                            {/* Location */}
+                            <Box 
                                 sx={{ 
-                                    fontWeight: 800,
-                                    mb: 4,
-                                    color: '#222222',
-                                    fontSize: { xs: '2.5rem', md: '3.5rem' }
+                                    flex: 1,
+                                    borderRight: '1px solid #DDDDDD',
+                                    pr: 2
                                 }}
                             >
-                                Overlap
-                                <Typography
-                                    variant="h2"
-                                    component="span"
-                                    sx={{
-                                        display: 'block',
-                                        color: '#FF385C',
-                                        fontSize: { xs: '2rem', md: '3rem' },
-                                        fontWeight: 700
+                                <Typography 
+                                    variant="subtitle2" 
+                                    sx={{ 
+                                        fontWeight: 600,
+                                        color: '#222222',
+                                        mb: 0.5
                                     }}
                                 >
-                                    
+                                    Where
                                 </Typography>
-                            </Typography>
-
-                            <Box sx={{ mt: 6 }}>
-                                <Grid container spacing={3}>
-                                    <Grid item xs={12}>
-                                        <Box sx={{ mb: 3 }}>
-                                            <LocationAutocomplete
-                                                value={searchState.location}
-                                                onChange={handleLocationChange}
-                                            />
-                                        </Box>
-                                    </Grid>
-                                    <Grid item xs={12}>
-                                        <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                            <Grid container spacing={2}>
-                                                <Grid item xs={12} sm={6}>
-                                                    <DatePicker
-                                                        label="Departure Date"
-                                                        value={searchState.dates.departure}
-                                                        onChange={handleDepartureDateChange}
-                                                        minDate={today}
-                                                        sx={{ width: '100%' }}
-                                                        slotProps={{
-                                                            textField: {
-                                                                helperText: 'Select your departure date'
-                                                            }
-                                                        }}
-                                                    />
-                                                </Grid>
-                                                <Grid item xs={12} sm={6}>
-                                                    <DatePicker
-                                                        label="Return Date"
-                                                        value={searchState.dates.return}
-                                                        onChange={handleReturnDateChange}
-                                                        minDate={searchState.dates.departure || today}
-                                                        disabled={!searchState.dates.departure}
-                                                        sx={{ width: '100%' }}
-                                                        slotProps={{
-                                                            textField: {
-                                                                helperText: searchState.dates.departure ? 'Select your return date' : 'Select departure date first'
-                                                            }
-                                                        }}
-                                                    />
-                                                </Grid>
-                                            </Grid>
-                                        </LocalizationProvider>
-                                    </Grid>
-                                    <Grid item xs={12}>
-                                        <Button
-                                            variant="contained"
-                                            onClick={handleSearch}
-                                            disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
-                                            sx={{
-                                                mt: 2,
-                                                py: 1.5,
-                                                px: 6,
-                                                borderRadius: 2,
-                                                backgroundColor: '#FF385C',
-                                                '&:hover': {
-                                                    backgroundColor: '#E61E4D'
-                                                }
-                                            }}
-                                        >
-                                            {searchState.loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
-                                        </Button>
-                                    </Grid>
-                                </Grid>
+                                <LocationAutocomplete
+                                    value={searchState.location}
+                                    onChange={handleLocationChange}
+                                    placeholder="Search destinations"
+                                />
                             </Box>
+
+                            {/* Check-in Date */}
+                            <Box 
+                                sx={{ 
+                                    flex: 1,
+                                    borderRight: '1px solid #DDDDDD',
+                                    px: 2
+                                }}
+                            >
+                                <Typography 
+                                    variant="subtitle2" 
+                                    sx={{ 
+                                        fontWeight: 600,
+                                        color: '#222222',
+                                        mb: 0.5
+                                    }}
+                                >
+                                    Check in
+                                </Typography>
+                                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                                    <DatePicker
+                                        value={searchState.dates.departure}
+                                        onChange={handleDepartureDateChange}
+                                        minDate={today}
+                                        slotProps={{
+                                            textField: {
+                                                variant: "standard",
+                                                placeholder: "Add dates",
+                                                InputProps: {
+                                                    disableUnderline: true
+                                                }
+                                            }
+                                        }}
+                                    />
+                                </LocalizationProvider>
+                            </Box>
+
+                            {/* Check-out Date */}
+                            <Box 
+                                sx={{ 
+                                    flex: 1,
+                                    px: 2
+                                }}
+                            >
+                                <Typography 
+                                    variant="subtitle2" 
+                                    sx={{ 
+                                        fontWeight: 600,
+                                        color: '#222222',
+                                        mb: 0.5
+                                    }}
+                                >
+                                    Check out
+                                </Typography>
+                                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                                    <DatePicker
+                                        value={searchState.dates.return}
+                                        onChange={handleReturnDateChange}
+                                        minDate={searchState.dates.departure || today}
+                                        disabled={!searchState.dates.departure}
+                                        slotProps={{
+                                            textField: {
+                                                variant: "standard",
+                                                placeholder: "Add dates",
+                                                InputProps: {
+                                                    disableUnderline: true
+                                                }
+                                            }
+                                        }}
+                                    />
+                                </LocalizationProvider>
+                            </Box>
+
+                            {/* Search Button */}
+                            <Button
+                                variant="contained"
+                                onClick={handleSearch}
+                                disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
+                                sx={{
+                                    ml: 1,
+                                    height: 48,
+                                    width: 48,
+                                    minWidth: 48,
+                                    borderRadius: '50%',
+                                    backgroundColor: '#FF385C',
+                                    '&:hover': {
+                                        backgroundColor: '#E61E4D'
+                                    }
+                                }}
+                            >
+                                {searchState.loading ? (
+                                    <CircularProgress size={24} color="inherit" />
+                                ) : (
+                                    <svg 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        viewBox="0 0 32 32" 
+                                        style={{ 
+                                            fill: 'white',
+                                            width: 24,
+                                            height: 24
+                                        }}
+                                    >
+                                        <path d="M13 24c6.1 0 11-4.9 11-11S19.1 2 13 2 2 6.9 2 13s4.9 11 11 11zm0-2c-5 0-9-4-9-9s4-9 9-9 9 4 9 9-4 9-9 9zm12.3 10.7l-8.6-8.6c.9-.9 1.6-1.9 2.1-3.1l8.6 8.6c.8.8.8 2 0 2.8-.7.8-1.9.8-2.7.1z"></path>
+                                    </svg>
+                                )}
+                            </Button>
                         </Paper>
                     </Box>
 
@@ -451,6 +533,8 @@ const Home = ({ searchState, setSearchState }) => {
                                     <Matches 
                                         matches={filteredMatches} 
                                         onMatchClick={handleMatchClick}
+                                        userLocation={searchState.location}
+                                        selectedMatch={selectedMatch}
                                     />
                                 </Box>
 
@@ -471,6 +555,7 @@ const Home = ({ searchState, setSearchState }) => {
                                         setActiveMarker={(callback) => {
                                             activeMarkerRef.current = callback;
                                         }}
+                                        onMarkerClick={handleMarkerClick}
                                     />
                                 </Box>
                             </Box>

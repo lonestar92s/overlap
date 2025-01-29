@@ -168,11 +168,27 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                             ${matches.length > 1 ? 'border-bottom: 1px solid #f5f5f5;' : ''}
                         ">
                             <div style="
-                                font-size: 13px;
-                                color: #666;
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
                                 margin-bottom: 8px;
                             ">
-                                ${date} at ${time}
+                                <div style="
+                                    font-size: 13px;
+                                    color: #666;
+                                ">
+                                    ${date} at ${time}
+                                </div>
+                                <div style="
+                                    font-size: 11px;
+                                    color: #666;
+                                    background-color: #f5f5f5;
+                                    padding: 4px 8px;
+                                    border-radius: 4px;
+                                    font-weight: 500;
+                                ">
+                                    ${match.competition.leagueName}
+                                </div>
                             </div>
                             <div style="
                                 display: flex;
