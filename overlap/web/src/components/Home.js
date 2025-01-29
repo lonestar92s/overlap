@@ -324,7 +324,7 @@ const Home = ({ searchState, setSearchState }) => {
                                         mb: 0.5
                                     }}
                                 >
-                                    Check in
+                                    Departure Date
                                 </Typography>
                                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                                     <DatePicker
@@ -359,7 +359,7 @@ const Home = ({ searchState, setSearchState }) => {
                                         mb: 0.5
                                     }}
                                 >
-                                    Check out
+                                    Return Date
                                 </Typography>
                                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                                     <DatePicker

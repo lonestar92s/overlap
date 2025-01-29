@@ -422,7 +422,7 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
         <Box
             sx={{
                 width: '100%',
-                height: '500px',
+                height: '1000px',
                 borderRadius: 2,
                 overflow: 'hidden',
                 mt: 4,
