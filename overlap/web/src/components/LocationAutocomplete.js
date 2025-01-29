@@ -13,7 +13,7 @@ import { debounce } from 'lodash';
 
 const LOCATIONIQ_API_KEY = process.env.REACT_APP_LOCATIONIQ_API_KEY;
 
-const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinations" }) => {
+const LocationAutocomplete = ({ value, onChange, placeholder = "Where are you going?" }) => {
     const [inputValue, setInputValue] = useState('');
     const [options, setOptions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -177,30 +177,35 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinati
                     }}
                 />
             )}
-            renderOption={(props, option) => (
-                <Box 
-                    component="li" 
-                    {...props}
-                    sx={{ 
-                        py: 1,
-                        px: 2,
-                        '&:hover': {
-                            backgroundColor: '#F7F7F7'
-                        }
-                    }}
-                >
-                    <LocationOn sx={{ color: '#717171', mr: 2 }} />
-                    <Box>
-                        <Typography variant="body1" color="#222222">
-                            {option.city}
-                            {option.region && `, ${option.region}`}
-                        </Typography>
-                        <Typography variant="body2" color="#717171">
-                            {option.country}
-                        </Typography>
+            renderOption={(props, option) => {
+                // Extract key from props
+                const { key, ...otherProps } = props;
+                return (
+                    <Box 
+                        component="li" 
+                        key={option.place_id} // Use place_id as key
+                        {...otherProps}
+                        sx={{ 
+                            py: 1,
+                            px: 2,
+                            '&:hover': {
+                                backgroundColor: '#F7F7F7'
+                            }
+                        }}
+                    >
+                        <LocationOn sx={{ color: '#717171', mr: 2 }} />
+                        <Box>
+                            <Typography variant="body1" color="#222222">
+                                {option.city}
+                                {option.region && `, ${option.region}`}
+                            </Typography>
+                            <Typography variant="body2" color="#717171">
+                                {option.country}
+                            </Typography>
+                        </Box>
                     </Box>
-                </Box>
-            )}
+                );
+            }}
             PaperComponent={({ children, ...props }) => (
                 <Paper 
                     {...props} 

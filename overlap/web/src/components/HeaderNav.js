@@ -4,6 +4,7 @@ import {
     Toolbar, 
     IconButton,
     Box,
+    Typography
 } from '@mui/material';
 import { Home, AccountCircle } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -22,37 +23,47 @@ const HeaderNav = ({ onHomeClick }) => {
             color="default" 
             elevation={1}
             sx={{
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(8px)'
+                backgroundColor: 'white',
+                borderBottom: '1px solid #DDDDDD'
             }}
         >
-            <Toolbar sx={{ justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <IconButton
+                        edge="start"
+                        color="inherit"
+                        aria-label="home"
                         onClick={handleHomeClick}
-                        size="large"
-                        sx={{ 
-                            color: '#FF385C',
-                            '&:hover': {
-                                backgroundColor: 'rgba(255, 56, 92, 0.04)'
-                            }
-                        }}
+                        sx={{ mr: 1 }}
                     >
                         <Home />
                     </IconButton>
+                    <Typography 
+                        variant="h6" 
+                        sx={{ 
+                            fontWeight: 700,
+                            color: '#FF385C',
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}
+                    >
+                        Overlap
+                    </Typography>
                 </Box>
 
-                <IconButton
-                    size="large"
-                    sx={{ 
-                        color: '#666',
-                        '&:hover': {
-                            backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                        }
-                    }}
-                >
-                    <AccountCircle />
-                </IconButton>
+                <Box>
+                    <IconButton
+                        size="large"
+                        sx={{ 
+                            color: '#666',
+                            '&:hover': {
+                                backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                            }
+                        }}
+                    >
+                        <AccountCircle />
+                    </IconButton>
+                </Box>
             </Toolbar>
         </AppBar>
     );
