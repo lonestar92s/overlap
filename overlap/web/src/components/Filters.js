@@ -23,6 +23,7 @@ const DISTANCE_OPTIONS = [
 
 const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
     const handleDistanceChange = (event) => {
+        console.log('Radio changed:', event.target.value);
         const value = event.target.value === 'all' ? null : Number(event.target.value);
         onDistanceChange(value);
     };
@@ -73,7 +74,7 @@ const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
                     </Typography>
                     <FormControl component="fieldset">
                         <RadioGroup
-                            value={selectedDistance || 'all'}
+                            value={selectedDistance === null ? 'all' : selectedDistance.toString()}
                             onChange={handleDistanceChange}
                         >
                             <FormControlLabel 
@@ -85,7 +86,7 @@ const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
                             {DISTANCE_OPTIONS.map((option) => (
                                 <FormControlLabel
                                     key={option.value}
-                                    value={option.value}
+                                    value={option.value.toString()}
                                     control={<Radio />}
                                     label={option.label}
                                     sx={{ mb: 1 }}
