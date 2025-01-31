@@ -44,6 +44,14 @@ const Filters = ({
         onLeaguesChange(newSelectedLeagues);
     };
 
+    const handleSelectAllLeagues = (event) => {
+        if (event.target.checked) {
+            onLeaguesChange(getAllLeagues().map(l => l.id));
+        } else {
+            onLeaguesChange([]);
+        }
+    };
+
     // Group leagues by country for display
     const leaguesByCountry = getAllLeagues().reduce((acc, league) => {
         const countryCode = Object.entries(LEAGUES).find(([_, leagues]) => 
@@ -56,6 +64,9 @@ const Filters = ({
         acc[countryCode].push(league);
         return acc;
     }, {});
+
+    const allLeaguesSelected = selectedLeagues.length === getAllLeagues().length;
+    const someLeaguesSelected = selectedLeagues.length > 0 && !allLeaguesSelected;
 
     return (
         <Dialog 
@@ -141,6 +152,17 @@ const Filters = ({
                         Leagues
                     </Typography>
                     <FormControl component="fieldset">
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={allLeaguesSelected}
+                                    indeterminate={someLeaguesSelected}
+                                    onChange={handleSelectAllLeagues}
+                                />
+                            }
+                            label="Show all leagues"
+                            sx={{ mb: 2 }}
+                        />
                         {Object.entries(leaguesByCountry).map(([countryCode, leagues]) => (
                             <Box key={countryCode} sx={{ mb: 2 }}>
                                 <Typography 
@@ -153,7 +175,8 @@ const Filters = ({
                                     {countryCode === 'GB' ? 'England' :
                                      countryCode === 'FR' ? 'France' :
                                      countryCode === 'ES' ? 'Spain' :
-                                     countryCode === 'DE' ? 'Germany' : countryCode}
+                                     countryCode === 'DE' ? 'Germany' :
+                                     countryCode === 'NL' ? 'Netherlands' : countryCode}
                                 </Typography>
                                 {leagues.map((league) => (
                                     <FormControlLabel

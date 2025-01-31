@@ -416,6 +416,114 @@ const BUNDESLIGA_VENUES = {
     }
 };
 
+const EREDIVISIE_VENUES = {
+    "PSV": {
+        stadium: "Philips Stadion",
+        location: "Eindhoven",
+        coordinates: [5.467778, 51.441944]
+    },
+    "Feyenoord Rotterdam": {
+        stadium: "De Kuip",
+        location: "Rotterdam",
+        coordinates: [4.523889, 51.893889]
+    },
+    "AFC Ajax": {
+        stadium: "Johan Cruijff ArenA",
+        location: "Amsterdam",
+        coordinates: [4.941944, 52.314167]
+    },
+    "AZ": {
+        stadium: "AFAS Stadion",
+        location: "Alkmaar",
+        coordinates: [4.744722, 52.605833]
+    },
+    "FC Twente '65": {
+        stadium: "De Grolsch Veste",
+        location: "Enschede",
+        coordinates: [6.865278, 52.236111]
+    },
+    "Vitesse Arnhem": {
+        stadium: "GelreDome",
+        location: "Arnhem",
+        coordinates: [5.911944, 51.965]
+    },
+    "FC Utrecht": {
+        stadium: "Stadion Galgenwaard",
+        location: "Utrecht",
+        coordinates: [5.145556, 52.078611]
+    },
+    "SC Heerenveen": {
+        stadium: "Abe Lenstra Stadion",
+        location: "Heerenveen",
+        coordinates: [5.930556, 52.956944]
+    },
+    "Sparta Rotterdam": {
+        stadium: "Sparta Stadion Het Kasteel",
+        location: "Rotterdam",
+        coordinates: [4.431944, 51.920278]
+    },
+    "NEC": {
+        stadium: "Goffertstadion",
+        location: "Nijmegen",
+        coordinates: [5.856944, 51.826667]
+    },
+    "PEC Zwolle": {
+        stadium: "MAC³PARK stadion",
+        location: "Zwolle",
+        coordinates: [6.094444, 52.524167]
+    },
+    "Go Ahead Eagles": {
+        stadium: "De Adelaarshorst",
+        location: "Deventer",
+        coordinates: [6.186389, 52.255]
+    },
+    "Almere City FC": {
+        stadium: "Yanmar Stadion",
+        location: "Almere",
+        coordinates: [5.2875, 52.341944]
+    },
+    "Excelsior Rotterdam": {
+        stadium: "Van Donge & De Roo Stadion",
+        location: "Rotterdam",
+        coordinates: [4.511944, 51.918889]
+    },
+    "Heracles Almelo": {
+        stadium: "Erve Asito",
+        location: "Almelo",
+        coordinates: [6.658333, 52.356944]
+    },
+    "RKC Waalwijk": {
+        stadium: "Mandemakers Stadion",
+        location: "Waalwijk",
+        coordinates: [5.065833, 51.688889]
+    },
+    "Fortuna Sittard": {
+        stadium: "Fortuna Sittard Stadion",
+        location: "Sittard",
+        coordinates: [5.866667, 51.001389]
+    },
+    "FC Volendam": {
+        stadium: "Kras Stadion",
+        location: "Volendam",
+        coordinates: [5.070556, 52.497778]
+    },
+    "FC Groningen": {
+        stadium: "Euroborg",
+        location: "Groningen",
+        coordinates: [6.574722, 53.196944]
+    },
+    "Willem II Tilburg": {
+        stadium: "Koning Willem II Stadion",
+        location: "Tilburg",
+        coordinates: [5.081944, 51.553889]
+    },
+    "NAC Breda": {
+        stadium: "Rat Verlegh Stadion",
+        location: "Breda",
+        coordinates: [4.801944, 51.588333]
+    }
+};
+
 // Function to get venue information for a team
 function getVenueForTeam(teamName) {
     // Check each league's venues
@@ -423,7 +531,8 @@ function getVenueForTeam(teamName) {
         ...PREMIER_LEAGUE_VENUES,
         ...LIGUE_1_VENUES,
         ...LA_LIGA_VENUES,
-        ...BUNDESLIGA_VENUES
+        ...BUNDESLIGA_VENUES,
+        ...EREDIVISIE_VENUES
     };
     return allVenues[teamName] || null;
 }
@@ -434,5 +543,6 @@ export {
     PREMIER_LEAGUE_VENUES,
     LIGUE_1_VENUES,
     LA_LIGA_VENUES,
-    BUNDESLIGA_VENUES
+    BUNDESLIGA_VENUES,
+    EREDIVISIE_VENUES
 }; 

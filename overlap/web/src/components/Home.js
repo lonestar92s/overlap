@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import { 
     Container, 
@@ -46,7 +46,7 @@ const Home = ({ searchState, setSearchState }) => {
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
-    const [selectedLeagues, setSelectedLeagues] = useState(getAllLeagues().map(l => l.id));
+    const [selectedLeagues, setSelectedLeagues] = useState([]);
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
 
@@ -90,22 +90,33 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
-    const handleLocationChange = (newValue) => {
-        setSearchState(prev => ({
-            ...prev,
-            location: newValue
-        }));
-
-        // Update selected leagues based on location
-        if (newValue?.country) {
-            const countryCode = getCountryCode(newValue.country);
+    const handleLocationSelect = (location) => {
+        setSearchState(prev => ({ ...prev, location }));
+        
+        if (location && location.country) {
+            // Special handling for UK locations
+            const countryCode = location.country === 'United Kingdom' ? 'GB' : getCountryCode(location.country);
             if (countryCode) {
+                // Get all leagues for the selected country
                 const countryLeagues = getLeaguesForCountry(countryCode);
-                setSelectedLeagues(countryLeagues.map(l => l.id));
+                if (countryLeagues.length > 0) {
+                    // Set selected leagues to all leagues from that country
+                    setSelectedLeagues(countryLeagues.map(league => league.id));
+                }
+                // Only fall back to all leagues if no country leagues found
+                else {
+                    const allLeagues = getAllLeagues();
+                    setSelectedLeagues(allLeagues.map(league => league.id));
+                }
             } else {
-                // If country not supported, show all leagues
-                setSelectedLeagues(getAllLeagues().map(l => l.id));
+                // If country not found, show all leagues
+                const allLeagues = getAllLeagues();
+                setSelectedLeagues(allLeagues.map(league => league.id));
             }
+        } else {
+            // If no location selected, show all leagues
+            const allLeagues = getAllLeagues();
+            setSelectedLeagues(allLeagues.map(league => league.id));
         }
     };
 
@@ -116,17 +127,6 @@ const Home = ({ searchState, setSearchState }) => {
                 departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
                 return: format(searchState.dates.return, 'yyyy-MM-dd')
             };
-            
-            // Log search parameters
-            console.log('Performing search with:', {
-                location: searchState.location ? {
-                    city: searchState.location.city,
-                    region: searchState.location.region,
-                    country: searchState.location.country,
-                    coordinates: [searchState.location.lon, searchState.location.lat]
-                } : 'No location selected',
-                dates: formattedDates
-            });
             
             try {
                 // Get all available leagues
@@ -160,10 +160,26 @@ const Home = ({ searchState, setSearchState }) => {
                     return [...acc, ...matchesWithLeague];
                 }, []);
 
-                // Sort matches by date
-                const sortedMatches = allMatches.sort((a, b) => 
-                    new Date(a.utcDate) - new Date(b.utcDate)
-                );
+                // Sort matches chronologically by date and time
+                const sortedMatches = [...allMatches].sort((a, b) => {
+                    const dateA = new Date(a.utcDate);
+                    const dateB = new Date(b.utcDate);
+                    return dateA.getTime() - dateB.getTime();
+                });
+
+                // If no matches found with current filters, show all matches
+                if (sortedMatches.length > 0) {
+                    // Check if there are matches in the currently selected leagues
+                    const matchesInSelectedLeagues = sortedMatches.filter(match => 
+                        selectedLeagues.includes(match.competition.id)
+                    );
+                    
+                    // Only fall back to all leagues if no matches in selected leagues
+                    if (matchesInSelectedLeagues.length === 0) {
+                        const allLeagues = getAllLeagues();
+                        setSelectedLeagues(allLeagues.map(league => league.id));
+                    }
+                }
 
                 // If location is selected, check for matches within 100 miles
                 if (searchState.location) {
@@ -181,14 +197,13 @@ const Home = ({ searchState, setSearchState }) => {
                         return distance <= 100;
                     });
 
-                    // If there are matches within 100 miles, set the filter
-                    // If not, show all matches
+                    // Only set distance filter if we found matches within range
                     setSelectedDistance(matchesWithin100Miles.length > 0 ? 100 : null);
                 } else {
                     setSelectedDistance(null);
                 }
                 
-                // Update all state at once to prevent multiple rerenders
+                // Update state
                 setSearchState(prev => ({
                     ...prev,
                     matches: sortedMatches,
@@ -202,10 +217,6 @@ const Home = ({ searchState, setSearchState }) => {
                     setTimeout(scrollToMap, 100);
                 }
                 
-                console.log('Search completed:', {
-                    matchCount: sortedMatches.length,
-                    hasLocation: !!searchState.location
-                });
             } catch (err) {
                 setSearchState(prev => ({
                     ...prev,
@@ -223,7 +234,7 @@ const Home = ({ searchState, setSearchState }) => {
     const handleReset = () => {
         setHasSearched(false);
         setSelectedDistance(null);
-        setSelectedLeagues(getAllLeagues().map(l => l.id));
+        setSelectedLeagues([]);
         setSearchState(prev => ({
             ...prev,
             dates: {
@@ -239,25 +250,10 @@ const Home = ({ searchState, setSearchState }) => {
 
     // Filter matches based on selected distance and leagues
     const filteredMatches = useMemo(() => {
-        console.log('Filtering matches:', {
-            totalMatches: searchState.matches.length,
-            selectedLeagues,
-            sampleMatch: searchState.matches[0]
-        });
-
         // First filter by leagues
         let filtered = searchState.matches.filter(match => {
-            const isIncluded = selectedLeagues.includes(match.competition.id);
-            // console.log('Match league check:', {
-            //     matchId: match.id,
-            //     competition: match.competition,
-            //     isIncluded
-            // });
+            const isIncluded = selectedLeagues.length === 0 || selectedLeagues.includes(match.competition.id);
             return isIncluded;
-        });
-
-        console.log('After league filtering:', {
-            filteredCount: filtered.length
         });
 
         // Then filter by distance if applicable
@@ -275,12 +271,15 @@ const Home = ({ searchState, setSearchState }) => {
 
                 return distance <= selectedDistance;
             });
-            console.log('After distance filtering:', {
-                finalCount: filtered.length
-            });
         }
 
-        return filtered;
+        // Always sort chronologically by date and time
+        return [...filtered].sort((a, b) => {
+            const dateA = new Date(a.utcDate);
+            const dateB = new Date(b.utcDate);
+            return dateA.getTime() - dateB.getTime();
+        });
+
     }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues]);
 
     const handleFiltersOpen = () => {
@@ -298,6 +297,7 @@ const Home = ({ searchState, setSearchState }) => {
 
     const handleMatchClick = (match) => {
         setSelectedMatch(match);
+        // Trigger marker popup and map centering
         if (activeMarkerRef.current) {
             activeMarkerRef.current(match);
             // On mobile, scroll to map when a match is clicked
@@ -307,10 +307,10 @@ const Home = ({ searchState, setSearchState }) => {
         }
     };
 
-    // Add handler for map marker clicks
-    const handleMarkerClick = (match) => {
-        setSelectedMatch(match);
-    };
+    // Reset selected match when filters change
+    useEffect(() => {
+        setSelectedMatch(null);
+    }, [selectedDistance, selectedLeagues]);
 
     return (
         <>
@@ -364,7 +364,7 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Typography>
                                 <LocationAutocomplete
                                     value={searchState.location}
-                                    onChange={handleLocationChange}
+                                    onChange={handleLocationSelect}
                                     placeholder="Search destinations"
                                 />
                             </Box>
@@ -614,7 +614,6 @@ const Home = ({ searchState, setSearchState }) => {
                                         setActiveMarker={(callback) => {
                                             activeMarkerRef.current = callback;
                                         }}
-                                        onMarkerClick={handleMarkerClick}
                                     />
                                 </Box>
                             </Box>
