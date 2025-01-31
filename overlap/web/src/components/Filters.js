@@ -44,16 +44,6 @@ const Filters = ({
         onLeaguesChange(newSelectedLeagues);
     };
 
-    const handleSelectAllLeagues = (event) => {
-        if (event.target.checked) {
-            onLeaguesChange(getAllLeagues().map(l => l.id));
-        } else {
-            onLeaguesChange([]);
-        }
-    };
-
-    const allLeaguesSelected = selectedLeagues.length === getAllLeagues().length;
-
     // Group leagues by country for display
     const leaguesByCountry = getAllLeagues().reduce((acc, league) => {
         const countryCode = Object.entries(LEAGUES).find(([_, leagues]) => 
@@ -151,20 +141,6 @@ const Filters = ({
                         Leagues
                     </Typography>
                     <FormControl component="fieldset">
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={allLeaguesSelected}
-                                    indeterminate={selectedLeagues.length > 0 && !allLeaguesSelected}
-                                    onChange={handleSelectAllLeagues}
-                                />
-                            }
-                            label="Show all leagues"
-                            sx={{ 
-                                mb: 2,
-                                fontWeight: 500
-                            }}
-                        />
                         {Object.entries(leaguesByCountry).map(([countryCode, leagues]) => (
                             <Box key={countryCode} sx={{ mb: 2 }}>
                                 <Typography 

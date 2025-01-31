@@ -46,7 +46,7 @@ const Home = ({ searchState, setSearchState }) => {
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
-    const [selectedLeagues, setSelectedLeagues] = useState([]);
+    const [selectedLeagues, setSelectedLeagues] = useState(getAllLeagues().map(l => l.id));
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
 
@@ -101,20 +101,11 @@ const Home = ({ searchState, setSearchState }) => {
             const countryCode = getCountryCode(newValue.country);
             if (countryCode) {
                 const countryLeagues = getLeaguesForCountry(countryCode);
-                if (countryLeagues.length > 0) {
-                    // If the country has leagues, select only those leagues
-                    setSelectedLeagues(countryLeagues.map(l => l.id));
-                } else {
-                    // If no leagues in the country, show all leagues
-                    setSelectedLeagues(getAllLeagues().map(l => l.id));
-                }
+                setSelectedLeagues(countryLeagues.map(l => l.id));
             } else {
                 // If country not supported, show all leagues
                 setSelectedLeagues(getAllLeagues().map(l => l.id));
             }
-        } else {
-            // If no location selected, show all leagues
-            setSelectedLeagues(getAllLeagues().map(l => l.id));
         }
     };
 
@@ -248,10 +239,26 @@ const Home = ({ searchState, setSearchState }) => {
 
     // Filter matches based on selected distance and leagues
     const filteredMatches = useMemo(() => {
+        console.log('Filtering matches:', {
+            totalMatches: searchState.matches.length,
+            selectedLeagues,
+            sampleMatch: searchState.matches[0]
+        });
+
         // First filter by leagues
-        let filtered = searchState.matches.filter(match => 
-            selectedLeagues.includes(match.competition.id)
-        );
+        let filtered = searchState.matches.filter(match => {
+            const isIncluded = selectedLeagues.includes(match.competition.id);
+            // console.log('Match league check:', {
+            //     matchId: match.id,
+            //     competition: match.competition,
+            //     isIncluded
+            // });
+            return isIncluded;
+        });
+
+        console.log('After league filtering:', {
+            filteredCount: filtered.length
+        });
 
         // Then filter by distance if applicable
         if (selectedDistance && searchState.location) {
@@ -267,6 +274,9 @@ const Home = ({ searchState, setSearchState }) => {
                 );
 
                 return distance <= selectedDistance;
+            });
+            console.log('After distance filtering:', {
+                finalCount: filtered.length
             });
         }
 
