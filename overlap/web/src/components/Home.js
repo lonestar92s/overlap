@@ -480,56 +480,52 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Button>
                             </Box>
 
+                            {/* Filters Bar */}
+                            <Box sx={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                mb: 2,
+                                backgroundColor: '#fff',
+                                py: 2
+                            }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    {selectedDistance ? `Showing matches within ${selectedDistance} miles` : 'Showing all matches'}
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<TuneRounded />}
+                                    onClick={handleFiltersOpen}
+                                    sx={{
+                                        borderColor: '#DDD',
+                                        color: '#666',
+                                        '&:hover': {
+                                            borderColor: '#999',
+                                            backgroundColor: '#F5F5F5'
+                                        }
+                                    }}
+                                >
+                                    Filters
+                                </Button>
+                            </Box>
+
                             {/* Results Grid */}
                             <Box 
                                 sx={{ 
                                     display: 'grid',
                                     gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                                     gap: 3,
-                                    height: { xs: 'auto', md: 'calc(100vh - 220px)' },
-                                    position: { xs: 'static', md: 'sticky' },
-                                    top: 100
+                                    height: { xs: 'auto', md: 'calc(100vh - 300px)' },
                                 }}
                             >
                                 {/* Left side - Match Results */}
                                 <Box 
                                     sx={{ 
                                         overflowY: { xs: 'visible', md: 'auto' },
-                                        pr: 2,
                                         height: { xs: 'auto', md: '100%' },
                                         order: { xs: 2, md: 1 }
                                     }}
                                 >
-                                    <Box sx={{ 
-                                        display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center', 
-                                        mb: 2,
-                                        position: { xs: 'static', md: 'sticky' },
-                                        top: 0,
-                                        backgroundColor: '#fff',
-                                        zIndex: 1,
-                                        py: 2
-                                    }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {selectedDistance ? `Showing matches within ${selectedDistance} miles` : 'Showing all matches'}
-                                        </Typography>
-                                        <Button
-                                            variant="outlined"
-                                            startIcon={<TuneRounded />}
-                                            onClick={handleFiltersOpen}
-                                            sx={{
-                                                borderColor: '#DDD',
-                                                color: '#666',
-                                                '&:hover': {
-                                                    borderColor: '#999',
-                                                    backgroundColor: '#F5F5F5'
-                                                }
-                                            }}
-                                        >
-                                            Filters
-                                        </Button>
-                                    </Box>
                                     <Matches 
                                         matches={filteredMatches} 
                                         onMatchClick={handleMatchClick}
@@ -542,10 +538,10 @@ const Home = ({ searchState, setSearchState }) => {
                                 <Box 
                                     ref={mapRef}
                                     sx={{ 
-                                        position: { xs: 'relative', md: 'sticky' },
-                                        top: 0,
                                         height: { xs: '400px', md: '100%' },
-                                        order: { xs: 1, md: 2 }
+                                        order: { xs: 1, md: 2 },
+                                        borderRadius: 2,
+                                        overflow: 'hidden'
                                     }}
                                 >
                                     <Map 
