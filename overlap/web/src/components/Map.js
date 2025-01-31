@@ -151,14 +151,40 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                 min-width: 250px;
             ">
                 <div style="
-                    font-weight: 600;
-                    font-size: 14px;
-                    color: #444;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
                     margin-bottom: 8px;
                     padding-bottom: 8px;
                     border-bottom: 1px solid #eee;
                 ">
-                    ${venue.stadium}
+                    <div style="
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: #444;
+                    ">
+                        ${venue.stadium}
+                    </div>
+                    ${venue.ticketUrl ? `
+                        <a 
+                            href="${venue.ticketUrl}" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style="
+                                font-size: 12px;
+                                color: #FF385C;
+                                text-decoration: none;
+                                padding: 4px 8px;
+                                border: 1px solid #FF385C;
+                                border-radius: 4px;
+                                transition: all 0.2s;
+                            "
+                            onmouseover="this.style.backgroundColor='#FF385C';this.style.color='white';"
+                            onmouseout="this.style.backgroundColor='transparent';this.style.color='#FF385C';"
+                        >
+                            Tickets
+                        </a>
+                    ` : ''}
                 </div>
                 ${matches.map(match => {
                     const { date, time } = formatMatchDateTime(match.utcDate);
