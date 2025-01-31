@@ -24,6 +24,7 @@ import HeaderNav from './HeaderNav';
 import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getVenueForTeam } from '../data/venues';
+import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
 
 // Helper function to calculate distance between two points using Haversine formula
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -45,6 +46,7 @@ const Home = ({ searchState, setSearchState }) => {
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
+    const [selectedLeagues, setSelectedLeagues] = useState([]);
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
 
@@ -93,6 +95,27 @@ const Home = ({ searchState, setSearchState }) => {
             ...prev,
             location: newValue
         }));
+
+        // Update selected leagues based on location
+        if (newValue?.country) {
+            const countryCode = getCountryCode(newValue.country);
+            if (countryCode) {
+                const countryLeagues = getLeaguesForCountry(countryCode);
+                if (countryLeagues.length > 0) {
+                    // If the country has leagues, select only those leagues
+                    setSelectedLeagues(countryLeagues.map(l => l.id));
+                } else {
+                    // If no leagues in the country, show all leagues
+                    setSelectedLeagues(getAllLeagues().map(l => l.id));
+                }
+            } else {
+                // If country not supported, show all leagues
+                setSelectedLeagues(getAllLeagues().map(l => l.id));
+            }
+        } else {
+            // If no location selected, show all leagues
+            setSelectedLeagues(getAllLeagues().map(l => l.id));
+        }
     };
 
     const handleSearch = async () => {
@@ -115,13 +138,8 @@ const Home = ({ searchState, setSearchState }) => {
             });
             
             try {
-                // Define leagues to fetch
-                const leagues = [
-                    { id: 'PL', name: 'Premier League' },
-                    { id: 'FL1', name: 'Ligue 1' },
-                    { id: 'PD', name: 'La Liga' },
-                    { id: 'BL1', name: 'Bundesliga' }
-                ];
+                // Get all available leagues
+                const leagues = getAllLeagues();
 
                 // Fetch matches from all leagues in parallel
                 const responses = await Promise.all(
@@ -140,11 +158,11 @@ const Home = ({ searchState, setSearchState }) => {
                 // Combine matches from all leagues
                 const allMatches = responses.reduce((acc, response, index) => {
                     const matches = response.data.matches || [];
-                    // Add league information to each match
                     const matchesWithLeague = matches.map(match => ({
                         ...match,
                         competition: {
                             ...match.competition,
+                            id: leagues[index].id,
                             leagueName: leagues[index].name
                         }
                     }));
@@ -214,6 +232,7 @@ const Home = ({ searchState, setSearchState }) => {
     const handleReset = () => {
         setHasSearched(false);
         setSelectedDistance(null);
+        setSelectedLeagues(getAllLeagues().map(l => l.id));
         setSearchState(prev => ({
             ...prev,
             dates: {
@@ -227,26 +246,32 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
-    // Filter matches based on selected distance
+    // Filter matches based on selected distance and leagues
     const filteredMatches = useMemo(() => {
-        if (!selectedDistance || !searchState.location) {
-            return searchState.matches;
+        // First filter by leagues
+        let filtered = searchState.matches.filter(match => 
+            selectedLeagues.includes(match.competition.id)
+        );
+
+        // Then filter by distance if applicable
+        if (selectedDistance && searchState.location) {
+            filtered = filtered.filter(match => {
+                const venue = getVenueForTeam(match.homeTeam.name);
+                if (!venue || !venue.coordinates) return false;
+
+                const distance = calculateDistance(
+                    searchState.location.lat,
+                    searchState.location.lon,
+                    venue.coordinates[1],
+                    venue.coordinates[0]
+                );
+
+                return distance <= selectedDistance;
+            });
         }
 
-        return searchState.matches.filter(match => {
-            const venue = getVenueForTeam(match.homeTeam.name);
-            if (!venue || !venue.coordinates) return false;
-
-            const distance = calculateDistance(
-                searchState.location.lat,
-                searchState.location.lon,
-                venue.coordinates[1], // Venue latitude
-                venue.coordinates[0]  // Venue longitude
-            );
-
-            return distance <= selectedDistance;
-        });
-    }, [searchState.matches, searchState.location, selectedDistance]);
+        return filtered;
+    }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues]);
 
     const handleFiltersOpen = () => {
         setIsFiltersOpen(true);
@@ -516,7 +541,9 @@ const Home = ({ searchState, setSearchState }) => {
                                 py: 2
                             }}>
                                 <Typography variant="body2" color="text.secondary">
-                                    {selectedDistance ? `Showing matches within ${selectedDistance} miles` : 'Showing all matches'}
+                                    {`Showing ${filteredMatches.length} matches`}
+                                    {selectedDistance ? ` within ${selectedDistance} miles` : ''}
+                                    {selectedLeagues.length < 4 ? ` from ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}` : ''}
                                 </Typography>
                                 <Button
                                     variant="outlined"
@@ -591,6 +618,8 @@ const Home = ({ searchState, setSearchState }) => {
                 onClose={handleFiltersClose}
                 selectedDistance={selectedDistance}
                 onDistanceChange={handleDistanceChange}
+                selectedLeagues={selectedLeagues}
+                onLeaguesChange={setSelectedLeagues}
             />
 
             {/* Back to top button */}
