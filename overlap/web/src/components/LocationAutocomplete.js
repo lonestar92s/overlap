@@ -13,12 +13,24 @@ import { debounce } from 'lodash';
 
 const LOCATIONIQ_API_KEY = process.env.REACT_APP_LOCATIONIQ_API_KEY;
 
-const LocationAutocomplete = ({ value, onChange, placeholder = "Where are you going?" }) => {
+const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinations" }) => {
     const [inputValue, setInputValue] = useState('');
     const [options, setOptions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [lastRequestTime, setLastRequestTime] = useState(0);
+
+    // Helper function to format location display
+    const formatLocationDisplay = (option) => {
+        if (!option) return '';
+        return `${option.city}, ${option.country}`;
+    };
+
+    // Helper function to format full location details
+    const formatLocationDetails = (option) => {
+        if (!option) return '';
+        return `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}`;
+    };
 
     const fetchSuggestions = async (query) => {
         if (!query || query.length < 2 || !LOCATIONIQ_API_KEY) {
@@ -141,9 +153,7 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Where are you go
             }}
             onInputChange={handleInputChange}
             options={options}
-            getOptionLabel={(option) => 
-                option ? `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}` : ''
-            }
+            getOptionLabel={(option) => formatLocationDisplay(option)}
             loading={loading}
             filterOptions={(x) => x}
             freeSolo
@@ -164,7 +174,7 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Where are you go
                     }}
                     sx={{
                         '& .MuiInputBase-root': {
-                            padding: '0 !important'
+                            padding: '0px !important'
                         },
                         '& .MuiInputBase-input': {
                             padding: '0 !important',
@@ -178,12 +188,11 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Where are you go
                 />
             )}
             renderOption={(props, option) => {
-                // Extract key from props
                 const { key, ...otherProps } = props;
                 return (
                     <Box 
                         component="li" 
-                        key={option.place_id} // Use place_id as key
+                        key={option.place_id}
                         {...otherProps}
                         sx={{ 
                             py: 1,
