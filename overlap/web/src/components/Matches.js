@@ -28,8 +28,10 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 const formatMatchDateTime = (utcDate) => {
     const date = new Date(utcDate);
     return {
-        date: format(date, 'EEE, MMM d'),
-        time: format(date, 'h:mm a')
+        date: format(date, 'EEE, MMM d', { timeZone: 'UTC' }),
+        time: format(date, 'h:mm a', { timeZone: 'UTC' }),
+        fullDate: format(date, 'EEEE, MMMM d', { timeZone: 'UTC' }),
+        groupDate: format(date, 'yyyy-MM-dd', { timeZone: 'UTC' })
     };
 };
 
@@ -232,11 +234,11 @@ const Matches = ({ matches, onMatchClick, userLocation, selectedMatch }) => {
     // Group sorted matches by date
     const groupedMatches = useMemo(() => {
         return sortedMatches.reduce((groups, match) => {
-            const date = format(new Date(match.utcDate), 'yyyy-MM-dd');
-            if (!groups[date]) {
-                groups[date] = [];
+            const { groupDate } = formatMatchDateTime(match.utcDate);
+            if (!groups[groupDate]) {
+                groups[groupDate] = [];
             }
-            groups[date].push(match);
+            groups[groupDate].push(match);
             return groups;
         }, {});
     }, [sortedMatches]);
@@ -255,7 +257,7 @@ const Matches = ({ matches, onMatchClick, userLocation, selectedMatch }) => {
                                 fontWeight: 600
                             }}
                         >
-                            {format(new Date(date), 'EEEE, MMMM d')}
+                            {formatMatchDateTime(dateMatches[0].utcDate).fullDate}
                         </Typography>
                         {dateMatches
                             .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate))
