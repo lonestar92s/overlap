@@ -118,7 +118,9 @@ const Home = ({ searchState, setSearchState }) => {
                 // Define leagues to fetch
                 const leagues = [
                     { id: 'PL', name: 'Premier League' },
-                    { id: 'FL1', name: 'Ligue 1' }
+                    { id: 'FL1', name: 'Ligue 1' },
+                    { id: 'PD', name: 'La Liga' },
+                    { id: 'BL1', name: 'Bundesliga' }
                 ];
 
                 // Fetch matches from all leagues in parallel
@@ -153,6 +155,29 @@ const Home = ({ searchState, setSearchState }) => {
                 const sortedMatches = allMatches.sort((a, b) => 
                     new Date(a.utcDate) - new Date(b.utcDate)
                 );
+
+                // If location is selected, check for matches within 100 miles
+                if (searchState.location) {
+                    const matchesWithin100Miles = sortedMatches.filter(match => {
+                        const venue = getVenueForTeam(match.homeTeam.name);
+                        if (!venue || !venue.coordinates) return false;
+
+                        const distance = calculateDistance(
+                            searchState.location.lat,
+                            searchState.location.lon,
+                            venue.coordinates[1],
+                            venue.coordinates[0]
+                        );
+
+                        return distance <= 100;
+                    });
+
+                    // If there are matches within 100 miles, set the filter
+                    // If not, show all matches
+                    setSelectedDistance(matchesWithin100Miles.length > 0 ? 100 : null);
+                } else {
+                    setSelectedDistance(null);
+                }
                 
                 // Update all state at once to prevent multiple rerenders
                 setSearchState(prev => ({
@@ -188,6 +213,7 @@ const Home = ({ searchState, setSearchState }) => {
     // Reset hasSearched when resetting the form
     const handleReset = () => {
         setHasSearched(false);
+        setSelectedDistance(null);
         setSearchState(prev => ({
             ...prev,
             dates: {

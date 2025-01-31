@@ -207,6 +207,198 @@ const TEAM_VENUES = {
         stadium: "Stade Geoffroy-Guichard",
         location: "Saint-Étienne",
         coordinates: [4.390278, 45.460833]
+    },
+    // La Liga Teams
+    "Real Madrid CF": {
+        stadium: "Santiago Bernabéu",
+        location: "Madrid",
+        coordinates: [-3.688333, 40.453056]
+    },
+    "FC Barcelona": {
+        stadium: "Spotify Camp Nou",
+        location: "Barcelona",
+        coordinates: [2.122917, 41.380898]
+    },
+    "Atlético de Madrid": {
+        stadium: "Cívitas Metropolitano",
+        location: "Madrid",
+        coordinates: [-3.599722, 40.436111]
+    },
+    "Real Sociedad de Fútbol": {
+        stadium: "Reale Arena",
+        location: "San Sebastián",
+        coordinates: [-1.973611, 43.301389]
+    },
+    "Real Betis Balompié": {
+        stadium: "Estadio Benito Villamarín",
+        location: "Seville",
+        coordinates: [-5.981667, 37.356389]
+    },
+    "Sevilla FC": {
+        stadium: "Ramón Sánchez-Pizjuán",
+        location: "Seville",
+        coordinates: [-5.970278, 37.383889]
+    },
+    "Villarreal CF": {
+        stadium: "Estadio de la Cerámica",
+        location: "Villarreal",
+        coordinates: [-0.103611, 39.944167]
+    },
+    "Athletic Club": {
+        stadium: "San Mamés",
+        location: "Bilbao",
+        coordinates: [-2.950278, 43.264167]
+    },
+    "Valencia CF": {
+        stadium: "Mestalla",
+        location: "Valencia",
+        coordinates: [-0.358333, 39.474722]
+    },
+    "CA Osasuna": {
+        stadium: "El Sadar",
+        location: "Pamplona",
+        coordinates: [-1.636944, 42.796389]
+    },
+    "Girona FC": {
+        stadium: "Estadi Montilivi",
+        location: "Girona",
+        coordinates: [2.825833, 41.961111]
+    },
+    "Getafe CF": {
+        stadium: "Coliseum Alfonso Pérez",
+        location: "Getafe",
+        coordinates: [-3.735556, 40.325556]
+    },
+    "RCD Mallorca": {
+        stadium: "Visit Mallorca Estadi",
+        location: "Palma",
+        coordinates: [2.637778, 39.589444]
+    },
+    "Deportivo Alavés": {
+        stadium: "Mendizorrotza",
+        location: "Vitoria-Gasteiz",
+        coordinates: [-2.688889, 42.839722]
+    },
+    "UD Las Palmas": {
+        stadium: "Estadio Gran Canaria",
+        location: "Las Palmas",
+        coordinates: [-15.456944, 28.100278]
+    },
+    "Celta de Vigo": {
+        stadium: "Abanca-Balaídos",
+        location: "Vigo",
+        coordinates: [-8.740278, 42.211944]
+    },
+    "Granada CF": {
+        stadium: "Nuevo Los Cármenes",
+        location: "Granada",
+        coordinates: [-3.595833, 37.153889]
+    },
+    "Cádiz CF": {
+        stadium: "Nuevo Mirandilla",
+        location: "Cádiz",
+        coordinates: [-6.270833, 36.501944]
+    },
+    "UD Almería": {
+        stadium: "Power Horse Stadium",
+        location: "Almería",
+        coordinates: [-2.408333, 36.841111]
+    },
+    "Rayo Vallecano": {
+        stadium: "Estadio de Vallecas",
+        location: "Madrid",
+        coordinates: [-3.657778, 40.391944]
+    },
+    // Bundesliga Teams
+    "FC Bayern München": {
+        stadium: "Allianz Arena",
+        location: "Munich",
+        coordinates: [11.624722, 48.218889]
+    },
+    "Borussia Dortmund": {
+        stadium: "Signal Iduna Park",
+        location: "Dortmund",
+        coordinates: [7.451667, 51.492778]
+    },
+    "RB Leipzig": {
+        stadium: "Red Bull Arena",
+        location: "Leipzig",
+        coordinates: [12.348056, 51.345833]
+    },
+    "Bayer 04 Leverkusen": {
+        stadium: "BayArena",
+        location: "Leverkusen",
+        coordinates: [6.973056, 51.038056]
+    },
+    "Eintracht Frankfurt": {
+        stadium: "Deutsche Bank Park",
+        location: "Frankfurt",
+        coordinates: [8.645278, 50.068611]
+    },
+    "VfL Wolfsburg": {
+        stadium: "Volkswagen Arena",
+        location: "Wolfsburg",
+        coordinates: [10.803889, 52.431944]
+    },
+    "SC Freiburg": {
+        stadium: "Europa-Park Stadion",
+        location: "Freiburg",
+        coordinates: [7.899444, 48.020278]
+    },
+    "1. FC Union Berlin": {
+        stadium: "Stadion An der Alten Försterei",
+        location: "Berlin",
+        coordinates: [13.568333, 52.457222]
+    },
+    "1. FSV Mainz 05": {
+        stadium: "MEWA ARENA",
+        location: "Mainz",
+        coordinates: [8.224167, 49.984167]
+    },
+    "TSG 1899 Hoffenheim": {
+        stadium: "PreZero Arena",
+        location: "Sinsheim",
+        coordinates: [8.891667, 49.239444]
+    },
+    "Borussia Mönchengladbach": {
+        stadium: "Borussia-Park",
+        location: "Mönchengladbach",
+        coordinates: [6.385556, 51.174722]
+    },
+    "1. FC Köln": {
+        stadium: "RheinEnergieSTADION",
+        location: "Cologne",
+        coordinates: [6.875278, 50.933611]
+    },
+    "SV Werder Bremen": {
+        stadium: "Weserstadion",
+        location: "Bremen",
+        coordinates: [8.837222, 53.066389]
+    },
+    "FC Augsburg": {
+        stadium: "WWK ARENA",
+        location: "Augsburg",
+        coordinates: [10.931944, 48.332778]
+    },
+    "VfB Stuttgart": {
+        stadium: "MHPArena",
+        location: "Stuttgart",
+        coordinates: [9.231667, 48.792222]
+    },
+    "VfL Bochum": {
+        stadium: "Vonovia Ruhrstadion",
+        location: "Bochum",
+        coordinates: [7.215556, 51.465]
+    },
+    "1. FC Heidenheim": {
+        stadium: "Voith-Arena",
+        location: "Heidenheim",
+        coordinates: [10.149722, 48.676111]
+    },
+    "SV Darmstadt 98": {
+        stadium: "Merck-Stadion am Böllenfalltor",
+        location: "Darmstadt",
+        coordinates: [8.649444, 49.859167]
     }
 };
 
