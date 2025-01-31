@@ -11,9 +11,12 @@ import {
     Radio,
     Typography,
     Box,
-    IconButton
+    IconButton,
+    Checkbox,
+    Divider
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import { getAllLeagues, LEAGUES } from '../data/leagues';
 
 const DISTANCE_OPTIONS = [
     { value: 50, label: '50 miles' },
@@ -21,12 +24,48 @@ const DISTANCE_OPTIONS = [
     { value: 250, label: '250 miles' }
 ];
 
-const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
+const Filters = ({ 
+    open, 
+    onClose, 
+    selectedDistance, 
+    onDistanceChange,
+    selectedLeagues,
+    onLeaguesChange 
+}) => {
     const handleDistanceChange = (event) => {
-        console.log('Radio changed:', event.target.value);
         const value = event.target.value === 'all' ? null : Number(event.target.value);
         onDistanceChange(value);
     };
+
+    const handleLeagueChange = (leagueId) => {
+        const newSelectedLeagues = selectedLeagues.includes(leagueId)
+            ? selectedLeagues.filter(id => id !== leagueId)
+            : [...selectedLeagues, leagueId];
+        onLeaguesChange(newSelectedLeagues);
+    };
+
+    const handleSelectAllLeagues = (event) => {
+        if (event.target.checked) {
+            onLeaguesChange(getAllLeagues().map(l => l.id));
+        } else {
+            onLeaguesChange([]);
+        }
+    };
+
+    const allLeaguesSelected = selectedLeagues.length === getAllLeagues().length;
+
+    // Group leagues by country for display
+    const leaguesByCountry = getAllLeagues().reduce((acc, league) => {
+        const countryCode = Object.entries(LEAGUES).find(([_, leagues]) => 
+            leagues.some(l => l.id === league.id)
+        )?.[0];
+        
+        if (!acc[countryCode]) {
+            acc[countryCode] = [];
+        }
+        acc[countryCode].push(league);
+        return acc;
+    }, {});
 
     return (
         <Dialog 
@@ -61,6 +100,7 @@ const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
                 </IconButton>
             </DialogTitle>
             <DialogContent dividers>
+                {/* Distance Filter */}
                 <Box sx={{ py: 1 }}>
                     <Typography 
                         variant="subtitle1" 
@@ -93,6 +133,70 @@ const Filters = ({ open, onClose, selectedDistance, onDistanceChange }) => {
                                 />
                             ))}
                         </RadioGroup>
+                    </FormControl>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                {/* League Filter */}
+                <Box sx={{ py: 1 }}>
+                    <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                            mb: 2,
+                            fontWeight: 500,
+                            color: '#444'
+                        }}
+                    >
+                        Leagues
+                    </Typography>
+                    <FormControl component="fieldset">
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={allLeaguesSelected}
+                                    indeterminate={selectedLeagues.length > 0 && !allLeaguesSelected}
+                                    onChange={handleSelectAllLeagues}
+                                />
+                            }
+                            label="Show all leagues"
+                            sx={{ 
+                                mb: 2,
+                                fontWeight: 500
+                            }}
+                        />
+                        {Object.entries(leaguesByCountry).map(([countryCode, leagues]) => (
+                            <Box key={countryCode} sx={{ mb: 2 }}>
+                                <Typography 
+                                    variant="subtitle2" 
+                                    sx={{ 
+                                        color: '#666',
+                                        mb: 1
+                                    }}
+                                >
+                                    {countryCode === 'GB' ? 'England' :
+                                     countryCode === 'FR' ? 'France' :
+                                     countryCode === 'ES' ? 'Spain' :
+                                     countryCode === 'DE' ? 'Germany' : countryCode}
+                                </Typography>
+                                {leagues.map((league) => (
+                                    <FormControlLabel
+                                        key={league.id}
+                                        control={
+                                            <Checkbox
+                                                checked={selectedLeagues.includes(league.id)}
+                                                onChange={() => handleLeagueChange(league.id)}
+                                            />
+                                        }
+                                        label={league.name}
+                                        sx={{ 
+                                            mb: 1,
+                                            ml: 2 // Indent leagues under country
+                                        }}
+                                    />
+                                ))}
+                            </Box>
+                        ))}
                     </FormControl>
                 </Box>
             </DialogContent>
