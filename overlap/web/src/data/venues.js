@@ -1,6 +1,5 @@
-// Mapping of Premier League and Ligue 1 teams to their home venues
-const TEAM_VENUES = {
-    // Premier League Teams
+// Venue data organized by league
+const PREMIER_LEAGUE_VENUES = {
     "Arsenal FC": {
         stadium: "Emirates Stadium",
         location: "London",
@@ -100,9 +99,10 @@ const TEAM_VENUES = {
         stadium: "Portman Road",
         location: "Ipswich",
         coordinates: [1.144722, 52.054722]
-    },
-    
-    // Ligue 1 Teams
+    }
+};
+
+const LIGUE_1_VENUES = {
     "Paris Saint-Germain FC": {
         stadium: "Parc des Princes",
         location: "Paris",
@@ -207,8 +207,10 @@ const TEAM_VENUES = {
         stadium: "Stade Geoffroy-Guichard",
         location: "Saint-Étienne",
         coordinates: [4.390278, 45.460833]
-    },
-    // La Liga Teams
+    }
+};
+
+const LA_LIGA_VENUES = {
     "Real Madrid CF": {
         stadium: "Santiago Bernabéu",
         location: "Madrid",
@@ -308,8 +310,10 @@ const TEAM_VENUES = {
         stadium: "Estadio de Vallecas",
         location: "Madrid",
         coordinates: [-3.657778, 40.391944]
-    },
-    // Bundesliga Teams
+    }
+};
+
+const BUNDESLIGA_VENUES = {
     "FC Bayern München": {
         stadium: "Allianz Arena",
         location: "Munich",
@@ -385,12 +389,12 @@ const TEAM_VENUES = {
         location: "Stuttgart",
         coordinates: [9.231667, 48.792222]
     },
-    "VfL Bochum": {
+    "VfL Bochum 1848": {
         stadium: "Vonovia Ruhrstadion",
         location: "Bochum",
         coordinates: [7.215556, 51.465]
     },
-    "1. FC Heidenheim": {
+    "1. FC Heidenheim 1846": {
         stadium: "Voith-Arena",
         location: "Heidenheim",
         coordinates: [10.149722, 48.676111]
@@ -399,13 +403,36 @@ const TEAM_VENUES = {
         stadium: "Merck-Stadion am Böllenfalltor",
         location: "Darmstadt",
         coordinates: [8.649444, 49.859167]
+    },
+    "Holstein Kiel": {
+        stadium: "Holstein-Stadion",
+        location: "Kiel",
+        coordinates: [10.122222, 54.340556]
+    },
+    "FC St. Pauli 1910": {
+        stadium: "Millerntor-Stadion",
+        location: "Hamburg",
+        coordinates: [9.970556, 53.554722]
     }
 };
 
 // Function to get venue information for a team
 function getVenueForTeam(teamName) {
-    return TEAM_VENUES[teamName] || null;
+    // Check each league's venues
+    const allVenues = {
+        ...PREMIER_LEAGUE_VENUES,
+        ...LIGUE_1_VENUES,
+        ...LA_LIGA_VENUES,
+        ...BUNDESLIGA_VENUES
+    };
+    return allVenues[teamName] || null;
 }
 
 // Export the functions and data
-export { TEAM_VENUES, getVenueForTeam }; 
+export {
+    getVenueForTeam,
+    PREMIER_LEAGUE_VENUES,
+    LIGUE_1_VENUES,
+    LA_LIGA_VENUES,
+    BUNDESLIGA_VENUES
+}; 
