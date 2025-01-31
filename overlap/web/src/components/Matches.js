@@ -55,6 +55,7 @@ const MatchCard = ({ match, onClick, distance, isSelected }) => {
     return (
         <Card 
             ref={cardRef}
+            id={`match-${match.id}`}
             elevation={0}
             onClick={() => onClick(match)}
             sx={{
@@ -242,29 +243,33 @@ const Matches = ({ matches, onMatchClick, userLocation, selectedMatch }) => {
 
     return (
         <Box>
-            {Object.entries(groupedMatches).map(([date, dateMatches]) => (
-                <Box key={date} sx={{ mb: 4 }}>
-                    <Typography 
-                        variant="h6" 
-                        sx={{ 
-                            mb: 2,
-                            color: '#222',
-                            fontWeight: 600
-                        }}
-                    >
-                        {format(new Date(date), 'EEEE, MMMM d')}
-                    </Typography>
-                    {dateMatches.map(match => (
-                        <MatchCard 
-                            key={match.id} 
-                            match={match}
-                            onClick={onMatchClick}
-                            distance={match.distance}
-                            isSelected={selectedMatch && selectedMatch.id === match.id}
-                        />
-                    ))}
-                </Box>
-            ))}
+            {Object.entries(groupedMatches)
+                .sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
+                .map(([date, dateMatches]) => (
+                    <Box key={date} sx={{ mb: 4 }}>
+                        <Typography 
+                            variant="h6" 
+                            sx={{ 
+                                mb: 2,
+                                color: '#222',
+                                fontWeight: 600
+                            }}
+                        >
+                            {format(new Date(date), 'EEEE, MMMM d')}
+                        </Typography>
+                        {dateMatches
+                            .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate))
+                            .map(match => (
+                                <MatchCard 
+                                    key={match.id} 
+                                    match={match}
+                                    onClick={onMatchClick}
+                                    distance={match.distance}
+                                    isSelected={selectedMatch && selectedMatch.id === match.id}
+                                />
+                            ))}
+                    </Box>
+                ))}
         </Box>
     );
 };

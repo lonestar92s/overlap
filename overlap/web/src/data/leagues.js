@@ -22,6 +22,9 @@ export const LEAGUES = {
         // Ready for expansion:
         // { id: 'BL2', name: 'Bundesliga 2', tier: 2 },
         // { id: 'BL3', name: '3. Liga', tier: 3 }
+    ],
+    'NL': [ // Netherlands
+        { id: 'DED', name: 'Eredivisie', tier: 1 }
     ]
 };
 
@@ -42,7 +45,8 @@ export const getCountryCode = (countryName) => {
         'England': 'GB',
         'France': 'FR',
         'Spain': 'ES',
-        'Germany': 'DE'
+        'Germany': 'DE',
+        'Netherlands': 'NL'
     };
     return countryMapping[countryName];
 };
