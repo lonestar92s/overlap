@@ -2,8 +2,8 @@
 export const LEAGUES = {
     'GB': [ // United Kingdom
         { id: 'PL', name: 'Premier League', tier: 1 },
+        { id: 'ELC', name: 'Championship', tier: 2 },
         // Ready for expansion:
-        // { id: 'ELC', name: 'Championship', tier: 2 },
         // { id: 'EL1', name: 'League One', tier: 3 },
         // { id: 'EL2', name: 'League Two', tier: 4 }
     ],

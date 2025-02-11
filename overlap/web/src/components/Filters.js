@@ -24,6 +24,14 @@ const DISTANCE_OPTIONS = [
     { value: 250, label: '250 miles' }
 ];
 
+const COUNTRY_NAMES = {
+    'GB': 'England',
+    'FR': 'France',
+    'ES': 'Spain',
+    'DE': 'Germany',
+    'NL': 'Netherlands'
+};
+
 const Filters = ({ 
     open, 
     onClose, 
@@ -44,6 +52,31 @@ const Filters = ({
         onLeaguesChange(newSelectedLeagues);
     };
 
+    const handleCountryChange = (countryCode) => {
+        const countryLeagues = LEAGUES[countryCode] || [];
+        const countryLeagueIds = countryLeagues.map(league => league.id);
+        
+        // Check if all leagues from this country are already selected
+        const allCountryLeaguesSelected = countryLeagueIds.every(id => 
+            selectedLeagues.includes(id)
+        );
+
+        if (allCountryLeaguesSelected) {
+            // If all selected, remove all leagues from this country
+            const newSelectedLeagues = selectedLeagues.filter(id => 
+                !countryLeagueIds.includes(id)
+            );
+            onLeaguesChange(newSelectedLeagues);
+        } else {
+            // If not all selected, add all leagues from this country
+            const newSelectedLeagues = [
+                ...selectedLeagues.filter(id => !countryLeagueIds.includes(id)),
+                ...countryLeagueIds
+            ];
+            onLeaguesChange(newSelectedLeagues);
+        }
+    };
+
     const handleSelectAllLeagues = (event) => {
         if (event.target.checked) {
             onLeaguesChange(getAllLeagues().map(l => l.id));
@@ -52,21 +85,23 @@ const Filters = ({
         }
     };
 
-    // Group leagues by country for display
-    const leaguesByCountry = getAllLeagues().reduce((acc, league) => {
-        const countryCode = Object.entries(LEAGUES).find(([_, leagues]) => 
-            leagues.some(l => l.id === league.id)
-        )?.[0];
-        
-        if (!acc[countryCode]) {
-            acc[countryCode] = [];
-        }
-        acc[countryCode].push(league);
-        return acc;
-    }, {});
-
+    // Check if all leagues are selected
     const allLeaguesSelected = selectedLeagues.length === getAllLeagues().length;
     const someLeaguesSelected = selectedLeagues.length > 0 && !allLeaguesSelected;
+
+    // Helper function to check country selection state
+    const getCountrySelectionState = (countryCode) => {
+        const countryLeagues = LEAGUES[countryCode] || [];
+        const countryLeagueIds = countryLeagues.map(league => league.id);
+        
+        const selectedCountryLeagues = countryLeagueIds.filter(id => 
+            selectedLeagues.includes(id)
+        );
+
+        if (selectedCountryLeagues.length === 0) return 'none';
+        if (selectedCountryLeagues.length === countryLeagueIds.length) return 'all';
+        return 'some';
+    };
 
     return (
         <Dialog 
@@ -163,39 +198,58 @@ const Filters = ({
                             label="Show all leagues"
                             sx={{ mb: 2 }}
                         />
-                        {Object.entries(leaguesByCountry).map(([countryCode, leagues]) => (
-                            <Box key={countryCode} sx={{ mb: 2 }}>
-                                <Typography 
-                                    variant="subtitle2" 
-                                    sx={{ 
-                                        color: '#666',
-                                        mb: 1
-                                    }}
-                                >
-                                    {countryCode === 'GB' ? 'England' :
-                                     countryCode === 'FR' ? 'France' :
-                                     countryCode === 'ES' ? 'Spain' :
-                                     countryCode === 'DE' ? 'Germany' :
-                                     countryCode === 'NL' ? 'Netherlands' : countryCode}
-                                </Typography>
-                                {leagues.map((league) => (
+                        {Object.entries(LEAGUES).map(([countryCode, leagues]) => {
+                            const countrySelectionState = getCountrySelectionState(countryCode);
+                            
+                            return (
+                                <Box key={countryCode} sx={{ mb: 2 }}>
+                                    {/* Country-level checkbox */}
                                     <FormControlLabel
-                                        key={league.id}
                                         control={
                                             <Checkbox
-                                                checked={selectedLeagues.includes(league.id)}
-                                                onChange={() => handleLeagueChange(league.id)}
+                                                checked={countrySelectionState === 'all'}
+                                                indeterminate={countrySelectionState === 'some'}
+                                                onChange={() => handleCountryChange(countryCode)}
                                             />
                                         }
-                                        label={league.name}
-                                        sx={{ 
-                                            mb: 1,
-                                            ml: 2 // Indent leagues under country
-                                        }}
+                                        label={
+                                            <Typography 
+                                                variant="subtitle2" 
+                                                sx={{ 
+                                                    color: '#222',
+                                                    fontWeight: 500
+                                                }}
+                                            >
+                                                {COUNTRY_NAMES[countryCode]}
+                                            </Typography>
+                                        }
                                     />
-                                ))}
-                            </Box>
-                        ))}
+                                    {/* League-level checkboxes */}
+                                    <Box sx={{ ml: 3 }}>
+                                        {leagues.map((league) => (
+                                            <FormControlLabel
+                                                key={league.id}
+                                                control={
+                                                    <Checkbox
+                                                        checked={selectedLeagues.includes(league.id)}
+                                                        onChange={() => handleLeagueChange(league.id)}
+                                                        size="small"
+                                                    />
+                                                }
+                                                label={league.name}
+                                                sx={{ 
+                                                    mb: 0.5,
+                                                    '& .MuiTypography-root': {
+                                                        fontSize: '0.9rem',
+                                                        color: '#666'
+                                                    }
+                                                }}
+                                            />
+                                        ))}
+                                    </Box>
+                                </Box>
+                            );
+                        })}
                     </FormControl>
                 </Box>
             </DialogContent>

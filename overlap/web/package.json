@@ -16,6 +16,7 @@
     "ajv-keywords": "^5.1.0",
     "axios": "^1.6.7",
     "date-fns": "^2.30.0",
+    "date-fns-tz": "^2.0.0",
     "mapbox-gl": "^3.9.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

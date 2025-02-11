@@ -70,7 +70,7 @@ const PREMIER_LEAGUE_VENUES = {
         stadium: "Old Trafford",
         location: "Manchester",
         coordinates: [-2.291389, 53.463056],
-        ticketUrl: 'https://tickets.manutd.com/'
+        ticketUrl: ''
     },
     "Newcastle United FC": {
         stadium: "St. James' Park",
@@ -119,6 +119,513 @@ const PREMIER_LEAGUE_VENUES = {
         location: "Ipswich",
         coordinates: [1.144722, 52.054722],
         ticketUrl: ''
+    },
+    "West Bromwich Albion FC": {
+        stadium: "The Hawthorns",
+        location: "West Bromwich",
+        coordinates: [-1.963889, 52.509167],
+        ticketUrl: ''
+    },
+    "Norwich City FC": {
+        stadium: "Carrow Road",
+        location: "Norwich",
+        coordinates: [1.308611, 52.622222],
+        ticketUrl: ''
+    },
+    "Hull City AFC": {
+        stadium: "MKM Stadium",
+        location: "Hull",
+        coordinates: [-0.367778, 53.746111],
+        ticketUrl: ''
+    },
+    "Coventry City FC": {
+        stadium: "Coventry Building Society Arena",
+        location: "Coventry",
+        coordinates: [-1.496667, 52.448056],
+        ticketUrl: ''
+    },
+    "Sunderland AFC": {
+        stadium: "Stadium of Light",
+        location: "Sunderland",
+        coordinates: [-1.388333, 54.915556],
+        ticketUrl: ''
+    },
+    "Preston North End FC": {
+        stadium: "Deepdale",
+        location: "Preston",
+        coordinates: [-2.688333, 53.772222],
+        ticketUrl: ''
+    },
+    "Middlesbrough FC": {
+        stadium: "Riverside Stadium",
+        location: "Middlesbrough",
+        coordinates: [-1.216944, 54.578333],
+        ticketUrl: ''
+    },
+    "Stoke City FC": {
+        stadium: "bet365 Stadium",
+        location: "Stoke-on-Trent",
+        coordinates: [-2.175556, 52.988333],
+        ticketUrl: ''
+    },
+    "Bristol City FC": {
+        stadium: "Ashton Gate",
+        location: "Bristol",
+        coordinates: [-2.620278, 51.44],
+        ticketUrl: ''
+    },
+    "Cardiff City FC": {
+        stadium: "Cardiff City Stadium",
+        location: "Cardiff",
+        coordinates: [-3.203056, 51.472778],
+        ticketUrl: ''
+    },
+    "Birmingham City FC": {
+        stadium: "St Andrew's",
+        location: "Birmingham",
+        coordinates: [-1.868333, 52.475833],
+        ticketUrl: ''
+    },
+    "Watford FC": {
+        stadium: "Vicarage Road",
+        location: "Watford",
+        coordinates: [-0.401667, 51.649722],
+        ticketUrl: ''
+    },
+    "Plymouth Argyle FC": {
+        stadium: "Home Park",
+        location: "Plymouth",
+        coordinates: [-4.150833, 50.384722],
+        ticketUrl: ''
+    },
+    "Queens Park Rangers FC": {
+        stadium: "Loftus Road",
+        location: "London",
+        coordinates: [-0.232222, 51.509167],
+        ticketUrl: ''
+    },
+    "Millwall FC": {
+        stadium: "The Den",
+        location: "London",
+        coordinates: [-0.050833, 51.485833],
+        ticketUrl: ''
+    },
+    "Swansea City AFC": {
+        stadium: "Swansea.com Stadium",
+        location: "Swansea",
+        coordinates: [-3.935278, 51.6425],
+        ticketUrl: ''
+    },
+    "Huddersfield Town AFC": {
+        stadium: "John Smith's Stadium",
+        location: "Huddersfield",
+        coordinates: [-1.768333, 53.654167],
+        ticketUrl: ''
+    },
+    "Sheffield Wednesday FC": {
+        stadium: "Hillsborough",
+        location: "Sheffield",
+        coordinates: [-1.500833, 53.411389],
+        ticketUrl: ''
+    },
+    "Rotherham United FC": {
+        stadium: "AESSEAL New York Stadium",
+        location: "Rotherham",
+        coordinates: [-1.362222, 53.429722],
+        ticketUrl: ''
+    },
+    "Blackburn Rovers FC": {
+        stadium: "Ewood Park",
+        location: "Blackburn",
+        coordinates: [-2.489167, 53.728611],
+        ticketUrl: ''
+    }
+};
+
+const CHAMPIONSHIP_VENUES = {
+    "Leeds United FC": {
+        stadium: "Elland Road",
+        location: "Leeds",
+        coordinates: [-1.572222, 53.777778],
+        ticketUrl: ''
+    },
+    "Southampton FC": {
+        stadium: "St Mary's Stadium",
+        location: "Southampton",
+        coordinates: [-1.391111, 50.905833],
+        ticketUrl: ''
+    },
+    "Ipswich Town FC": {
+        stadium: "Portman Road",
+        location: "Ipswich",
+        coordinates: [1.144722, 52.054722],
+        ticketUrl: ''
+    },
+    "West Bromwich Albion FC": {
+        stadium: "The Hawthorns",
+        location: "West Bromwich",
+        coordinates: [-1.963889, 52.509167],
+        ticketUrl: ''
+    },
+    "Norwich City FC": {
+        stadium: "Carrow Road",
+        location: "Norwich",
+        coordinates: [1.308611, 52.622222],
+        ticketUrl: ''
+    },
+    "Hull City AFC": {
+        stadium: "MKM Stadium",
+        location: "Hull",
+        coordinates: [-0.367778, 53.746111],
+        ticketUrl: ''
+    },
+    "Coventry City FC": {
+        stadium: "Coventry Building Society Arena",
+        location: "Coventry",
+        coordinates: [-1.496667, 52.448056],
+        ticketUrl: ''
+    },
+    "Sunderland AFC": {
+        stadium: "Stadium of Light",
+        location: "Sunderland",
+        coordinates: [-1.388333, 54.915556],
+        ticketUrl: ''
+    },
+    "Preston North End FC": {
+        stadium: "Deepdale",
+        location: "Preston",
+        coordinates: [-2.688333, 53.772222],
+        ticketUrl: ''
+    },
+    "Middlesbrough FC": {
+        stadium: "Riverside Stadium",
+        location: "Middlesbrough",
+        coordinates: [-1.216944, 54.578333],
+        ticketUrl: ''
+    },
+    "Stoke City FC": {
+        stadium: "bet365 Stadium",
+        location: "Stoke-on-Trent",
+        coordinates: [-2.175556, 52.988333],
+        ticketUrl: ''
+    },
+    "Bristol City FC": {
+        stadium: "Ashton Gate",
+        location: "Bristol",
+        coordinates: [-2.620278, 51.44],
+        ticketUrl: ''
+    },
+    "Cardiff City FC": {
+        stadium: "Cardiff City Stadium",
+        location: "Cardiff",
+        coordinates: [-3.203056, 51.472778],
+        ticketUrl: ''
+    },
+    "Birmingham City FC": {
+        stadium: "St Andrew's",
+        location: "Birmingham",
+        coordinates: [-1.868333, 52.475833],
+        ticketUrl: ''
+    },
+    "Watford FC": {
+        stadium: "Vicarage Road",
+        location: "Watford",
+        coordinates: [-0.401667, 51.649722],
+        ticketUrl: ''
+    },
+    "Plymouth Argyle FC": {
+        stadium: "Home Park",
+        location: "Plymouth",
+        coordinates: [-4.150833, 50.384722],
+        ticketUrl: ''
+    },
+    "Queens Park Rangers FC": {
+        stadium: "Loftus Road",
+        location: "London",
+        coordinates: [-0.232222, 51.509167],
+        ticketUrl: ''
+    },
+    "Millwall FC": {
+        stadium: "The Den",
+        location: "London",
+        coordinates: [-0.050833, 51.485833],
+        ticketUrl: ''
+    },
+    "Swansea City AFC": {
+        stadium: "Swansea.com Stadium",
+        location: "Swansea",
+        coordinates: [-3.935278, 51.6425],
+        ticketUrl: ''
+    },
+    "Huddersfield Town AFC": {
+        stadium: "John Smith's Stadium",
+        location: "Huddersfield",
+        coordinates: [-1.768333, 53.654167],
+        ticketUrl: ''
+    },
+    "Sheffield Wednesday FC": {
+        stadium: "Hillsborough",
+        location: "Sheffield",
+        coordinates: [-1.500833, 53.411389],
+        ticketUrl: ''
+    },
+    "Rotherham United FC": {
+        stadium: "AESSEAL New York Stadium",
+        location: "Rotherham",
+        coordinates: [-1.362222, 53.429722],
+        ticketUrl: ''
+    },
+    "Blackburn Rovers FC": {
+        stadium: "Ewood Park",
+        location: "Blackburn",
+        coordinates: [-2.489167, 53.728611],
+        ticketUrl: ''
+    }
+};
+
+const LA_LIGA_VENUES = {
+    "Real Madrid CF": {
+        stadium: "Santiago Bernabéu",
+        location: "Madrid",
+        coordinates: [-3.688333, 40.453056],
+        ticketUrl: ''
+    },
+    "FC Barcelona": {
+        stadium: "Spotify Camp Nou",
+        location: "Barcelona",
+        coordinates: [2.122917, 41.380898],
+        ticketUrl: ''
+    },
+    "Atlético de Madrid": {
+        stadium: "Cívitas Metropolitano",
+        location: "Madrid",
+        coordinates: [-3.599722, 40.436111],
+        ticketUrl: ''
+    },
+    "Real Sociedad de Fútbol": {
+        stadium: "Reale Arena",
+        location: "San Sebastián",
+        coordinates: [-1.973611, 43.301389],
+        ticketUrl: ''
+    },
+    "Real Betis Balompié": {
+        stadium: "Estadio Benito Villamarín",
+        location: "Seville",
+        coordinates: [-5.981667, 37.356389],
+        ticketUrl: ''
+    },
+    "Sevilla FC": {
+        stadium: "Ramón Sánchez-Pizjuán",
+        location: "Seville",
+        coordinates: [-5.970278, 37.383889],
+        ticketUrl: ''
+    },
+    "Villarreal CF": {
+        stadium: "Estadio de la Cerámica",
+        location: "Villarreal",
+        coordinates: [-0.103611, 39.944167],
+        ticketUrl: ''
+    },
+    "Athletic Club": {
+        stadium: "San Mamés",
+        location: "Bilbao",
+        coordinates: [-2.950278, 43.264167],
+        ticketUrl: ''
+    },
+    "Valencia CF": {
+        stadium: "Mestalla",
+        location: "Valencia",
+        coordinates: [-0.358333, 39.474722],
+        ticketUrl: ''
+    },
+    "CA Osasuna": {
+        stadium: "El Sadar",
+        location: "Pamplona",
+        coordinates: [-1.636944, 42.796389],
+        ticketUrl: ''
+    },
+    "Girona FC": {
+        stadium: "Estadi Montilivi",
+        location: "Girona",
+        coordinates: [2.825833, 41.961389],
+        ticketUrl: ''
+    },
+    "Getafe CF": {
+        stadium: "Coliseum Alfonso Pérez",
+        location: "Getafe",
+        coordinates: [-3.735556, 40.325556],
+        ticketUrl: ''
+    },
+    "RCD Mallorca": {
+        stadium: "Visit Mallorca Estadi",
+        location: "Palma",
+        coordinates: [2.637778, 39.589444],
+        ticketUrl: ''
+    },
+    "Deportivo Alavés": {
+        stadium: "Mendizorrotza",
+        location: "Vitoria-Gasteiz",
+        coordinates: [-2.688889, 42.839722],
+        ticketUrl: ''
+    },
+    "UD Las Palmas": {
+        stadium: "Estadio Gran Canaria",
+        location: "Las Palmas",
+        coordinates: [-15.456944, 28.100278],
+        ticketUrl: ''
+    },
+    "Celta de Vigo": {
+        stadium: "Abanca-Balaídos",
+        location: "Vigo",
+        coordinates: [-8.740278, 42.211944],
+        ticketUrl: ''
+    },
+    "Granada CF": {
+        stadium: "Nuevo Los Cármenes",
+        location: "Granada",
+        coordinates: [-3.595833, 37.153889],
+        ticketUrl: ''
+    },
+    "Cádiz CF": {
+        stadium: "Nuevo Mirandilla",
+        location: "Cádiz",
+        coordinates: [-6.270833, 36.501944],
+        ticketUrl: ''
+    },
+    "UD Almería": {
+        stadium: "Power Horse Stadium",
+        location: "Almería",
+        coordinates: [-2.408333, 36.841111],
+        ticketUrl: ''
+    },
+    "Rayo Vallecano": {
+        stadium: "Estadio de Vallecas",
+        location: "Madrid",
+        coordinates: [-3.657778, 40.391944],
+        ticketUrl: ''
+    }
+};
+
+const BUNDESLIGA_VENUES = {
+    "FC Bayern München": {
+        stadium: "Allianz Arena",
+        location: "Munich",
+        coordinates: [11.624722, 48.218889],
+        ticketUrl: ''
+    },
+    "Borussia Dortmund": {
+        stadium: "Signal Iduna Park",
+        location: "Dortmund",
+        coordinates: [7.451667, 51.492778],
+        ticketUrl: ''
+    },
+    "RB Leipzig": {
+        stadium: "Red Bull Arena",
+        location: "Leipzig",
+        coordinates: [12.348056, 51.345833],
+        ticketUrl: ''
+    },
+    "Bayer 04 Leverkusen": {
+        stadium: "BayArena",
+        location: "Leverkusen",
+        coordinates: [6.973056, 51.038056],
+        ticketUrl: ''
+    },
+    "Eintracht Frankfurt": {
+        stadium: "Deutsche Bank Park",
+        location: "Frankfurt",
+        coordinates: [8.645278, 50.068611],
+        ticketUrl: ''
+    },
+    "VfL Wolfsburg": {
+        stadium: "Volkswagen Arena",
+        location: "Wolfsburg",
+        coordinates: [10.803889, 52.431944],
+        ticketUrl: ''
+    },
+    "SC Freiburg": {
+        stadium: "Europa-Park Stadion",
+        location: "Freiburg",
+        coordinates: [7.899444, 48.020278],
+        ticketUrl: ''
+    },
+    "1. FC Union Berlin": {
+        stadium: "Stadion An der Alten Försterei",
+        location: "Berlin",
+        coordinates: [13.568333, 52.457222],
+        ticketUrl: ''
+    },
+    "1. FSV Mainz 05": {
+        stadium: "MEWA ARENA",
+        location: "Mainz",
+        coordinates: [8.224167, 49.984167],
+        ticketUrl: ''
+    },
+    "TSG 1899 Hoffenheim": {
+        stadium: "PreZero Arena",
+        location: "Sinsheim",
+        coordinates: [8.891667, 49.239444],
+        ticketUrl: ''
+    },
+    "Borussia Mönchengladbach": {
+        stadium: "Borussia-Park",
+        location: "Mönchengladbach",
+        coordinates: [6.385556, 51.174722],
+        ticketUrl: ''
+    },
+    "1. FC Köln": {
+        stadium: "RheinEnergieSTADION",
+        location: "Cologne",
+        coordinates: [6.875278, 50.933611],
+        ticketUrl: ''
+    },
+    "SV Werder Bremen": {
+        stadium: "Weserstadion",
+        location: "Bremen",
+        coordinates: [8.837222, 53.066389],
+        ticketUrl: ''
+    },
+    "FC Augsburg": {
+        stadium: "WWK ARENA",
+        location: "Augsburg",
+        coordinates: [10.931944, 48.332778],
+        ticketUrl: ''
+    },
+    "VfB Stuttgart": {
+        stadium: "MHPArena",
+        location: "Stuttgart",
+        coordinates: [9.231667, 48.792222],
+        ticketUrl: ''
+    },
+    "VfL Bochum 1848": {
+        stadium: "Vonovia Ruhrstadion",
+        location: "Bochum",
+        coordinates: [7.215556, 51.465],
+        ticketUrl: ''
+    },
+    "1. FC Heidenheim 1846": {
+        stadium: "Voith-Arena",
+        location: "Heidenheim",
+        coordinates: [10.149722, 48.676111],
+        ticketUrl: ''
+    },
+    "SV Darmstadt 98": {
+        stadium: "Merck-Stadion am Böllenfalltor",
+        location: "Darmstadt",
+        coordinates: [8.649444, 49.859167],
+        ticketUrl: ''
+    },
+    "Holstein Kiel": {
+        stadium: "Holstein-Stadion",
+        location: "Kiel",
+        coordinates: [10.122222, 54.340556],
+        ticketUrl: ''
+    },
+    "FC St. Pauli 1910": {
+        stadium: "Millerntor-Stadion",
+        location: "Hamburg",
+        coordinates: [9.970556, 53.554722],
+        ticketUrl: ''
     }
 };
 
@@ -126,7 +633,7 @@ const LIGUE_1_VENUES = {
     "Paris Saint-Germain FC": {
         stadium: "Parc des Princes",
         location: "Paris",
-        coordinates: [2.253049, 48.841389],
+        coordinates: [2.253056, 48.841389],
         ticketUrl: ''
     },
     "Olympique de Marseille": {
@@ -247,252 +754,6 @@ const LIGUE_1_VENUES = {
         stadium: "Stade Geoffroy-Guichard",
         location: "Saint-Étienne",
         coordinates: [4.390278, 45.460833],
-        ticketUrl: ''
-    }
-};
-
-const LA_LIGA_VENUES = {
-    "Real Madrid CF": {
-        stadium: "Santiago Bernabéu",
-        location: "Madrid",
-        coordinates: [-3.688333, 40.453056],
-        ticketUrl: ''
-    },
-    "FC Barcelona": {
-        stadium: "Spotify Camp Nou",
-        location: "Barcelona",
-        coordinates: [2.122917, 41.380898],
-        ticketUrl: ''
-    },
-    "Atlético de Madrid": {
-        stadium: "Cívitas Metropolitano",
-        location: "Madrid",
-        coordinates: [-3.599722, 40.436111],
-        ticketUrl: ''
-    },
-    "Real Sociedad de Fútbol": {
-        stadium: "Reale Arena",
-        location: "San Sebastián",
-        coordinates: [-1.973611, 43.301389],
-        ticketUrl: ''
-    },
-    "Real Betis Balompié": {
-        stadium: "Estadio Benito Villamarín",
-        location: "Seville",
-        coordinates: [-5.981667, 37.356389],
-        ticketUrl: ''
-    },
-    "Sevilla FC": {
-        stadium: "Ramón Sánchez-Pizjuán",
-        location: "Seville",
-        coordinates: [-5.970278, 37.383889],
-        ticketUrl: ''
-    },
-    "Villarreal CF": {
-        stadium: "Estadio de la Cerámica",
-        location: "Villarreal",
-        coordinates: [-0.103611, 39.944167],
-        ticketUrl: ''
-    },
-    "Athletic Club": {
-        stadium: "San Mamés",
-        location: "Bilbao",
-        coordinates: [-2.950278, 43.264167],
-        ticketUrl: ''
-    },
-    "Valencia CF": {
-        stadium: "Mestalla",
-        location: "Valencia",
-        coordinates: [-0.358333, 39.474722],
-        ticketUrl: ''
-    },
-    "CA Osasuna": {
-        stadium: "El Sadar",
-        location: "Pamplona",
-        coordinates: [-1.636944, 42.796389],
-        ticketUrl: ''
-    },
-    "Girona FC": {
-        stadium: "Estadi Montilivi",
-        location: "Girona",
-        coordinates: [2.825833, 41.961111],
-        ticketUrl: ''
-    },
-    "Getafe CF": {
-        stadium: "Coliseum Alfonso Pérez",
-        location: "Getafe",
-        coordinates: [-3.735556, 40.325556],
-        ticketUrl: ''
-    },
-    "RCD Mallorca": {
-        stadium: "Visit Mallorca Estadi",
-        location: "Palma",
-        coordinates: [2.637778, 39.589444],
-        ticketUrl: ''
-    },
-    "Deportivo Alavés": {
-        stadium: "Mendizorrotza",
-        location: "Vitoria-Gasteiz",
-        coordinates: [-2.688889, 42.839722],
-        ticketUrl: ''
-    },
-    "UD Las Palmas": {
-        stadium: "Estadio Gran Canaria",
-        location: "Las Palmas",
-        coordinates: [-15.456944, 28.100278],
-        ticketUrl: ''
-    },
-    "Celta de Vigo": {
-        stadium: "Abanca-Balaídos",
-        location: "Vigo",
-        coordinates: [-8.740278, 42.211944],
-        ticketUrl: ''
-    },
-    "Granada CF": {
-        stadium: "Nuevo Los Cármenes",
-        location: "Granada",
-        coordinates: [-3.595833, 37.153889],
-        ticketUrl: ''
-    },
-    "Cádiz CF": {
-        stadium: "Nuevo Mirandilla",
-        location: "Cádiz",
-        coordinates: [-6.270833, 36.501944],
-        ticketUrl: ''
-    },
-    "UD Almería": {
-        stadium: "Power Horse Stadium",
-        location: "Almería",
-        coordinates: [-2.408333, 36.841111],
-        ticketUrl: ''
-    },
-    "Rayo Vallecano": {
-        stadium: "Estadio de Vallecas",
-        location: "Madrid",
-        coordinates: [-3.657778, 40.391944],
-        ticketUrl: ''
-    }
-};
-
-const BUNDESLIGA_VENUES = {
-    "FC Bayern München": {
-        stadium: "Allianz Arena",
-        location: "Munich",
-        coordinates: [11.624722, 48.218889],
-        ticketUrl: 'https://fcbayern.com/en/tickets'
-    },
-    "Borussia Dortmund": {
-        stadium: "Signal Iduna Park",
-        location: "Dortmund",
-        coordinates: [7.451667, 51.492778],
-        ticketUrl: ''
-    },
-    "RB Leipzig": {
-        stadium: "Red Bull Arena",
-        location: "Leipzig",
-        coordinates: [12.348056, 51.345833],
-        ticketUrl: ''
-    },
-    "Bayer 04 Leverkusen": {
-        stadium: "BayArena",
-        location: "Leverkusen",
-        coordinates: [6.973056, 51.038056],
-        ticketUrl: ''
-    },
-    "Eintracht Frankfurt": {
-        stadium: "Deutsche Bank Park",
-        location: "Frankfurt",
-        coordinates: [8.645278, 50.068611],
-        ticketUrl: ''
-    },
-    "VfL Wolfsburg": {
-        stadium: "Volkswagen Arena",
-        location: "Wolfsburg",
-        coordinates: [10.803889, 52.431944],
-        ticketUrl: ''
-    },
-    "SC Freiburg": {
-        stadium: "Europa-Park Stadion",
-        location: "Freiburg",
-        coordinates: [7.899444, 48.020278],
-        ticketUrl: ''
-    },
-    "1. FC Union Berlin": {
-        stadium: "Stadion An der Alten Försterei",
-        location: "Berlin",
-        coordinates: [13.568333, 52.457222],
-        ticketUrl: ''
-    },
-    "1. FSV Mainz 05": {
-        stadium: "MEWA ARENA",
-        location: "Mainz",
-        coordinates: [8.224167, 49.984167],
-        ticketUrl: ''
-    },
-    "TSG 1899 Hoffenheim": {
-        stadium: "PreZero Arena",
-        location: "Sinsheim",
-        coordinates: [8.891667, 49.239444],
-        ticketUrl: ''
-    },
-    "Borussia Mönchengladbach": {
-        stadium: "Borussia-Park",
-        location: "Mönchengladbach",
-        coordinates: [6.385556, 51.174722],
-        ticketUrl: ''
-    },
-    "1. FC Köln": {
-        stadium: "RheinEnergieSTADION",
-        location: "Cologne",
-        coordinates: [6.875278, 50.933611],
-        ticketUrl: ''
-    },
-    "SV Werder Bremen": {
-        stadium: "Weserstadion",
-        location: "Bremen",
-        coordinates: [8.837222, 53.066389],
-        ticketUrl: ''
-    },
-    "FC Augsburg": {
-        stadium: "WWK ARENA",
-        location: "Augsburg",
-        coordinates: [10.931944, 48.332778],
-        ticketUrl: ''
-    },
-    "VfB Stuttgart": {
-        stadium: "MHPArena",
-        location: "Stuttgart",
-        coordinates: [9.231667, 48.792222],
-        ticketUrl: ''
-    },
-    "VfL Bochum 1848": {
-        stadium: "Vonovia Ruhrstadion",
-        location: "Bochum",
-        coordinates: [7.215556, 51.465],
-        ticketUrl: ''
-    },
-    "1. FC Heidenheim 1846": {
-        stadium: "Voith-Arena",
-        location: "Heidenheim",
-        coordinates: [10.149722, 48.676111],
-        ticketUrl: ''
-    },
-    "SV Darmstadt 98": {
-        stadium: "Merck-Stadion am Böllenfalltor",
-        location: "Darmstadt",
-        coordinates: [8.649444, 49.859167],
-        ticketUrl: ''
-    },
-    "Holstein Kiel": {
-        stadium: "Holstein-Stadion",
-        location: "Kiel",
-        coordinates: [10.122222, 54.340556],
-        ticketUrl: ''
-    },
-    "FC St. Pauli 1910": {
-        stadium: "Millerntor-Stadion",
-        location: "Hamburg",
-        coordinates: [9.970556, 53.554722],
         ticketUrl: ''
     }
 };
@@ -627,13 +888,13 @@ const EREDIVISIE_VENUES = {
 };
 
 // Function to get venue information for a team
-function getVenueForTeam(teamName) {
-    // Check each league's venues
+export function getVenueForTeam(teamName) {
     const allVenues = {
         ...PREMIER_LEAGUE_VENUES,
-        ...LIGUE_1_VENUES,
+        ...CHAMPIONSHIP_VENUES,
         ...LA_LIGA_VENUES,
         ...BUNDESLIGA_VENUES,
+        ...LIGUE_1_VENUES,
         ...EREDIVISIE_VENUES
     };
     return allVenues[teamName] || null;
@@ -641,10 +902,10 @@ function getVenueForTeam(teamName) {
 
 // Export the functions and data
 export {
-    getVenueForTeam,
     PREMIER_LEAGUE_VENUES,
-    LIGUE_1_VENUES,
+    CHAMPIONSHIP_VENUES,
     LA_LIGA_VENUES,
     BUNDESLIGA_VENUES,
+    LIGUE_1_VENUES,
     EREDIVISIE_VENUES
 }; 
