@@ -92,47 +92,19 @@ const Home = ({ searchState, setSearchState }) => {
 
     const handleLocationSelect = (location) => {
         setSearchState(prev => ({ ...prev, location }));
-        
-        if (location && location.country) {
-            // Special handling for UK locations
-            const countryCode = location.country === 'United Kingdom' ? 'GB' : getCountryCode(location.country);
-            if (countryCode) {
-                // Get all leagues for the selected country
-                const countryLeagues = getLeaguesForCountry(countryCode);
-                if (countryLeagues.length > 0) {
-                    // Set selected leagues to all leagues from that country
-                    setSelectedLeagues(countryLeagues.map(league => league.id));
-                }
-                // Only fall back to all leagues if no country leagues found
-                else {
-                    const allLeagues = getAllLeagues();
-                    setSelectedLeagues(allLeagues.map(league => league.id));
-                }
-            } else {
-                // If country not found, show all leagues
-                const allLeagues = getAllLeagues();
-                setSelectedLeagues(allLeagues.map(league => league.id));
-            }
-        } else {
-            // If no location selected, show all leagues
-            const allLeagues = getAllLeagues();
-            setSelectedLeagues(allLeagues.map(league => league.id));
-        }
     };
 
     const handleSearch = async () => {
         if (searchState.dates.departure && searchState.dates.return) {
             setSearchState(prev => ({ ...prev, loading: true, error: null }));
             const formattedDates = {
-                departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
-                return: format(searchState.dates.return, 'yyyy-MM-dd')
+                departure: format(searchState.dates.departure, 'yyyy-MM-dd', { timeZone: 'UTC' }),
+                return: format(searchState.dates.return, 'yyyy-MM-dd', { timeZone: 'UTC' })
             };
             
             try {
-                // Get all available leagues
+                console.log('🔍 Starting match search with dates:', formattedDates);
                 const leagues = getAllLeagues();
-
-                // Fetch matches from all leagues in parallel
                 const responses = await Promise.all(
                     leagues.map(league => 
                         axios.get(
@@ -146,9 +118,29 @@ const Home = ({ searchState, setSearchState }) => {
                     )
                 );
 
-                // Combine matches from all leagues
+                console.log('📊 API Responses received for all leagues');
+
                 const allMatches = responses.reduce((acc, response, index) => {
+                    console.log(`\n🏆 Processing matches for league: ${leagues[index].name}`);
                     const matches = response.data.matches || [];
+                    console.log(`Found ${matches.length} matches in ${leagues[index].name}`);
+                    
+                    if (matches.length > 0) {
+                        // Log details of first match as example
+                        const sampleMatch = matches[0];
+                        console.log('Sample match data:', {
+                            id: sampleMatch.id,
+                            utcDate: sampleMatch.utcDate,
+                            parsedDate: new Date(sampleMatch.utcDate).toISOString(),
+                            localTime: new Date(sampleMatch.utcDate).toLocaleString(),
+                            status: sampleMatch.status,
+                            homeTeam: `${sampleMatch.homeTeam.name} (${sampleMatch.homeTeam.shortName})`,
+                            awayTeam: `${sampleMatch.awayTeam.name} (${sampleMatch.awayTeam.shortName})`,
+                            competition: sampleMatch.competition,
+                            venue: getVenueForTeam(sampleMatch.homeTeam.name)
+                        });
+                    }
+
                     const matchesWithLeague = matches.map(match => ({
                         ...match,
                         competition: {
@@ -160,24 +152,35 @@ const Home = ({ searchState, setSearchState }) => {
                     return [...acc, ...matchesWithLeague];
                 }, []);
 
-                // Sort matches chronologically by date and time
                 const sortedMatches = [...allMatches].sort((a, b) => {
                     const dateA = new Date(a.utcDate);
                     const dateB = new Date(b.utcDate);
                     return dateA.getTime() - dateB.getTime();
                 });
 
-                // If no matches found with current filters, show all matches
-                if (sortedMatches.length > 0) {
-                    // Check if there are matches in the currently selected leagues
-                    const matchesInSelectedLeagues = sortedMatches.filter(match => 
-                        selectedLeagues.includes(match.competition.id)
-                    );
-                    
-                    // Only fall back to all leagues if no matches in selected leagues
-                    if (matchesInSelectedLeagues.length === 0) {
-                        const allLeagues = getAllLeagues();
-                        setSelectedLeagues(allLeagues.map(league => league.id));
+                console.log(`\n📅 Total matches found: ${sortedMatches.length}`);
+                console.log('First 3 matches after sorting:', sortedMatches.slice(0, 3).map(match => ({
+                    date: match.utcDate,
+                    homeTeam: match.homeTeam.name,
+                    awayTeam: match.awayTeam.name,
+                    competition: match.competition.leagueName
+                })));
+
+                // Set leagues based on location and available matches
+                if (searchState.location && searchState.location.country) {
+                    const countryCode = getCountryCode(searchState.location.country);
+                    if (countryCode) {
+                        const countryLeagues = getLeaguesForCountry(countryCode);
+                        const countryLeagueIds = countryLeagues.map(league => league.id);
+                        
+                        // Check if there are any matches in the country's leagues
+                        const hasCountryMatches = sortedMatches.some(match => 
+                            countryLeagueIds.includes(match.competition.id)
+                        );
+
+                        // If matches found in country leagues, select only those leagues
+                        // Otherwise, show all leagues
+                        setSelectedLeagues(hasCountryMatches ? countryLeagueIds : getAllLeagues().map(league => league.id));
                     }
                 }
 
@@ -202,22 +205,30 @@ const Home = ({ searchState, setSearchState }) => {
                 } else {
                     setSelectedDistance(null);
                 }
-                
-                // Update state
+
                 setSearchState(prev => ({
                     ...prev,
                     matches: sortedMatches,
                     loading: false,
-                    error: null
+                    error: sortedMatches.length === 0 ? 'No matches found for the selected dates.' : null
                 }));
-                setHasSearched(true);
                 
+                setHasSearched(true);
+
                 // Scroll to map after a short delay to ensure it's rendered
                 if (sortedMatches.length > 0) {
                     setTimeout(scrollToMap, 100);
                 }
-                
+
             } catch (err) {
+                console.error('❌ Error in handleSearch:', err);
+                if (err.response) {
+                    console.error('API Error Details:', {
+                        status: err.response.status,
+                        statusText: err.response.statusText,
+                        data: err.response.data
+                    });
+                }
                 setSearchState(prev => ({
                     ...prev,
                     error: 'Failed to fetch matches. Please try again.',

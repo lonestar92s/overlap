@@ -4,6 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { getVenueForTeam } from '../data/venues';
 import { format } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 
@@ -133,12 +134,89 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
         };
     }, []); // Empty dependency array since we only want this to run once
 
+    // Helper function to get timezone from coordinates
+    const getTimezoneFromCoordinates = (coordinates) => {
+        // This is a simplified version. In a real-world application, 
+        // you would want to use a timezone lookup service or library
+        // like Google Time Zone API or moment-timezone with a complete timezone database
+        
+        const [longitude, latitude] = coordinates;
+        
+        // Europe
+        if (latitude >= 35 && latitude <= 60) {
+            if (longitude >= -10 && longitude <= 2) return 'Europe/London';      // UK, Ireland, Portugal
+            if (longitude > 2 && longitude <= 7.5) return 'Europe/Paris';        // France, Belgium, Netherlands
+            if (longitude > 7.5 && longitude <= 15) return 'Europe/Berlin';      // Germany, Switzerland, Italy
+            if (longitude > 15 && longitude <= 20) return 'Europe/Rome';         // Italy, Austria
+            if (longitude <= -10) return 'Atlantic/Azores';                      // Azores
+            if (longitude > 20 && longitude <= 30) return 'Europe/Istanbul';     // Turkey, Eastern Europe
+        }
+        
+        // Americas
+        if (longitude >= -180 && longitude <= -30) {
+            if (latitude >= 25 && latitude <= 50) {  // North America
+                if (longitude >= -125 && longitude <= -115) return 'America/Los_Angeles';
+                if (longitude > -115 && longitude <= -100) return 'America/Denver';
+                if (longitude > -100 && longitude <= -85) return 'America/Chicago';
+                if (longitude > -85 && longitude <= -65) return 'America/New_York';
+            }
+            if (latitude >= -60 && latitude < 25) {  // South & Central America
+                if (longitude >= -85 && longitude <= -75) return 'America/Bogota';
+                if (longitude > -75 && longitude <= -65) return 'America/Lima';
+                if (longitude > -65 && longitude <= -55) return 'America/Sao_Paulo';
+                if (longitude > -55 && longitude <= -30) return 'America/Buenos_Aires';
+            }
+        }
+        
+        // Asia
+        if (latitude >= 20 && latitude <= 55 && longitude >= 30 && longitude <= 180) {
+            if (longitude >= 30 && longitude <= 45) return 'Asia/Dubai';         // UAE
+            if (longitude > 45 && longitude <= 60) return 'Asia/Karachi';        // Pakistan
+            if (longitude > 60 && longitude <= 75) return 'Asia/Kolkata';        // India
+            if (longitude > 75 && longitude <= 90) return 'Asia/Bangkok';        // Thailand
+            if (longitude > 90 && longitude <= 105) return 'Asia/Shanghai';      // China
+            if (longitude > 105 && longitude <= 120) return 'Asia/Tokyo';        // Japan
+        }
+        
+        // Africa
+        if (latitude >= -35 && latitude <= 35 && longitude >= -20 && longitude <= 50) {
+            if (longitude >= -20 && longitude <= 0) return 'Africa/Casablanca';  // Morocco
+            if (longitude > 0 && longitude <= 20) return 'Africa/Lagos';         // Nigeria
+            if (longitude > 20 && longitude <= 35) return 'Africa/Cairo';        // Egypt
+            if (longitude > 35 && longitude <= 50) return 'Africa/Nairobi';      // Kenya
+        }
+        
+        // Australia & Oceania
+        if (latitude >= -50 && latitude <= -10 && longitude >= 110 && longitude <= 180) {
+            if (longitude >= 110 && longitude <= 130) return 'Australia/Perth';
+            if (longitude > 130 && longitude <= 150) return 'Australia/Sydney';
+            if (longitude > 150) return 'Pacific/Auckland';
+        }
+        
+        return 'UTC'; // Default to UTC if no specific timezone is found
+    };
+
     // Format match date and time
-    const formatMatchDateTime = (utcDate) => {
+    const formatMatchDateTime = (utcDate, venue) => {
+        // Create date object from UTC string
         const date = new Date(utcDate);
+        
+        // Get venue timezone, default to UTC
+        let timeZone = 'UTC';
+        if (venue?.coordinates) {
+            timeZone = getTimezoneFromCoordinates(venue.coordinates);
+        }
+        
+        // Get timezone display name
+        const timeZoneDisplay = timeZone.split('/')[1] || 'UTC';
+        
+        // Convert UTC date to venue's timezone
+        const zonedDate = utcToZonedTime(date, timeZone);
+        
+        // Format the date and time in the venue's timezone
         return {
-            date: format(date, 'EEE, MMM d'),
-            time: format(date, 'h:mm a')
+            date: format(zonedDate, 'EEE, MMM d'),
+            time: format(zonedDate, 'h:mm a') + ' ' + timeZoneDisplay
         };
     };
 
@@ -187,7 +265,7 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                     ` : ''}
                 </div>
                 ${matches.map(match => {
-                    const { date, time } = formatMatchDateTime(match.utcDate);
+                    const { date, time } = formatMatchDateTime(match.utcDate, getVenueForTeam(match.homeTeam.name));
                     return `
                         <div style="
                             padding: 8px 0;
