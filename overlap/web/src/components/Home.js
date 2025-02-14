@@ -25,6 +25,9 @@ import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getVenueForTeam } from '../data/venues';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
+import ItineraryBuilder from './ItineraryBuilder';
+
+const BACKEND_URL = 'http://localhost:3001';
 
 // Helper function to calculate distance between two points using Haversine formula
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -49,6 +52,7 @@ const Home = ({ searchState, setSearchState }) => {
     const [selectedLeagues, setSelectedLeagues] = useState([]);
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Add scroll listener to show/hide back to top button
     React.useEffect(() => {
@@ -98,31 +102,39 @@ const Home = ({ searchState, setSearchState }) => {
         if (searchState.dates.departure && searchState.dates.return) {
             setSearchState(prev => ({ ...prev, loading: true, error: null }));
             const formattedDates = {
-                departure: format(searchState.dates.departure, 'yyyy-MM-dd', { timeZone: 'UTC' }),
-                return: format(searchState.dates.return, 'yyyy-MM-dd', { timeZone: 'UTC' })
+                departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
+                return: format(searchState.dates.return, 'yyyy-MM-dd')
             };
             
             try {
-                console.log('🔍 Starting match search with dates:', formattedDates);
                 const leagues = getAllLeagues();
-                const responses = await Promise.all(
-                    leagues.map(league => 
-                        axios.get(
-                            `/v4/competitions/${league.id}/matches?dateFrom=${formattedDates.departure}&dateTo=${formattedDates.return}`,
-                            {
-                                headers: {
-                                    'X-Auth-Token': '2a9e46d07879477e9e4b1506101a299f'
-                                }
-                            }
-                        )
-                    )
-                );
+                console.log('🔍 Starting match search with dates:', formattedDates);
 
-                console.log('📊 API Responses received for all leagues');
+                const responses = await Promise.all(
+                    leagues.map(async league => {
+                        try {
+                            const url = `${BACKEND_URL}/v4/competitions/${league.id}/matches`;
+                            console.log(`Fetching from: ${url}`);
+                            
+                            const response = await axios.get(url, {
+                                params: {
+                                    dateFrom: formattedDates.departure,
+                                    dateTo: formattedDates.return
+                                }
+                            });
+                            
+                            console.log(`Successfully fetched data for league: ${league.name}`);
+                            return response.data;
+                        } catch (error) {
+                            console.error(`Error fetching matches for league ${league.name}:`, error);
+                            return { matches: [] };
+                        }
+                    })
+                );
 
                 const allMatches = responses.reduce((acc, response, index) => {
                     console.log(`\n🏆 Processing matches for league: ${leagues[index].name}`);
-                    const matches = response.data.matches || [];
+                    const matches = response.matches || [];
                     console.log(`Found ${matches.length} matches in ${leagues[index].name}`);
                     
                     if (matches.length > 0) {
@@ -131,8 +143,6 @@ const Home = ({ searchState, setSearchState }) => {
                         console.log('Sample match data:', {
                             id: sampleMatch.id,
                             utcDate: sampleMatch.utcDate,
-                            parsedDate: new Date(sampleMatch.utcDate).toISOString(),
-                            localTime: new Date(sampleMatch.utcDate).toLocaleString(),
                             status: sampleMatch.status,
                             homeTeam: `${sampleMatch.homeTeam.name} (${sampleMatch.homeTeam.shortName})`,
                             awayTeam: `${sampleMatch.awayTeam.name} (${sampleMatch.awayTeam.shortName})`,
@@ -322,6 +332,87 @@ const Home = ({ searchState, setSearchState }) => {
     useEffect(() => {
         setSelectedMatch(null);
     }, [selectedDistance, selectedLeagues]);
+
+    // Handle match selection/deselection
+    const handleMatchSelect = (match) => {
+        console.log('Handling match select/deselect:', match.id);
+        console.log('Current selected matches:', searchState.selectedMatches);
+        
+        setSearchState(prev => {
+            const currentSelectedMatches = prev.selectedMatches || [];
+            const isAlreadySelected = currentSelectedMatches.some(m => m.id === match.id);
+            
+            console.log('Is already selected:', isAlreadySelected);
+            
+            if (isAlreadySelected) {
+                // Remove the match and its associated transportation
+                const newSelectedMatches = currentSelectedMatches.filter(m => m.id !== match.id);
+                const newSelectedTransportation = { ...prev.selectedTransportation };
+                
+                // Remove transportation options that involve this match
+                Object.keys(newSelectedTransportation).forEach(key => {
+                    if (key.includes(String(match.id))) {
+                        delete newSelectedTransportation[key];
+                    }
+                });
+                
+                console.log('New selected matches after removal:', newSelectedMatches);
+                
+                return {
+                    ...prev,
+                    selectedMatches: newSelectedMatches,
+                    selectedTransportation: newSelectedTransportation
+                };
+            } else {
+                // Add the match if we haven't reached the limit
+                if (currentSelectedMatches.length < 5) {
+                    const newSelectedMatches = [...currentSelectedMatches, match].sort((a, b) => 
+                        new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime()
+                    );
+                    
+                    console.log('New selected matches after addition:', newSelectedMatches);
+                    
+                    return {
+                        ...prev,
+                        selectedMatches: newSelectedMatches
+                    };
+                }
+            }
+            return prev;
+        });
+    };
+
+    // Handle transportation selection
+    const handleTransportationSelect = (key, option) => {
+        setSearchState(prev => ({
+            ...prev,
+            selectedTransportation: {
+                ...prev.selectedTransportation,
+                [key]: option
+            }
+        }));
+    };
+
+    // Handle itinerary save
+    const handleSaveItinerary = () => {
+        // This would be connected to the backend later
+        console.log('Saving itinerary:', {
+            matches: searchState.selectedMatches,
+            transportation: searchState.selectedTransportation
+        });
+    };
+
+    // Reset selected matches and transportation when a new search is performed
+    useEffect(() => {
+        if (hasSearched) {
+            setSearchState(prev => ({
+                ...prev,
+                selectedMatches: [],
+                selectedTransportation: {}
+            }));
+            setSelectedMatch(null);
+        }
+    }, [hasSearched]);
 
     return (
         <>
@@ -605,27 +696,56 @@ const Home = ({ searchState, setSearchState }) => {
                                         onMatchClick={handleMatchClick}
                                         userLocation={searchState.location}
                                         selectedMatch={selectedMatch}
+                                        onSelectMatch={handleMatchSelect}
+                                        selectedMatches={searchState.selectedMatches}
                                     />
                                 </Box>
 
-                                {/* Right side - Map */}
+                                {/* Right side - Map and Itinerary Builder */}
                                 <Box 
-                                    ref={mapRef}
                                     sx={{ 
-                                        height: { xs: '400px', md: '100%' },
-                                        order: { xs: 1, md: 2 },
-                                        borderRadius: 2,
-                                        overflow: 'hidden'
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 3,
+                                        height: { xs: 'auto', md: '100%' },
+                                        order: { xs: 1, md: 2 }
                                     }}
                                 >
-                                    <Map 
-                                        location={searchState.location} 
-                                        showLocation={hasSearched && searchState.matches.length > 0}
-                                        matches={filteredMatches}
-                                        setActiveMarker={(callback) => {
-                                            activeMarkerRef.current = callback;
+                                    {/* Map */}
+                                    <Box 
+                                        ref={mapRef}
+                                        sx={{ 
+                                            height: { xs: '400px', md: '50%' },
+                                            borderRadius: 2,
+                                            overflow: 'hidden'
                                         }}
-                                    />
+                                    >
+                                        <Map 
+                                            location={searchState.location} 
+                                            showLocation={hasSearched && searchState.matches.length > 0}
+                                            matches={filteredMatches}
+                                            setActiveMarker={(callback) => {
+                                                activeMarkerRef.current = callback;
+                                            }}
+                                            selectedMatches={searchState.selectedMatches}
+                                            selectedTransportation={searchState.selectedTransportation}
+                                        />
+                                    </Box>
+
+                                    {/* Itinerary Builder */}
+                                    <Box 
+                                        sx={{ 
+                                            height: { xs: 'auto', md: '50%' },
+                                            overflowY: 'auto'
+                                        }}
+                                    >
+                                        <ItineraryBuilder
+                                            selectedMatches={searchState.selectedMatches}
+                                            onTransportationSelect={handleTransportationSelect}
+                                            selectedTransportation={searchState.selectedTransportation}
+                                            onSave={handleSaveItinerary}
+                                        />
+                                    </Box>
                                 </Box>
                             </Box>
                         </>

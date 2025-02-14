@@ -41,14 +41,22 @@ const AppContent = () => {
   const [searchState, setSearchState] = useState({
     location: null,
     dates: { departure: null, return: null },
-    matches: []
+    matches: [],
+    selectedMatches: [],
+    selectedTransportation: {},
+    loading: false,
+    error: null
   });
 
   const handleReset = () => {
     setSearchState({
       location: null,
       dates: { departure: null, return: null },
-      matches: []
+      matches: [],
+      selectedMatches: [],
+      selectedTransportation: {},
+      loading: false,
+      error: null
     });
     navigate('/');
   };
@@ -67,6 +75,16 @@ const AppContent = () => {
 };
 
 function App() {
+  const [searchState, setSearchState] = useState({
+    location: null,
+    dates: { departure: null, return: null },
+    matches: [],
+    selectedMatches: [],
+    selectedTransportation: {},
+    loading: false,
+    error: null
+  });
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
