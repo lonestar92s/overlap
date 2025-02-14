@@ -11,13 +11,28 @@ const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 // Set the access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const Map = ({ location, showLocation, matches, setActiveMarker }) => {
+// Transportation colors
+const TRANSPORT_COLORS = {
+    driving: '#4CAF50',  // Green
+    transit: '#2196F3',  // Blue
+    flight: '#FF9800'    // Orange
+};
+
+const Map = ({ 
+    location, 
+    showLocation, 
+    matches, 
+    setActiveMarker,
+    selectedMatches = [],
+    selectedTransportation = {}
+}) => {
     const mapContainer = useRef(null);
     const mapInstance = useRef(null);
     const [mapError, setMapError] = useState(null);
     const [loading, setLoading] = useState(true);
     const timeoutRef = useRef(null);
     const markerRefs = useRef({});
+    const markers = useRef([]);
 
     // Initialize map
     useEffect(() => {
@@ -116,12 +131,8 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
                     map.off('style.load');
                     
                     // Remove markers first
-                    Object.values(markerRefs.current).forEach(marker => {
-                        if (marker && marker.remove) {
-                            marker.remove();
-                        }
-                    });
-                    markerRefs.current = {};
+                    markers.current.forEach(marker => marker.remove());
+                    markers.current = [];
                     
                     // Remove the map instance
                     map.remove();
@@ -375,12 +386,8 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
         });
 
         // Remove all existing markers first
-        Object.values(markerRefs.current).forEach(marker => {
-            if (marker && marker.remove) {
-                marker.remove();
-            }
-        });
-        markerRefs.current = {};
+        markers.current.forEach(marker => marker.remove());
+        markers.current = [];
 
         // Reset view if not showing location
         if (!showLocation) {
@@ -487,13 +494,260 @@ const Map = ({ location, showLocation, matches, setActiveMarker }) => {
         if (hasMarkers && !bounds.isEmpty()) {
             console.log('Fitting bounds to markers');
             mapInstance.current.fitBounds(bounds, {
-                padding: 50,
-                maxZoom: 10
+                padding: {
+                    top: 100,
+                    bottom: 100,
+                    left: 100,
+                    right: 100
+                },
+                maxZoom: 8,
+                duration: 1000
             });
         }
 
         console.log('Map updated with locations and matches');
     }, [location, matches, showLocation, loading]);
+
+    // Add route lines between selected matches
+    useEffect(() => {
+        if (!mapInstance.current || loading || selectedMatches.length < 2) {
+            console.log('Skipping route creation:', {
+                hasMap: !!mapInstance.current,
+                loading,
+                selectedMatchesCount: selectedMatches.length
+            });
+            return;
+        }
+
+        console.log('Creating routes for matches:', {
+            selectedMatches: selectedMatches.map(m => m.id),
+            transportation: selectedTransportation
+        });
+
+        // Remove existing route layers and sources
+        const map = mapInstance.current;
+        const existingLayers = map.getStyle().layers;
+        existingLayers.forEach(layer => {
+            if (layer.id.startsWith('route-')) {
+                console.log('Removing layer:', layer.id);
+                map.removeLayer(layer.id);
+            }
+        });
+        Object.keys(map.getStyle().sources).forEach(source => {
+            if (source.startsWith('route-')) {
+                console.log('Removing source:', source);
+                map.removeSource(source);
+            }
+        });
+
+        // Add routes between consecutive matches
+        for (let i = 0; i < selectedMatches.length - 1; i++) {
+            const currentMatch = selectedMatches[i];
+            const nextMatch = selectedMatches[i + 1];
+            const currentVenue = getVenueForTeam(currentMatch.homeTeam.name);
+            const nextVenue = getVenueForTeam(nextMatch.homeTeam.name);
+
+            if (!currentVenue?.coordinates || !nextVenue?.coordinates) {
+                console.warn('Missing venue coordinates:', {
+                    currentTeam: currentMatch.homeTeam.name,
+                    nextTeam: nextMatch.homeTeam.name,
+                    hasCurrentVenue: !!currentVenue,
+                    hasNextVenue: !!nextVenue
+                });
+                continue;
+            }
+
+            const transportKey = `${currentMatch.id}-${nextMatch.id}`;
+            const transport = selectedTransportation[transportKey];
+            
+            if (!transport) {
+                console.warn('No transportation selected for route:', transportKey);
+                continue;
+            }
+
+            console.log('Adding route:', {
+                from: currentMatch.homeTeam.name,
+                to: nextMatch.homeTeam.name,
+                transportType: transport.type,
+                transportKey
+            });
+
+            // Create a line between the venues
+            const coordinates = [
+                currentVenue.coordinates,
+                nextVenue.coordinates
+            ];
+
+            // For flights, create an arc
+            let routeCoordinates = coordinates;
+            if (transport.type === 'flight') {
+                routeCoordinates = createArcCoordinates(
+                    currentVenue.coordinates,
+                    nextVenue.coordinates
+                );
+            }
+
+            const sourceId = `route-${transportKey}`;
+            const layerId = `route-line-${transportKey}`;
+
+            try {
+                // Add the route source
+                map.addSource(sourceId, {
+                    'type': 'geojson',
+                    'data': {
+                        'type': 'Feature',
+                        'properties': {},
+                        'geometry': {
+                            'type': 'LineString',
+                            'coordinates': routeCoordinates
+                        }
+                    }
+                });
+
+                // Add the route layer
+                map.addLayer({
+                    'id': layerId,
+                    'type': 'line',
+                    'source': sourceId,
+                    'layout': {
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                    },
+                    'paint': {
+                        'line-color': TRANSPORT_COLORS[transport.type] || '#888',
+                        'line-width': 3,
+                        'line-dasharray': transport.type === 'flight' ? [2, 1] : [1],
+                        'line-opacity': 0.8
+                    }
+                });
+
+                console.log('Successfully added route:', {
+                    sourceId,
+                    layerId,
+                    coordinates: routeCoordinates
+                });
+            } catch (error) {
+                console.error('Error adding route:', {
+                    sourceId,
+                    layerId,
+                    error: error.message
+                });
+            }
+        }
+
+        // Fit bounds to include all matches and routes
+        if (selectedMatches.length > 0) {
+            const bounds = new mapboxgl.LngLatBounds();
+            selectedMatches.forEach(match => {
+                const venue = getVenueForTeam(match.homeTeam.name);
+                if (venue?.coordinates) {
+                    bounds.extend(venue.coordinates);
+                }
+            });
+            
+            map.fitBounds(bounds, {
+                padding: {
+                    top: 100,
+                    bottom: 100,
+                    left: 100,
+                    right: 100
+                },
+                maxZoom: 8,
+                duration: 1000
+            });
+        }
+    }, [selectedMatches, selectedTransportation, loading]);
+
+    // Helper function to create an arc for flight routes
+    const createArcCoordinates = (start, end) => {
+        const points = 50; // Number of points in the arc
+        const coordinates = [];
+        
+        for (let i = 0; i <= points; i++) {
+            const t = i / points;
+            
+            // Create an arc by interpolating between the points
+            const lat = start[1] + (end[1] - start[1]) * t;
+            const lon = start[0] + (end[0] - start[0]) * t;
+            
+            // Add altitude variation
+            const altitude = Math.sin(t * Math.PI) * 0.5; // Max altitude offset
+            
+            coordinates.push([
+                lon,
+                lat + altitude // Add altitude to create the arc effect
+            ]);
+        }
+        
+        return coordinates;
+    };
+
+    // Add markers for matches
+    useEffect(() => {
+        if (!mapInstance.current || loading) return;
+
+        // Remove existing markers
+        markers.current.forEach(marker => marker.remove());
+        markers.current = [];
+
+        matches.forEach(match => {
+            const venue = getVenueForTeam(match.homeTeam.name);
+            if (!venue?.coordinates) return;
+
+            const isSelected = selectedMatches.some(m => m.id === match.id);
+            
+            // Create marker element
+            const el = document.createElement('div');
+            el.className = 'match-marker';
+            el.style.width = '10px';
+            el.style.height = '10px';
+            el.style.backgroundColor = isSelected ? '#FF385C' : '#385CFF';
+            el.style.borderRadius = '50%';
+            el.style.border = '1px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+            el.style.cursor = 'pointer';
+
+            // Create popup
+            const popup = new mapboxgl.Popup({
+                offset: 25,
+                closeButton: false,
+                className: 'match-popup'
+            }).setHTML(`
+                <div style="padding: 12px;">
+                    <div style="margin-bottom: 8px;">
+                        <strong>${format(new Date(match.utcDate), 'EEE, MMM d • h:mm a')}</strong>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <span>${match.homeTeam.name}</span>
+                        <span style="margin: 0 4px;">vs</span>
+                        <span>${match.awayTeam.name}</span>
+                    </div>
+                    <div style="color: #666;">
+                        ${venue.stadium}, ${venue.location}
+                    </div>
+                </div>
+            `);
+
+            // Create and store marker
+            const marker = new mapboxgl.Marker({
+                element: el,
+                anchor: 'center'
+            })
+            .setLngLat(venue.coordinates)
+            .setPopup(popup);
+
+            // Add click handler
+            el.addEventListener('click', () => {
+                // Close other popups
+                markers.current.forEach(m => m.getPopup().remove());
+                // Open this popup
+                marker.togglePopup();
+            });
+
+            marker.addTo(mapInstance.current);
+            markers.current.push(marker);
+        });
+    }, [matches, loading, selectedMatches]);
 
     if (mapError) {
         return (
