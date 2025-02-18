@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const transportationRoutes = require('./routes/transportation');
 const matchesRoutes = require('./routes/matches');
+const searchRoutes = require('./routes/search');
 
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
@@ -14,6 +15,7 @@ dotenv.config({ path: envPath });
 console.log('Environment variables loaded:', {
     port: process.env.PORT || '3001 (default)',
     googleApiKey: process.env.GOOGLE_API_KEY ? 'Present' : 'Missing',
+    openaiApiKey: process.env.OPENAI_API_KEY ? 'Present' : 'Missing',
     nodeEnv: process.env.NODE_ENV || 'not set'
 });
 
@@ -31,6 +33,7 @@ app.use(express.json());
 
 // Use routes
 app.use('/api', transportationRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/v4', matchesRoutes);
 
 const PORT = process.env.PORT || 3001;

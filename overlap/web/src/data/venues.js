@@ -887,6 +887,39 @@ const EREDIVISIE_VENUES = {
     }
 };
 
+const PRIMEIRA_LIGA_VENUES = {
+    "SL Benfica": {
+        stadium: "Estádio da Luz",
+        location: "Lisbon",
+        coordinates: [-9.184674, 38.752827],
+        ticketUrl: ''
+    },
+    "FC Porto": {
+        stadium: "Estádio do Dragão",
+        location: "Porto",
+        coordinates: [-8.583533, 41.161758],
+        ticketUrl: ''
+    },
+    "Sporting CP": {
+        stadium: "Estádio José Alvalade",
+        location: "Lisbon",
+        coordinates: [-9.160944, 38.761444],
+        ticketUrl: ''
+    },
+    "SC Braga": {
+        stadium: "Estádio Municipal de Braga",
+        location: "Braga",
+        coordinates: [-8.431389, 41.563611],
+        ticketUrl: ''
+    },
+    "Vitória SC": {
+        stadium: "Estádio D. Afonso Henriques",
+        location: "Guimarães",
+        coordinates: [-8.312778, 41.445278],
+        ticketUrl: ''
+    }
+};
+
 // Function to get venue information for a team
 export function getVenueForTeam(teamName) {
     const allVenues = {
@@ -895,7 +928,8 @@ export function getVenueForTeam(teamName) {
         ...LA_LIGA_VENUES,
         ...BUNDESLIGA_VENUES,
         ...LIGUE_1_VENUES,
-        ...EREDIVISIE_VENUES
+        ...EREDIVISIE_VENUES,
+        ...PRIMEIRA_LIGA_VENUES
     };
     return allVenues[teamName] || null;
 }
@@ -907,5 +941,6 @@ export {
     LA_LIGA_VENUES,
     BUNDESLIGA_VENUES,
     LIGUE_1_VENUES,
-    EREDIVISIE_VENUES
+    EREDIVISIE_VENUES,
+    PRIMEIRA_LIGA_VENUES
 }; 

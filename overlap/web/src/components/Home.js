@@ -26,6 +26,7 @@ import Filters from './Filters';
 import { getVenueForTeam } from '../data/venues';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
 import ItineraryBuilder from './ItineraryBuilder';
+import NaturalLanguageSearch from './NaturalLanguageSearch';
 
 const BACKEND_URL = 'http://localhost:3001';
 
@@ -414,6 +415,51 @@ const Home = ({ searchState, setSearchState }) => {
         }
     }, [hasSearched]);
 
+    const handleNaturalLanguageSearch = (searchParams) => {
+        // Set loading state first
+        setSearchState(prev => ({
+            ...prev,
+            loading: true,
+            error: null
+        }));
+
+        // Update search parameters
+        setSearchState(prev => ({
+            ...prev,
+            location: searchParams.location ? {
+                place_id: `${searchParams.location.city}-${searchParams.location.country}`,
+                city: searchParams.location.city,
+                country: searchParams.location.country,
+                lat: searchParams.location.coordinates[1],
+                lon: searchParams.location.coordinates[0]
+            } : null,
+            dates: {
+                departure: searchParams.dateRange?.start ? new Date(searchParams.dateRange.start) : null,
+                return: searchParams.dateRange?.end ? new Date(searchParams.dateRange.end) : null
+            },
+            selectedLeagues: searchParams.leagues || []
+        }));
+
+        // Only trigger search if we have both location and date range
+        if (searchParams.location && searchParams.dateRange?.start && searchParams.dateRange?.end) {
+            handleSearch();
+        } else {
+            // Reset loading state if we don't have enough parameters
+            setSearchState(prev => ({
+                ...prev,
+                loading: false,
+                error: 'Please provide both location and dates for the search.'
+            }));
+        }
+    };
+
+    const handleNaturalLanguageError = (error) => {
+        setSearchState(prev => ({
+            ...prev,
+            error
+        }));
+    };
+
     return (
         <>
             <HeaderNav onHomeClick={handleReset} />
@@ -427,6 +473,14 @@ const Home = ({ searchState, setSearchState }) => {
                         mt: 8 // Add margin top to account for fixed header
                     }}
                 >
+                    {/* Add NaturalLanguageSearch component at the top */}
+                    <Box sx={{ p: 3, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'grey.200' }}>
+                        <NaturalLanguageSearch
+                            onSearch={handleNaturalLanguageSearch}
+                            onError={handleNaturalLanguageError}
+                        />
+                    </Box>
+
                     {/* Search Form */}
                     <Box sx={{ mb: searchState.matches.length > 0 && hasSearched ? 4 : 0 }}>
                         <Paper 
