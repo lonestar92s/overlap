@@ -25,6 +25,9 @@ export const LEAGUES = {
     ],
     'NL': [ // Netherlands
         { id: 'DED', name: 'Eredivisie', tier: 1 }
+    ],
+    'PT': [ // Portugal
+        { id: 'PPL', name: 'Primeira Liga', tier: 1 }
     ]
 };
 
@@ -46,7 +49,8 @@ export const getCountryCode = (countryName) => {
         'France': 'FR',
         'Spain': 'ES',
         'Germany': 'DE',
-        'Netherlands': 'NL'
+        'Netherlands': 'NL',
+        'Portugal': 'PT'
     };
     return countryMapping[countryName];
 };

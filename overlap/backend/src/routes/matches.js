@@ -14,23 +14,32 @@ router.get('/competitions/:competitionId/matches', async (req, res) => {
         const { competitionId } = req.params;
         const { dateFrom, dateTo } = req.query;
         
-        console.log(`Fetching matches for competition ${competitionId} from ${dateFrom} to ${dateTo}`);
+        console.log('Fetching matches with params:', {
+            competitionId,
+            dateFrom,
+            dateTo,
+            apiKey: process.env.FOOTBALL_DATA_API_KEY ? 'Present' : 'Missing'
+        });
 
         const response = await axios.get(
             `https://api.football-data.org/v4/competitions/${competitionId}/matches`,
             {
                 headers: {
-                    'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY || '2a9e46d07879477e9e4b1506101a299f'
+                    'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY
                 },
                 params: {
                     dateFrom,
                     dateTo
                 },
-                httpsAgent // Add the HTTPS agent to the request
+                httpsAgent
             }
         );
         
-        console.log(`Successfully fetched matches for ${competitionId}`);
+        console.log(`Successfully fetched matches for ${competitionId}:`, {
+            matchCount: response.data.matches?.length || 0,
+            competition: response.data.competition?.name
+        });
+
         res.json(response.data);
     } catch (error) {
         console.error('Error fetching matches:', {
