@@ -42,8 +42,8 @@ const AppContent = () => {
     location: null,
     dates: { departure: null, return: null },
     matches: [],
-    selectedMatches: [],
-    selectedTransportation: {},
+    // selectedMatches: [],
+    // selectedTransportation: {},
     loading: false,
     error: null
   });
@@ -53,8 +53,8 @@ const AppContent = () => {
       location: null,
       dates: { departure: null, return: null },
       matches: [],
-      selectedMatches: [],
-      selectedTransportation: {},
+      // selectedMatches: [],
+      // selectedTransportation: {},
       loading: false,
       error: null
     });
@@ -79,8 +79,8 @@ function App() {
     location: null,
     dates: { departure: null, return: null },
     matches: [],
-    selectedMatches: [],
-    selectedTransportation: {},
+    // selectedMatches: [],
+    // selectedTransportation: {},
     loading: false,
     error: null
   });
