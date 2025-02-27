@@ -25,7 +25,6 @@ import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getVenueForTeam } from '../data/venues';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
-import ItineraryBuilder from './ItineraryBuilder';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 
 const BACKEND_URL = 'http://localhost:3001';
@@ -750,8 +749,6 @@ const Home = ({ searchState, setSearchState }) => {
                                         onMatchClick={handleMatchClick}
                                         userLocation={searchState.location}
                                         selectedMatch={selectedMatch}
-                                        onSelectMatch={handleMatchSelect}
-                                        selectedMatches={searchState.selectedMatches}
                                     />
                                 </Box>
 
@@ -769,7 +766,7 @@ const Home = ({ searchState, setSearchState }) => {
                                     <Box 
                                         ref={mapRef}
                                         sx={{ 
-                                            height: { xs: '400px', md: '50%' },
+                                            height: { xs: '400px', md: '100%' },
                                             borderRadius: 2,
                                             overflow: 'hidden'
                                         }}
@@ -781,23 +778,7 @@ const Home = ({ searchState, setSearchState }) => {
                                             setActiveMarker={(callback) => {
                                                 activeMarkerRef.current = callback;
                                             }}
-                                            selectedMatches={searchState.selectedMatches}
-                                            selectedTransportation={searchState.selectedTransportation}
-                                        />
-                                    </Box>
-
-                                    {/* Itinerary Builder */}
-                                    <Box 
-                                        sx={{ 
-                                            height: { xs: 'auto', md: '50%' },
-                                            overflowY: 'auto'
-                                        }}
-                                    >
-                                        <ItineraryBuilder
-                                            selectedMatches={searchState.selectedMatches}
-                                            onTransportationSelect={handleTransportationSelect}
-                                            selectedTransportation={searchState.selectedTransportation}
-                                            onSave={handleSaveItinerary}
+                                            selectedMatch={selectedMatch}
                                         />
                                     </Box>
                                 </Box>

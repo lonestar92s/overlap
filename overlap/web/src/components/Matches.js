@@ -128,7 +128,15 @@ const formatMatchDateTime = (utcDate, venue) => {
     };
 };
 
-const MatchCard = ({ match, onClick, distance, isSelected, onSelectMatch, isSelectable, isInItinerary }) => {
+const MatchCard = ({ 
+    match, 
+    onClick, 
+    distance, 
+    isSelected,
+    // onSelectMatch,
+    // isSelectable,
+    // isInItinerary 
+}) => {
     const venue = getVenueForTeam(match.homeTeam.name);
     const { date, time } = formatMatchDateTime(match.utcDate, venue);
     const cardRef = useRef(null);
@@ -142,13 +150,15 @@ const MatchCard = ({ match, onClick, distance, isSelected, onSelectMatch, isSele
         }
     }, [isSelected]);
 
+    // Comment out itinerary-related handlers
+    /*
     const handleSelectMatch = (e) => {
         e.stopPropagation();
-        console.log('Match select button clicked:', match.id);
-        console.log('Is selectable:', isSelectable);
-        console.log('Is in itinerary:', isInItinerary);
-        onSelectMatch(match);
+        if (isSelectable) {
+            onSelectMatch(match);
+        }
     };
+    */
 
     // Log missing venue for debugging
     if (!venue) {
@@ -167,13 +177,12 @@ const MatchCard = ({ match, onClick, distance, isSelected, onSelectMatch, isSele
                 borderRadius: 2,
                 transition: 'all 0.2s ease-in-out',
                 cursor: 'pointer',
-                backgroundColor: isInItinerary ? '#FFF8F9' : isSelected ? '#F8F9FF' : 'white',
-                borderColor: isInItinerary ? '#FF385C' : isSelected ? '#385CFF' : '#eee',
-                opacity: !isSelectable && !isInItinerary ? 0.5 : 1,
+                backgroundColor: isSelected ? '#F8F9FF' : 'white',
+                borderColor: isSelected ? '#385CFF' : '#eee',
                 '&:hover': {
-                    transform: isSelectable || isInItinerary ? 'translateY(-2px)' : 'none',
-                    boxShadow: isSelectable || isInItinerary ? '0 4px 12px rgba(0,0,0,0.1)' : 'none',
-                    borderColor: isInItinerary ? '#FF385C' : isSelected ? '#385CFF' : '#ddd'
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    borderColor: '#385CFF'
                 }
             }}
         >
@@ -199,26 +208,19 @@ const MatchCard = ({ match, onClick, distance, isSelected, onSelectMatch, isSele
                         >
                             {match.competition.leagueName}
                         </Typography>
-                        {(isSelectable || isInItinerary) && (
+                        {/* Comment out itinerary selection button */}
+                        {/*
+                        {isSelectable && (
                             <Button
-                                variant={isInItinerary ? "contained" : "outlined"}
                                 size="small"
                                 onClick={handleSelectMatch}
-                                sx={{
-                                    minWidth: 'auto',
-                                    px: 1,
-                                    backgroundColor: isInItinerary ? '#FF385C' : 'transparent',
-                                    borderColor: isInItinerary ? '#FF385C' : '#385CFF',
-                                    color: isInItinerary ? 'white' : '#385CFF',
-                                    '&:hover': {
-                                        backgroundColor: isInItinerary ? '#E61E4D' : 'rgba(56, 92, 255, 0.1)',
-                                        borderColor: isInItinerary ? '#E61E4D' : '#385CFF',
-                                    }
-                                }}
+                                variant={isInItinerary ? "contained" : "outlined"}
+                                color="primary"
                             >
-                                {isInItinerary ? 'Remove' : 'Add'}
+                                {isInItinerary ? "Remove from Itinerary" : "Add to Itinerary"}
                             </Button>
                         )}
+                        */}
                     </Box>
                 </Box>
                 
@@ -332,96 +334,59 @@ const Matches = ({
     matches, 
     onMatchClick, 
     userLocation, 
-    selectedMatch,
-    onSelectMatch,
-    selectedMatches = [],
-    maxDistance = 300 // Maximum allowed distance between venues in miles
+    selectedMatch
 }) => {
-    // Calculate distances and sort matches
-    const sortedMatches = useMemo(() => {
-        if (!userLocation) return matches;
-
-        return [...matches].map(match => {
+    // Calculate distances for all matches once
+    const matchesWithDistance = useMemo(() => {
+        return matches.map(match => {
             const venue = getVenueForTeam(match.homeTeam.name);
-            let distance = null;
-            
-            if (venue && venue.coordinates) {
-                distance = calculateDistance(
+            const distance = userLocation && venue?.coordinates ? 
+                calculateDistance(
                     userLocation.lat,
                     userLocation.lon,
                     venue.coordinates[1],
                     venue.coordinates[0]
-                );
-            }
-            
+                ) : null;
             return { ...match, distance };
-        }).sort((a, b) => {
-            // Put matches with no distance at the end
-            if (a.distance === null) return 1;
-            if (b.distance === null) return -1;
-            return a.distance - b.distance;
         });
     }, [matches, userLocation]);
 
-    // Check if a match can be added to the itinerary
-    const isMatchSelectable = (match) => {
-        if (selectedMatches.length >= 5) return false;
-        
-        // Check for time conflicts
-        const matchDate = new Date(match.utcDate);
-        return !selectedMatches.some(selected => {
-            const selectedDate = new Date(selected.utcDate);
-            // Consider matches within 4 hours of each other as conflicts
-            return Math.abs(matchDate.getTime() - selectedDate.getTime()) < 4 * 60 * 60 * 1000;
-        });
-    };
-
-    // Check if venues are too far apart
-    const areVenuesReachable = (match) => {
-        if (selectedMatches.length === 0) return true;
-        
-        const matchVenue = getVenueForTeam(match.homeTeam.name);
-        if (!matchVenue?.coordinates) return false;
-
-        return selectedMatches.every(selected => {
-            const selectedVenue = getVenueForTeam(selected.homeTeam.name);
-            if (!selectedVenue?.coordinates) return false;
-
-            const distance = calculateDistance(
-                matchVenue.coordinates[1],
-                matchVenue.coordinates[0],
-                selectedVenue.coordinates[1],
-                selectedVenue.coordinates[0]
-            );
-
-            return distance <= maxDistance;
-        });
-    };
-
-    // Group sorted matches by date
+    // Group matches by date
     const groupedMatches = useMemo(() => {
-        return sortedMatches.reduce((groups, match) => {
-            const date = format(new Date(match.utcDate), 'yyyy-MM-dd', { timeZone: 'UTC' });
+        return matchesWithDistance.reduce((groups, match) => {
+            const date = format(new Date(match.utcDate), 'yyyy-MM-dd');
             if (!groups[date]) {
                 groups[date] = [];
             }
             groups[date].push(match);
             return groups;
         }, {});
-    }, [sortedMatches]);
+    }, [matchesWithDistance]);
+
+    // Sort function that prioritizes distance if available, then falls back to time
+    const sortMatches = (a, b) => {
+        if (userLocation) {
+            // If both matches have distances, sort by distance
+            if (a.distance !== null && b.distance !== null) {
+                return a.distance - b.distance;
+            }
+            // Put matches with distances first
+            if (a.distance !== null) return -1;
+            if (b.distance !== null) return 1;
+        }
+        // Fall back to time-based sorting
+        return new Date(a.utcDate) - new Date(b.utcDate);
+    };
 
     return (
         <Box>
             {Object.entries(groupedMatches)
-                .sort(([dateA], [dateB]) => {
-                    const dateAObj = new Date(dateA + 'T00:00:00Z');
-                    const dateBObj = new Date(dateB + 'T00:00:00Z');
-                    return dateAObj.getTime() - dateBObj.getTime();
-                })
+                .sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
                 .map(([date, dateMatches]) => {
                     const firstMatch = dateMatches[0];
                     const firstMatchVenue = getVenueForTeam(firstMatch.homeTeam.name);
                     const { fullDate } = formatMatchDateTime(firstMatch.utcDate, firstMatchVenue);
+
                     return (
                         <Box key={date} sx={{ mb: 4 }}>
                             <Typography 
@@ -435,21 +400,14 @@ const Matches = ({
                                 {fullDate}
                             </Typography>
                             {dateMatches
-                                .sort((a, b) => {
-                                    const dateA = new Date(a.utcDate);
-                                    const dateB = new Date(b.utcDate);
-                                    return dateA.getTime() - dateB.getTime();
-                                })
+                                .sort(sortMatches)
                                 .map(match => (
-                                    <MatchCard 
-                                        key={match.id} 
+                                    <MatchCard
+                                        key={match.id}
                                         match={match}
                                         onClick={onMatchClick}
                                         distance={match.distance}
-                                        isSelected={selectedMatch && selectedMatch.id === match.id}
-                                        onSelectMatch={onSelectMatch}
-                                        isSelectable={isMatchSelectable(match) && areVenuesReachable(match)}
-                                        isInItinerary={selectedMatches.some(m => m.id === match.id)}
+                                        isSelected={selectedMatch?.id === match.id}
                                     />
                                 ))}
                         </Box>
