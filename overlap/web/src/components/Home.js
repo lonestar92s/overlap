@@ -468,17 +468,15 @@ const Home = ({ searchState, setSearchState }) => {
                         minHeight: '100vh',
                         display: 'flex',
                         flexDirection: 'column',
-                        py: 4,
+                        py: 2, // Reduced padding
                         mt: 8 // Add margin top to account for fixed header
                     }}
                 >
-                    {/* Add NaturalLanguageSearch component at the top */}
-                    <Box sx={{ p: 3, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'grey.200' }}>
-                        <NaturalLanguageSearch
-                            onSearch={handleNaturalLanguageSearch}
-                            onError={handleNaturalLanguageError}
-                        />
-                    </Box>
+                    {/* Remove the Box wrapper and position NaturalLanguageSearch more efficiently */}
+                    <NaturalLanguageSearch
+                        onSearch={handleNaturalLanguageSearch}
+                        onError={handleNaturalLanguageError}
+                    />
 
                     {/* Search Form */}
                     <Box sx={{ mb: searchState.matches.length > 0 && hasSearched ? 4 : 0 }}>
