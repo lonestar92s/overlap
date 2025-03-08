@@ -460,28 +460,31 @@ const Home = ({ searchState, setSearchState }) => {
     };
 
     return (
-        <>
+        <Box sx={{ 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            overflow: 'hidden',
+            position: 'relative'
+        }}>
+            {/* Header */}
             <HeaderNav onHomeClick={handleReset} />
-            <Container maxWidth="xl">
-                <Box
-                    sx={{
-                        minHeight: '100vh',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        py: 4,
-                        mt: 8 // Add margin top to account for fixed header
-                    }}
-                >
-                    {/* Add NaturalLanguageSearch component at the top */}
-                    <Box sx={{ p: 3, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'grey.200' }}>
-                        <NaturalLanguageSearch
-                            onSearch={handleNaturalLanguageSearch}
-                            onError={handleNaturalLanguageError}
-                        />
-                    </Box>
-
-                    {/* Search Form */}
-                    <Box sx={{ mb: searchState.matches.length > 0 && hasSearched ? 4 : 0 }}>
+            
+            {/* Search Section - Only visible when no matches are shown */}
+            {(!searchState.matches.length || !hasSearched) && (
+                <Box sx={{ 
+                    p: 3, 
+                    backgroundColor: 'white', 
+                    borderBottom: '1px solid', 
+                    borderColor: 'grey.200',
+                    zIndex: 2
+                }}>
+                    <NaturalLanguageSearch
+                        onSearch={handleNaturalLanguageSearch}
+                        onError={handleNaturalLanguageError}
+                    />
+                    
+                    <Box sx={{ mt: 2 }}>
                         <Paper 
                             elevation={3}
                             sx={{
@@ -631,163 +634,194 @@ const Home = ({ searchState, setSearchState }) => {
                             </Button>
                         </Paper>
                     </Box>
+                </Box>
+            )}
 
-                    {searchState.error && hasSearched && (
-                        <Box sx={{ mt: 4, textAlign: 'center' }}>
-                            <Typography color="error">{searchState.error}</Typography>
-                        </Box>
-                    )}
+            {/* Main Content Area */}
+            <Box sx={{ 
+                flex: 1,
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                {searchState.error && hasSearched && (
+                    <Box sx={{ p: 4, textAlign: 'center' }}>
+                        <Typography color="error">{searchState.error}</Typography>
+                    </Box>
+                )}
 
-                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
-                        <Box sx={{ mt: 4, textAlign: 'center' }}>
-                            <Paper 
-                                elevation={1}
+                {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
+                    <Box sx={{ p: 4, textAlign: 'center' }}>
+                        <Paper 
+                            elevation={1}
+                            sx={{ 
+                                p: 4, 
+                                borderRadius: 2,
+                                backgroundColor: '#FFF8F9',
+                                maxWidth: 600,
+                                mx: 'auto'
+                            }}
+                        >
+                            <Typography 
+                                variant="h6"
                                 sx={{ 
-                                    p: 4, 
-                                    borderRadius: 2,
-                                    backgroundColor: '#FFF8F9'
+                                    color: '#666',
+                                    fontWeight: 500
                                 }}
                             >
-                                <Typography 
-                                    variant="h6"
-                                    sx={{ 
-                                        color: '#666',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    No Premier League matches are scheduled between {format(searchState.dates.departure, 'MMMM d')} and {format(searchState.dates.return, 'MMMM d, yyyy')}.
-                                </Typography>
-                                <Typography 
-                                    sx={{ 
-                                        mt: 1,
-                                        color: '#888'
-                                    }}
-                                >
-                                    Try selecting different dates to find matches.
-                                </Typography>
-                            </Paper>
-                        </Box>
-                    )}
-
-                    {searchState.matches.length > 0 && hasSearched && (
-                        <>
-                            {/* Mobile Map Toggle */}
-                            <Box 
+                                No matches are scheduled between {format(searchState.dates.departure, 'MMMM d')} and {format(searchState.dates.return, 'MMMM d, yyyy')}.
+                            </Typography>
+                            <Typography 
                                 sx={{ 
-                                    display: { xs: 'block', md: 'none' },
-                                    mb: 2 
+                                    mt: 1,
+                                    color: '#888'
                                 }}
                             >
-                                <Button
-                                    fullWidth
-                                    variant="outlined"
-                                    onClick={() => mapRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                                    sx={{
-                                        borderColor: '#DDD',
-                                        color: '#666',
-                                        py: 1.5,
-                                        '&:hover': {
-                                            borderColor: '#999',
-                                            backgroundColor: '#F5F5F5'
-                                        }
-                                    }}
-                                >
-                                    Show Map
-                                </Button>
-                            </Box>
+                                Try selecting different dates to find matches.
+                            </Typography>
+                        </Paper>
+                    </Box>
+                )}
 
-                            {/* Filters Bar */}
-                            <Box sx={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center', 
-                                mb: 2,
-                                backgroundColor: '#fff',
-                                py: 2
-                            }}>
+                {searchState.matches.length > 0 && hasSearched && (
+                    <>
+                        {/* Compact Search Bar - Only visible when matches are shown */}
+                        <Box sx={{ 
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            backgroundColor: 'white',
+                            zIndex: 10,
+                            p: 1.5,
+                            borderBottom: '1px solid',
+                            borderColor: 'grey.200',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                        }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Typography variant="body2" color="text.secondary">
-                                    {`Showing ${filteredMatches.length} matches`}
-                                    {selectedDistance ? ` within ${selectedDistance} miles` : ''}
-                                    {selectedLeagues.length < 4 ? ` from ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}` : ''}
+                                    {searchState.location?.city && (
+                                        <>From: {searchState.location.city}</>
+                                    )}
                                 </Typography>
-                                <Button
-                                    variant="outlined"
-                                    startIcon={<TuneRounded />}
-                                    onClick={handleFiltersOpen}
-                                    sx={{
-                                        borderColor: '#DDD',
-                                        color: '#666',
-                                        '&:hover': {
-                                            borderColor: '#999',
-                                            backgroundColor: '#F5F5F5'
-                                        }
-                                    }}
-                                >
-                                    Filters
-                                </Button>
+                                <Typography variant="body2" color="text.secondary">
+                                    {format(searchState.dates.departure, 'MMM d')} - {format(searchState.dates.return, 'MMM d, yyyy')}
+                                </Typography>
                             </Box>
-
-                            {/* Results Grid */}
-                            <Box 
-                                sx={{ 
-                                    display: 'grid',
-                                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                                    gap: 3,
-                                    height: { xs: 'auto', md: 'calc(100vh - 300px)' },
+                            <Button 
+                                size="small" 
+                                startIcon={<TuneRounded />}
+                                onClick={handleFiltersOpen}
+                                sx={{
+                                    borderColor: '#DDD',
+                                    color: '#666',
+                                    '&:hover': {
+                                        borderColor: '#999',
+                                        backgroundColor: '#F5F5F5'
+                                    }
                                 }}
                             >
-                                {/* Left side - Match Results */}
-                                <Box 
-                                    sx={{ 
-                                        overflowY: { xs: 'visible', md: 'auto' },
-                                        height: { xs: 'auto', md: '100%' },
-                                        order: { xs: 2, md: 1 }
-                                    }}
-                                >
+                                Filters
+                            </Button>
+                        </Box>
+
+                        {/* Full-screen Map with Rail */}
+                        <Box sx={{ 
+                            position: 'absolute',
+                            top: 56, // Height of the compact search bar
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            display: 'flex'
+                        }}>
+                            {/* Left Rail with Matches */}
+                            <Box sx={{
+                                width: { xs: '100%', md: '380px' },
+                                height: '100%',
+                                backgroundColor: 'white',
+                                borderRight: '1px solid #DDDDDD',
+                                overflowY: 'auto',
+                                display: { xs: selectedMatch ? 'none' : 'block', md: 'block' },
+                                zIndex: 5,
+                                boxShadow: { xs: 'none', md: '2px 0 8px rgba(0,0,0,0.1)' }
+                            }}>
+                                {/* Matches List */}
+                                <Box sx={{ p: 2 }}>
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center',
+                                        mb: 2,
+                                        pb: 1,
+                                        borderBottom: '1px solid #eee'
+                                    }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {`Showing ${filteredMatches.length} matches`}
+                                            {selectedDistance ? ` within ${selectedDistance} miles` : ''}
+                                            {selectedLeagues.length > 0 && ` from ${selectedLeagues.length} leagues`}
+                                        </Typography>
+                                    </Box>
+                                    
                                     <Matches 
-                                        matches={filteredMatches} 
+                                        matches={filteredMatches}
+                                        selectedMatches={searchState.selectedMatches}
                                         onMatchClick={handleMatchClick}
                                         userLocation={searchState.location}
                                         selectedMatch={selectedMatch}
                                     />
                                 </Box>
+                            </Box>
 
-                                {/* Right side - Map and Itinerary Builder */}
-                                <Box 
-                                    sx={{ 
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 3,
-                                        height: { xs: 'auto', md: '100%' },
-                                        order: { xs: 1, md: 2 }
+                            {/* Full-screen Map */}
+                            <Box sx={{ 
+                                flex: 1,
+                                height: '100%',
+                                position: 'relative'
+                            }}>
+                                <Map
+                                    matches={filteredMatches}
+                                    location={searchState.location}
+                                    showLocation={true}
+                                    selectedMatches={searchState.selectedMatches}
+                                    selectedTransportation={searchState.selectedTransportation}
+                                    setActiveMarker={(callback) => {
+                                        activeMarkerRef.current = callback;
                                     }}
-                                >
-                                    {/* Map */}
-                                    <Box 
-                                        ref={mapRef}
-                                        sx={{ 
-                                            height: { xs: '400px', md: '100%' },
-                                            borderRadius: 2,
-                                            overflow: 'hidden'
+                                />
+                                
+                                {/* Mobile toggle button to show matches list */}
+                                <Box sx={{ 
+                                    display: { xs: 'block', md: 'none' },
+                                    position: 'absolute',
+                                    bottom: 16,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: 5
+                                }}>
+                                    <Button
+                                        variant="contained"
+                                        onClick={() => setSelectedMatch(null)}
+                                        sx={{
+                                            display: selectedMatch ? 'flex' : 'none',
+                                            backgroundColor: 'white',
+                                            color: '#333',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                                            '&:hover': {
+                                                backgroundColor: '#f5f5f5'
+                                            }
                                         }}
                                     >
-                                        <Map 
-                                            location={searchState.location} 
-                                            showLocation={hasSearched && searchState.matches.length > 0}
-                                            matches={filteredMatches}
-                                            setActiveMarker={(callback) => {
-                                                activeMarkerRef.current = callback;
-                                            }}
-                                            selectedMatch={selectedMatch}
-                                        />
-                                    </Box>
+                                        Back to List
+                                    </Button>
                                 </Box>
                             </Box>
-                        </>
-                    )}
-                </Box>
-            </Container>
+                        </Box>
+                    </>
+                )}
+            </Box>
 
+            {/* Filters Dialog */}
             <Filters 
                 open={isFiltersOpen}
                 onClose={handleFiltersClose}
@@ -817,7 +851,7 @@ const Home = ({ searchState, setSearchState }) => {
                     <KeyboardArrowUp />
                 </Fab>
             </Zoom>
-        </>
+        </Box>
     );
 };
 
