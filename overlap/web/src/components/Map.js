@@ -696,16 +696,7 @@ const Map = ({
 
             const isSelected = selectedMatches.some(m => m.id === match.id);
             
-            // Create marker element
-            const el = document.createElement('div');
-            el.className = 'match-marker';
-            el.style.width = '10px';
-            el.style.height = '10px';
-            el.style.backgroundColor = isSelected ? '#FF385C' : '#385CFF';
-            el.style.borderRadius = '50%';
-            el.style.border = '1px solid white';
-            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-            el.style.cursor = 'pointer';
+
 
             // Create popup
             const popup = new mapboxgl.Popup({
@@ -730,19 +721,14 @@ const Map = ({
 
             // Create and store marker
             const marker = new mapboxgl.Marker({
-                element: el,
+            
                 anchor: 'center'
             })
             .setLngLat(venue.coordinates)
             .setPopup(popup);
 
             // Add click handler
-            el.addEventListener('click', () => {
-                // Close other popups
-                markers.current.forEach(m => m.getPopup().remove());
-                // Open this popup
-                marker.togglePopup();
-            });
+            
 
             marker.addTo(mapInstance.current);
             markers.current.push(marker);
