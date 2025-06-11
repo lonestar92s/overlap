@@ -58,8 +58,7 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinati
                         q: query,
                         limit: 5,
                         dedupe: 1,
-                        'accept-language': 'en',
-                        tag: 'place:city,place:town'
+                        'accept-language': 'en'
                     }
                 }
             );

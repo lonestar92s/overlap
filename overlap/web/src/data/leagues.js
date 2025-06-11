@@ -1,33 +1,38 @@
 // League data with country mappings
 export const LEAGUES = {
     'GB': [ // United Kingdom
-        { id: 'PL', name: 'Premier League', tier: 1 },
-        { id: 'ELC', name: 'Championship', tier: 2 },
-        // Ready for expansion:
-        // { id: 'EL1', name: 'League One', tier: 3 },
-        // { id: 'EL2', name: 'League Two', tier: 4 }
+        { id: '39', name: 'Premier League', tier: 1 },
+        { id: '40', name: 'Championship', tier: 2 }
     ],
     'FR': [ // France
-        { id: 'FL1', name: 'Ligue 1', tier: 1 },
-        // Ready for expansion:
-        // { id: 'FL2', name: 'Ligue 2', tier: 2 }
+        { id: '61', name: 'Ligue 1', tier: 1 }
     ],
     'ES': [ // Spain
-        { id: 'PD', name: 'La Liga', tier: 1 },
-        // Ready for expansion:
-        // { id: 'SD', name: 'La Liga 2', tier: 2 }
+        { id: '140', name: 'La Liga', tier: 1 }
     ],
     'DE': [ // Germany
-        { id: 'BL1', name: 'Bundesliga', tier: 1 },
-        // Ready for expansion:
-        // { id: 'BL2', name: 'Bundesliga 2', tier: 2 },
-        // { id: 'BL3', name: '3. Liga', tier: 3 }
+        { id: '78', name: 'Bundesliga', tier: 1 }
     ],
     'NL': [ // Netherlands
-        { id: 'DED', name: 'Eredivisie', tier: 1 }
+        { id: '88', name: 'Eredivisie', tier: 1 }
     ],
     'PT': [ // Portugal
-        { id: 'PPL', name: 'Primeira Liga', tier: 1 }
+        { id: '94', name: 'Primeira Liga', tier: 1 }
+    ],
+    'IT': [ // Italy
+        { id: '135', name: 'Serie A', tier: 1 }
+    ],
+    'BR': [ // Brazil
+        { id: '71', name: 'Série A', tier: 1 }
+    ],
+    'US': [ // United States
+        { id: '253', name: 'Major League Soccer', tier: 1 }
+    ],
+    'INT': [ // International Competitions
+        { id: '2', name: 'UEFA Champions League', tier: 1 },
+        { id: '4', name: 'European Championship', tier: 1 },
+        { id: '13', name: 'Copa Libertadores', tier: 1 },
+        { id: '1', name: 'FIFA World Cup', tier: 1 }
     ]
 };
 
@@ -36,7 +41,7 @@ export const getLeaguesForCountry = (countryCode) => {
     return LEAGUES[countryCode] || [];
 };
 
-// Helper function to get all available leagues
+// Helper function to get all leagues
 export const getAllLeagues = () => {
     return Object.values(LEAGUES).flat();
 };
@@ -50,7 +55,12 @@ export const getCountryCode = (countryName) => {
         'Spain': 'ES',
         'Germany': 'DE',
         'Netherlands': 'NL',
-        'Portugal': 'PT'
+        'Portugal': 'PT',
+        'Italy': 'IT',
+        'Brazil': 'BR',
+        'United States': 'US',
+        'USA': 'US',
+        'International': 'INT'
     };
     return countryMapping[countryName];
 };
