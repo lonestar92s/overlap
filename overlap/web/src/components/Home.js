@@ -30,7 +30,7 @@ import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/lea
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 import LocationSearch from './LocationSearch';
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'http://localhost:3001/v4';
 
 // Helper function to calculate distance between two points using Haversine formula
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -113,59 +113,42 @@ const Home = ({ searchState, setSearchState }) => {
             try {
                 const leagues = getAllLeagues();
                 console.log('🔍 Starting match search with dates:', formattedDates);
+                console.log(`Fetching matches for ${leagues.length} leagues`);
 
+                // Fetch all leagues in parallel
                 const responses = await Promise.all(
-                    leagues.map(async league => {
+                    leagues.map(async (league) => {
+                        const url = `${BACKEND_URL}/competitions/${league.id}/matches`;
                         try {
-                            const url = `${BACKEND_URL}/v4/competitions/${league.id}/matches`;
-                            console.log(`Fetching from: ${url}`);
-                            
                             const response = await axios.get(url, {
                                 params: {
                                     dateFrom: formattedDates.departure,
                                     dateTo: formattedDates.return
                                 }
                             });
-                            
-                            console.log(`Successfully fetched data for league: ${league.name}`);
-                            return response.data;
+                            return { success: true, data: response.data, league };
                         } catch (error) {
                             console.error(`Error fetching matches for league ${league.name}:`, error);
-                            return { matches: [] };
+                            return { success: false, data: { matches: [] }, league };
                         }
                     })
                 );
 
-                const allMatches = responses.reduce((acc, response, index) => {
-                    console.log(`\n🏆 Processing matches for league: ${leagues[index].name}`);
-                    const matches = response.matches || [];
-                    console.log(`Found ${matches.length} matches in ${leagues[index].name}`);
-                    
-                    if (matches.length > 0) {
-                        // Log details of first match as example
-                        const sampleMatch = matches[0];
-                        console.log('Sample match data:', {
-                            id: sampleMatch.id,
-                            utcDate: sampleMatch.utcDate,
-                            status: sampleMatch.status,
-                            homeTeam: `${sampleMatch.homeTeam.name} (${sampleMatch.homeTeam.shortName})`,
-                            awayTeam: `${sampleMatch.awayTeam.name} (${sampleMatch.awayTeam.shortName})`,
-                            competition: sampleMatch.competition,
-                            venue: getVenueForTeam(sampleMatch.homeTeam.name)
-                        });
-                    }
-
-                    const matchesWithLeague = matches.map(match => ({
+                // Process all matches in a single pass
+                const allMatches = responses.reduce((acc, { data, league }) => {
+                    // Use data.response for API-Football v3
+                    const matches = data.response || [];
+                    return [...acc, ...matches.map(match => ({
                         ...match,
                         competition: {
                             ...match.competition,
-                            id: leagues[index].id,
-                            leagueName: leagues[index].name
+                            id: league.id,
+                            leagueName: league.name
                         }
-                    }));
-                    return [...acc, ...matchesWithLeague];
+                    }))];
                 }, []);
 
+                // Sort matches by date
                 const sortedMatches = [...allMatches].sort((a, b) => {
                     const dateA = new Date(a.utcDate);
                     const dateB = new Date(b.utcDate);
@@ -173,53 +156,8 @@ const Home = ({ searchState, setSearchState }) => {
                 });
 
                 console.log(`\n📅 Total matches found: ${sortedMatches.length}`);
-                console.log('First 3 matches after sorting:', sortedMatches.slice(0, 3).map(match => ({
-                    date: match.utcDate,
-                    homeTeam: match.homeTeam.name,
-                    awayTeam: match.awayTeam.name,
-                    competition: match.competition.leagueName
-                })));
 
-                // Set leagues based on location and available matches
-                if (searchState.location && searchState.location.country) {
-                    const countryCode = getCountryCode(searchState.location.country);
-                    if (countryCode) {
-                        const countryLeagues = getLeaguesForCountry(countryCode);
-                        const countryLeagueIds = countryLeagues.map(league => league.id);
-                        
-                        // Check if there are any matches in the country's leagues
-                        const hasCountryMatches = sortedMatches.some(match => 
-                            countryLeagueIds.includes(match.competition.id)
-                        );
-
-                        // If matches found in country leagues, select only those leagues
-                        // Otherwise, show all leagues
-                        setSelectedLeagues(hasCountryMatches ? countryLeagueIds : getAllLeagues().map(league => league.id));
-                    }
-                }
-
-                // If location is selected, check for matches within 100 miles
-                if (searchState.location) {
-                    const matchesWithin100Miles = sortedMatches.filter(match => {
-                        const venue = getVenueForTeam(match.homeTeam.name);
-                        if (!venue || !venue.coordinates) return false;
-
-                        const distance = calculateDistance(
-                            searchState.location.lat,
-                            searchState.location.lon,
-                            venue.coordinates[1],
-                            venue.coordinates[0]
-                        );
-
-                        return distance <= 100;
-                    });
-
-                    // Only set distance filter if we found matches within range
-                    setSelectedDistance(matchesWithin100Miles.length > 0 ? 100 : null);
-                } else {
-                    setSelectedDistance(null);
-                }
-
+                // Store all matches in state, filtering will be handled by the UI
                 setSearchState(prev => ({
                     ...prev,
                     matches: sortedMatches,
@@ -250,7 +188,6 @@ const Home = ({ searchState, setSearchState }) => {
                     matches: []
                 }));
                 setHasSearched(true);
-                console.error('Error fetching matches:', err);
             }
         }
     };
@@ -281,11 +218,11 @@ const Home = ({ searchState, setSearchState }) => {
             return isIncluded;
         });
 
-        // Then filter by distance if applicable
+        // Then filter by distance if location is selected
         if (selectedDistance && searchState.location) {
-            filtered = filtered.filter(match => {
+            filtered = filtered.map(match => {
                 const venue = getVenueForTeam(match.homeTeam.name);
-                if (!venue || !venue.coordinates) return false;
+                if (!venue || !venue.coordinates) return { ...match, distance: null };
 
                 const distance = calculateDistance(
                     searchState.location.lat,
@@ -294,8 +231,9 @@ const Home = ({ searchState, setSearchState }) => {
                     venue.coordinates[0]
                 );
 
-                return distance <= selectedDistance;
-            });
+                return { ...match, distance };
+            }).filter(match => match.distance !== null && match.distance <= selectedDistance)
+              .sort((a, b) => a.distance - b.distance);
         }
 
         // Always sort chronologically by date and time

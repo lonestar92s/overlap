@@ -920,6 +920,123 @@ const PRIMEIRA_LIGA_VENUES = {
     }
 };
 
+const SERIE_A_VENUES = {
+    "CR Flamengo": {
+        stadium: "Maracanã",
+        location: "Rio de Janeiro",
+        coordinates: [-43.230556, -22.912222],
+        ticketUrl: ''
+    },
+    "SE Palmeiras": {
+        stadium: "Allianz Parque",
+        location: "São Paulo",
+        coordinates: [-46.684444, -23.527222],
+        ticketUrl: ''
+    },
+    "São Paulo FC": {
+        stadium: "Morumbi",
+        location: "São Paulo",
+        coordinates: [-46.720556, -23.600833],
+        ticketUrl: ''
+    },
+    "SC Internacional": {
+        stadium: "Beira-Rio",
+        location: "Porto Alegre",
+        coordinates: [-51.238889, -30.064722],
+        ticketUrl: ''
+    },
+    "CA Mineiro": {
+        stadium: "Arena MRV",
+        location: "Belo Horizonte",
+        coordinates: [-43.938889, -19.920833],
+        ticketUrl: ''
+    },
+    "CR Vasco da Gama": {
+        stadium: "São Januário",
+        location: "Rio de Janeiro",
+        coordinates: [-43.228889, -22.888889],
+        ticketUrl: ''
+    },
+    "Grêmio FBPA": {
+        stadium: "Arena do Grêmio",
+        location: "Porto Alegre",
+        coordinates: [-51.130833, -30.081944],
+        ticketUrl: ''
+    },
+    "SC Corinthians Paulista": {
+        stadium: "Neo Química Arena",
+        location: "São Paulo",
+        coordinates: [-46.474722, -23.545833],
+        ticketUrl: ''
+    },
+    "Fortaleza EC": {
+        stadium: "Arena Castelão",
+        location: "Fortaleza",
+        coordinates: [-38.522778, -3.807778],
+        ticketUrl: ''
+    },
+    "Santos FC": {
+        stadium: "Vila Belmiro",
+        location: "Santos",
+        coordinates: [-46.333889, -23.961944],
+        ticketUrl: ''
+    },
+    "EC Bahia": {
+        stadium: "Arena Fonte Nova",
+        location: "Salvador",
+        coordinates: [-38.504722, -12.978889],
+        ticketUrl: ''
+    },
+    "Cruzeiro EC": {
+        stadium: "Mineirão",
+        location: "Belo Horizonte",
+        coordinates: [-43.970833, -19.865833],
+        ticketUrl: ''
+    },
+    "EC Vitória": {
+        stadium: "Barradão",
+        location: "Salvador",
+        coordinates: [-38.504722, -12.978889],
+        ticketUrl: ''
+    },
+    "RB Bragantino": {
+        stadium: "Nabi Abi Chedid",
+        location: "Bragança Paulista",
+        coordinates: [-46.541944, -22.953889],
+        ticketUrl: ''
+    },
+    "Fluminense FC": {
+        stadium: "Maracanã",
+        location: "Rio de Janeiro",
+        coordinates: [-43.230556, -22.912222],
+        ticketUrl: ''
+    },
+    "Ceará SC": {
+        stadium: "Arena Castelão",
+        location: "Fortaleza",
+        coordinates: [-38.522778, -3.807778],
+        ticketUrl: ''
+    },
+    "Botafogo FR": {
+        stadium: "Nilton Santos",
+        location: "Rio de Janeiro",
+        coordinates: [-43.230556, -22.912222],
+        ticketUrl: ''
+    },
+    "Mirassol FC": {
+        stadium: "Estádio Municipal José Maria de Campos Maia",
+        location: "Mirassol",
+        coordinates: [-49.521944, -20.818889],
+        ticketUrl: ''
+    },
+    "EC Juventude": {
+        stadium: "Alfredo Jaconi",
+        location: "Caxias do Sul",
+        coordinates: [-51.179722, -29.168889],
+        ticketUrl: ''
+    }
+};
+
 // Function to get venue information for a team
 export function getVenueForTeam(teamName) {
     const allVenues = {
@@ -929,7 +1046,8 @@ export function getVenueForTeam(teamName) {
         ...BUNDESLIGA_VENUES,
         ...LIGUE_1_VENUES,
         ...EREDIVISIE_VENUES,
-        ...PRIMEIRA_LIGA_VENUES
+        ...PRIMEIRA_LIGA_VENUES,
+        ...SERIE_A_VENUES
     };
     return allVenues[teamName] || null;
 }
