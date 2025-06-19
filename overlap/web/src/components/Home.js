@@ -29,6 +29,7 @@ import { getVenueForTeam } from '../data/venues';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 import LocationSearch from './LocationSearch';
+import { getVenueCoordinates } from '../utils/venues';
 
 const BACKEND_URL = 'http://localhost:3001/v4';
 
@@ -98,12 +99,38 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
+    useEffect(() => {
+        console.log('searchState updated:', searchState);
+    }, [searchState]);
+
     const handleLocationSelect = (location) => {
-        setSearchState(prev => ({ ...prev, location }));
+        // Convert lat/lon to numbers if they are strings
+        const normalizedLocation = {
+            ...location,
+            lat: typeof location.lat === 'string' ? parseFloat(location.lat) : location.lat,
+            lon: typeof location.lon === 'string' ? parseFloat(location.lon) : location.lon
+        };
+        console.log('Setting location in state:', normalizedLocation);
+        setSearchState(prev => ({
+            ...prev,
+            location: normalizedLocation,
+            matches: [], // Clear matches when location changes
+            loading: false,
+            error: null
+        }));
     };
 
     const handleSearch = async () => {
+        // Set default distance filter to 100 miles if not already set
+        if (!selectedDistance) {
+            setSelectedDistance(100);
+        }
+        
+        // Reset league filters to show all leagues
+        setSelectedLeagues([]);
+        
         if (searchState.dates.departure && searchState.dates.return) {
+            const currentLocation = searchState.location;
             setSearchState(prev => ({ ...prev, loading: true, error: null }));
             const formattedDates = {
                 departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
@@ -111,9 +138,10 @@ const Home = ({ searchState, setSearchState }) => {
             };
             
             try {
-                const leagues = getAllLeagues();
+                // TEMPORARY: Only fetch Premier League for testing
+                const leagues = [{ id: 39, name: 'Premier League', country: 'England' }];
                 console.log('🔍 Starting match search with dates:', formattedDates);
-                console.log(`Fetching matches for ${leagues.length} leagues`);
+                console.log(`Fetching matches for ${leagues.length} leagues (testing mode)`);
 
                 // Fetch all leagues in parallel
                 const responses = await Promise.all(
@@ -124,6 +152,9 @@ const Home = ({ searchState, setSearchState }) => {
                                 params: {
                                     dateFrom: formattedDates.departure,
                                     dateTo: formattedDates.return
+                                },
+                                headers: {
+                                    'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY
                                 }
                             });
                             return { success: true, data: response.data, league };
@@ -136,22 +167,32 @@ const Home = ({ searchState, setSearchState }) => {
 
                 // Process all matches in a single pass
                 const allMatches = responses.reduce((acc, { data, league }) => {
-                    // Use data.response for API-Football v3
+                    // The API response is already in the correct format
                     const matches = data.response || [];
-                    return [...acc, ...matches.map(match => ({
-                        ...match,
-                        competition: {
-                            ...match.competition,
-                            id: league.id,
-                            leagueName: league.name
+                    
+                    // Add competition data if missing
+                    const processedMatches = matches.map(match => {
+                        if (!match.competition) {
+                            return {
+                                ...match,
+                                competition: {
+                                    id: league.id,
+                                    name: league.name,
+                                    country: league.country || 'Unknown',
+                                    logo: league.logo || ''
+                                }
+                            };
                         }
-                    }))];
+                        return match;
+                    });
+                    
+                    return [...acc, ...processedMatches];
                 }, []);
 
                 // Sort matches by date
                 const sortedMatches = [...allMatches].sort((a, b) => {
-                    const dateA = new Date(a.utcDate);
-                    const dateB = new Date(b.utcDate);
+                    const dateA = new Date(a.fixture.date);
+                    const dateB = new Date(b.fixture.date);
                     return dateA.getTime() - dateB.getTime();
                 });
 
@@ -162,7 +203,8 @@ const Home = ({ searchState, setSearchState }) => {
                     ...prev,
                     matches: sortedMatches,
                     loading: false,
-                    error: sortedMatches.length === 0 ? 'No matches found for the selected dates.' : null
+                    error: sortedMatches.length === 0 ? 'No matches found for the selected dates.' : null,
+                    location: currentLocation // Preserve the location
                 }));
                 
                 setHasSearched(true);
@@ -185,7 +227,8 @@ const Home = ({ searchState, setSearchState }) => {
                     ...prev,
                     error: 'Failed to fetch matches. Please try again.',
                     loading: false,
-                    matches: []
+                    matches: [],
+                    location: currentLocation // Preserve the location even on error
                 }));
                 setHasSearched(true);
             }
@@ -214,6 +257,12 @@ const Home = ({ searchState, setSearchState }) => {
     const filteredMatches = useMemo(() => {
         // First filter by leagues
         let filtered = searchState.matches.filter(match => {
+            // Add null safety for competition data
+            if (!match.competition) {
+                console.warn('Match missing competition data:', match);
+                return false; // Skip matches without competition data
+            }
+            
             const isIncluded = selectedLeagues.length === 0 || selectedLeagues.includes(match.competition.id);
             return isIncluded;
         });
@@ -221,14 +270,22 @@ const Home = ({ searchState, setSearchState }) => {
         // Then filter by distance if location is selected
         if (selectedDistance && searchState.location) {
             filtered = filtered.map(match => {
-                const venue = getVenueForTeam(match.homeTeam.name);
-                if (!venue || !venue.coordinates) return { ...match, distance: null };
+                const venue = match.fixture.venue;
+                if (!venue || !venue.id) return { ...match, distance: null };
+
+                // Get venue coordinates from our database
+                const venueData = getVenueForTeam(match.teams.home.name);
+                if (!venueData || !venueData.coordinates) {
+                    return { ...match, distance: null };
+                }
+
+                const [venueLon, venueLat] = venueData.coordinates;
 
                 const distance = calculateDistance(
                     searchState.location.lat,
                     searchState.location.lon,
-                    venue.coordinates[1],
-                    venue.coordinates[0]
+                    venueLat,
+                    venueLon
                 );
 
                 return { ...match, distance };
@@ -238,12 +295,14 @@ const Home = ({ searchState, setSearchState }) => {
 
         // Always sort chronologically by date and time
         return [...filtered].sort((a, b) => {
-            const dateA = new Date(a.utcDate);
-            const dateB = new Date(b.utcDate);
+            const dateA = new Date(a.fixture.date);
+            const dateB = new Date(b.fixture.date);
             return dateA.getTime() - dateB.getTime();
         });
 
     }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues]);
+
+    console.log('filteredMatches length:', filteredMatches.length);
 
     const handleFiltersOpen = () => {
         setIsFiltersOpen(true);
@@ -309,7 +368,7 @@ const Home = ({ searchState, setSearchState }) => {
                 // Add the match if we haven't reached the limit
                 if (currentSelectedMatches.length < 5) {
                     const newSelectedMatches = [...currentSelectedMatches, match].sort((a, b) => 
-                        new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime()
+                        new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime()
                     );
                     
                     console.log('New selected matches after addition:', newSelectedMatches);
@@ -408,8 +467,41 @@ const Home = ({ searchState, setSearchState }) => {
 
     // Add a function to handle search from the overlay
     const handleOverlaySearch = async () => {
+        // Ensure we have a valid location before proceeding
+        if (!searchState.location) {
+            console.error('No location selected');
+            return;
+        }
+
+        // Store the current location
+        const currentLocation = searchState.location;
+        
+        // Close the overlay
         setShowSearchOverlay(false);
+        
+        // Update the search state with the current location and reset matches
+        setSearchState(prev => ({
+            ...prev,
+            location: currentLocation,
+            matches: [], // Clear matches when location changes
+            loading: true,
+            error: null
+        }));
+
+        // Perform the search
         await handleSearch();
+
+        // Ensure the location is still set after the search
+        setSearchState(prev => ({
+            ...prev,
+            location: currentLocation
+        }));
+
+        // Force a re-render of the Map component
+        setSearchState(prev => ({
+            ...prev,
+            location: { ...currentLocation }
+        }));
     };
 
     return (

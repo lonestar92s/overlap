@@ -133,12 +133,14 @@ const MatchCard = ({
     onClick, 
     distance, 
     isSelected,
-    // onSelectMatch,
-    // isSelectable,
-    // isInItinerary 
 }) => {
-    const venue = getVenueForTeam(match.homeTeam.name);
-    const { date, time } = formatMatchDateTime(match.utcDate, venue);
+    // Extract data from the new API response format
+    const fixture = match.fixture;
+    const teams = match.teams;
+    const league = match.league;
+    const venue = fixture.venue;
+    
+    const { date, time } = formatMatchDateTime(fixture.date, venue);
     const cardRef = useRef(null);
 
     useEffect(() => {
@@ -150,25 +152,10 @@ const MatchCard = ({
         }
     }, [isSelected]);
 
-    // Comment out itinerary-related handlers
-    /*
-    const handleSelectMatch = (e) => {
-        e.stopPropagation();
-        if (isSelectable) {
-            onSelectMatch(match);
-        }
-    };
-    */
-
-    // Log missing venue for debugging
-    if (!venue) {
-        console.warn(`No venue data found for team: ${match.homeTeam.name}`);
-    }
-
     return (
         <Card 
             ref={cardRef}
-            id={`match-${match.id}`}
+            id={`match-${fixture.id}`}
             elevation={0}
             onClick={() => onClick(match)}
             sx={{
@@ -206,125 +193,56 @@ const MatchCard = ({
                                 fontWeight: 500
                             }}
                         >
-                            {match.competition.leagueName}
+                            {league.name}
                         </Typography>
-                        {/* Comment out itinerary selection button */}
-                        {/*
-                        {isSelectable && (
-                            <Button
-                                size="small"
-                                onClick={handleSelectMatch}
-                                variant={isInItinerary ? "contained" : "outlined"}
-                                color="primary"
-                            >
-                                {isInItinerary ? "Remove from Itinerary" : "Add to Itinerary"}
-                            </Button>
-                        )}
-                        */}
                     </Box>
                 </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
                         <Avatar 
-                            src={match.homeTeam.crest} 
-                            alt={match.homeTeam.name}
-                            sx={{ 
-                                width: 32, 
-                                height: 32, 
-                                mr: 1,
-                                backgroundColor: 'transparent'
-                            }}
+                            src={teams.home.logo} 
+                            alt={teams.home.name}
+                            sx={{ width: 40, height: 40 }}
                         />
-                        <Typography 
-                            variant="body1"
-                            sx={{ 
-                                fontWeight: 500,
-                                color: '#222'
-                            }}
-                        >
-                            {match.homeTeam.name}
+                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                            {teams.home.name}
                         </Typography>
                     </Box>
                     <Typography 
-                        variant="body1" 
+                        variant="h6" 
                         sx={{ 
-                            mx: 2,
+                            mx: 2, 
                             color: '#666',
-                            fontWeight: 500
+                            fontWeight: 600
                         }}
                     >
                         vs
                     </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'flex-end' }}>
-                        <Typography 
-                            variant="body1"
-                            sx={{ 
-                                fontWeight: 500,
-                                color: '#222',
-                                mr: 1
-                            }}
-                        >
-                            {match.awayTeam.name}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'flex-end' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                            {teams.away.name}
                         </Typography>
                         <Avatar 
-                            src={match.awayTeam.crest} 
-                            alt={match.awayTeam.name}
-                            sx={{ 
-                                width: 32, 
-                                height: 32,
-                                backgroundColor: 'transparent'
-                            }}
+                            src={teams.away.logo} 
+                            alt={teams.away.name}
+                            sx={{ width: 40, height: 40 }}
                         />
                     </Box>
                 </Box>
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    {venue ? (
-                        <>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                <Stadium sx={{ mr: 1, color: '#666' }} />
-                                <Typography variant="body2" color="textSecondary">
-                                    {venue.stadium}
-                                </Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <LocationOn sx={{ mr: 1, color: '#666', fontSize: 20 }} />
-                                    <Typography 
-                                        variant="body2" 
-                                        color="textSecondary"
-                                        sx={{ fontSize: '0.875rem' }}
-                                    >
-                                        {venue.location}
-                                    </Typography>
-                                </Box>
-                                {distance != null && (
-                                    <Typography 
-                                        variant="body2" 
-                                        color="textSecondary"
-                                        sx={{ 
-                                            fontSize: '0.875rem',
-                                            backgroundColor: '#f5f5f5',
-                                            px: 1,
-                                            py: 0.5,
-                                            borderRadius: 1
-                                        }}
-                                    >
-                                        {Math.round(distance)} miles away
-                                    </Typography>
-                                )}
-                            </Box>
-                        </>
-                    ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <Stadium sx={{ mr: 1, color: '#666' }} />
-                            <Typography variant="body2" color="textSecondary">
-                                Home venue information unavailable
-                            </Typography>
-                        </Box>
-                    )}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                    <Stadium sx={{ color: '#666', fontSize: 20 }} />
+                    <Typography variant="body2" color="textSecondary">
+                        {venue.name}, {venue.city}
+                    </Typography>
                 </Box>
+                {distance && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                        <LocationOn sx={{ color: '#666', fontSize: 20 }} />
+                        <Typography variant="body2" color="textSecondary">
+                            {distance.toFixed(1)} miles away
+                        </Typography>
+                    </Box>
+                )}
             </CardContent>
         </Card>
     );
@@ -339,13 +257,13 @@ const Matches = ({
     // Calculate distances for all matches once
     const matchesWithDistance = useMemo(() => {
         return matches.map(match => {
-            const venue = getVenueForTeam(match.homeTeam.name);
-            const distance = userLocation && venue?.coordinates ? 
+            const venue = match.fixture.venue;
+            const distance = userLocation && venue ? 
                 calculateDistance(
                     userLocation.lat,
                     userLocation.lon,
-                    venue.coordinates[1],
-                    venue.coordinates[0]
+                    venue.lat || 0,
+                    venue.lng || 0
                 ) : null;
             return { ...match, distance };
         });
@@ -354,7 +272,7 @@ const Matches = ({
     // Group matches by date
     const groupedMatches = useMemo(() => {
         return matchesWithDistance.reduce((groups, match) => {
-            const date = format(new Date(match.utcDate), 'yyyy-MM-dd');
+            const date = format(new Date(match.fixture.date), 'yyyy-MM-dd');
             if (!groups[date]) {
                 groups[date] = [];
             }
@@ -375,7 +293,7 @@ const Matches = ({
             if (b.distance !== null) return 1;
         }
         // Fall back to time-based sorting
-        return new Date(a.utcDate) - new Date(b.utcDate);
+        return new Date(a.fixture.date) - new Date(b.fixture.date);
     };
 
     return (
@@ -384,8 +302,7 @@ const Matches = ({
                 .sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
                 .map(([date, dateMatches]) => {
                     const firstMatch = dateMatches[0];
-                    const firstMatchVenue = getVenueForTeam(firstMatch.homeTeam.name);
-                    const { fullDate } = formatMatchDateTime(firstMatch.utcDate, firstMatchVenue);
+                    const { fullDate } = formatMatchDateTime(firstMatch.fixture.date, firstMatch.fixture.venue);
 
                     return (
                         <Box key={date} sx={{ mb: 4 }}>
@@ -403,11 +320,11 @@ const Matches = ({
                                 .sort(sortMatches)
                                 .map(match => (
                                     <MatchCard
-                                        key={match.id}
+                                        key={match.fixture.id}
                                         match={match}
                                         onClick={onMatchClick}
                                         distance={match.distance}
-                                        isSelected={selectedMatch?.id === match.id}
+                                        isSelected={selectedMatch?.fixture.id === match.fixture.id}
                                     />
                                 ))}
                         </Box>
