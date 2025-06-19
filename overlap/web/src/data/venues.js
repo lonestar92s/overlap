@@ -920,7 +920,70 @@ const PRIMEIRA_LIGA_VENUES = {
     }
 };
 
-const SERIE_A_VENUES = {
+const ITALIAN_SERIE_A_VENUES = {
+    "Juventus FC": {
+        stadium: "Allianz Stadium",
+        location: "Turin",
+        coordinates: [7.641389, 45.109722],
+        ticketUrl: ''
+    },
+    "AC Milan": {
+        stadium: "San Siro",
+        location: "Milan",
+        coordinates: [9.123889, 45.478889],
+        ticketUrl: ''
+    },
+    "Inter Milan": {
+        stadium: "San Siro",
+        location: "Milan",
+        coordinates: [9.123889, 45.478889],
+        ticketUrl: ''
+    },
+    "AS Roma": {
+        stadium: "Stadio Olimpico",
+        location: "Rome",
+        coordinates: [12.454722, 41.933889],
+        ticketUrl: ''
+    },
+    "SS Lazio": {
+        stadium: "Stadio Olimpico",
+        location: "Rome",
+        coordinates: [12.454722, 41.933889],
+        ticketUrl: ''
+    },
+    "SSC Napoli": {
+        stadium: "Diego Armando Maradona Stadium",
+        location: "Naples",
+        coordinates: [14.193889, 40.833889],
+        ticketUrl: ''
+    },
+    "Atalanta BC": {
+        stadium: "Gewiss Stadium",
+        location: "Bergamo",
+        coordinates: [9.678889, 45.698889],
+        ticketUrl: ''
+    },
+    "ACF Fiorentina": {
+        stadium: "Artemio Franchi",
+        location: "Florence",
+        coordinates: [11.278889, 43.778889],
+        ticketUrl: ''
+    },
+    "Bologna FC 1909": {
+        stadium: "Renato Dall'Ara",
+        location: "Bologna",
+        coordinates: [11.308889, 44.498889],
+        ticketUrl: ''
+    },
+    "Torino FC": {
+        stadium: "Olimpico Grande Torino",
+        location: "Turin",
+        coordinates: [7.641389, 45.109722],
+        ticketUrl: ''
+    }
+};
+
+const BRAZILIAN_SERIE_A_VENUES = {
     "CR Flamengo": {
         stadium: "Maracanã",
         location: "Rio de Janeiro",
@@ -1047,7 +1110,8 @@ export function getVenueForTeam(teamName) {
         ...LIGUE_1_VENUES,
         ...EREDIVISIE_VENUES,
         ...PRIMEIRA_LIGA_VENUES,
-        ...SERIE_A_VENUES
+        ...ITALIAN_SERIE_A_VENUES,
+        // ...BRAZILIAN_SERIE_A_VENUES  // COMMENTED OUT FOR TESTING
     };
     return allVenues[teamName] || null;
 }
@@ -1060,5 +1124,7 @@ export {
     BUNDESLIGA_VENUES,
     LIGUE_1_VENUES,
     EREDIVISIE_VENUES,
-    PRIMEIRA_LIGA_VENUES
+    PRIMEIRA_LIGA_VENUES,
+    ITALIAN_SERIE_A_VENUES,
+    // ...BRAZILIAN_SERIE_A_VENUES
 }; 

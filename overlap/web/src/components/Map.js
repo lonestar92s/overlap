@@ -5,6 +5,7 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import { getVenueForTeam } from '../data/venues';
 import { format } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { getVenueCoordinates } from '../utils/venues';
 
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 
@@ -233,116 +234,39 @@ const Map = ({
 
     // Create styled popup HTML for multiple matches at the same venue
     const createVenuePopupHTML = (venue, matches) => {
-        return `
-            <div style="
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-                padding: 8px;
-                min-width: 250px;
-            ">
-                <div style="
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 8px;
-                    padding-bottom: 8px;
-                    border-bottom: 1px solid #eee;
-                ">
-                    <div style="
-                        font-weight: 600;
-                        font-size: 14px;
-                        color: #444;
-                    ">
-                        ${venue.stadium}
+        const matchList = matches.map(match => {
+            const homeTeam = match.teams.home;
+            const awayTeam = match.teams.away;
+            const matchTime = new Date(match.fixture.date).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+            const matchDate = new Date(match.fixture.date).toLocaleDateString([], {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            return `
+                <div class="match-item">
+                    <div class="match-teams">
+                        <span class="team home">${homeTeam.name}</span>
+                        <span class="vs">vs</span>
+                        <span class="team away">${awayTeam.name}</span>
                     </div>
-                    ${venue.ticketUrl ? `
-                        <a 
-                            href="${venue.ticketUrl}" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style="
-                                font-size: 12px;
-                                color: #FF385C;
-                                text-decoration: none;
-                                padding: 4px 8px;
-                                border: 1px solid #FF385C;
-                                border-radius: 4px;
-                                transition: all 0.2s;
-                            "
-                            onmouseover="this.style.backgroundColor='#FF385C';this.style.color='white';"
-                            onmouseout="this.style.backgroundColor='transparent';this.style.color='#FF385C';"
-                        >
-                            Tickets
-                        </a>
-                    ` : ''}
+                    <div class="match-time">${matchDate} at ${matchTime}</div>
                 </div>
-                ${matches.map(match => {
-                    const { date, time } = formatMatchDateTime(match.utcDate, getVenueForTeam(match.homeTeam.name));
-                    return `
-                        <div style="
-                            padding: 8px 0;
-                            ${matches.length > 1 ? 'border-bottom: 1px solid #f5f5f5;' : ''}
-                        ">
-                            <div style="
-                                display: flex;
-                                justify-content: space-between;
-                                align-items: center;
-                                margin-bottom: 8px;
-                            ">
-                                <div style="
-                                    font-size: 13px;
-                                    color: #666;
-                                ">
-                                    ${date} at ${time}
-                                </div>
-                                <div style="
-                                    font-size: 11px;
-                                    color: #666;
-                                    background-color: #f5f5f5;
-                                    padding: 4px 8px;
-                                    border-radius: 4px;
-                                    font-weight: 500;
-                                ">
-                                    ${match.competition.leagueName}
-                                </div>
-                            </div>
-                            <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                            ">
-                                <div style="
-                                    display: flex;
-                                    align-items: center;
-                                    gap: 8px;
-                                ">
-                                    <img 
-                                        src="${match.homeTeam.crest}" 
-                                        alt="${match.homeTeam.name}"
-                                        style="width: 20px; height: 20px; object-fit: contain;"
-                                    />
-                                    <span style="font-size: 13px; color: #333;">${match.homeTeam.name}</span>
-                                </div>
-                                <div style="
-                                    font-size: 12px;
-                                    color: #666;
-                                    margin: 0 8px;
-                                ">vs</div>
-                                <div style="
-                                    display: flex;
-                                    align-items: center;
-                                    gap: 8px;
-                                ">
-                                    <span style="font-size: 13px; color: #333;">${match.awayTeam.name}</span>
-                                    <img 
-                                        src="${match.awayTeam.crest}" 
-                                        alt="${match.awayTeam.name}"
-                                        style="width: 20px; height: 20px; object-fit: contain;"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
+            `;
+        }).join('');
+
+        return `
+            <div class="venue-popup">
+                <h3>${venue.name}</h3>
+                <p>${venue.city}, ${venue.country}</p>
+                <div class="matches-list">
+                    ${matchList}
+                </div>
             </div>
         `;
     };
@@ -351,10 +275,10 @@ const Map = ({
     useEffect(() => {
         if (setActiveMarker) {
             setActiveMarker((match) => {
-                const venue = getVenueForTeam(match.homeTeam.name);
-                if (!venue || !venue.coordinates) return;
+                const venue = match.fixture.venue;
+                if (!venue || !venue.id) return;
 
-                const venueKey = `${venue.stadium}-${venue.coordinates.join(',')}`;
+                const venueKey = `${venue.name}-${venue.id}`;
                 const marker = markerRefs.current[venueKey];
                 
                 if (marker) {
@@ -389,26 +313,113 @@ const Map = ({
         markers.current.forEach(marker => marker.remove());
         markers.current = [];
 
-        // Reset view if not showing location
-        if (!showLocation) {
+        // COMMENTED OUT TEST MARKER FOR NOW
+        // // ADD HARDCODED TEST MARKER - REMOVE THIS AFTER TESTING
+        // console.log('Adding hardcoded test marker at London coordinates');
+        // console.log('mapInstance.current:', mapInstance.current);
+        // console.log('mapInstance.current type:', typeof mapInstance.current);
+        // 
+        // const testMarker = new mapboxgl.Marker({
+        //     color: '#00FF00'  // Bright green to make it obvious
+        // })
+        //     .setLngLat([-0.1278, 51.5074]);  // London coordinates
+        //     
+        // console.log('Test marker created:', testMarker);
+        // console.log('About to add test marker to map...');
+        // 
+        // const addedTestMarker = testMarker.addTo(mapInstance.current);
+        // console.log('Test marker addTo result:', addedTestMarker);
+        // console.log('Test marker after addTo:', testMarker);
+        // 
+        // markers.current.push(testMarker);
+        // console.log('Test marker added successfully');
+        // console.log('Test marker element:', testMarker.getElement());
+        // console.log('Test marker LngLat:', testMarker.getLngLat());
+
+        const bounds = new mapboxgl.LngLatBounds();
+        let hasMarkers = false;
+
+        // First, center on user location if available
+        if (location) {
+            console.log('Centering map on user location:', {
+                city: location.city,
+                region: location.region,
+                country: location.country,
+                coordinates: [location.lon, location.lat]
+            });
+
+            // Create popup for user location
+            const popup = new mapboxgl.Popup({
+                offset: 25,
+                closeButton: false
+            }).setHTML(`
+                <div style="
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+                    padding: 8px;
+                ">
+                    <div style="
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: #444;
+                        margin-bottom: 4px;
+                    ">${location.city}${location.region ? `, ${location.region}` : ''}</div>
+                    <div style="
+                        font-size: 12px;
+                        color: #666;
+                    ">${location.country}</div>
+                </div>
+            `);
+
+            // Add user location marker with delay to ensure map is fully rendered
+            console.log('Creating user location marker with coordinates:', [location.lon, location.lat]);
+            console.log('mapInstance.current for user marker:', mapInstance.current);
+            
+            setTimeout(() => {
+                const userMarker = new mapboxgl.Marker({
+                    color: '#FF385C'
+                })
+                    .setLngLat([location.lon, location.lat])
+                    .setPopup(popup);
+                
+                console.log('User marker created (delayed):', userMarker);
+                console.log('About to add user marker to map...');
+                
+                const addedUserMarker = userMarker.addTo(mapInstance.current);
+                console.log('User marker addTo result:', addedUserMarker);
+
+                markers.current.push(userMarker);
+                console.log('User location marker added successfully (delayed)');
+                console.log('User marker element:', userMarker.getElement());
+                console.log('User marker LngLat:', userMarker.getLngLat());
+                console.log('Total markers in array:', markers.current.length);
+            }, 200); // 200ms delay to let map fully render
+
+            bounds.extend([location.lon, location.lat]);
+            hasMarkers = true;
+
+            // Center map on user location with appropriate zoom
+            mapInstance.current.flyTo({
+                center: [location.lon, location.lat],
+                zoom: matches && matches.length > 0 ? 8 : 10,
+                essential: true
+            });
+        } else if (!showLocation) {
+            // Reset view if not showing location
             mapInstance.current.flyTo({
                 center: [-0.118092, 51.509865],
-                zoom: 8,
+                zoom: 3,
                 essential: true
             });
             return;
         }
 
-        const bounds = new mapboxgl.LngLatBounds();
-        let hasMarkers = false;
-
         // Group matches by venue
         if (matches && matches.length > 0) {
             const venueMatches = matches.reduce((acc, match) => {
-                const venue = getVenueForTeam(match.homeTeam.name);
-                if (!venue || !venue.coordinates) return acc;
+                const venue = match.fixture.venue;
+                if (!venue || !venue.id) return acc;
 
-                const venueKey = `${venue.stadium}-${venue.coordinates.join(',')}`;
+                const venueKey = `${venue.name}-${venue.id}`;
                 if (!acc[venueKey]) {
                     acc[venueKey] = {
                         venue,
@@ -428,85 +439,40 @@ const Map = ({
                     maxWidth: '300px'
                 }).setHTML(createVenuePopupHTML(venue, venueMatches));
 
+                // Get coordinates for the venue using team name
+                const homeTeam = venueMatches[0].teams.home.name;
+                const venueData = getVenueForTeam(homeTeam);
+                if (!venueData || !venueData.coordinates) {
+                    ;
+                    return;
+                }
+
+                const coordinates = venueData.coordinates;
+
                 // Create and add venue marker with popup
                 const venueMarker = new mapboxgl.Marker({
                     color: '#4CAF50'
                 })
-                    .setLngLat(venue.coordinates)
+                    .setLngLat(coordinates)
                     .setPopup(popup)
                     .addTo(mapInstance.current);
 
                 // Store marker reference with venue key
                 markerRefs.current[venueKey] = venueMarker;
-                bounds.extend(venue.coordinates);
+                bounds.extend(coordinates);
                 hasMarkers = true;
             });
+
+            // If we have both user location and matches, fit bounds to show all markers
+            if (location && hasMarkers) {
+                mapInstance.current.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 12
+                });
+            }
         }
 
-        // Add user location marker if available
-        if (location) {
-            console.log('Adding user location to map:', {
-                city: location.city,
-                region: location.region,
-                country: location.country,
-                coordinates: [location.lon, location.lat]
-            });
-
-            // Create popup but don't add it to map yet
-            const popup = new mapboxgl.Popup({
-                offset: 25,
-                closeButton: false
-            }).setHTML(`
-                <div style="
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-                    padding: 8px;
-                ">
-                    <div style="
-                        font-weight: 600;
-                        font-size: 14px;
-                        color: #444;
-                        margin-bottom: 4px;
-                    ">
-                        Your Location
-                    </div>
-                    <div style="font-size: 13px; color: #666;">
-                        ${location.city}${location.region ? `, ${location.region}` : ''}<br>
-                        ${location.country}
-                    </div>
-                </div>
-            `);
-
-            // Create and add user location marker with popup
-            const userMarker = new mapboxgl.Marker({
-                color: '#FF385C'
-            })
-                .setLngLat([location.lon, location.lat])
-                .setPopup(popup) // Attach popup to marker
-                .addTo(mapInstance.current);
-
-            // Store marker reference with location ID
-            markerRefs.current['user-location'] = userMarker;
-            bounds.extend([location.lon, location.lat]);
-            hasMarkers = true;
-        }
-
-        // Fit map to show all markers if we have any
-        if (hasMarkers && !bounds.isEmpty()) {
-            console.log('Fitting bounds to markers');
-            mapInstance.current.fitBounds(bounds, {
-                padding: {
-                    top: 100,
-                    bottom: 100,
-                    left: 100,
-                    right: 100
-                },
-                maxZoom: 8,
-                duration: 1000
-            });
-        }
-
-        console.log('Map updated with locations and matches');
-    }, [location, matches, showLocation, loading]);
+    }, [location, showLocation, matches, loading]);
 
     // Add route lines between selected matches
     useEffect(() => {
@@ -544,20 +510,31 @@ const Map = ({
         for (let i = 0; i < selectedMatches.length - 1; i++) {
             const currentMatch = selectedMatches[i];
             const nextMatch = selectedMatches[i + 1];
-            const currentVenue = getVenueForTeam(currentMatch.homeTeam.name);
-            const nextVenue = getVenueForTeam(nextMatch.homeTeam.name);
+            const currentVenue = currentMatch.fixture.venue;
+            const nextVenue = nextMatch.fixture.venue;
 
-            if (!currentVenue?.coordinates || !nextVenue?.coordinates) {
-                console.warn('Missing venue coordinates:', {
-                    currentTeam: currentMatch.homeTeam.name,
-                    nextTeam: nextMatch.homeTeam.name,
-                    hasCurrentVenue: !!currentVenue,
-                    hasNextVenue: !!nextVenue
+            if (!currentVenue?.id || !nextVenue?.id) {
+                console.warn('Missing venue information:', {
+                    currentVenue: currentVenue?.name,
+                    nextVenue: nextVenue?.name
                 });
                 continue;
             }
 
-            const transportKey = `${currentMatch.id}-${nextMatch.id}`;
+            const currentCoordinates = getVenueForTeam(currentMatch.teams.home.name)?.coordinates;
+            const nextCoordinates = getVenueForTeam(nextMatch.teams.home.name)?.coordinates;
+
+            if (!currentCoordinates || !nextCoordinates) {
+                console.warn('Missing venue coordinates:', {
+                    currentTeam: currentMatch.teams.home.name,
+                    nextTeam: nextMatch.teams.home.name,
+                    currentVenue: currentVenue.name,
+                    nextVenue: nextVenue.name
+                });
+                continue;
+            }
+
+            const transportKey = `${currentMatch.fixture.id}-${nextMatch.fixture.id}`;
             const transport = selectedTransportation[transportKey];
             
             if (!transport) {
@@ -566,24 +543,23 @@ const Map = ({
             }
 
             console.log('Adding route:', {
-                from: currentMatch.homeTeam.name,
-                to: nextMatch.homeTeam.name,
-                transportType: transport.type,
-                transportKey
+                from: currentVenue.name,
+                to: nextVenue.name,
+                transport: transport.type
             });
 
             // Create a line between the venues
             const coordinates = [
-                currentVenue.coordinates,
-                nextVenue.coordinates
+                currentCoordinates,
+                nextCoordinates
             ];
 
             // For flights, create an arc
             let routeCoordinates = coordinates;
             if (transport.type === 'flight') {
                 routeCoordinates = createArcCoordinates(
-                    currentVenue.coordinates,
-                    nextVenue.coordinates
+                    currentCoordinates,
+                    nextCoordinates
                 );
             }
 
@@ -639,7 +615,7 @@ const Map = ({
         if (selectedMatches.length > 0) {
             const bounds = new mapboxgl.LngLatBounds();
             selectedMatches.forEach(match => {
-                const venue = getVenueForTeam(match.homeTeam.name);
+                const venue = match.fixture.venue;
                 if (venue?.coordinates) {
                     bounds.extend(venue.coordinates);
                 }
@@ -691,10 +667,18 @@ const Map = ({
         markers.current = [];
 
         matches.forEach(match => {
-            const venue = getVenueForTeam(match.homeTeam.name);
-            if (!venue?.coordinates) return;
+            const venue = match.fixture.venue;
+            if (!venue?.id) return;
 
-            const isSelected = selectedMatches.some(m => m.id === match.id);
+            const venueData = getVenueForTeam(match.teams.home.name);
+            if (!venueData || !venueData.coordinates) {
+                
+                return;
+            }
+
+            const coordinates = venueData.coordinates;
+
+            const isSelected = selectedMatches.some(m => m.fixture.id === match.fixture.id);
             
             // Create marker element
             const el = document.createElement('div');
@@ -715,15 +699,15 @@ const Map = ({
             }).setHTML(`
                 <div style="padding: 12px;">
                     <div style="margin-bottom: 8px;">
-                        <strong>${format(new Date(match.utcDate), 'EEE, MMM d • h:mm a')}</strong>
+                        <strong>${format(new Date(match.fixture.date), 'EEE, MMM d • h:mm a')}</strong>
                     </div>
                     <div style="margin-bottom: 8px;">
-                        <span>${match.homeTeam.name}</span>
+                        <span>${match.teams.home.name}</span>
                         <span style="margin: 0 4px;">vs</span>
-                        <span>${match.awayTeam.name}</span>
+                        <span>${match.teams.away.name}</span>
                     </div>
                     <div style="color: #666;">
-                        ${venue.stadium}, ${venue.location}
+                        ${venue.name}, ${venue.city}
                     </div>
                 </div>
             `);
@@ -733,7 +717,7 @@ const Map = ({
                 element: el,
                 anchor: 'center'
             })
-            .setLngLat(venue.coordinates)
+            .setLngLat(coordinates)
             .setPopup(popup);
 
             // Add click handler
