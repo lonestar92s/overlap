@@ -29,7 +29,12 @@ const COUNTRY_NAMES = {
     'FR': 'France',
     'ES': 'Spain',
     'DE': 'Germany',
-    'NL': 'Netherlands'
+    'NL': 'Netherlands',
+    'PT': 'Portugal',
+    'IT': 'Italy',
+    'BR': 'Brazil',
+    'US': 'United States',
+    'INT': 'International'
 };
 
 const Filters = ({ 
@@ -38,7 +43,10 @@ const Filters = ({
     selectedDistance, 
     onDistanceChange,
     selectedLeagues,
-    onLeaguesChange 
+    onLeaguesChange,
+    selectedTeams,
+    onTeamsChange,
+    teamsByLeague
 }) => {
     const handleDistanceChange = (event) => {
         const value = event.target.value === 'all' ? null : Number(event.target.value);
@@ -50,6 +58,44 @@ const Filters = ({
             ? selectedLeagues.filter(id => id !== leagueId)
             : [...selectedLeagues, leagueId];
         onLeaguesChange(newSelectedLeagues);
+
+        // When deselecting a league, also deselect all teams from that league
+        if (selectedLeagues.includes(leagueId)) {
+            const leagueTeams = teamsByLeague[leagueId] || [];
+            const newSelectedTeams = selectedTeams.filter(team => !leagueTeams.includes(team));
+            onTeamsChange(newSelectedTeams);
+        }
+    };
+
+    const handleTeamChange = (teamName) => {
+        const newSelectedTeams = selectedTeams.includes(teamName)
+            ? selectedTeams.filter(name => name !== teamName)
+            : [...selectedTeams, teamName];
+        onTeamsChange(newSelectedTeams);
+    };
+
+    const handleLeagueTeamsChange = (leagueId) => {
+        const leagueTeams = teamsByLeague[leagueId] || [];
+        
+        // Check if all teams from this league are already selected
+        const allLeagueTeamsSelected = leagueTeams.every(team => 
+            selectedTeams.includes(team)
+        );
+
+        if (allLeagueTeamsSelected) {
+            // If all selected, remove all teams from this league
+            const newSelectedTeams = selectedTeams.filter(team => 
+                !leagueTeams.includes(team)
+            );
+            onTeamsChange(newSelectedTeams);
+        } else {
+            // If not all selected, add all teams from this league
+            const newSelectedTeams = [
+                ...selectedTeams.filter(team => !leagueTeams.includes(team)),
+                ...leagueTeams
+            ];
+            onTeamsChange(newSelectedTeams);
+        }
     };
 
     const handleCountryChange = (countryCode) => {
@@ -67,6 +113,11 @@ const Filters = ({
                 !countryLeagueIds.includes(id)
             );
             onLeaguesChange(newSelectedLeagues);
+            
+            // Also remove all teams from the deselected leagues
+            const countryTeams = countryLeagueIds.flatMap(leagueId => teamsByLeague[leagueId] || []);
+            const newSelectedTeams = selectedTeams.filter(team => !countryTeams.includes(team));
+            onTeamsChange(newSelectedTeams);
         } else {
             // If not all selected, add all leagues from this country
             const newSelectedLeagues = [
@@ -82,6 +133,8 @@ const Filters = ({
             onLeaguesChange(getAllLeagues().map(l => l.id));
         } else {
             onLeaguesChange([]);
+            // When deselecting all leagues, also clear all team selections
+            onTeamsChange([]);
         }
     };
 
@@ -103,6 +156,20 @@ const Filters = ({
         return 'some';
     };
 
+    // Helper function to check team selection state for a league
+    const getLeagueTeamSelectionState = (leagueId) => {
+        const leagueTeams = teamsByLeague[leagueId] || [];
+        if (leagueTeams.length === 0) return 'none';
+        
+        const selectedLeagueTeams = leagueTeams.filter(team => 
+            selectedTeams.includes(team)
+        );
+
+        if (selectedLeagueTeams.length === 0) return 'none';
+        if (selectedLeagueTeams.length === leagueTeams.length) return 'all';
+        return 'some';
+    };
+
     return (
         <Dialog 
             open={open} 
@@ -111,7 +178,8 @@ const Filters = ({
                 sx: {
                     borderRadius: 2,
                     width: '100%',
-                    maxWidth: '400px'
+                    maxWidth: '500px',
+                    maxHeight: '80vh'
                 }
             }}
         >
@@ -226,26 +294,93 @@ const Filters = ({
                                     />
                                     {/* League-level checkboxes */}
                                     <Box sx={{ ml: 3 }}>
-                                        {leagues.map((league) => (
-                                            <FormControlLabel
-                                                key={league.id}
-                                                control={
-                                                    <Checkbox
-                                                        checked={selectedLeagues.includes(league.id)}
-                                                        onChange={() => handleLeagueChange(league.id)}
-                                                        size="small"
+                                        {leagues.map((league) => {
+                                            const leagueTeams = teamsByLeague[league.id] || [];
+                                            const teamSelectionState = getLeagueTeamSelectionState(league.id);
+                                            
+                                            return (
+                                                <Box key={league.id} sx={{ mb: 1 }}>
+                                                    {/* League checkbox */}
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Checkbox
+                                                                checked={selectedLeagues.includes(league.id)}
+                                                                onChange={() => handleLeagueChange(league.id)}
+                                                                size="small"
+                                                            />
+                                                        }
+                                                        label={league.name}
+                                                        sx={{ 
+                                                            mb: 0.5,
+                                                            '& .MuiTypography-root': {
+                                                                fontSize: '0.9rem',
+                                                                color: '#666'
+                                                            }
+                                                        }}
                                                     />
-                                                }
-                                                label={league.name}
-                                                sx={{ 
-                                                    mb: 0.5,
-                                                    '& .MuiTypography-root': {
-                                                        fontSize: '0.9rem',
-                                                        color: '#666'
-                                                    }
-                                                }}
-                                            />
-                                        ))}
+                                                    
+                                                    {/* Team checkboxes - only show if league is selected and has teams */}
+                                                    {selectedLeagues.includes(league.id) && leagueTeams.length > 0 && (
+                                                        <Box sx={{ ml: 4, mt: 1 }}>
+                                                            {/* Select all teams for this league */}
+                                                            <FormControlLabel
+                                                                control={
+                                                                    <Checkbox
+                                                                        checked={teamSelectionState === 'all'}
+                                                                        indeterminate={teamSelectionState === 'some'}
+                                                                        onChange={() => handleLeagueTeamsChange(league.id)}
+                                                                        size="small"
+                                                                    />
+                                                                }
+                                                                label={
+                                                                    <Typography 
+                                                                        variant="caption" 
+                                                                        sx={{ 
+                                                                            color: '#888',
+                                                                            fontWeight: 500
+                                                                        }}
+                                                                    >
+                                                                        All Teams
+                                                                    </Typography>
+                                                                }
+                                                                sx={{ mb: 0.5 }}
+                                                            />
+                                                            
+                                                            {/* Individual team checkboxes */}
+                                                            <Box sx={{ ml: 2 }}>
+                                                                {leagueTeams.map((team) => (
+                                                                    <FormControlLabel
+                                                                        key={team}
+                                                                        control={
+                                                                            <Checkbox
+                                                                                checked={selectedTeams.includes(team)}
+                                                                                onChange={() => handleTeamChange(team)}
+                                                                                size="small"
+                                                                            />
+                                                                        }
+                                                                        label={
+                                                                            <Typography 
+                                                                                variant="caption" 
+                                                                                sx={{ 
+                                                                                    fontSize: '0.8rem',
+                                                                                    color: '#999'
+                                                                                }}
+                                                                            >
+                                                                                {team}
+                                                                            </Typography>
+                                                                        }
+                                                                        sx={{ 
+                                                                            mb: 0.25,
+                                                                            display: 'block'
+                                                                        }}
+                                                                    />
+                                                                ))}
+                                                            </Box>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            );
+                                        })}
                                     </Box>
                                 </Box>
                             );

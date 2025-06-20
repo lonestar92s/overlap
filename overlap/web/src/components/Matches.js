@@ -5,25 +5,13 @@ import {
     Typography, 
     Box,
     Avatar,
-    Button
+    Button,
+    IconButton
 } from '@mui/material';
-import { Stadium, AccessTime, LocationOn } from '@mui/icons-material';
+import { Stadium, AccessTime, LocationOn, FavoriteBorder, Favorite } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { utcToZonedTime } from 'date-fns-tz';
-import { getVenueForTeam } from '../data/venues';
-
-// Helper function to calculate distance between two points using Haversine formula
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 3959; // Earth's radius in miles
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in miles
-};
+// getVenueForTeam import removed - distances now calculated in backend
 
 // Helper function to get timezone from coordinates
 const getTimezoneFromCoordinates = (coordinates) => {
@@ -133,6 +121,8 @@ const MatchCard = ({
     onClick, 
     distance, 
     isSelected,
+    onHeartClick = () => {},
+    isFavorited = false,
 }) => {
     // Extract data from the new API response format
     const fixture = match.fixture;
@@ -195,6 +185,22 @@ const MatchCard = ({
                         >
                             {league.name}
                         </Typography>
+                        <IconButton
+                            size="small"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onHeartClick(match);
+                            }}
+                            sx={{
+                                color: isFavorited ? '#FF385C' : '#666',
+                                '&:hover': {
+                                    color: '#FF385C',
+                                    backgroundColor: 'rgba(255, 56, 92, 0.04)'
+                                }
+                            }}
+                        >
+                            {isFavorited ? <Favorite fontSize="small" /> : <FavoriteBorder fontSize="small" />}
+                        </IconButton>
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -252,22 +258,18 @@ const Matches = ({
     matches, 
     onMatchClick, 
     userLocation, 
-    selectedMatch
+    selectedMatch,
+    onHeartClick = () => {},
+    favoritedMatches = []
 }) => {
-    // Calculate distances for all matches once
+    // Use distances from backend response (calculated server-side)
     const matchesWithDistance = useMemo(() => {
         return matches.map(match => {
-            const venue = match.fixture.venue;
-            const distance = userLocation && venue ? 
-                calculateDistance(
-                    userLocation.lat,
-                    userLocation.lon,
-                    venue.lat || 0,
-                    venue.lng || 0
-                ) : null;
+            // Distance is now calculated in the backend and included in venue object
+            const distance = match.fixture.venue?.distance || null;
             return { ...match, distance };
         });
-    }, [matches, userLocation]);
+    }, [matches]);
 
     // Group matches by date
     const groupedMatches = useMemo(() => {
@@ -325,6 +327,8 @@ const Matches = ({
                                         onClick={onMatchClick}
                                         distance={match.distance}
                                         isSelected={selectedMatch?.fixture.id === match.fixture.id}
+                                        onHeartClick={onHeartClick}
+                                        isFavorited={favoritedMatches.includes(match.fixture.id)}
                                     />
                                 ))}
                         </Box>

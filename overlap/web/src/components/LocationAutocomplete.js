@@ -173,14 +173,38 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinati
                     }}
                     sx={{
                         '& .MuiInputBase-root': {
-                            padding: '0px !important'
+                            padding: '0px !important',
+                            '&:before': {
+                                display: 'none'
+                            },
+                            '&:after': {
+                                display: 'none'
+                            },
+                            '&:hover:not(.Mui-disabled):before': {
+                                display: 'none'
+                            }
                         },
                         '& .MuiInputBase-input': {
                             padding: '0 !important',
                             color: '#222222',
+                            outline: 'none !important',
+                            '&:focus': {
+                                outline: 'none !important'
+                            },
                             '&::placeholder': {
                                 color: '#717171',
                                 opacity: 1
+                            }
+                        },
+                        '& .MuiInput-underline': {
+                            '&:before': {
+                                display: 'none'
+                            },
+                            '&:after': {
+                                display: 'none'
+                            },
+                            '&:hover:not(.Mui-disabled):before': {
+                                display: 'none'
                             }
                         }
                     }}
@@ -194,20 +218,21 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinati
                         key={option.place_id}
                         {...otherProps}
                         sx={{ 
-                            py: 1,
-                            px: 2,
+                            py: 0.5,
+                            px: 1.5,
+                            minHeight: 'auto',
                             '&:hover': {
                                 backgroundColor: '#F7F7F7'
                             }
                         }}
                     >
-                        <LocationOn sx={{ color: '#717171', mr: 2 }} />
+                        <LocationOn sx={{ color: '#717171', mr: 1, fontSize: 18 }} />
                         <Box>
-                            <Typography variant="body1" color="#222222">
+                            <Typography variant="body2" color="#222222" sx={{ fontSize: '0.875rem', lineHeight: 1.2 }}>
                                 {option.city}
                                 {option.region && `, ${option.region}`}
                             </Typography>
-                            <Typography variant="body2" color="#717171">
+                            <Typography variant="caption" color="#717171" sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
                                 {option.country}
                             </Typography>
                         </Box>
@@ -217,12 +242,14 @@ const LocationAutocomplete = ({ value, onChange, placeholder = "Search destinati
             PaperComponent={({ children, ...props }) => (
                 <Paper 
                     {...props} 
-                    elevation={3}
+                    elevation={2}
                     sx={{ 
-                        mt: 1,
-                        borderRadius: 4,
+                        mt: 0.5,
+                        borderRadius: 2,
                         border: '1px solid #DDDDDD',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                        maxHeight: '200px',
+                        overflow: 'auto'
                     }}
                 >
                     {children}

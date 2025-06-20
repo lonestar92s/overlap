@@ -25,26 +25,12 @@ import LocationAutocomplete from './LocationAutocomplete';
 import HeaderNav from './HeaderNav';
 import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
-import { getVenueForTeam } from '../data/venues';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 import LocationSearch from './LocationSearch';
-import { getVenueCoordinates } from '../utils/venues';
+// getVenueForTeam and calculateDistance removed - distances now calculated in backend
 
 const BACKEND_URL = 'http://localhost:3001/v4';
-
-// Helper function to calculate distance between two points using Haversine formula
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 3959; // Earth's radius in miles
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in miles
-};
 
 const Home = ({ searchState, setSearchState }) => {
     const today = startOfToday();
@@ -54,10 +40,12 @@ const Home = ({ searchState, setSearchState }) => {
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
     const [selectedLeagues, setSelectedLeagues] = useState([]);
+    const [selectedTeams, setSelectedTeams] = useState([]);
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [showSearchOverlay, setShowSearchOverlay] = useState(false);
+    const [favoritedMatches, setFavoritedMatches] = useState([]);
 
     // Add scroll listener to show/hide back to top button
     React.useEffect(() => {
@@ -104,6 +92,19 @@ const Home = ({ searchState, setSearchState }) => {
     }, [searchState]);
 
     const handleLocationSelect = (location) => {
+        // Handle null/undefined location (when input is cleared)
+        if (!location) {
+            console.log('Location cleared');
+            setSearchState(prev => ({
+                ...prev,
+                location: null,
+                matches: [], // Clear matches when location changes
+                loading: false,
+                error: null
+            }));
+            return;
+        }
+
         // Convert lat/lon to numbers if they are strings
         const normalizedLocation = {
             ...location,
@@ -126,8 +127,9 @@ const Home = ({ searchState, setSearchState }) => {
             setSelectedDistance(100);
         }
         
-        // Reset league filters to show all leagues
+        // Reset league and team filters to show all
         setSelectedLeagues([]);
+        setSelectedTeams([]);
         
         if (searchState.dates.departure && searchState.dates.return) {
             const currentLocation = searchState.location;
@@ -138,10 +140,9 @@ const Home = ({ searchState, setSearchState }) => {
             };
             
             try {
-                // TEMPORARY: Only fetch Premier League for testing
-                const leagues = [{ id: 39, name: 'Premier League', country: 'England' }];
+                const leagues = getAllLeagues();
                 console.log('🔍 Starting match search with dates:', formattedDates);
-                console.log(`Fetching matches for ${leagues.length} leagues (testing mode)`);
+                console.log(`Fetching matches for ${leagues.length} leagues`);
 
                 // Fetch all leagues in parallel
                 const responses = await Promise.all(
@@ -151,7 +152,9 @@ const Home = ({ searchState, setSearchState }) => {
                             const response = await axios.get(url, {
                                 params: {
                                     dateFrom: formattedDates.departure,
-                                    dateTo: formattedDates.return
+                                    dateTo: formattedDates.return,
+                                    userLat: currentLocation?.lat,
+                                    userLon: currentLocation?.lon
                                 },
                                 headers: {
                                     'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY
@@ -253,7 +256,7 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
-    // Filter matches based on selected distance and leagues
+    // Filter matches based on selected distance, leagues, and teams
     const filteredMatches = useMemo(() => {
         // First filter by leagues
         let filtered = searchState.matches.filter(match => {
@@ -267,30 +270,22 @@ const Home = ({ searchState, setSearchState }) => {
             return isIncluded;
         });
 
+        // Then filter by teams if any teams are selected
+        if (selectedTeams.length > 0) {
+            filtered = filtered.filter(match => {
+                const homeTeamName = match.teams.home.name;
+                const awayTeamName = match.teams.away.name;
+                return selectedTeams.includes(homeTeamName) || selectedTeams.includes(awayTeamName);
+            });
+        }
+
         // Then filter by distance if location is selected
         if (selectedDistance && searchState.location) {
-            filtered = filtered.map(match => {
-                const venue = match.fixture.venue;
-                if (!venue || !venue.id) return { ...match, distance: null };
-
-                // Get venue coordinates from our database
-                const venueData = getVenueForTeam(match.teams.home.name);
-                if (!venueData || !venueData.coordinates) {
-                    return { ...match, distance: null };
-                }
-
-                const [venueLon, venueLat] = venueData.coordinates;
-
-                const distance = calculateDistance(
-                    searchState.location.lat,
-                    searchState.location.lon,
-                    venueLat,
-                    venueLon
-                );
-
-                return { ...match, distance };
-            }).filter(match => match.distance !== null && match.distance <= selectedDistance)
-              .sort((a, b) => a.distance - b.distance);
+            filtered = filtered.filter(match => {
+                // Distance is now calculated in backend and included in venue object
+                const distance = match.fixture.venue?.distance;
+                return distance !== null && distance <= selectedDistance;
+            }).sort((a, b) => (a.fixture.venue?.distance || 0) - (b.fixture.venue?.distance || 0));
         }
 
         // Always sort chronologically by date and time
@@ -300,9 +295,45 @@ const Home = ({ searchState, setSearchState }) => {
             return dateA.getTime() - dateB.getTime();
         });
 
-    }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues]);
+    }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues, selectedTeams]);
 
-    console.log('filteredMatches length:', filteredMatches.length);
+    console.log('🔍 FILTERING DEBUG:', {
+        totalMatches: searchState.matches.length,
+        selectedLeagues: selectedLeagues,
+        selectedTeams: selectedTeams,
+        filteredMatchesLength: filteredMatches.length,
+        filteredMatchTeams: filteredMatches.map(m => `${m.teams.home.name} vs ${m.teams.away.name}`),
+        // Debug: Show all unique team names in Premier League matches
+        premierLeagueTeams: [...new Set(
+            searchState.matches
+                .filter(m => m.competition.id === '39')
+                .flatMap(m => [m.teams.home.name, m.teams.away.name])
+        )].sort()
+    });
+
+    // Helper function to get teams by league from current matches
+    const getTeamsByLeague = useMemo(() => {
+        const teamsByLeague = {};
+        
+        searchState.matches.forEach(match => {
+            if (!match.competition || !match.teams) return;
+            
+            const leagueId = match.competition.id;
+            if (!teamsByLeague[leagueId]) {
+                teamsByLeague[leagueId] = new Set();
+            }
+            
+            teamsByLeague[leagueId].add(match.teams.home.name);
+            teamsByLeague[leagueId].add(match.teams.away.name);
+        });
+        
+        // Convert Sets to sorted arrays
+        Object.keys(teamsByLeague).forEach(leagueId => {
+            teamsByLeague[leagueId] = Array.from(teamsByLeague[leagueId]).sort();
+        });
+        
+        return teamsByLeague;
+    }, [searchState.matches]);
 
     const handleFiltersOpen = () => {
         setIsFiltersOpen(true);
@@ -315,6 +346,24 @@ const Home = ({ searchState, setSearchState }) => {
     const handleDistanceChange = (distance) => {
         console.log('Distance changed:', distance); // Add logging
         setSelectedDistance(distance);
+    };
+
+    const handleTeamsChange = (teams) => {
+        console.log('Teams changed:', teams);
+        setSelectedTeams(teams);
+    };
+
+    const handleHeartClick = (match) => {
+        const matchId = match.fixture.id;
+        setFavoritedMatches(prev => {
+            if (prev.includes(matchId)) {
+                // Remove from favorites
+                return prev.filter(id => id !== matchId);
+            } else {
+                // Add to favorites
+                return [...prev, matchId];
+            }
+        });
     };
 
     const handleMatchClick = (match) => {
@@ -332,7 +381,7 @@ const Home = ({ searchState, setSearchState }) => {
     // Reset selected match when filters change
     useEffect(() => {
         setSelectedMatch(null);
-    }, [selectedDistance, selectedLeagues]);
+    }, [selectedDistance, selectedLeagues, selectedTeams]);
 
     // Handle match selection/deselection
     const handleMatchSelect = (match) => {
@@ -533,7 +582,7 @@ const Home = ({ searchState, setSearchState }) => {
                         
                         <Box sx={{ mt: 2 }}>
                             <Paper 
-                                elevation={3}
+                                elevation={0}
                                 sx={{
                                     p: 2,
                                     width: '100%',
@@ -544,9 +593,8 @@ const Home = ({ searchState, setSearchState }) => {
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
                                     border: '1px solid #DDDDDD',
-                                    '&:hover': {
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
-                                    }
+                                    boxShadow: 'none',
+                                    boxShadow: 'none'
                                 }}
                             >
                                 {/* Location */}
@@ -884,7 +932,7 @@ const Home = ({ searchState, setSearchState }) => {
                             }}>
                                 {/* Left Rail with Matches */}
                                 <Box sx={{
-                                    width: { xs: '100%', md: '380px' },
+                                    width: { xs: '100%', md: '480px' },
                                     height: '100%',
                                     backgroundColor: 'white',
                                     borderRight: '1px solid #DDDDDD',
@@ -893,22 +941,23 @@ const Home = ({ searchState, setSearchState }) => {
                                     zIndex: 5,
                                     boxShadow: { xs: 'none', md: '2px 0 8px rgba(0,0,0,0.1)' }
                                 }}>
-                                    {/* Matches List */}
-                                    <Box sx={{ p: 2 }}>
-                                        <Box sx={{ 
-                                            display: 'flex', 
-                                            justifyContent: 'space-between', 
-                                            alignItems: 'center',
-                                            mb: 2,
-                                            pb: 1,
-                                            borderBottom: '1px solid #eee'
-                                        }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {`Showing ${filteredMatches.length} matches`}
-                                                {selectedDistance ? ` within ${selectedDistance} miles` : ''}
-                                                {selectedLeagues.length > 0 && ` from ${selectedLeagues.length} leagues`}
-                                            </Typography>
-                                        </Box>
+                                                                    {/* Matches List */}
+                                <Box sx={{ p: '5px' }}>
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center',
+                                        mb: 2,
+                                        pb: 1,
+                                        borderBottom: '1px solid #eee'
+                                    }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {`Showing ${filteredMatches.length} matches`}
+                                            {selectedDistance ? ` within ${selectedDistance} miles` : ''}
+                                            {selectedLeagues.length > 0 && ` from ${selectedLeagues.length} leagues`}
+                                            {selectedTeams.length > 0 && ` featuring ${selectedTeams.length} teams`}
+                                        </Typography>
+                                    </Box>
                                         
                                         <Matches 
                                             matches={filteredMatches}
@@ -916,6 +965,8 @@ const Home = ({ searchState, setSearchState }) => {
                                             onMatchClick={handleMatchClick}
                                             userLocation={searchState.location}
                                             selectedMatch={selectedMatch}
+                                            onHeartClick={handleHeartClick}
+                                            favoritedMatches={favoritedMatches}
                                         />
                                     </Box>
                                 </Box>
@@ -927,6 +978,7 @@ const Home = ({ searchState, setSearchState }) => {
                                     position: 'relative'
                                 }}>
                                     <Map
+                                        key={`map-${filteredMatches.length}-${selectedTeams.join(',')}`}
                                         matches={filteredMatches}
                                         location={searchState.location}
                                         showLocation={true}
@@ -935,6 +987,8 @@ const Home = ({ searchState, setSearchState }) => {
                                         setActiveMarker={(callback) => {
                                             activeMarkerRef.current = callback;
                                         }}
+                                        onHeartClick={handleHeartClick}
+                                        favoritedMatches={favoritedMatches}
                                     />
                                     
                                     {/* Mobile toggle button to show matches list */}
@@ -976,6 +1030,9 @@ const Home = ({ searchState, setSearchState }) => {
                     onDistanceChange={handleDistanceChange}
                     selectedLeagues={selectedLeagues}
                     onLeaguesChange={setSelectedLeagues}
+                    selectedTeams={selectedTeams}
+                    onTeamsChange={handleTeamsChange}
+                    teamsByLeague={getTeamsByLeague}
                 />
 
                 {/* Back to top button */}
