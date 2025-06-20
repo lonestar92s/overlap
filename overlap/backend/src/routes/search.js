@@ -1,5 +1,5 @@
 const express = require('express');
-const OpenAI = require('openai');
+// const OpenAI = require('openai');
 const https = require('https');
 const router = express.Router();
 
@@ -8,10 +8,10 @@ const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    httpAgent: httpsAgent
-});
+// const openai = new OpenAI({
+//     apiKey: process.env.OPENAI_API_KEY,
+//     httpAgent: httpsAgent
+// });
 
 // Helper function to format date as YYYY-MM-DD
 const formatDate = (date) => {
@@ -292,6 +292,23 @@ router.post('/natural-language', async (req, res) => {
             error: 'Failed to process natural language search',
             message: error.message 
         });
+    }
+});
+
+router.post('/parse', async (req, res) => {
+    try {
+        const { query } = req.body;
+        console.log('Received query for parsing:', query);
+
+        // Use simple parser directly instead of trying OpenAI first
+        console.log('Using simple parser...');
+        const parsedResponse = parseQuery(query);
+        console.log('Simple parser response:', parsedResponse);
+
+        res.json(parsedResponse);
+    } catch (error) {
+        console.error('Error parsing query:', error);
+        res.status(500).json({ error: 'Error parsing query' });
     }
 });
 

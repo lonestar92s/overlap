@@ -20,23 +20,11 @@ async function fetchMatches(startDate, endDate) {
     const formattedEndDate = formatDateForApi(endDate);
     
     try {
-        const url = `https://api.football-data.org/v4/competitions/${COMPETITION_ID}/matches`;
-        const params = new URLSearchParams({
-            dateFrom: formattedStartDate,
-            dateTo: formattedEndDate
-        });
-
-        console.log('[Overlap - API] Making request to:', url);
-        console.log('[Overlap - API] Request parameters:', {
-            dateFrom: formattedStartDate,
-            dateTo: formattedEndDate,
-            competitions: COMPETITION_ID,
-            apiKey: API_KEY.substring(0, 8) + '...' // Log only part of the API key for security
-        });
-
-        const response = await fetch(`${url}?${params.toString()}`, {
+        const url = `https://api-football-v3.p.rapidapi.com/fixtures?league=${COMPETITION_ID}&from=${formattedStartDate}&to=${formattedEndDate}`;
+        const response = await fetch(`${url}`, {
             headers: {
-                'X-Auth-Token': API_KEY
+                'X-RapidAPI-Key': API_KEY,
+                'X-RapidAPI-Host': 'api-football-v3.p.rapidapi.com'
             }
         });
 
