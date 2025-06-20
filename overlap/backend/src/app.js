@@ -12,11 +12,12 @@ console.log('Loading .env file from:', envPath);
 dotenv.config({ path: envPath });
 
 // Log environment status
-console.log('Environment variables loaded:', {
-    port: process.env.PORT || '3001 (default)',
-    googleApiKey: process.env.GOOGLE_API_KEY ? 'Present' : 'Missing',
-    openaiApiKey: process.env.OPENAI_API_KEY ? 'Present' : 'Missing',
-    nodeEnv: process.env.NODE_ENV || 'not set'
+console.log('Environment check:', {
+    nodeEnv: process.env.NODE_ENV,
+    port: process.env.PORT,
+    rapidApiKey: process.env.RAPIDAPI_KEY ? 'Present' : 'Missing',
+    envPath: envPath,
+    envFileExists: require('fs').existsSync(envPath)
 });
 
 const app = express();
