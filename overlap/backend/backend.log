@@ -1,0 +1,29 @@
+Environment check: {
+  googleApiKey: 'Missing',
+  amadeusClientId: 'Missing',
+  nodeEnv: 'not set'
+}
+ERROR: Google API key is not set in environment variables
+Loading .env file from: /Users/andrewaluko/Cursor/flight-match-finder/overlap/backend/.env
+Environment check: {
+  nodeEnv: undefined,
+  port: '3001',
+  rapidApiKey: 'Present',
+  envPath: '/Users/andrewaluko/Cursor/flight-match-finder/overlap/backend/.env',
+  envFileExists: true
+}
+(node:54936) [MONGODB DRIVER] Warning: useNewUrlParser is a deprecated option: useNewUrlParser has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:54936) [MONGODB DRIVER] Warning: useUnifiedTopology is a deprecated option: useUnifiedTopology has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+Server is running on port 3001
+✅ Connected to MongoDB
+🔍 Searching API for teams matching: Liverpool
+No Football API key configured
+🔍 Searching API for teams matching: Liverpool
+No Football API key configured
+🔍 Searching API for teams matching: Liverpool
+No Football API key configured
+🔍 Searching API for teams matching: Man
+No Football API key configured
+🔍 Searching API for teams matching: Man
+No Football API key configured

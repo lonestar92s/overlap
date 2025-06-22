@@ -16,27 +16,74 @@ const userSchema = new mongoose.Schema({
         minlength: 8,
         select: false // Don't include password in queries by default
     },
+    profile: {
+        firstName: String,
+        lastName: String,
+        avatar: String,
+        timezone: {
+            type: String,
+            default: 'UTC'
+        }
+    },
     preferences: {
         defaultLocation: {
             city: String,
             country: String,
-            coordinates: {
-                type: [Number],
-                validate: {
-                    validator: function(v) {
-                        return v.length === 2;
-                    },
-                    message: 'Coordinates must be [longitude, latitude]'
-                }
-            }
+            coordinates: [Number]
         },
-        favoriteTeams: [String],
+        favoriteTeams: [{
+            teamId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Team',
+                required: true
+            },
+            addedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
         favoriteLeagues: [String],
         defaultSearchRadius: {
             type: Number,
             default: 100
+        },
+        currency: {
+            type: String,
+            default: 'USD'
+        },
+        notifications: {
+            email: {
+                type: Boolean,
+                default: true
+            },
+            matchReminders: {
+                type: Boolean,
+                default: false
+            },
+            priceAlerts: {
+                type: Boolean,
+                default: false
+            }
         }
-    }
+    },
+    savedMatches: [{
+        matchId: String,
+        homeTeam: {
+            name: String,
+            logo: String
+        },
+        awayTeam: {
+            name: String,
+            logo: String
+        },
+        league: String,
+        venue: String,
+        date: Date,
+        savedAt: {
+            type: Date,
+            default: Date.now
+        }
+    }]
 }, {
     timestamps: true
 });
@@ -61,6 +108,13 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
     } catch (error) {
         throw error;
     }
+};
+
+// Get public profile (exclude sensitive data)
+userSchema.methods.getPublicProfile = function() {
+    const userObject = this.toObject();
+    delete userObject.password;
+    return userObject;
 };
 
 const User = mongoose.model('User', userSchema);

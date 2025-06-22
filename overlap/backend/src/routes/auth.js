@@ -8,7 +8,7 @@ const router = express.Router();
 // Register a new user
 router.post('/register', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, profile } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -20,8 +20,21 @@ router.post('/register', async (req, res) => {
         const user = new User({
             email,
             password,
+            profile: profile || {},
             preferences: {
-                defaultSearchRadius: 100
+                defaultLocation: {
+                    city: '',
+                    country: ''
+                },
+                favoriteTeams: [],
+                favoriteLeagues: [],
+                defaultSearchRadius: 100,
+                currency: 'USD',
+                notifications: {
+                    email: true,
+                    matchReminders: false,
+                    priceAlerts: false
+                }
             }
         });
 
@@ -38,6 +51,7 @@ router.post('/register', async (req, res) => {
             user: {
                 id: user._id,
                 email: user.email,
+                profile: user.profile,
                 preferences: user.preferences
             },
             token
@@ -75,6 +89,7 @@ router.post('/login', async (req, res) => {
             user: {
                 id: user._id,
                 email: user.email,
+                profile: user.profile,
                 preferences: user.preferences
             },
             token
@@ -91,6 +106,7 @@ router.get('/me', auth, async (req, res) => {
             user: {
                 id: req.user._id,
                 email: req.user.email,
+                profile: req.user.profile,
                 preferences: req.user.preferences
             }
         });

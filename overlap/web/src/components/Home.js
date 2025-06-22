@@ -22,7 +22,7 @@ import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
-import HeaderNav from './HeaderNav';
+
 import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
@@ -46,6 +46,11 @@ const Home = ({ searchState, setSearchState }) => {
     const [showFilters, setShowFilters] = useState(false);
     const [showSearchOverlay, setShowSearchOverlay] = useState(false);
     const [favoritedMatches, setFavoritedMatches] = useState([]);
+
+    // Load saved matches on component mount
+    useEffect(() => {
+        loadSavedMatches();
+    }, []);
 
     // Add scroll listener to show/hide back to top button
     React.useEffect(() => {
@@ -353,14 +358,96 @@ const Home = ({ searchState, setSearchState }) => {
         setSelectedTeams(teams);
     };
 
+    const loadSavedMatches = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await fetch('http://localhost:3001/api/preferences/saved-matches', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const matchIds = data.savedMatches.map(match => parseInt(match.matchId));
+                setFavoritedMatches(matchIds);
+            }
+        } catch (error) {
+            console.error('Error loading saved matches:', error);
+        }
+    };
+
+    const saveMatch = async (match) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await fetch('http://localhost:3001/api/preferences/saved-matches', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    matchId: match.fixture.id.toString(),
+                    homeTeam: {
+                        name: match.teams.home.name,
+                        logo: match.teams.home.logo
+                    },
+                    awayTeam: {
+                        name: match.teams.away.name,
+                        logo: match.teams.away.logo
+                    },
+                    league: match.league.name,
+                    venue: `${match.fixture.venue.name}, ${match.fixture.venue.city}`,
+                    date: match.fixture.date
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save match');
+            }
+        } catch (error) {
+            console.error('Error saving match:', error);
+            // Revert the state change on error
+            setFavoritedMatches(prev => prev.filter(id => id !== match.fixture.id));
+        }
+    };
+
+    const removeSavedMatch = async (matchId) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await fetch(`http://localhost:3001/api/preferences/saved-matches/${matchId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to remove saved match');
+            }
+        } catch (error) {
+            console.error('Error removing saved match:', error);
+            // Revert the state change on error
+            setFavoritedMatches(prev => [...prev, matchId]);
+        }
+    };
+
     const handleHeartClick = (match) => {
         const matchId = match.fixture.id;
         setFavoritedMatches(prev => {
             if (prev.includes(matchId)) {
                 // Remove from favorites
+                removeSavedMatch(matchId);
                 return prev.filter(id => id !== matchId);
             } else {
                 // Add to favorites
+                saveMatch(match);
                 return [...prev, matchId];
             }
         });
@@ -562,8 +649,6 @@ const Home = ({ searchState, setSearchState }) => {
                 overflow: 'hidden',
                 position: 'relative'
             }}>
-                {/* Header */}
-                <HeaderNav onHomeClick={handleReset} />
                 
                 {/* Search Section - Only visible when no matches are shown */}
                 {(!searchState.matches.length || !hasSearched) && (
@@ -978,7 +1063,6 @@ const Home = ({ searchState, setSearchState }) => {
                                     position: 'relative'
                                 }}>
                                     <Map
-                                        key={`map-${filteredMatches.length}-${selectedTeams.join(',')}`}
                                         matches={filteredMatches}
                                         location={searchState.location}
                                         showLocation={true}

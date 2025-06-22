@@ -2,9 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const mongoose = require('mongoose');
 const transportationRoutes = require('./routes/transportation');
 const matchesRoutes = require('./routes/matches');
 const searchRoutes = require('./routes/search');
+const authRoutes = require('./routes/auth');
+const preferencesRoutes = require('./routes/preferences');
+const teamsRoutes = require('./routes/teams');
 
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
@@ -32,9 +36,24 @@ app.use(cors({
 
 app.use(express.json());
 
+// Connect to MongoDB
+if (process.env.MONGODB_URI) {
+    mongoose.connect(process.env.MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true
+    })
+    .then(() => console.log('✅ Connected to MongoDB'))
+    .catch((error) => console.error('❌ MongoDB connection error:', error));
+} else {
+    console.log('⚠️  MONGODB_URI not found - auth features will be disabled');
+}
+
 // Use routes
 app.use('/api', transportationRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/preferences', preferencesRoutes);
+app.use('/api/teams', teamsRoutes);
 app.use('/v4', matchesRoutes);
 
 const PORT = process.env.PORT || 3001;
