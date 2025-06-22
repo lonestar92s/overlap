@@ -534,17 +534,32 @@ const Map = ({
             }
         }
 
-        console.log('🗺️ MAP COMPONENT received matches:', {
-            matchesLength: matches.length,
-            matchIds: matches.map(m => m.fixture.id),
-            firstMatch: matches[0] ? {
-                id: matches[0].fixture.id,
-                homeTeam: matches[0].teams.home.name,
-                awayTeam: matches[0].teams.away.name
-            } : null
-        });
+
 
     }, [location, showLocation, matches, loading]);
+
+    // Update heart buttons in open popups when favoritedMatches changes
+    useEffect(() => {
+        if (!mapInstance.current) return;
+
+        // Update all visible heart buttons
+        const heartButtons = document.querySelectorAll('.heart-btn');
+        heartButtons.forEach(btn => {
+            const matchId = btn.getAttribute('data-match-id');
+            if (matchId) {
+                const svg = btn.querySelector('svg');
+                const isFavorited = favoritedMatches.includes(parseInt(matchId));
+                
+                if (isFavorited) {
+                    svg.setAttribute('fill', '#FF385C');
+                    svg.setAttribute('stroke', '#FF385C');
+                } else {
+                    svg.setAttribute('fill', 'none');
+                    svg.setAttribute('stroke', '#666');
+                }
+            }
+        });
+    }, [favoritedMatches]);
 
     // Add route lines between selected matches
     useEffect(() => {

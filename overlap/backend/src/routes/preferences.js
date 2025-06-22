@@ -1,13 +1,45 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
+const Team = require('../models/Team');
 
 const router = express.Router();
 
-// Get user preferences
+// Get user profile and preferences
 router.get('/', auth, async (req, res) => {
     try {
-        res.json({ preferences: req.user.preferences });
+        // Populate favorite teams with full team data
+        await req.user.populate('preferences.favoriteTeams.teamId');
+        
+        res.json({ 
+            profile: req.user.profile,
+            preferences: req.user.preferences 
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Update user profile
+router.put('/profile', auth, async (req, res) => {
+    const updates = Object.keys(req.body);
+    const allowedUpdates = ['firstName', 'lastName', 'avatar', 'timezone'];
+
+    const isValidOperation = updates.every(update => 
+        allowedUpdates.includes(update)
+    );
+
+    if (!isValidOperation) {
+        return res.status(400).json({ error: 'Invalid profile updates' });
+    }
+
+    try {
+        updates.forEach(update => {
+            req.user.profile[update] = req.body[update];
+        });
+
+        await req.user.save();
+        res.json({ profile: req.user.profile });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -20,7 +52,9 @@ router.put('/', auth, async (req, res) => {
         'defaultLocation',
         'favoriteTeams',
         'favoriteLeagues',
-        'defaultSearchRadius'
+        'defaultSearchRadius',
+        'currency',
+        'notifications'
     ];
 
     // Validate update fields
@@ -35,7 +69,15 @@ router.put('/', auth, async (req, res) => {
     try {
         // Update each field in preferences
         updates.forEach(update => {
-            req.user.preferences[update] = req.body[update];
+            if (update === 'notifications' && typeof req.body[update] === 'object') {
+                // Handle nested notifications object
+                req.user.preferences.notifications = {
+                    ...req.user.preferences.notifications,
+                    ...req.body[update]
+                };
+            } else {
+                req.user.preferences[update] = req.body[update];
+            }
         });
 
         await req.user.save();
@@ -48,13 +90,26 @@ router.put('/', auth, async (req, res) => {
 // Add favorite team
 router.post('/teams', auth, async (req, res) => {
     try {
-        const { teamName } = req.body;
+        const { teamId } = req.body;
         
-        if (!req.user.preferences.favoriteTeams.includes(teamName)) {
-            req.user.preferences.favoriteTeams.push(teamName);
+        // Verify team exists
+        const team = await Team.findById(teamId);
+        if (!team) {
+            return res.status(404).json({ error: 'Team not found' });
+        }
+        
+        // Check if team is already in favorites
+        const isAlreadyFavorite = req.user.preferences.favoriteTeams.some(
+            fav => fav.teamId.toString() === teamId
+        );
+        
+        if (!isAlreadyFavorite) {
+            req.user.preferences.favoriteTeams.push({ teamId });
             await req.user.save();
         }
         
+        // Return populated favorite teams
+        await req.user.populate('preferences.favoriteTeams.teamId');
         res.json({ favoriteTeams: req.user.preferences.favoriteTeams });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -62,13 +117,16 @@ router.post('/teams', auth, async (req, res) => {
 });
 
 // Remove favorite team
-router.delete('/teams/:teamName', auth, async (req, res) => {
+router.delete('/teams/:teamId', auth, async (req, res) => {
     try {
-        const teamName = decodeURIComponent(req.params.teamName);
+        const teamId = req.params.teamId;
         req.user.preferences.favoriteTeams = req.user.preferences.favoriteTeams
-            .filter(team => team !== teamName);
+            .filter(fav => fav.teamId.toString() !== teamId);
         
         await req.user.save();
+        
+        // Return populated favorite teams
+        await req.user.populate('preferences.favoriteTeams.teamId');
         res.json({ favoriteTeams: req.user.preferences.favoriteTeams });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -100,6 +158,55 @@ router.delete('/leagues/:leagueId', auth, async (req, res) => {
         
         await req.user.save();
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Get saved matches
+router.get('/saved-matches', auth, async (req, res) => {
+    try {
+        res.json({ savedMatches: req.user.savedMatches });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Save a match
+router.post('/saved-matches', auth, async (req, res) => {
+    try {
+        const { matchId, homeTeam, awayTeam, league, venue, date } = req.body;
+        
+        // Check if match is already saved
+        const existingMatch = req.user.savedMatches.find(match => match.matchId === matchId);
+        if (existingMatch) {
+            return res.status(400).json({ error: 'Match already saved' });
+        }
+        
+        req.user.savedMatches.push({
+            matchId,
+            homeTeam,
+            awayTeam,
+            league,
+            venue,
+            date: new Date(date)
+        });
+        
+        await req.user.save();
+        res.json({ savedMatches: req.user.savedMatches });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Remove saved match
+router.delete('/saved-matches/:matchId', auth, async (req, res) => {
+    try {
+        const matchId = req.params.matchId;
+        req.user.savedMatches = req.user.savedMatches.filter(match => match.matchId !== matchId);
+        
+        await req.user.save();
+        res.json({ savedMatches: req.user.savedMatches });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
