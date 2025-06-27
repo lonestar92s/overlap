@@ -1,32 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { 
     AppBar, 
     Toolbar, 
-    IconButton,
-    Box,
-    Typography,
-    Menu,
+    Typography, 
+    Box, 
+    IconButton, 
+    Avatar, 
+    Menu, 
     MenuItem,
-    Avatar,
-    Divider
+    Drawer,
+    List,
+    ListItem,
+    ListItemText,
+    ListItemIcon,
+    Divider,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import { 
-    Home, 
+    AccountCircle, 
     Person, 
-    ExitToApp
+    FlightTakeoff, 
+    Settings, 
+    Logout,
+    Menu as MenuIcon,
+    Stadium,
+    Explore as ExploreIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from './Auth';
 
-const HeaderNav = ({ onHomeClick, user, onLogout }) => {
+const HeaderNav = () => {
     const navigate = useNavigate();
+    const { user, logout } = useContext(AuthContext);
     const [anchorEl, setAnchorEl] = useState(null);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    const handleHomeClick = () => {
-        onHomeClick();
-        navigate('/');
-    };
-
-    const handleMenuOpen = (event) => {
+    const handleMenuClick = (event) => {
         setAnchorEl(event.currentTarget);
     };
 
@@ -34,72 +47,196 @@ const HeaderNav = ({ onHomeClick, user, onLogout }) => {
         setAnchorEl(null);
     };
 
-    const handleProfileClick = () => {
-        handleMenuClose();
-        navigate('/profile');
+    const handleMobileMenuToggle = () => {
+        setMobileMenuOpen(!mobileMenuOpen);
     };
 
-    const handleLogoutClick = () => {
-        handleMenuClose();
-        onLogout();
+    const handleMobileMenuClose = () => {
+        setMobileMenuOpen(false);
     };
+
+    const handleHomeClick = () => {
+        navigate('/');
+        handleMobileMenuClose();
+    };
+
+    const handleStadiumsClick = () => {
+        navigate('/stadiums');
+        handleMobileMenuClose();
+    };
+
+    const handleExploreClick = () => {
+        navigate('/explore');
+        handleMobileMenuClose();
+    };
+
+    const handleProfileClick = () => {
+        navigate('/profile');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
+    const handleTripsClick = () => {
+        navigate('/trips');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
+    const handlePreferencesClick = () => {
+        navigate('/preferences');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
+    const handleMatchesClick = () => {
+        navigate('/attended-matches');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
+    const handleLogout = () => {
+        logout();
+        navigate('/');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
+    const mobileMenuItems = [
+        { text: 'Home', icon: <ExploreIcon />, onClick: handleHomeClick },
+        { text: 'Stadiums', icon: <Stadium />, onClick: handleStadiumsClick },
+        { text: 'Explore', icon: <ExploreIcon />, onClick: handleExploreClick },
+    ];
+
+    const userMenuItems = [
+        { text: 'Profile', icon: <Person />, onClick: handleProfileClick },
+        { text: 'My Trips', icon: <FlightTakeoff />, onClick: handleTripsClick },
+        { text: 'Matches I\'ve Been To', icon: <Stadium />, onClick: handleMatchesClick },
+        { text: 'Preferences', icon: <Settings />, onClick: handlePreferencesClick },
+    ];
 
     return (
-        <AppBar 
-            position="fixed" 
-            color="default" 
-            elevation={1}
-            sx={{
-                backgroundColor: 'white',
-                borderBottom: '1px solid #DDDDDD'
-            }}
-        >
-            <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton
-                        edge="start"
-                        color="inherit"
-                        aria-label="home"
-                        onClick={handleHomeClick}
-                        sx={{ mr: 1 }}
-                    >
-                        <Home />
-                    </IconButton>
-                    <Typography 
-                        variant="h6" 
-                        sx={{ 
-                            fontWeight: 700,
-                            color: '#FF385C',
-                            display: 'flex',
-                            alignItems: 'center'
-                        }}
-                    >
-                        Overlap
-                    </Typography>
-                </Box>
-
-                <Box>
-                    <IconButton
-                        size="large"
-                        onClick={handleMenuOpen}
-                        sx={{ 
-                            color: '#666',
-                            '&:hover': {
-                                backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                            }
-                        }}
-                    >
-                        {user?.profile?.avatar ? (
-                            <Avatar 
-                                src={user.profile.avatar} 
-                                sx={{ width: 32, height: 32 }}
-                            />
-                        ) : (
-                            <Avatar sx={{ width: 32, height: 32, bgcolor: '#FF385C' }}>
-                                {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-                            </Avatar>
+        <>
+            <AppBar 
+                position="fixed" 
+                color="default" 
+                elevation={1}
+                sx={{
+                    backgroundColor: 'white',
+                    borderBottom: '1px solid #DDDDDD'
+                }}
+            >
+                <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {/* Left Side - Mobile Menu + Brand */}
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {/* Mobile Menu Button */}
+                        {isMobile && (
+                            <IconButton
+                                edge="start"
+                                color="inherit"
+                                aria-label="menu"
+                                onClick={handleMobileMenuToggle}
+                                sx={{ mr: 1 }}
+                            >
+                                <MenuIcon />
+                            </IconButton>
                         )}
-                    </IconButton>
+                        
+                        <Typography 
+                            variant="h6" 
+                            onClick={handleHomeClick}
+                            sx={{ 
+                                fontWeight: 700,
+                                color: '#FF385C',
+                                display: 'flex',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                                '&:hover': {
+                                    backgroundColor: 'rgba(255, 56, 92, 0.08)',
+                                    color: '#E91E63'
+                                }
+                            }}
+                        >
+                            Overlap
+                        </Typography>
+                    </Box>
+                    
+                    {/* Center - Main Navigation (Desktop Only) */}
+                    <Box sx={{ 
+                        display: { xs: 'none', md: 'flex' }, 
+                        gap: 2,
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)'
+                    }}>
+                        <Typography
+                            variant="body1"
+                            onClick={handleStadiumsClick}
+                            sx={{ 
+                                color: '#666',
+                                cursor: 'pointer',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                fontWeight: 500,
+                                '&:hover': {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                                    color: '#333'
+                                }
+                            }}
+                        >
+                            Stadiums
+                        </Typography>
+                        <Typography
+                            variant="body1"
+                            onClick={handleExploreClick}
+                            sx={{ 
+                                color: '#666',
+                                cursor: 'pointer',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                fontWeight: 500,
+                                '&:hover': {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                                    color: '#333'
+                                }
+                            }}
+                        >
+                            Explore
+                        </Typography>
+                    </Box>
+                    
+                    {/* Right Side - User Menu */}
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {user ? (
+                            <IconButton
+                                onClick={handleMenuClick}
+                                sx={{ 
+                                    p: 0.5,
+                                    border: '2px solid transparent',
+                                    '&:hover': {
+                                        borderColor: '#FF385C'
+                                    }
+                                }}
+                            >
+                                <Avatar 
+                                    sx={{ 
+                                        width: { xs: 32, sm: 40 }, 
+                                        height: { xs: 32, sm: 40 },
+                                        backgroundColor: '#FF385C',
+                                        fontSize: { xs: '0.875rem', sm: '1rem' }
+                                    }}
+                                >
+                                    {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase()}
+                                </Avatar>
+                            </IconButton>
+                        ) : (
+                            <IconButton onClick={() => navigate('/auth')}>
+                                <AccountCircle />
+                            </IconButton>
+                        )}
+                    </Box>
                     
                     <Menu
                         anchorEl={anchorEl}
@@ -129,21 +266,128 @@ const HeaderNav = ({ onHomeClick, user, onLogout }) => {
                             </Typography>
                         </Box>
                         
-                        <MenuItem onClick={handleProfileClick}>
-                            <Person sx={{ mr: 1 }} />
-                            Profile & Preferences
-                        </MenuItem>
+                        {userMenuItems.map((item, index) => (
+                            <MenuItem key={index} onClick={item.onClick}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    {item.icon}
+                                    <Typography>{item.text}</Typography>
+                                </Box>
+                            </MenuItem>
+                        ))}
                         
-                        <Divider />
-                        
-                        <MenuItem onClick={handleLogoutClick}>
-                            <ExitToApp sx={{ mr: 1 }} />
-                            Logout
+                        <MenuItem onClick={handleLogout}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Logout />
+                                <Typography>Logout</Typography>
+                            </Box>
                         </MenuItem>
                     </Menu>
+                </Toolbar>
+            </AppBar>
+
+            {/* Mobile Navigation Drawer */}
+            <Drawer
+                anchor="left"
+                open={mobileMenuOpen}
+                onClose={handleMobileMenuClose}
+                PaperProps={{
+                    sx: {
+                        width: 280,
+                        backgroundColor: 'white'
+                    }
+                }}
+            >
+                <Box sx={{ pt: 2, pb: 1 }}>
+                    <Typography 
+                        variant="h6" 
+                        sx={{ 
+                            fontWeight: 700,
+                            color: '#FF385C',
+                            px: 2,
+                            mb: 1
+                        }}
+                    >
+                        Overlap
+                    </Typography>
+                    <Divider />
                 </Box>
-            </Toolbar>
-        </AppBar>
+                
+                <List>
+                    {mobileMenuItems.map((item, index) => (
+                        <ListItem 
+                            button 
+                            key={index} 
+                            onClick={item.onClick}
+                            sx={{
+                                '&:hover': {
+                                    backgroundColor: 'rgba(255, 56, 92, 0.04)'
+                                }
+                            }}
+                        >
+                            <ListItemIcon sx={{ color: '#666' }}>
+                                {item.icon}
+                            </ListItemIcon>
+                            <ListItemText 
+                                primary={item.text}
+                                primaryTypographyProps={{
+                                    fontWeight: 500
+                                }}
+                            />
+                        </ListItem>
+                    ))}
+                </List>
+                
+                {user && (
+                    <>
+                        <Divider sx={{ my: 1 }} />
+                        <List>
+                            {userMenuItems.map((item, index) => (
+                                <ListItem 
+                                    button 
+                                    key={index} 
+                                    onClick={item.onClick}
+                                    sx={{
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 56, 92, 0.04)'
+                                        }
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#666' }}>
+                                        {item.icon}
+                                    </ListItemIcon>
+                                    <ListItemText 
+                                        primary={item.text}
+                                        primaryTypographyProps={{
+                                            fontWeight: 500
+                                        }}
+                                    />
+                                </ListItem>
+                            ))}
+                            
+                            <ListItem 
+                                button 
+                                onClick={handleLogout}
+                                sx={{
+                                    '&:hover': {
+                                        backgroundColor: 'rgba(255, 56, 92, 0.04)'
+                                    }
+                                }}
+                            >
+                                <ListItemIcon sx={{ color: '#666' }}>
+                                    <Logout />
+                                </ListItemIcon>
+                                <ListItemText 
+                                    primary="Logout"
+                                    primaryTypographyProps={{
+                                        fontWeight: 500
+                                    }}
+                                />
+                            </ListItem>
+                        </List>
+                    </>
+                )}
+            </Drawer>
+        </>
     );
 };
 

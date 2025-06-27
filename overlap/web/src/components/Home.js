@@ -22,15 +22,19 @@ import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
+import SearchBar from './SearchBar';
 
 import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
-import { getAllLeagues, getCountryCode, getLeaguesForCountry } from '../data/leagues';
+import { getAllLeagues, getCountryCode, getLeaguesForCountry, getLeagueById } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 import LocationSearch from './LocationSearch';
+import useVisitedStadiums from '../hooks/useVisitedStadiums';
+import TripModal from './TripModal';
+import { getBackendUrl } from '../utils/api';
 // getVenueForTeam and calculateDistance removed - distances now calculated in backend
 
-const BACKEND_URL = 'http://localhost:3001/v4';
+const BACKEND_URL = `${getBackendUrl()}/v4`;
 
 const Home = ({ searchState, setSearchState }) => {
     const today = startOfToday();
@@ -44,8 +48,12 @@ const Home = ({ searchState, setSearchState }) => {
     const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
-    const [showSearchOverlay, setShowSearchOverlay] = useState(false);
     const [favoritedMatches, setFavoritedMatches] = useState([]);
+    const [tripModalOpen, setTripModalOpen] = useState(false);
+    const [selectedMatchForTrip, setSelectedMatchForTrip] = useState(null);
+    
+    // Use shared visited stadiums hook
+    const { visitedStadiums, handleStadiumClick, isStadiumVisited } = useVisitedStadiums();
 
     // Load saved matches on component mount
     useEffect(() => {
@@ -136,9 +144,12 @@ const Home = ({ searchState, setSearchState }) => {
         setSelectedLeagues([]);
         setSelectedTeams([]);
         
-        if (searchState.dates.departure && searchState.dates.return) {
+        if (searchState.dates.departure && searchState.dates.return &&
+            searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) &&
+            searchState.dates.return instanceof Date && !isNaN(searchState.dates.return)) {
             const currentLocation = searchState.location;
             setSearchState(prev => ({ ...prev, loading: true, error: null }));
+            setHasSearched(true);
             const formattedDates = {
                 departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
                 return: format(searchState.dates.return, 'yyyy-MM-dd')
@@ -181,12 +192,14 @@ const Home = ({ searchState, setSearchState }) => {
                     // Add competition data if missing
                     const processedMatches = matches.map(match => {
                         if (!match.competition) {
+                            // Get the complete league information from our database
+                            const leagueInfo = getLeagueById(league.id);
                             return {
                                 ...match,
                                 competition: {
                                     id: league.id,
-                                    name: league.name,
-                                    country: league.country || 'Unknown',
+                                    name: leagueInfo?.name || league.name,
+                                    country: leagueInfo?.country || 'Unknown',
                                     logo: league.logo || ''
                                 }
                             };
@@ -363,7 +376,7 @@ const Home = ({ searchState, setSearchState }) => {
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            const response = await fetch('http://localhost:3001/api/preferences/saved-matches', {
+            const response = await fetch(`${getBackendUrl()}/api/preferences/saved-matches`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -379,12 +392,14 @@ const Home = ({ searchState, setSearchState }) => {
         }
     };
 
+
+
     const saveMatch = async (match) => {
         try {
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            const response = await fetch('http://localhost:3001/api/preferences/saved-matches', {
+            const response = await fetch(`${getBackendUrl()}/api/preferences/saved-matches`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -421,7 +436,7 @@ const Home = ({ searchState, setSearchState }) => {
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            const response = await fetch(`http://localhost:3001/api/preferences/saved-matches/${matchId}`, {
+            const response = await fetch(`${getBackendUrl()}/api/preferences/saved-matches/${matchId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -439,17 +454,17 @@ const Home = ({ searchState, setSearchState }) => {
     };
 
     const handleHeartClick = (match) => {
-        const matchId = match.fixture.id;
+        setSelectedMatchForTrip(match);
+        setTripModalOpen(true);
+    };
+
+    const handleMatchAddedToTrip = (matchId) => {
+        // Add the match to favoritedMatches to keep the heart selected
         setFavoritedMatches(prev => {
-            if (prev.includes(matchId)) {
-                // Remove from favorites
-                removeSavedMatch(matchId);
-                return prev.filter(id => id !== matchId);
-            } else {
-                // Add to favorites
-                saveMatch(match);
+            if (!prev.includes(matchId)) {
                 return [...prev, matchId];
             }
+            return prev;
         });
     };
 
@@ -596,49 +611,7 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
-    // Add a function to toggle the search overlay
-    const toggleSearchOverlay = () => {
-        setShowSearchOverlay(prev => !prev);
-    };
 
-    // Add a function to handle search from the overlay
-    const handleOverlaySearch = async () => {
-        // Ensure we have a valid location before proceeding
-        if (!searchState.location) {
-            console.error('No location selected');
-            return;
-        }
-
-        // Store the current location
-        const currentLocation = searchState.location;
-        
-        // Close the overlay
-        setShowSearchOverlay(false);
-        
-        // Update the search state with the current location and reset matches
-        setSearchState(prev => ({
-            ...prev,
-            location: currentLocation,
-            matches: [], // Clear matches when location changes
-            loading: true,
-            error: null
-        }));
-
-        // Perform the search
-        await handleSearch();
-
-        // Ensure the location is still set after the search
-        setSearchState(prev => ({
-            ...prev,
-            location: currentLocation
-        }));
-
-        // Force a re-render of the Map component
-        setSearchState(prev => ({
-            ...prev,
-            location: { ...currentLocation }
-        }));
-    };
 
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -653,7 +626,7 @@ const Home = ({ searchState, setSearchState }) => {
                 {/* Search Section - Only visible when no matches are shown */}
                 {(!searchState.matches.length || !hasSearched) && (
                     <Box sx={{ 
-                        p: 3, 
+                        p: { xs: 2, sm: 3 }, 
                         backgroundColor: 'white', 
                         borderBottom: '1px solid', 
                         borderColor: 'grey.200',
@@ -665,150 +638,15 @@ const Home = ({ searchState, setSearchState }) => {
                             onError={handleNaturalLanguageError}
                         />
                         
-                        <Box sx={{ mt: 2 }}>
-                            <Paper 
-                                elevation={0}
-                                sx={{
-                                    p: 2,
-                                    width: '100%',
-                                    maxWidth: 900,
-                                    borderRadius: 50,
-                                    mx: 'auto',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    border: '1px solid #DDDDDD',
-                                    boxShadow: 'none',
-                                    boxShadow: 'none'
-                                }}
-                            >
-                                {/* Location */}
-                                <Box 
-                                    sx={{ 
-                                        flex: 1,
-                                        borderRight: '1px solid #DDDDDD',
-                                        pr: 2
-                                    }}
-                                >
-                                    <Typography 
-                                        variant="subtitle2" 
-                                        sx={{ 
-                                            fontWeight: 600,
-                                            color: '#222222',
-                                            mb: 0.5
-                                        }}
-                                    >
-                                        Where
-                                    </Typography>
-                                    <LocationAutocomplete
-                                        value={searchState.location}
-                                        onChange={handleLocationSelect}
-                                        placeholder="Search destinations"
-                                    />
-                                </Box>
-
-                                {/* Check-in Date */}
-                                <Box 
-                                    sx={{ 
-                                        flex: 1,
-                                        borderRight: '1px solid #DDDDDD',
-                                        px: 2
-                                    }}
-                                >
-                                    <Typography 
-                                        variant="subtitle2" 
-                                        sx={{ 
-                                            fontWeight: 600,
-                                            color: '#222222',
-                                            mb: 0.5
-                                        }}
-                                    >
-                                        Departure Date
-                                    </Typography>
-                                    <DatePicker
-                                        value={searchState.dates.departure}
-                                        onChange={handleDepartureDateChange}
-                                        minDate={today}
-                                        slotProps={{
-                                            textField: {
-                                                variant: "standard",
-                                                placeholder: "Add dates",
-                                                InputProps: {
-                                                    disableUnderline: true
-                                                }
-                                            }
-                                        }}
-                                    />
-                                </Box>
-
-                                {/* Check-out Date */}
-                                <Box 
-                                    sx={{ 
-                                        flex: 1,
-                                        px: 2
-                                    }}
-                                >
-                                    <Typography 
-                                        variant="subtitle2" 
-                                        sx={{ 
-                                            fontWeight: 600,
-                                            color: '#222222',
-                                            mb: 0.5
-                                        }}
-                                    >
-                                        Return Date
-                                    </Typography>
-                                    <DatePicker
-                                        value={searchState.dates.return}
-                                        onChange={handleReturnDateChange}
-                                        minDate={searchState.dates.departure || today}
-                                        disabled={!searchState.dates.departure}
-                                        slotProps={{
-                                            textField: {
-                                                variant: "standard",
-                                                placeholder: "Add dates",
-                                                InputProps: {
-                                                    disableUnderline: true
-                                                }
-                                            }
-                                        }}
-                                    />
-                                </Box>
-
-                                {/* Search Button */}
-                                <Button
-                                    variant="contained"
-                                    onClick={handleSearch}
-                                    disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
-                                    sx={{
-                                        ml: 1,
-                                        height: 48,
-                                        width: 48,
-                                        minWidth: 48,
-                                        borderRadius: '50%',
-                                        backgroundColor: '#FF385C',
-                                        '&:hover': {
-                                            backgroundColor: '#E61E4D'
-                                        }
-                                    }}
-                                >
-                                    {searchState.loading ? (
-                                        <CircularProgress size={24} color="inherit" />
-                                    ) : (
-                                        <svg 
-                                            xmlns="http://www.w3.org/2000/svg" 
-                                            viewBox="0 0 32 32" 
-                                            style={{ 
-                                                fill: 'white',
-                                                width: 24,
-                                                height: 24
-                                            }}
-                                        >
-                                            <path d="M13 24c6.1 0 11-4.9 11-11S19.1 2 13 2 2 6.9 2 13s4.9 11 11 11zm0-2c-5 0-9-4-9-9s4-9 9-9 9 4 9 9-4 9-9 9zm12.3 10.7l-8.6-8.6c.9-.9 1.6-1.9 2.1-3.1l8.6 8.6c.8.8.8 2 0 2.8-.7.8-1.9.8-2.7.1z"></path>
-                                        </svg>
-                                    )}
-                                </Button>
-                            </Paper>
+                        <Box sx={{ mt: 2, maxWidth: 900, mx: 'auto' }}>
+                            <SearchBar
+                                searchState={searchState}
+                                onLocationChange={handleLocationSelect}
+                                onDepartureDateChange={handleDepartureDateChange}
+                                onReturnDateChange={handleReturnDateChange}
+                                onSearch={handleSearch}
+                                compact={false}
+                            />
                         </Box>
                     </Box>
                 )}
@@ -821,17 +659,17 @@ const Home = ({ searchState, setSearchState }) => {
                     mt: searchState.matches.length > 0 && hasSearched ? '64px' : 0 // Add margin top to account for fixed header when showing matches
                 }}>
                     {searchState.error && hasSearched && (
-                        <Box sx={{ p: 4, textAlign: 'center' }}>
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
                             <Typography color="error">{searchState.error}</Typography>
                         </Box>
                     )}
 
                     {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
-                        <Box sx={{ p: 4, textAlign: 'center' }}>
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
                             <Paper 
                                 elevation={1}
                                 sx={{ 
-                                    p: 4, 
+                                    p: { xs: 3, sm: 4 }, 
                                     borderRadius: 2,
                                     backgroundColor: '#FFF8F9',
                                     maxWidth: 600,
@@ -845,7 +683,13 @@ const Home = ({ searchState, setSearchState }) => {
                                         fontWeight: 500
                                     }}
                                 >
-                                    No matches are scheduled between {format(searchState.dates.departure, 'MMMM d')} and {format(searchState.dates.return, 'MMMM d, yyyy')}.
+                                    No matches are scheduled between {
+                                        searchState.dates.departure && searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) ?
+                                        format(searchState.dates.departure, 'MMMM d') : 'selected dates'
+                                    } and {
+                                        searchState.dates.return && searchState.dates.return instanceof Date && !isNaN(searchState.dates.return) ?
+                                        format(searchState.dates.return, 'MMMM d, yyyy') : 'selected dates'
+                                    }.
                                 </Typography>
                                 <Typography 
                                     sx={{ 
@@ -869,39 +713,25 @@ const Home = ({ searchState, setSearchState }) => {
                                 right: 0,
                                 backgroundColor: 'white',
                                 zIndex: 5, // Lower than header nav
-                                p: 1.5,
+                                p: { xs: 1, sm: 1.5 },
                                 borderBottom: '1px solid',
                                 borderColor: 'grey.200',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'space-between'
+                                justifyContent: 'space-between',
+                                gap: { xs: 1, sm: 2 }
                             }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {searchState.location?.city && (
-                                            <>From: {searchState.location.city}</>
-                                        )}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {format(searchState.dates.departure, 'MMM d')} - {format(searchState.dates.return, 'MMM d, yyyy')}
-                                    </Typography>
+                                <Box sx={{ flex: 1 }}>
+                                    <SearchBar
+                                        searchState={searchState}
+                                        onLocationChange={handleLocationSelect}
+                                        onDepartureDateChange={handleDepartureDateChange}
+                                        onReturnDateChange={handleReturnDateChange}
+                                        onSearch={handleSearch}
+                                        compact={true}
+                                    />
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Button 
-                                        size="small" 
-                                        startIcon={<SearchRounded />}
-                                        onClick={toggleSearchOverlay}
-                                        sx={{
-                                            borderColor: '#DDD',
-                                            color: '#666',
-                                            '&:hover': {
-                                                borderColor: '#999',
-                                                backgroundColor: '#F5F5F5'
-                                            }
-                                        }}
-                                    >
-                                        New Search
-                                    </Button>
                                     <Button 
                                         size="small" 
                                         startIcon={<TuneRounded />}
@@ -920,96 +750,12 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Box>
                             </Box>
 
-                            {/* Search Overlay */}
-                            {showSearchOverlay && (
-                                <Box sx={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    zIndex: 20,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    p: 3,
-                                    pt: '80px' // Account for header
-                                }}>
-                                    <Box sx={{ 
-                                        width: '100%', 
-                                        maxWidth: 600, 
-                                        backgroundColor: 'white',
-                                        borderRadius: 2,
-                                        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                                        p: 3
-                                    }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                            <Typography variant="h6">Search for Matches</Typography>
-                                            <IconButton onClick={toggleSearchOverlay} size="small">
-                                                <CloseRounded />
-                                            </IconButton>
-                                        </Box>
-                                        
-                                        <Box sx={{ mb: 3 }}>
-                                            <Typography variant="subtitle2" sx={{ mb: 1 }}>Location</Typography>
-                                            <LocationSearch 
-                                                onSelect={handleLocationSelect}
-                                                initialLocation={searchState.location}
-                                            />
-                                        </Box>
-                                        
-                                        <Box sx={{ mb: 3 }}>
-                                            <Typography variant="subtitle2" sx={{ mb: 1 }}>Dates</Typography>
-                                            <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                                <Box sx={{ display: 'flex', gap: 2 }}>
-                                                    <Box sx={{ flex: 1 }}>
-                                                        <DatePicker
-                                                            label="Departure"
-                                                            value={searchState.dates.departure}
-                                                            onChange={handleDepartureDateChange}
-                                                            renderInput={(params) => <TextField {...params} fullWidth size="small" />}
-                                                            minDate={new Date()}
-                                                        />
-                                                    </Box>
-                                                    <Box sx={{ flex: 1 }}>
-                                                        <DatePicker
-                                                            label="Return"
-                                                            value={searchState.dates.return}
-                                                            onChange={handleReturnDateChange}
-                                                            renderInput={(params) => <TextField {...params} fullWidth size="small" />}
-                                                            minDate={searchState.dates.departure || new Date()}
-                                                        />
-                                                    </Box>
-                                                </Box>
-                                            </LocalizationProvider>
-                                        </Box>
-                                        
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            fullWidth
-                                            onClick={handleOverlaySearch}
-                                            disabled={!searchState.location || searchState.loading}
-                                            sx={{
-                                                py: 1.5,
-                                                backgroundColor: '#FF385C',
-                                                '&:hover': {
-                                                    backgroundColor: '#E61E4D'
-                                                }
-                                            }}
-                                        >
-                                            {searchState.loading ? <CircularProgress size={24} color="inherit" /> : 'Search Matches'}
-                                        </Button>
-                                    </Box>
-                                </Box>
-                            )}
+
 
                             {/* Full-screen Map with Rail */}
                             <Box sx={{ 
                                 position: 'absolute',
-                                top: 56, // Height of the compact search bar
+                                top: { xs: 76, sm: 82 }, // Adjust for mobile vs desktop compact search bar height
                                 left: 0,
                                 right: 0,
                                 bottom: 0,
@@ -1020,29 +766,33 @@ const Home = ({ searchState, setSearchState }) => {
                                     width: { xs: '100%', md: '480px' },
                                     height: '100%',
                                     backgroundColor: 'white',
-                                    borderRight: '1px solid #DDDDDD',
+                                    borderRight: { xs: 'none', md: '1px solid #DDDDDD' },
                                     overflowY: 'auto',
                                     display: { xs: selectedMatch ? 'none' : 'block', md: 'block' },
                                     zIndex: 5,
                                     boxShadow: { xs: 'none', md: '2px 0 8px rgba(0,0,0,0.1)' }
                                 }}>
-                                                                    {/* Matches List */}
-                                <Box sx={{ p: '5px' }}>
+                                    {/* Matches List */}
                                     <Box sx={{ 
-                                        display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center',
-                                        mb: 2,
-                                        pb: 1,
-                                        borderBottom: '1px solid #eee'
+                                        p: { xs: 1.5, sm: 2 },
+                                        height: '100%',
+                                        overflowY: 'auto'
                                     }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {`Showing ${filteredMatches.length} matches`}
-                                            {selectedDistance ? ` within ${selectedDistance} miles` : ''}
-                                            {selectedLeagues.length > 0 && ` from ${selectedLeagues.length} leagues`}
-                                            {selectedTeams.length > 0 && ` featuring ${selectedTeams.length} teams`}
-                                        </Typography>
-                                    </Box>
+                                        <Box sx={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between', 
+                                            alignItems: 'center',
+                                            mb: 2,
+                                            pb: 1,
+                                            borderBottom: '1px solid #eee'
+                                        }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {`Showing ${filteredMatches.length} matches`}
+                                                {selectedDistance ? ` within ${selectedDistance} miles` : ''}
+                                                {selectedLeagues.length > 0 && ` from ${selectedLeagues.length} leagues`}
+                                                {selectedTeams.length > 0 && ` featuring ${selectedTeams.length} teams`}
+                                            </Typography>
+                                        </Box>
                                         
                                         <Matches 
                                             matches={filteredMatches}
@@ -1052,6 +802,9 @@ const Home = ({ searchState, setSearchState }) => {
                                             selectedMatch={selectedMatch}
                                             onHeartClick={handleHeartClick}
                                             favoritedMatches={favoritedMatches}
+                                            onStadiumClick={handleStadiumClick}
+                                            visitedStadiums={visitedStadiums}
+                                            isStadiumVisited={isStadiumVisited}
                                         />
                                     </Box>
                                 </Box>
@@ -1073,13 +826,14 @@ const Home = ({ searchState, setSearchState }) => {
                                         }}
                                         onHeartClick={handleHeartClick}
                                         favoritedMatches={favoritedMatches}
+                                        visitedStadiums={visitedStadiums}
                                     />
                                     
                                     {/* Mobile toggle button to show matches list */}
                                     <Box sx={{ 
                                         display: { xs: 'block', md: 'none' },
                                         position: 'absolute',
-                                        bottom: 16,
+                                        bottom: { xs: 20, sm: 16 },
                                         left: '50%',
                                         transform: 'translateX(-50%)',
                                         zIndex: 5
@@ -1092,6 +846,9 @@ const Home = ({ searchState, setSearchState }) => {
                                                 backgroundColor: 'white',
                                                 color: '#333',
                                                 boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                                                px: { xs: 2, sm: 3 },
+                                                py: { xs: 1, sm: 1.5 },
+                                                fontSize: { xs: '0.875rem', sm: '1rem' },
                                                 '&:hover': {
                                                     backgroundColor: '#f5f5f5'
                                                 }
@@ -1139,6 +896,17 @@ const Home = ({ searchState, setSearchState }) => {
                         <KeyboardArrowUp />
                     </Fab>
                 </Zoom>
+
+                {/* Trip Modal */}
+                <TripModal
+                    open={tripModalOpen}
+                    onClose={() => {
+                        setTripModalOpen(false);
+                        setSelectedMatchForTrip(null);
+                    }}
+                    match={selectedMatchForTrip}
+                    onMatchAddedToTrip={handleMatchAddedToTrip}
+                />
             </Box>
         </LocalizationProvider>
     );

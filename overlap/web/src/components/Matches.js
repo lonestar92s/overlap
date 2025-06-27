@@ -10,111 +10,10 @@ import {
 } from '@mui/material';
 import { Stadium, AccessTime, LocationOn, FavoriteBorder, Favorite } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { utcToZonedTime } from 'date-fns-tz';
+import { formatMatchDateTime } from '../utils/timezone';
 // getVenueForTeam import removed - distances now calculated in backend
 
-// Helper function to get timezone from coordinates
-const getTimezoneFromCoordinates = (coordinates) => {
-    // This is a simplified version. In a real-world application, 
-    // you would want to use a timezone lookup service or library
-    // like Google Time Zone API or moment-timezone with a complete timezone database
-    
-    const [longitude, latitude] = coordinates;
-    
-    // Europe
-    if (latitude >= 35 && latitude <= 60) {
-        if (longitude >= -10 && longitude <= 2) return 'Europe/London';      // UK, Ireland, Portugal
-        if (longitude > 2 && longitude <= 7.5) return 'Europe/Paris';        // France, Belgium, Netherlands
-        if (longitude > 7.5 && longitude <= 15) return 'Europe/Berlin';      // Germany, Switzerland, Italy
-        if (longitude > 15 && longitude <= 20) return 'Europe/Rome';         // Italy, Austria
-        if (longitude <= -10) return 'Atlantic/Azores';                      // Azores
-        if (longitude > 20 && longitude <= 30) return 'Europe/Istanbul';     // Turkey, Eastern Europe
-    }
-    
-    // Americas
-    if (longitude >= -180 && longitude <= -30) {
-        if (latitude >= 25 && latitude <= 50) {  // North America
-            if (longitude >= -125 && longitude <= -115) return 'America/Los_Angeles';
-            if (longitude > -115 && longitude <= -100) return 'America/Denver';
-            if (longitude > -100 && longitude <= -85) return 'America/Chicago';
-            if (longitude > -85 && longitude <= -65) return 'America/New_York';
-        }
-        if (latitude >= -60 && latitude < 25) {  // South & Central America
-            if (longitude >= -85 && longitude <= -75) return 'America/Bogota';
-            if (longitude > -75 && longitude <= -65) return 'America/Lima';
-            if (longitude > -65 && longitude <= -55) return 'America/Sao_Paulo';
-            if (longitude > -55 && longitude <= -30) return 'America/Buenos_Aires';
-        }
-    }
-    
-    // Asia
-    if (latitude >= 20 && latitude <= 55 && longitude >= 30 && longitude <= 180) {
-        if (longitude >= 30 && longitude <= 45) return 'Asia/Dubai';         // UAE
-        if (longitude > 45 && longitude <= 60) return 'Asia/Karachi';        // Pakistan
-        if (longitude > 60 && longitude <= 75) return 'Asia/Kolkata';        // India
-        if (longitude > 75 && longitude <= 90) return 'Asia/Bangkok';        // Thailand
-        if (longitude > 90 && longitude <= 105) return 'Asia/Shanghai';      // China
-        if (longitude > 105 && longitude <= 120) return 'Asia/Tokyo';        // Japan
-    }
-    
-    // Africa
-    if (latitude >= -35 && latitude <= 35 && longitude >= -20 && longitude <= 50) {
-        if (longitude >= -20 && longitude <= 0) return 'Africa/Casablanca';  // Morocco
-        if (longitude > 0 && longitude <= 20) return 'Africa/Lagos';         // Nigeria
-        if (longitude > 20 && longitude <= 35) return 'Africa/Cairo';        // Egypt
-        if (longitude > 35 && longitude <= 50) return 'Africa/Nairobi';      // Kenya
-    }
-    
-    // Australia & Oceania
-    if (latitude >= -50 && latitude <= -10 && longitude >= 110 && longitude <= 180) {
-        if (longitude >= 110 && longitude <= 130) return 'Australia/Perth';
-        if (longitude > 130 && longitude <= 150) return 'Australia/Sydney';
-        if (longitude > 150) return 'Pacific/Auckland';
-    }
-    
-    return 'UTC'; // Default to UTC if no specific timezone is found
-};
 
-// Helper function to format match date and time
-const formatMatchDateTime = (utcDate, venue) => {
-    // Create date object from UTC string
-    const date = new Date(utcDate);
-    
-    // Get venue timezone, default to UTC
-    let timeZone = 'UTC';
-    if (venue?.coordinates) {
-        timeZone = getTimezoneFromCoordinates(venue.coordinates);
-    }
-    
-    // Get timezone display name
-    // const getTimezoneAbbreviation = (timeZone, date) => {
-    //     const isDST = new Date(date).getTimezoneOffset() === 0;
-    //     switch (timeZone) {
-    //         case 'Europe/London':
-    //             return isDST ? 'BST' : 'GMT';
-    //         case 'Europe/Paris':
-    //         case 'Europe/Berlin':
-    //         case 'Europe/Rome':
-    //             return isDST ? 'CEST' : 'CET';
-    //         default:
-    //             return timeZone.split('/')[1] || 'UTC';
-    //     }
-    // };
-
-    // const timeZoneDisplay = getTimezoneAbbreviation(timeZone, date);
-    
-    // Convert UTC date to venue's timezone
-    const zonedDate = utcToZonedTime(date, timeZone);
-    
-    // Format the date and time in the venue's timezone
-    return {
-        date: format(zonedDate, 'EEE, MMM d'),
-        time: format(zonedDate, 'h:mm a'),
-        fullDate: format(zonedDate, 'EEEE, MMMM d'),
-        // Keep groupDate in UTC to ensure consistent grouping
-        groupDate: format(date, 'yyyy-MM-dd')
-    };
-};
 
 const MatchCard = ({ 
     match, 
@@ -123,6 +22,8 @@ const MatchCard = ({
     isSelected,
     onHeartClick = () => {},
     isFavorited = false,
+    onStadiumClick = () => {},
+    isStadiumVisited = false,
 }) => {
     // Extract data from the new API response format
     const fixture = match.fixture;
@@ -149,7 +50,7 @@ const MatchCard = ({
             elevation={0}
             onClick={() => onClick(match)}
             sx={{
-                mb: 2,
+                mb: { xs: 1.5, sm: 2 },
                 border: '1px solid #eee',
                 borderRadius: 2,
                 transition: 'all 0.2s ease-in-out',
@@ -157,30 +58,31 @@ const MatchCard = ({
                 backgroundColor: isSelected ? '#F8F9FF' : 'white',
                 borderColor: isSelected ? '#385CFF' : '#eee',
                 '&:hover': {
-                    transform: 'translateY(-2px)',
+                    transform: { xs: 'none', sm: 'translateY(-2px)' },
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                     borderColor: '#385CFF'
                 }
             }}
         >
-            <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <CardContent sx={{ p: { xs: 2, sm: 3 }, '&:last-child': { pb: { xs: 2, sm: 3 } } }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: { xs: 2, sm: 3 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <AccessTime sx={{ mr: 1, color: '#666' }} />
-                        <Typography variant="subtitle1" color="textSecondary">
+                        <AccessTime sx={{ mr: 1, color: '#666', fontSize: { xs: 18, sm: 24 } }} />
+                        <Typography variant="subtitle1" color="textSecondary" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                             {time}
                         </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
                         <Typography 
                             variant="caption" 
                             sx={{ 
                                 color: '#666',
                                 backgroundColor: '#f5f5f5',
-                                px: 1.5,
+                                px: { xs: 1, sm: 1.5 },
                                 py: 0.5,
                                 borderRadius: 1,
-                                fontWeight: 500
+                                fontWeight: 500,
+                                fontSize: { xs: '0.7rem', sm: '0.75rem' }
                             }}
                         >
                             {league.name}
@@ -189,62 +91,127 @@ const MatchCard = ({
                             size="small"
                             onClick={(e) => {
                                 e.stopPropagation();
+                                onStadiumClick(match);
+                            }}
+                            sx={{
+                                color: isStadiumVisited ? '#4CAF50' : '#666',
+                                p: { xs: 0.5, sm: 1 },
+                                '&:hover': {
+                                    color: '#4CAF50',
+                                    backgroundColor: 'rgba(76, 175, 80, 0.04)'
+                                }
+                            }}
+                            title={isStadiumVisited ? "You've been to this stadium" : "Mark stadium as visited"}
+                        >
+                            <Stadium fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                            size="small"
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 onHeartClick(match);
                             }}
                             sx={{
                                 color: isFavorited ? '#FF385C' : '#666',
+                                p: { xs: 0.5, sm: 1 },
                                 '&:hover': {
                                     color: '#FF385C',
                                     backgroundColor: 'rgba(255, 56, 92, 0.04)'
                                 }
                             }}
+                            title={isFavorited ? "Remove from want to go" : "Add to want to go"}
                         >
                             {isFavorited ? <Favorite fontSize="small" /> : <FavoriteBorder fontSize="small" />}
                         </IconButton>
                     </Box>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    mb: { xs: 1.5, sm: 2 },
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    gap: { xs: 1, sm: 0 }
+                }}>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: { xs: 1.5, sm: 2 }, 
+                        flex: 1,
+                        justifyContent: { xs: 'center', sm: 'flex-start' }
+                    }}>
                         <Avatar 
                             src={teams.home.logo} 
                             alt={teams.home.name}
-                            sx={{ width: 40, height: 40 }}
+                            sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
                         />
-                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                        <Typography 
+                            variant="subtitle1" 
+                            sx={{ 
+                                fontWeight: 500,
+                                fontSize: { xs: '0.875rem', sm: '1rem' },
+                                textAlign: { xs: 'center', sm: 'left' }
+                            }}
+                        >
                             {teams.home.name}
                         </Typography>
                     </Box>
                     <Typography 
                         variant="h6" 
                         sx={{ 
-                            mx: 2, 
+                            mx: { xs: 1, sm: 2 }, 
                             color: '#666',
-                            fontWeight: 600
+                            fontWeight: 600,
+                            fontSize: { xs: '1rem', sm: '1.25rem' }
                         }}
                     >
                         vs
                     </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'flex-end' }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: { xs: 1.5, sm: 2 }, 
+                        flex: 1, 
+                        justifyContent: { xs: 'center', sm: 'flex-end' }
+                    }}>
+                        <Typography 
+                            variant="subtitle1" 
+                            sx={{ 
+                                fontWeight: 500,
+                                fontSize: { xs: '0.875rem', sm: '1rem' },
+                                textAlign: { xs: 'center', sm: 'right' }
+                            }}
+                        >
                             {teams.away.name}
                         </Typography>
                         <Avatar 
                             src={teams.away.logo} 
                             alt={teams.away.name}
-                            sx={{ width: 40, height: 40 }}
+                            sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
                         />
                     </Box>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                    <Stadium sx={{ color: '#666', fontSize: 20 }} />
-                    <Typography variant="body2" color="textSecondary">
-                        {venue.name}, {venue.city}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: { xs: 1.5, sm: 2 } }}>
+                    <Stadium sx={{ color: '#666', fontSize: { xs: 18, sm: 20 } }} />
+                    <Typography 
+                        variant="body2" 
+                        color="textSecondary"
+                        sx={{ 
+                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                            lineHeight: 1.3
+                        }}
+                    >
+                        {venue.name}, {venue.city}, {venue.country}
                     </Typography>
                 </Box>
                 {distance && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                        <LocationOn sx={{ color: '#666', fontSize: 20 }} />
-                        <Typography variant="body2" color="textSecondary">
+                        <LocationOn sx={{ color: '#666', fontSize: { xs: 18, sm: 20 } }} />
+                        <Typography 
+                            variant="body2" 
+                            color="textSecondary"
+                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                        >
                             {distance.toFixed(1)} miles away
                         </Typography>
                     </Box>
@@ -260,7 +227,10 @@ const Matches = ({
     userLocation, 
     selectedMatch,
     onHeartClick = () => {},
-    favoritedMatches = []
+    favoritedMatches = [],
+    onStadiumClick = () => {},
+    visitedStadiums = [],
+    isStadiumVisited = () => false
 }) => {
     // Use distances from backend response (calculated server-side)
     const matchesWithDistance = useMemo(() => {
@@ -320,17 +290,24 @@ const Matches = ({
                             </Typography>
                             {dateMatches
                                 .sort(sortMatches)
-                                .map(match => (
-                                    <MatchCard
-                                        key={match.fixture.id}
-                                        match={match}
-                                        onClick={onMatchClick}
-                                        distance={match.distance}
-                                        isSelected={selectedMatch?.fixture.id === match.fixture.id}
-                                        onHeartClick={onHeartClick}
-                                        isFavorited={favoritedMatches.includes(match.fixture.id)}
-                                    />
-                                ))}
+                                .map(match => {
+                                    // Check if this stadium has been visited
+                                    const stadiumVisited = isStadiumVisited(match);
+
+                                    return (
+                                        <MatchCard
+                                            key={match.fixture.id}
+                                            match={match}
+                                            onClick={onMatchClick}
+                                            distance={match.distance}
+                                            isSelected={selectedMatch?.fixture.id === match.fixture.id}
+                                            onHeartClick={onHeartClick}
+                                            isFavorited={favoritedMatches.includes(match.fixture.id)}
+                                            onStadiumClick={onStadiumClick}
+                                            isStadiumVisited={stadiumVisited}
+                                        />
+                                    );
+                                })}
                         </Box>
                     );
                 })}

@@ -15,210 +15,16 @@ import {
   FormControl,
   InputLabel,
   Switch,
-  FormControlLabel,
-  Chip,
-  Card,
-  CardContent,
-  IconButton
+  FormControlLabel
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
-  PhotoCamera as PhotoCameraIcon,
-  Delete as DeleteIcon,
-  Stadium as StadiumIcon,
-  AccessTime as AccessTimeIcon,
-  LocationOn as LocationOnIcon
+  PhotoCamera as PhotoCameraIcon
 } from '@mui/icons-material';
-import TeamSearch from './TeamSearch';
-import { format } from 'date-fns';
 
-// Component for displaying saved matches
-const WantToGoSection = () => {
-  const [savedMatches, setSavedMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSavedMatches();
-  }, []);
-
-  const fetchSavedMatches = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch('http://localhost:3001/api/preferences/saved-matches', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSavedMatches(data.savedMatches);
-      }
-    } catch (error) {
-      console.error('Error fetching saved matches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeSavedMatch = async (matchId) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch(`http://localhost:3001/api/preferences/saved-matches/${matchId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        setSavedMatches(prev => prev.filter(match => match.matchId !== matchId));
-      }
-    } catch (error) {
-      console.error('Error removing saved match:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Grid item xs={12}>
-        <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-          Want to Go
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-        <Box display="flex" justifyContent="center" p={2}>
-          <CircularProgress size={24} />
-        </Box>
-      </Grid>
-    );
-  }
-
-  return (
-    <Grid item xs={12}>
-      <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-        Want to Go
-      </Typography>
-      <Divider sx={{ mb: 2 }} />
-      
-      {savedMatches.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
-          No saved matches yet. Heart matches while searching to add them here!
-        </Typography>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {savedMatches
-            .sort((a, b) => new Date(a.date) - new Date(b.date)) // Sort by date, soonest first
-            .map((match) => {
-              // Handle both old string format and new object format for team data
-              const homeTeam = typeof match.homeTeam === 'string' 
-                ? { name: match.homeTeam, logo: null }
-                : match.homeTeam;
-              const awayTeam = typeof match.awayTeam === 'string'
-                ? { name: match.awayTeam, logo: null }
-                : match.awayTeam;
-              
-              return (
-                <Card key={match.matchId} elevation={1} sx={{ position: 'relative' }}>
-                  <CardContent sx={{ pb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Box sx={{ flex: 1 }}>
-                        {/* Team matchup with logos */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-                            {homeTeam.logo && (
-                              <Avatar 
-                                src={homeTeam.logo} 
-                                alt={homeTeam.name}
-                                sx={{ width: 32, height: 32 }}
-                              />
-                            )}
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                              {homeTeam.name}
-                            </Typography>
-                          </Box>
-                          
-                          <Typography variant="h6" sx={{ color: '#666', fontWeight: 600, mx: 1 }}>
-                            vs
-                          </Typography>
-                          
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, justifyContent: 'flex-end' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                              {awayTeam.name}
-                            </Typography>
-                            {awayTeam.logo && (
-                              <Avatar 
-                                src={awayTeam.logo} 
-                                alt={awayTeam.name}
-                                sx={{ width: 32, height: 32 }}
-                              />
-                            )}
-                          </Box>
-                        </Box>
-                        
-                        {/* League */}
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            color: '#666',
-                            backgroundColor: '#f5f5f5',
-                            px: 1.5,
-                            py: 0.5,
-                            borderRadius: 1,
-                            fontWeight: 500,
-                            display: 'inline-block',
-                            mb: 1
-                          }}
-                        >
-                          {match.league}
-                        </Typography>
-                        
-                        {/* Date and Time */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <AccessTimeIcon sx={{ fontSize: 16, color: '#666' }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {format(new Date(match.date), 'MMM dd, yyyy • HH:mm')}
-                          </Typography>
-                        </Box>
-                        
-                        {/* Venue */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <LocationOnIcon sx={{ fontSize: 16, color: '#666' }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {match.venue}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      
-                      {/* Remove button */}
-                      <IconButton
-                        size="small"
-                        onClick={() => removeSavedMatch(match.matchId)}
-                        sx={{
-                          color: '#666',
-                          '&:hover': {
-                            color: '#FF385C',
-                            backgroundColor: 'rgba(255, 56, 92, 0.04)'
-                          }
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </CardContent>
-                </Card>
-              );
-            })}
-        </Box>
-      )}
-    </Grid>
-  );
-};
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -242,8 +48,6 @@ const Profile = () => {
       country: '',
       coordinates: []
     },
-    favoriteTeams: [],
-    favoriteLeagues: [],
     defaultSearchRadius: 100,
     currency: 'USD',
     notifications: {
@@ -292,8 +96,6 @@ const Profile = () => {
         });
         setPreferences(data.preferences || {
           defaultLocation: { city: '', country: '', coordinates: [] },
-          favoriteTeams: [],
-          favoriteLeagues: [],
           defaultSearchRadius: 100,
           currency: 'USD',
           notifications: {
@@ -368,8 +170,6 @@ const Profile = () => {
       });
       setPreferences(user.preferences || {
         defaultLocation: { city: '', country: '', coordinates: [] },
-        favoriteTeams: [],
-        favoriteLeagues: [],
         defaultSearchRadius: 100,
         currency: 'USD',
         notifications: {
@@ -381,65 +181,7 @@ const Profile = () => {
     }
   };
 
-  const handleTeamSelect = async (team) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/preferences/teams', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ teamId: team.id })
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        setPreferences(prev => ({
-          ...prev,
-          favoriteTeams: data.favoriteTeams
-        }));
-        setMessage('Team added to favorites!');
-      } else {
-        setError('Failed to add team to favorites');
-      }
-    } catch (err) {
-      setError('Network error: ' + err.message);
-    }
-  };
-
-  const removeFavoriteTeam = async (teamId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/preferences/teams/${teamId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPreferences(prev => ({
-          ...prev,
-          favoriteTeams: data.favoriteTeams
-        }));
-        setMessage('Team removed from favorites!');
-      } else {
-        setError('Failed to remove team from favorites');
-      }
-    } catch (err) {
-      setError('Network error: ' + err.message);
-    }
-  };
-
-  const removeFavoriteLeague = (leagueToRemove) => {
-    setPreferences(prev => ({
-      ...prev,
-      favoriteLeagues: prev.favoriteLeagues.filter(league => league !== leagueToRemove)
-    }));
-  };
 
   if (loading) {
     return (
@@ -621,78 +363,7 @@ const Profile = () => {
             </FormControl>
           </Grid>
 
-          {/* Favorite Teams */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-              Favorite Teams
-            </Typography>
-            
-            {/* Team Search - only show when editing */}
-            {editing && (
-              <Box sx={{ mb: 2 }}>
-                <TeamSearch
-                  onTeamSelect={handleTeamSelect}
-                  placeholder="Search and add teams to your favorites..."
-                  selectedTeams={preferences.favoriteTeams}
-                />
-              </Box>
-            )}
-            
-            {/* Display favorite teams */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {preferences.favoriteTeams.map((favoriteTeam, index) => {
-                // Handle both old string format and new object format
-                const team = favoriteTeam.teamId || favoriteTeam;
-                const teamName = typeof team === 'string' ? team : team.name;
-                const teamId = typeof team === 'string' ? null : team._id;
-                
-                return (
-                  <Chip
-                    key={index}
-                    label={teamName}
-                    onDelete={editing ? () => removeFavoriteTeam(teamId || teamName) : undefined}
-                    color="primary"
-                    variant="outlined"
-                    sx={{
-                      '& .MuiChip-label': {
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1
-                      }
-                    }}
-                  />
-                );
-              })}
-              {preferences.favoriteTeams.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  {editing ? 'Search and add teams to your favorites above' : 'No favorite teams selected'}
-                </Typography>
-              )}
-            </Box>
-          </Grid>
 
-          {/* Favorite Leagues */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-              Favorite Leagues
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {preferences.favoriteLeagues.map((league, index) => (
-                <Chip
-                  key={index}
-                  label={league}
-                  onDelete={editing ? () => removeFavoriteLeague(league) : undefined}
-                  color="secondary"
-                  variant="outlined"
-                />
-              ))}
-              {preferences.favoriteLeagues.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  No favorite leagues selected
-                </Typography>
-              )}
-            </Box>
-          </Grid>
 
           {/* Notification Settings */}
           <Grid item xs={12}>
@@ -744,8 +415,7 @@ const Profile = () => {
             />
           </Grid>
 
-          {/* Want to Go - Saved Matches */}
-          <WantToGoSection />
+
         </Grid>
       </Paper>
     </Box>

@@ -16,7 +16,7 @@ const additionalTeams = [
         aliases: ['Chicago Fire', 'Chicago', 'Fire FC', 'CF97'],
         code: 'CHI',
         founded: 1997,
-        logo: 'https://logos.footapi.com/chicago-fire.png',
+        logo: 'https://media.api-sports.io/football/teams/1395.png',
         country: 'United States',
         city: 'Chicago',
         venue: {

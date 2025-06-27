@@ -36,3 +36,112 @@
     transform: rotate(360deg);
   }
 }
+
+/* Mobile-specific overrides for better UX */
+@media screen and (max-width: 768px) {
+  /* Ensure proper spacing on mobile */
+  .MuiContainer-root {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  
+  /* Fix card spacing on mobile */
+  .MuiCard-root {
+    margin-bottom: 12px !important;
+  }
+  
+  /* Improve button sizing for touch */
+  .MuiButton-root {
+    min-height: 48px;
+    padding: 12px 16px;
+  }
+  
+  .MuiButton-sizeSmall {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+  
+  /* Better text field sizing */
+  .MuiTextField-root .MuiInputBase-root {
+    min-height: 48px;
+  }
+  
+  /* Improve select dropdown sizing */
+  .MuiSelect-select {
+    min-height: 20px !important;
+    padding: 14px !important;
+  }
+  
+  /* Fix autocomplete dropdown positioning */
+  .MuiAutocomplete-popper {
+    z-index: 9999 !important;
+  }
+  
+  /* Ensure proper chip sizing */
+  .MuiChip-root {
+    height: auto;
+    padding: 4px 8px;
+  }
+  
+  /* Fix drawer width on mobile */
+  .MuiDrawer-paper {
+    width: 280px !important;
+  }
+  
+  /* Improve typography hierarchy on mobile */
+  .MuiTypography-h4 {
+    font-size: 1.75rem !important;
+  }
+  
+  .MuiTypography-h5 {
+    font-size: 1.5rem !important;
+  }
+  
+  .MuiTypography-h6 {
+    font-size: 1.25rem !important;
+  }
+}
+
+/* Very small screens (phones in portrait) */
+@media screen and (max-width: 480px) {
+  /* Further reduce padding on very small screens */
+  .MuiContainer-root {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  /* Smaller typography for very small screens */
+  .MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
+  
+  .MuiTypography-h5 {
+    font-size: 1.25rem !important;
+  }
+  
+  .MuiTypography-h6 {
+    font-size: 1.1rem !important;
+  }
+  
+  /* Reduce card padding on very small screens */
+  .MuiCardContent-root {
+    padding: 12px !important;
+  }
+  
+  /* Smaller icon buttons */
+  .MuiIconButton-root {
+    padding: 6px;
+  }
+}
+
+/* Landscape phones and small tablets */
+@media screen and (min-width: 481px) and (max-width: 768px) {
+  /* Optimize for landscape orientation */
+  .MuiGrid-container {
+    margin: 0 !important;
+  }
+  
+  .MuiGrid-item {
+    padding: 8px !important;
+  }
+}

@@ -16,7 +16,7 @@ const sampleTeams = [
         aliases: ['Liverpool', 'LFC', 'The Reds'],
         code: 'LIV',
         founded: 1892,
-        logo: 'https://logos.footapi.com/64.png',
+        logo: 'https://media.api-sports.io/football/teams/40.png',
         country: 'England',
         city: 'Liverpool',
         venue: {
@@ -39,7 +39,7 @@ const sampleTeams = [
         aliases: ['Manchester United', 'Man United', 'United', 'MUFC'],
         code: 'MUN',
         founded: 1878,
-        logo: 'https://logos.footapi.com/66.png',
+        logo: 'https://media.api-sports.io/football/teams/33.png',
         country: 'England',
         city: 'Manchester',
         venue: {
@@ -62,7 +62,7 @@ const sampleTeams = [
         aliases: ['Manchester City', 'Man City', 'City', 'MCFC'],
         code: 'MCI',
         founded: 1880,
-        logo: 'https://logos.footapi.com/65.png',
+        logo: 'https://media.api-sports.io/football/teams/50.png',
         country: 'England',
         city: 'Manchester',
         venue: {
@@ -85,7 +85,7 @@ const sampleTeams = [
         aliases: ['Arsenal', 'The Gunners', 'AFC'],
         code: 'ARS',
         founded: 1886,
-        logo: 'https://logos.footapi.com/42.png',
+        logo: 'https://media.api-sports.io/football/teams/42.png',
         country: 'England',
         city: 'London',
         venue: {
@@ -108,7 +108,7 @@ const sampleTeams = [
         aliases: ['Chelsea', 'The Blues', 'CFC'],
         code: 'CHE',
         founded: 1905,
-        logo: 'https://logos.footapi.com/49.png',
+        logo: 'https://media.api-sports.io/football/teams/49.png',
         country: 'England',
         city: 'London',
         venue: {
@@ -133,7 +133,7 @@ const sampleTeams = [
         aliases: ['Real Madrid', 'Madrid', 'Los Blancos', 'RMCF'],
         code: 'RMA',
         founded: 1902,
-        logo: 'https://logos.footapi.com/85.png',
+        logo: 'https://media.api-sports.io/football/teams/541.png',
         country: 'Spain',
         city: 'Madrid',
         venue: {
@@ -156,7 +156,7 @@ const sampleTeams = [
         aliases: ['Barcelona', 'Barça', 'Barca', 'FCB'],
         code: 'BAR',
         founded: 1899,
-        logo: 'https://logos.footapi.com/83.png',
+        logo: 'https://media.api-sports.io/football/teams/529.png',
         country: 'Spain',
         city: 'Barcelona',
         venue: {
@@ -181,7 +181,7 @@ const sampleTeams = [
         aliases: ['Bayern Munich', 'Bayern', 'FCB'],
         code: 'FCB',
         founded: 1900,
-        logo: 'https://logos.footapi.com/157.png',
+        logo: 'https://media.api-sports.io/football/teams/157.png',
         country: 'Germany',
         city: 'Munich',
         venue: {

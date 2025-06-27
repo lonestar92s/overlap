@@ -9,6 +9,8 @@ const searchRoutes = require('./routes/search');
 const authRoutes = require('./routes/auth');
 const preferencesRoutes = require('./routes/preferences');
 const teamsRoutes = require('./routes/teams');
+const attendedMatchesRoutes = require('./routes/attendedMatches');
+const tripsRoutes = require('./routes/trips');
 
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
@@ -28,13 +30,30 @@ const app = express();
 
 // Configure CORS with more detailed options
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // Allow localhost and local network IPs
+        if (origin.match(/^http:\/\/localhost:\d+$/) || 
+            origin.match(/^http:\/\/192\.168\.\d+\.\d+:\d+$/) ||
+            origin.match(/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/) ||
+            origin.match(/^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:\d+$/)) {
+            return callback(null, true);
+        }
+        
+        // Reject other origins
+        callback(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token'],
     credentials: true
 }));
 
 app.use(express.json());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -54,10 +73,14 @@ app.use('/api/search', searchRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/teams', teamsRoutes);
+app.use('/api/matches/attended', attendedMatchesRoutes);
+app.use('/api/trips', tripsRoutes);
 app.use('/v4', matchesRoutes);
 
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT} and accessible from all network interfaces`);
+    console.log(`Local access: http://localhost:${PORT}`);
+    console.log(`Network access: http://[YOUR-IP-ADDRESS]:${PORT}`);
 }); 
