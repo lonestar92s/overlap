@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import {
   Paper,
   Typography,
@@ -19,8 +19,67 @@ import {
   Visibility,
   VisibilityOff
 } from '@mui/icons-material';
+import { getBackendUrl } from '../utils/api';
 
-const Auth = ({ onLogin }) => {
+// Create AuthContext
+export const AuthContext = createContext();
+
+// AuthProvider component
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user is logged in on app start
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  const value = {
+    user,
+    login,
+    logout,
+    loading
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Custom hook to use auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+const Auth = () => {
+  const { login } = useAuth();
   const [tab, setTab] = useState(0); // 0 = login, 1 = register
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,7 +122,7 @@ const Auth = ({ onLogin }) => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/auth/login', {
+      const response = await fetch(`${getBackendUrl()}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -80,9 +139,7 @@ const Auth = ({ onLogin }) => {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         setMessage('Login successful!');
-        if (onLogin) {
-          onLogin(data.user);
-        }
+        login(data.user);
       } else {
         setError(data.error || 'Login failed');
       }
@@ -111,7 +168,7 @@ const Auth = ({ onLogin }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/auth/register', {
+      const response = await fetch(`${getBackendUrl()}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -132,9 +189,7 @@ const Auth = ({ onLogin }) => {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         setMessage('Registration successful!');
-        if (onLogin) {
-          onLogin(data.user);
-        }
+        login(data.user);
       } else {
         setError(data.error || 'Registration failed');
       }

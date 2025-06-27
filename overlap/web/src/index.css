@@ -5,9 +5,68 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Mobile-first responsive improvements */
+* {
+  box-sizing: border-box;
+}
+
+/* Prevent zoom on iOS when focusing inputs */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Improve touch targets on mobile */
+@media screen and (max-width: 768px) {
+  button,
+  .MuiButton-root,
+  .MuiIconButton-root {
+    min-height: 44px;
+  }
+  
+  .MuiIconButton-root {
+    min-width: 44px;
+  }
+}
+
+/* Smooth scrolling for better mobile experience */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Improve readability on mobile */
+@media screen and (max-width: 480px) {
+  body {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+/* Fix Material-UI dialog positioning on mobile */
+@media screen and (max-width: 768px) {
+  .MuiDialog-paper {
+    margin: 16px !important;
+    width: calc(100% - 32px) !important;
+    max-width: none !important;
+  }
+  
+  .MuiDialog-paperFullScreen {
+    margin: 0 !important;
+    width: 100% !important;
+  }
 }

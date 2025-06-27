@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const https = require('https');
-const { getVenueForTeam } = require('../data/venues');
+const { getVenueForTeam, getCacheStats, clearVenuesCache, refreshVenuesCache } = require('../data/venues');
 const router = express.Router();
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
@@ -20,6 +20,7 @@ const LEAGUE_NAMES = {
     '61': 'Ligue 1',
     '140': 'La Liga',
     '78': 'Bundesliga',
+    '207': 'Swiss Super League',
     '88': 'Eredivisie',
     '94': 'Primeira Liga',
     '135': 'Serie A',
@@ -185,6 +186,36 @@ const TEAM_NAME_MAPPING = {
     'Monza': 'AC Monza',
     'Venezia': 'Venezia FC',  // Promoted
     
+    // Eredivisie (Dutch League)
+    'Ajax': 'AFC Ajax',
+    'PSV': 'PSV',
+    'Feyenoord': 'Feyenoord Rotterdam',
+    'AZ Alkmaar': 'AZ',
+    'FC Twente': 'FC Twente \'65',
+    'Vitesse': 'Vitesse Arnhem',
+    'FC Utrecht': 'FC Utrecht',
+    'SC Heerenveen': 'SC Heerenveen',
+    'Sparta Rotterdam': 'Sparta Rotterdam',
+    'NEC Nijmegen': 'NEC',
+    'PEC Zwolle': 'PEC Zwolle',
+    'Go Ahead Eagles': 'Go Ahead Eagles',
+    'Almere City': 'Almere City FC',
+    'Excelsior': 'Excelsior Rotterdam',
+    'Heracles': 'Heracles Almelo',
+    'RKC Waalwijk': 'RKC Waalwijk',
+    'Fortuna Sittard': 'Fortuna Sittard',
+    'FC Volendam': 'FC Volendam',
+    'FC Groningen': 'FC Groningen',
+    'Willem II': 'Willem II Tilburg',
+    'NAC Breda': 'NAC Breda',
+
+    // Primeira Liga (Portuguese League)
+    'Benfica': 'SL Benfica',
+    'Porto': 'FC Porto',
+    'Sporting CP': 'Sporting CP',
+    'Braga': 'SC Braga',
+    'Vitoria Guimaraes': 'Vitória SC',
+
     // MLS teams
     'Real Salt Lake': 'Real Salt Lake',
     'Sporting Kansas City': 'Sporting Kansas City',
@@ -212,7 +243,10 @@ const TEAM_NAME_MAPPING = {
     'Minnesota United FC': 'Minnesota United FC',
     'Los Angeles Galaxy': 'LA Galaxy',
     'Los Angeles FC': 'Los Angeles FC',
-    'San Diego': 'San Diego FC'
+    'San Diego': 'San Diego FC',
+    'New York Red Bulls': 'New York Red Bulls',
+    'Toronto FC': 'Toronto FC',
+    'Nashville SC': 'Nashville SC'
 };
 
 // Function to map API-Sports team name to venues.js key
@@ -290,19 +324,40 @@ function transformApiSportsData(apiResponse, competitionId, userLocation = null)
                         return {
                             id: fixture.fixture.venue?.id || `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
                             name: venueData.stadium,
-                            city: venueData.location,
-                            country: fixture.league.country || 'Unknown Country',
+                            city: venueData.city,
+                            country: venueData.country,
                             distance: distance,
                             coordinates: venueData.coordinates
                         };
                     } else {
                         console.log(`❌ NO MARKER: ${fixture.teams.home.name} (mapped to ${mappedTeamName}) - venue not found in database`);
+                        
+                        // Get proper country information from our league data
+                        const leagueCountryMap = {
+                            '39': 'England',     // Premier League
+                            '40': 'England',     // Championship
+                            '61': 'France',      // Ligue 1
+                            '140': 'Spain',      // La Liga
+                            '78': 'Germany',     // Bundesliga
+                            '88': 'Netherlands', // Eredivisie
+                            '94': 'Portugal',    // Primeira Liga
+                            '135': 'Italy',      // Serie A
+                            '71': 'Brazil',      // Série A
+                            '253': 'United States', // MLS
+                            '2': 'Europe',       // Champions League
+                            '4': 'Europe',       // European Championship
+                            '13': 'South America', // Copa Libertadores
+                            '1': 'International' // World Cup
+                        };
+                        
+                        const properCountry = leagueCountryMap[competitionId.toString()] || fixture.league.country || 'Unknown Country';
+                        
                         // Fallback to API-Sports data if we don't have venue data
                         return {
                             id: fixture.fixture.venue?.id || null,
                             name: fixture.fixture.venue?.name || 'Unknown Venue',
                             city: fixture.fixture.venue?.city || 'Unknown City',
-                            country: fixture.league.country || 'Unknown Country',
+                            country: properCountry,
                             distance: null,
                             coordinates: null
                         };
@@ -418,6 +473,188 @@ router.get('/competitions/:competitionId/matches', async (req, res) => {
         res.status(500).json({ 
             error: 'Failed to fetch matches',
             message: error.message
+        });
+    }
+});
+
+// Cache management endpoints
+router.get('/cache/venues/stats', (req, res) => {
+    try {
+        const stats = getCacheStats();
+        res.json({
+            success: true,
+            cacheStats: stats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error getting cache stats:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to get cache statistics',
+            message: error.message 
+        });
+    }
+});
+
+router.post('/cache/venues/clear', (req, res) => {
+    try {
+        clearVenuesCache();
+        res.json({
+            success: true,
+            message: 'Venues cache cleared successfully',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to clear cache',
+            message: error.message 
+        });
+    }
+});
+
+router.post('/cache/venues/refresh', (req, res) => {
+    try {
+        const refreshedCache = refreshVenuesCache();
+        const stats = getCacheStats();
+        res.json({
+            success: true,
+            message: 'Venues cache refreshed successfully',
+            venueCount: Object.keys(refreshedCache).length,
+            cacheStats: stats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error refreshing cache:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to refresh cache',
+            message: error.message 
+        });
+    }
+});
+
+/**
+ * GET /v4/matches/search
+ * Search for matches between specific teams
+ * Query params: homeTeam, awayTeam, dateFrom, dateTo, season
+ */
+router.get('/matches/search', async (req, res) => {
+    try {
+        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025 } = req.query;
+
+        if (!homeTeam && !awayTeam) {
+            return res.status(400).json({
+                success: false,
+                message: 'At least one team must be specified'
+            });
+        }
+
+        // Build search parameters
+        const params = {
+            season: season
+        };
+
+        // Add team filters if provided
+        if (homeTeam && awayTeam) {
+            // Search for matches between specific teams
+            params.h2h = `${homeTeam}-${awayTeam}`;
+        } else if (homeTeam) {
+            params.team = homeTeam;
+        } else if (awayTeam) {
+            params.team = awayTeam;
+        }
+
+        // Add date filters
+        if (dateFrom) {
+            params.from = dateFrom;
+        }
+        if (dateTo) {
+            params.to = dateTo;
+        }
+
+        console.log(`🔍 Searching matches with params:`, params);
+
+        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+            headers: {
+                'x-apisports-key': API_SPORTS_KEY
+            },
+            params,
+            httpsAgent
+        });
+
+        if (!response.data || !response.data.response) {
+            return res.json({
+                success: true,
+                data: {
+                    matches: [],
+                    count: 0
+                }
+            });
+        }
+
+        // Transform matches to include venue data
+        const matches = response.data.response.map(fixture => {
+            const homeTeamName = mapTeamName(fixture.teams.home.name);
+            const venueData = getVenueForTeam(homeTeamName);
+
+            return {
+                fixture: {
+                    id: fixture.fixture.id,
+                    date: fixture.fixture.date,
+                    status: fixture.fixture.status,
+                    venue: venueData ? {
+                        id: venueData.stadium || fixture.fixture.venue?.name,
+                        name: venueData.stadium || fixture.fixture.venue?.name || 'Unknown Venue',
+                        city: venueData.city || fixture.fixture.venue?.city || 'Unknown City',
+                        country: venueData.country || 'Unknown Country'
+                    } : {
+                        id: fixture.fixture.venue?.id || null,
+                        name: fixture.fixture.venue?.name || 'Unknown Venue',
+                        city: fixture.fixture.venue?.city || 'Unknown City',
+                        country: fixture.league.country || 'Unknown Country'
+                    }
+                },
+                league: {
+                    id: fixture.league.id,
+                    name: fixture.league.name,
+                    logo: fixture.league.logo
+                },
+                teams: {
+                    home: {
+                        id: fixture.teams.home.id,
+                        name: homeTeamName,
+                        logo: fixture.teams.home.logo
+                    },
+                    away: {
+                        id: fixture.teams.away.id,
+                        name: mapTeamName(fixture.teams.away.name),
+                        logo: fixture.teams.away.logo
+                    }
+                },
+                goals: {
+                    home: fixture.goals.home,
+                    away: fixture.goals.away
+                },
+                score: fixture.score
+            };
+        });
+
+        res.json({
+            success: true,
+            data: {
+                matches,
+                count: matches.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Error searching matches:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to search matches',
+            error: error.message
         });
     }
 });

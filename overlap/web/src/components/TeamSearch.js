@@ -166,6 +166,16 @@ const TeamSearch = ({ onTeamSelect, placeholder = "Search for teams...", selecte
                                             alt={`${team.name} logo`}
                                             className="team-logo"
                                             onError={(e) => {
+                                                // Try fallback URL format
+                                                if (team.logo && team.logo.includes('logos.footapi.com')) {
+                                                    // Extract team ID from the old URL format
+                                                    const match = team.logo.match(/\/(\d+)\.png$/);
+                                                    if (match) {
+                                                        e.target.src = `https://media.api-sports.io/football/teams/${match[1]}.png`;
+                                                        return;
+                                                    }
+                                                }
+                                                // If still fails, hide the image
                                                 e.target.style.display = 'none';
                                             }}
                                         />

@@ -83,6 +83,119 @@ const userSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         }
+    }],
+    visitedStadiums: [{
+        venueId: {
+            type: String,
+            required: true
+        },
+        venueName: {
+            type: String,
+            required: true
+        },
+        city: String,
+        country: String,
+        visitDate: Date, // Optional - when they visited
+        notes: String,   // Optional - personal notes about the visit
+        visitedAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    attendedMatches: [{
+        matchId: {
+            type: String,
+            required: true
+        },
+        matchType: {
+            type: String,
+            enum: ['api', 'manual'],
+            required: true
+        },
+        
+        // Match details (common for both API and manual)
+        homeTeam: {
+            name: { type: String, required: true },
+            logo: String,
+            apiId: String // For API matches
+        },
+        awayTeam: {
+            name: { type: String, required: true },
+            logo: String,
+            apiId: String // For API matches
+        },
+        venue: {
+            name: { type: String, required: false },
+            city: String,
+            country: String,
+            coordinates: [Number] // [longitude, latitude]
+        },
+        competition: String,
+        date: {
+            type: Date,
+            required: false
+        },
+        
+        // User-specific data
+        userScore: String, // "2-1" or "Arsenal 2-1 Chelsea"
+        userNotes: String,
+        photos: [{
+            filename: String,
+            uploadDate: {
+                type: Date,
+                default: Date.now
+            },
+            caption: String
+        }],
+        attendedDate: {
+            type: Date,
+            default: Date.now
+        },
+        
+        // API match data (for matches found via search)
+        apiMatchData: {
+            fixtureId: String,
+            officialScore: String,
+            status: String,
+            leagueId: String
+        }
+    }],
+    trips: [{
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        description: {
+            type: String,
+            default: ''
+        },
+        matches: [{
+            matchId: String,
+            homeTeam: {
+                name: String,
+                logo: String
+            },
+            awayTeam: {
+                name: String,
+                logo: String
+            },
+            league: String,
+            venue: String,
+            date: Date,
+            addedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
+        createdAt: {
+            type: Date,
+            default: Date.now
+        },
+        updatedAt: {
+            type: Date,
+            default: Date.now
+        }
     }]
 }, {
     timestamps: true

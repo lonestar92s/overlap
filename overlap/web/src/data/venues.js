@@ -1100,31 +1100,176 @@ const BRAZILIAN_SERIE_A_VENUES = {
     }
 };
 
-// Function to get venue information for a team
-export function getVenueForTeam(teamName) {
+const SWISS_SUPER_LEAGUE_VENUES = {
+    "FC Zurich": {
+        stadium: "Letzigrund Stadium",
+        city: "Zurich",
+        country: "Switzerland",
+        coordinates: [8.497778, 47.383333],
+        ticketUrl: 'https://fcz.ch/tickets'
+    },
+    "BSC Young Boys": {
+        stadium: "Wankdorf Stadium",
+        city: "Bern",
+        country: "Switzerland",
+        coordinates: [7.463889, 46.963333],
+        ticketUrl: 'https://www.bscyb.ch/tickets'
+    },
+    "FC Basel 1893": {
+        stadium: "St. Jakob-Park",
+        city: "Basel",
+        country: "Switzerland",
+        coordinates: [7.621944, 47.542222],
+        ticketUrl: 'https://www.fcb.ch/tickets'
+    },
+    "Servette FC": {
+        stadium: "Stade de Genève",
+        city: "Geneva",
+        country: "Switzerland",
+        coordinates: [6.122222, 46.183333],
+        ticketUrl: 'https://www.servettefc.ch/tickets'
+    },
+    "FC Lugano": {
+        stadium: "Cornaredo Stadium",
+        city: "Lugano",
+        country: "Switzerland",
+        coordinates: [8.960556, 46.020556],
+        ticketUrl: 'https://www.fclugano.com/tickets'
+    },
+    "FC ST. Gallen": {
+        stadium: "Kybunpark",
+        city: "St. Gallen",
+        country: "Switzerland",
+        coordinates: [9.401111, 47.450556],
+        ticketUrl: 'https://www.fcsg.ch/tickets'
+    },
+    "FC Luzern": {
+        stadium: "Swissporarena",
+        city: "Lucerne",
+        country: "Switzerland",
+        coordinates: [8.338889, 47.032778],
+        ticketUrl: 'https://www.fcl.ch/tickets'
+    },
+    "FC Sion": {
+        stadium: "Stade Tourbillon",
+        city: "Sion",
+        country: "Switzerland",
+        coordinates: [7.384444, 46.234722],
+        ticketUrl: 'https://www.fc-sion.ch/tickets'
+    },
+    "Grasshoppers": {
+        stadium: "Letzigrund Stadium",
+        city: "Zurich",
+        country: "Switzerland",
+        coordinates: [8.497778, 47.383333],
+        ticketUrl: 'https://www.gcz.ch/tickets'
+    },
+    "Lausanne": {
+        stadium: "Stade de la Tuilière",
+        city: "Lausanne",
+        country: "Switzerland",
+        coordinates: [6.579167, 46.561944],
+        ticketUrl: 'https://www.lausanne-sport.ch/tickets'
+    },
+    "FC Winterthur": {
+        stadium: "Schützenwiese",
+        city: "Winterthur",
+        country: "Switzerland",
+        coordinates: [8.742222, 47.505556],
+        ticketUrl: 'https://www.fcwinterthur.ch/tickets'
+    },
+    "FC Thun": {
+        stadium: "Arena Thun",
+        city: "Thun",
+        country: "Switzerland",
+        coordinates: [7.627778, 46.758333],
+        ticketUrl: 'https://www.fcthun.ch/tickets'
+    }
+};
+
+// Cached venues object - built once and reused
+let cachedVenues = null;
+let cacheStats = {
+    hits: 0,
+    misses: 0,
+    cacheBuilds: 0
+};
+
+// Function to build the combined venues cache
+function buildVenuesCache() {
+    console.log('🏟️  Building frontend venues cache...');
+    const startTime = Date.now();
+    
     const allVenues = {
         ...PREMIER_LEAGUE_VENUES,
         ...CHAMPIONSHIP_VENUES,
         ...LA_LIGA_VENUES,
         ...BUNDESLIGA_VENUES,
+        ...SWISS_SUPER_LEAGUE_VENUES,
         ...LIGUE_1_VENUES,
         ...EREDIVISIE_VENUES,
         ...PRIMEIRA_LIGA_VENUES,
         ...ITALIAN_SERIE_A_VENUES,
-        // ...BRAZILIAN_SERIE_A_VENUES  // COMMENTED OUT FOR TESTING
+        ...BRAZILIAN_SERIE_A_VENUES
     };
-    return allVenues[teamName] || null;
+    
+    const buildTime = Date.now() - startTime;
+    const venueCount = Object.keys(allVenues).length;
+    cacheStats.cacheBuilds++;
+    
+    console.log(`✅ Frontend venues cache built: ${venueCount} venues in ${buildTime}ms`);
+    return allVenues;
+}
+
+// Function to get venue information for a team (with caching)
+export function getVenueForTeam(teamName) {
+    // Build cache on first access
+    if (!cachedVenues) {
+        cachedVenues = buildVenuesCache();
+    }
+    
+    const venue = cachedVenues[teamName] || null;
+    
+    // Update cache statistics
+    if (venue) {
+        cacheStats.hits++;
+    } else {
+        cacheStats.misses++;
+    }
+    
+    return venue;
+}
+
+// Function to get cache statistics (for debugging)
+export function getCacheStats() {
+    return {
+        ...cacheStats,
+        totalRequests: cacheStats.hits + cacheStats.misses,
+        hitRate: cacheStats.hits + cacheStats.misses > 0 
+            ? ((cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100).toFixed(2) + '%'
+            : '0%',
+        cachedVenues: cachedVenues ? Object.keys(cachedVenues).length : 0
+    };
+}
+
+// Function to clear cache (for development)
+export function clearVenuesCache() {
+    cachedVenues = null;
+    console.log('🗑️  Frontend venues cache cleared');
 }
 
 // Export the functions and data
 export {
+    getCacheStats,
+    clearVenuesCache,
     PREMIER_LEAGUE_VENUES,
     CHAMPIONSHIP_VENUES,
     LA_LIGA_VENUES,
     BUNDESLIGA_VENUES,
+    SWISS_SUPER_LEAGUE_VENUES,
     LIGUE_1_VENUES,
     EREDIVISIE_VENUES,
     PRIMEIRA_LIGA_VENUES,
     ITALIAN_SERIE_A_VENUES,
-    // ...BRAZILIAN_SERIE_A_VENUES
+    BRAZILIAN_SERIE_A_VENUES
 }; 

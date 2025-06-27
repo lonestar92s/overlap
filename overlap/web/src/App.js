@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './components/Home';
 import HeaderNav from './components/HeaderNav';
-import Auth from './components/Auth';
+import Auth, { AuthContext, AuthProvider } from './components/Auth';
 import Profile from './components/Profile';
+import Trips from './components/Trips';
+import Preferences from './components/Preferences';
+import Stadiums from './components/Stadiums';
+import Explore from './components/Explore';
+import AttendedMatches from './components/AttendedMatches';
 
 const theme = createTheme({
   palette: {
@@ -38,81 +43,54 @@ const theme = createTheme({
 });
 
 // Wrapper component to handle state and navigation
-const AppContent = () => {
+function AppContent() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user, logout } = useContext(AuthContext);
+
+  // Initialize search state
   const [searchState, setSearchState] = useState({
     location: null,
-    dates: { departure: null, return: null },
+    dates: {
+      departure: null,
+      return: null
+    },
     matches: [],
     loading: false,
     error: null
   });
 
-  useEffect(() => {
-    // Check if user is logged in on app start
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    if (token && userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (error) {
-        console.error('Error parsing user data:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-    }
-  }, []);
-
-  const handleLogin = (userData) => {
-    setUser(userData);
+  const handleHomeClick = () => {
     navigate('/');
   };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    navigate('/');
-  };
-
-  const handleReset = () => {
-    setSearchState({
-      location: null,
-      dates: { departure: null, return: null },
-      matches: [],
-      loading: false,
-      error: null
-    });
-    navigate('/');
-  };
-
-  // Show auth screen if user is not logged in
-  if (!user) {
-    return <Auth onLogin={handleLogin} />;
-  }
 
   return (
-    <Box sx={{ minHeight: '100vh' }}>
-      <HeaderNav onHomeClick={handleReset} user={user} onLogout={handleLogout} />
-      <Routes>
-        <Route path="/" element={<Home 
-          searchState={searchState} 
-          setSearchState={setSearchState} 
-        />} />
-        <Route path="/profile" element={<Profile />} />
-      </Routes>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <HeaderNav />
+      <Box component="main" sx={{ flexGrow: 1, backgroundColor: '#F7F7F7' }}>
+        <Routes>
+          <Route path="/" element={<Home searchState={searchState} setSearchState={setSearchState} />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/profile" element={user ? <Profile /> : <Auth />} />
+          <Route path="/trips" element={user ? <Trips /> : <Auth />} />
+          <Route path="/attended-matches" element={user ? <AttendedMatches /> : <Auth />} />
+          <Route path="/preferences" element={user ? <Preferences /> : <Auth />} />
+          <Route path="/stadiums" element={<Stadiums />} />
+          <Route path="/explore" element={<Explore />} />
+        </Routes>
+      </Box>
     </Box>
   );
-};
+}
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <AppContent />
-      </Router>
+      <AuthProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

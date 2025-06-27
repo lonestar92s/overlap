@@ -212,4 +212,96 @@ router.delete('/saved-matches/:matchId', auth, async (req, res) => {
     }
 });
 
+// Get visited stadiums
+router.get('/visited-stadiums', auth, async (req, res) => {
+    try {
+        res.json({ visitedStadiums: req.user.visitedStadiums });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Add visited stadium
+router.post('/visited-stadiums', auth, async (req, res) => {
+    try {
+        const { venueId, venueName, city, country, visitDate, notes } = req.body;
+        
+        // Validate required fields
+        if (!venueId || !venueName) {
+            return res.status(400).json({ error: 'venueId and venueName are required' });
+        }
+        
+        // Check if stadium is already visited
+        const existingStadium = req.user.visitedStadiums.find(
+            stadium => stadium.venueId === venueId
+        );
+        
+        if (existingStadium) {
+            return res.status(400).json({ error: 'Stadium already marked as visited' });
+        }
+        
+        // Add stadium to visited list
+        const stadiumData = {
+            venueId,
+            venueName,
+            city: city || '',
+            country: country || '',
+            visitDate: visitDate ? new Date(visitDate) : null,
+            notes: notes || ''
+        };
+        
+        req.user.visitedStadiums.push(stadiumData);
+        await req.user.save();
+        
+        res.json({ visitedStadiums: req.user.visitedStadiums });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Update visited stadium
+router.put('/visited-stadiums/:venueId', auth, async (req, res) => {
+    try {
+        const { venueId } = req.params;
+        const { visitDate, notes } = req.body;
+        
+        const stadium = req.user.visitedStadiums.find(
+            stadium => stadium.venueId === venueId
+        );
+        
+        if (!stadium) {
+            return res.status(404).json({ error: 'Stadium not found in visited list' });
+        }
+        
+        // Update allowed fields
+        if (visitDate !== undefined) {
+            stadium.visitDate = visitDate ? new Date(visitDate) : null;
+        }
+        if (notes !== undefined) {
+            stadium.notes = notes;
+        }
+        
+        await req.user.save();
+        res.json({ visitedStadiums: req.user.visitedStadiums });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Remove visited stadium
+router.delete('/visited-stadiums/:venueId', auth, async (req, res) => {
+    try {
+        const { venueId } = req.params;
+        
+        req.user.visitedStadiums = req.user.visitedStadiums.filter(
+            stadium => stadium.venueId !== venueId
+        );
+        
+        await req.user.save();
+        res.json({ visitedStadiums: req.user.visitedStadiums });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 module.exports = router; 
