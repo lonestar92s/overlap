@@ -646,7 +646,7 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                     <Typography><strong>Location:</strong> {[selectedMatch.venue?.city, selectedMatch.venue?.country].filter(Boolean).join(', ')}</Typography>
                   )}
                   {selectedMatch.competition && <Typography><strong>Competition:</strong> {selectedMatch.competition}</Typography>}
-                  {selectedMatch.date && <Typography><strong>Date:</strong> {selectedMatch.date.toLocaleDateString()}</Typography>}
+                  {selectedMatch.date && <Typography><strong>Date:</strong> {formatMatchDateTime(selectedMatch.date.toISOString(), selectedMatch.venue).fullDate}</Typography>}
                   {selectedMatch.userScore && <Typography><strong>Score:</strong> {selectedMatch.userScore}</Typography>}
                   {selectedMatch.userNotes && <Typography><strong>Notes:</strong> {selectedMatch.userNotes}</Typography>}
                   <Typography><strong>Media:</strong> {photos.length} file(s)</Typography>

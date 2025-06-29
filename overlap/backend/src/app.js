@@ -11,6 +11,8 @@ const preferencesRoutes = require('./routes/preferences');
 const teamsRoutes = require('./routes/teams');
 const attendedMatchesRoutes = require('./routes/attendedMatches');
 const tripsRoutes = require('./routes/trips');
+const leaguesRoutes = require('./routes/leagues');
+const adminRouter = require('./routes/admin');
 
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
@@ -73,9 +75,15 @@ app.use('/api/search', searchRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/teams', teamsRoutes);
+app.use('/api/leagues', leaguesRoutes);
 app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/trips', tripsRoutes);
 app.use('/v4', matchesRoutes);
+app.use('/api/admin', adminRouter);
+
+// Set up unmapped team logging after routes are loaded
+const teamService = require('./services/teamService');
+teamService.setUnmappedLogger(adminRouter.logUnmappedTeam);
 
 const PORT = process.env.PORT || 3001;
 

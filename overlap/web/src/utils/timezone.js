@@ -1,6 +1,23 @@
 import { format } from 'date-fns';
 import { utcToZonedTime } from 'date-fns-tz';
 
+/**
+ * SINGLE SOURCE OF TRUTH FOR MATCH TIME DISPLAY
+ * ==============================================
+ * 
+ * CORE PRINCIPLE: Always show match times in the STADIUM'S LOCAL TIME
+ * 
+ * Use Case: User in Chicago planning to travel to London for a 7pm match
+ * - API returns: 2025-03-15T19:00:00Z (7pm UTC)  
+ * - We show: "7:00 PM GMT" (London local time)
+ * - NOT: "1:00 PM CST" (Chicago time) ❌
+ * 
+ * This helps users:
+ * - Plan dinner reservations around match times
+ * - Book transportation to/from stadium
+ * - Understand local kickoff time for their trip
+ */
+
 // Helper function to get timezone from coordinates
 export const getTimezoneFromCoordinates = (coordinates) => {
     if (!coordinates || coordinates.length !== 2) {
@@ -67,7 +84,7 @@ export const getTimezoneFromCoordinates = (coordinates) => {
     return 'UTC'; // Default to UTC if no specific timezone is found
 };
 
-// Get timezone abbreviation for display
+// Get timezone abbreviation for display (e.g., "JST", "GMT", "EST")
 export const getTimezoneAbbreviation = (timeZone, date) => {
     try {
         const formatter = new Intl.DateTimeFormat('en', {
@@ -83,21 +100,35 @@ export const getTimezoneAbbreviation = (timeZone, date) => {
     }
 };
 
-// Main function to format match date and time in venue's local timezone
+/**
+ * PRIMARY FUNCTION: Format match date/time in stadium's local timezone
+ * 
+ * @param {string} utcDate - ISO date string from API (e.g., "2025-03-15T19:00:00Z")
+ * @param {object} venue - Venue object with coordinates array [longitude, latitude]
+ * @returns {object} Formatted date/time components in stadium's local time
+ * 
+ * Usage Examples:
+ * - Match cards: `const { time, timeZone } = formatMatchDateTime(fixture.date, venue)`
+ * - Trip planning: `const { fullDateTime } = formatMatchDateTime(match.date, venue)`
+ * - Map popups: `const { date, time } = formatMatchDateTime(match.fixture.date, venue)`
+ */
 export const formatMatchDateTime = (utcDate, venue) => {
     if (!utcDate) {
         return {
             date: 'TBD',
             time: 'TBD',
             fullDate: 'Date TBD',
-            timeZone: 'UTC'
+            fullDateTime: 'Date & Time TBD',
+            timeZone: 'UTC',
+            timeZoneId: 'UTC',
+            groupDate: null
         };
     }
     
     // Create date object from UTC string
     const date = new Date(utcDate);
     
-    // Get venue timezone, default to UTC
+    // Get venue timezone, default to UTC if no coordinates
     let timeZone = 'UTC';
     if (venue?.coordinates) {
         timeZone = getTimezoneFromCoordinates(venue.coordinates);
@@ -106,23 +137,25 @@ export const formatMatchDateTime = (utcDate, venue) => {
     // Convert UTC date to venue's timezone
     const zonedDate = utcToZonedTime(date, timeZone);
     
-    // Get timezone abbreviation
+    // Get timezone abbreviation for display
     const tzAbbr = getTimezoneAbbreviation(timeZone, zonedDate);
     
     // Format the date and time in the venue's timezone
     return {
-        date: format(zonedDate, 'EEE, MMM d'),
-        time: format(zonedDate, 'h:mm a'),
-        fullDate: format(zonedDate, 'EEE, MMM d, yyyy'),
-        fullDateTime: format(zonedDate, 'EEE, MMM d, yyyy h:mm a'),
-        timeZone: tzAbbr,
-        timeZoneId: timeZone,
+        date: format(zonedDate, 'EEE, MMM d'),              // "Sat, Mar 15"
+        time: format(zonedDate, 'h:mm a'),                  // "7:00 PM"
+        fullDate: format(zonedDate, 'EEE, MMM d, yyyy'),    // "Sat, Mar 15, 2025"
+        fullDateTime: format(zonedDate, 'EEE, MMM d, yyyy h:mm a'), // "Sat, Mar 15, 2025 7:00 PM"
+        timeZone: tzAbbr,                                   // "GMT"
+        timeZoneId: timeZone,                               // "Europe/London"
         // Keep groupDate in UTC to ensure consistent grouping across timezones
-        groupDate: format(date, 'yyyy-MM-dd')
+        groupDate: format(date, 'yyyy-MM-dd')              // "2025-03-15"
     };
 };
 
-// Format for attended matches (simpler format)
+/**
+ * SIMPLIFIED FUNCTION: For attended matches (date only, no time)
+ */
 export const formatAttendedMatchDate = (date, venue) => {
     if (!date) return 'Date not set';
     
@@ -140,4 +173,15 @@ export const formatAttendedMatchDate = (date, venue) => {
     
     // Return just the date (no time for attended matches)
     return format(zonedDate, 'MMM d, yyyy');
+};
+
+/**
+ * UTILITY FUNCTION: For admin/debug purposes (shows user's local time)
+ * Use sparingly - only for non-match-related timestamps
+ */
+export const formatUserLocalTime = (utcDate) => {
+    if (!utcDate) return 'N/A';
+    
+    const date = new Date(utcDate);
+    return date.toLocaleString();
 }; 

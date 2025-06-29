@@ -68,9 +68,14 @@ const MatchCard = ({
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: { xs: 2, sm: 3 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <AccessTime sx={{ mr: 1, color: '#666', fontSize: { xs: 18, sm: 24 } }} />
-                        <Typography variant="subtitle1" color="textSecondary" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                            {time}
-                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                            <Typography variant="subtitle1" color="textSecondary" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+                                {time}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, lineHeight: 1 }}>
+                                {formatMatchDateTime(fixture.date, venue).timeZone}
+                            </Typography>
+                        </Box>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
                         <Typography 

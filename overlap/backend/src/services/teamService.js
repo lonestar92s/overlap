@@ -1,64 +1,192 @@
 const Team = require('../models/Team');
+const League = require('../models/League');
 
 class TeamService {
     constructor() {
-        // Use the same API-Sports that provides match data
-        this.apiBaseUrl = 'https://v3.football.api-sports.io';
-        this.apiKey = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2'; // Use the same key as matches route
+        this.cache = new Map();
+        this.cacheExpiry = 30 * 60 * 1000; // 30 minutes cache
+        this.apiBaseUrl = process.env.EXTERNAL_API_URL || 'https://api.football-data.org/v4';
+        this.apiKey = process.env.FOOTBALL_DATA_API_KEY;
+        this.logUnmappedTeam = null; // Will be set by admin routes
+    }
+
+    // Set the logging function from admin routes
+    setUnmappedLogger(logFunction) {
+        this.logUnmappedTeam = logFunction;
     }
 
     /**
-     * Search for teams - checks cache first, then API if needed
+     * Map API-Sports team name to database team name
      */
-    async searchTeams(searchTerm, limit = 20) {
+    async mapApiNameToTeam(apiSportsName) {
         try {
-            // First, search our cached teams
-            const cachedTeams = await Team.searchTeams(searchTerm, limit);
-            
-            // If we have enough results, return them
-            if (cachedTeams.length >= Math.min(limit, 10)) {
-                // Update search counts for returned teams
-                await Promise.all(
-                    cachedTeams.map(team => team.incrementSearch())
-                );
-                return this.formatTeamsForResponse(cachedTeams);
+            // Check cache first
+            const cacheKey = `map_${apiSportsName}`;
+            const cached = this.cache.get(cacheKey);
+            if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
+                return cached.result;
             }
 
-            // If not enough cached results, fetch from API
-            console.log(`🔍 Searching API for teams matching: ${searchTerm}`);
-            const apiTeams = await this.fetchTeamsFromAPI(searchTerm);
+            let result = apiSportsName; // Default fallback
+
+            // Method 1: Direct API name match
+            let team = await Team.findOne({ apiName: apiSportsName });
             
-            // Cache the new teams
-            const savedTeams = await this.cacheTeams(apiTeams);
-            
-            // Combine cached and new results
-            const allTeams = [...cachedTeams];
-            savedTeams.forEach(newTeam => {
-                // Avoid duplicates
-                if (!allTeams.find(existing => existing.apiId === newTeam.apiId)) {
-                    allTeams.push(newTeam);
+            if (team) {
+                result = team.name;
+            } else {
+                // Method 2: Exact name match
+                team = await Team.findOne({ name: apiSportsName });
+                
+                if (team) {
+                    result = team.name;
+                } else {
+                    // Method 3: Search in aliases
+                    team = await Team.findOne({ aliases: { $in: [apiSportsName] } });
+                    
+                    if (team) {
+                        result = team.name;
+                    } else {
+                        // Team not found - log as unmapped
+                        console.log(`❌ NO MAPPING: ${apiSportsName} (unmapped team)`);
+                        if (this.logUnmappedTeam) {
+                            this.logUnmappedTeam(apiSportsName);
+                        }
+                        result = apiSportsName; // Keep original name
+                    }
                 }
+            }
+            
+            // Cache the result
+            this.cache.set(cacheKey, {
+                result,
+                timestamp: Date.now()
             });
-
-            // Sort by relevance and return
-            const sortedTeams = this.sortTeamsByRelevance(allTeams, searchTerm);
-            return this.formatTeamsForResponse(sortedTeams.slice(0, limit));
-
+            
+            return result;
         } catch (error) {
-            console.error('Error searching teams:', error);
-            // Fallback to cached results only
-            const cachedTeams = await Team.searchTeams(searchTerm, limit);
-            return this.formatTeamsForResponse(cachedTeams);
+            console.error(`Error mapping API name ${apiSportsName}:`, error);
+            return apiSportsName; // Fallback to original name
         }
     }
 
     /**
-     * Get popular teams (for autocomplete suggestions)
+     * Get team by database name (existing functionality)
+     */
+    async getTeamByName(teamName) {
+        try {
+            const team = await Team.findOne({ name: teamName })
+                .populate('leagueId')
+                .populate('venueId');
+            return team;
+        } catch (error) {
+            console.error(`Error getting team ${teamName}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Bulk update teams with API names from hardcoded mapping
+     */
+    async updateTeamsWithApiNames(teamNameMapping) {
+        let updated = 0;
+        let errors = 0;
+
+        console.log(`🔄 Updating ${Object.keys(teamNameMapping).length} teams with API names...`);
+
+        for (const [apiName, teamName] of Object.entries(teamNameMapping)) {
+            try {
+                const result = await Team.updateOne(
+                    { name: teamName },
+                    { 
+                        $set: { apiName: apiName },
+                        $addToSet: { aliases: apiName } // Also add to aliases for search
+                    }
+                );
+
+                if (result.modifiedCount > 0) {
+                    updated++;
+                    if (updated % 50 === 0) {
+                        console.log(`✅ Updated ${updated} teams so far...`);
+                    }
+                } else {
+                    console.log(`⚠️  Team not found in database: ${teamName} (API: ${apiName})`);
+                }
+            } catch (error) {
+                console.error(`❌ Error updating ${teamName}:`, error.message);
+                errors++;
+            }
+        }
+
+        console.log(`\n📊 API Name Update Summary:`);
+        console.log(`✅ Successfully updated: ${updated} teams`);
+        console.log(`❌ Errors: ${errors}`);
+        
+        return { updated, errors };
+    }
+
+    /**
+     * Search teams (existing functionality enhanced)
+     */
+    async searchTeams(searchTerm, options = {}) {
+        const limit = options.limit || 20;
+        const country = options.country;
+        const league = options.league;
+
+        try {
+            let query = {
+                $or: [
+                    { name: { $regex: searchTerm, $options: 'i' } },
+                    { aliases: { $regex: searchTerm, $options: 'i' } },
+                    { apiName: { $regex: searchTerm, $options: 'i' } }, // Include API name in search
+                    { code: { $regex: searchTerm, $options: 'i' } }
+                ]
+            };
+
+            if (country) {
+                query.country = country;
+            }
+
+            if (league) {
+                const leagueDoc = await League.findOne({ 
+                    $or: [
+                        { name: { $regex: league, $options: 'i' } },
+                        { apiId: league }
+                    ]
+                });
+                if (leagueDoc) {
+                    query.leagueId = leagueDoc._id;
+                }
+            }
+
+            const teams = await Team.find(query)
+                .populate('leagueId')
+                .populate('venueId')
+                .sort({ popularity: -1, searchCount: -1 })
+                .limit(limit);
+
+            // Update search counts for found teams
+            const updatePromises = teams.map(team => team.incrementSearch());
+            await Promise.all(updatePromises);
+
+            return teams;
+        } catch (error) {
+            console.error('Error searching teams:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get popular teams (existing functionality)
      */
     async getPopularTeams(limit = 50) {
         try {
-            const teams = await Team.getPopularTeams(limit);
-            return this.formatTeamsForResponse(teams);
+            const teams = await Team.find({})
+                .populate('leagueId')
+                .populate('venueId')
+                .sort({ popularity: -1, searchCount: -1 })
+                .limit(limit);
+            return teams;
         } catch (error) {
             console.error('Error getting popular teams:', error);
             return [];
@@ -66,208 +194,68 @@ class TeamService {
     }
 
     /**
-     * Fetch teams from external API
+     * Get teams by league
      */
-    async fetchTeamsFromAPI(searchTerm) {
+    async getTeamsByLeague(leagueApiId) {
+        try {
+            const league = await League.findOne({ apiId: leagueApiId });
+            if (!league) {
+                return [];
+            }
+
+            const teams = await Team.find({ leagueId: league._id })
+                .populate('venueId')
+                .sort({ name: 1 });
+            
+            return teams;
+        } catch (error) {
+            console.error(`Error getting teams for league ${leagueApiId}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * External API integration (existing functionality)
+     */
+    async searchTeamsFromAPI(searchTerm) {
         if (!this.apiKey) {
-            console.warn('No API-Sports key configured');
+            console.warn('No external API key configured, skipping external search');
             return [];
         }
 
         try {
-            // For API-Sports, we'll search teams directly
-            console.log(`🔍 Searching API-Sports for teams matching: ${searchTerm}`);
-            
             const response = await fetch(`${this.apiBaseUrl}/teams?search=${encodeURIComponent(searchTerm)}`, {
                 headers: {
-                    'x-apisports-key': this.apiKey
+                    'X-Auth-Token': this.apiKey
                 }
             });
 
             if (!response.ok) {
-                throw new Error(`API request failed: ${response.status}`);
+                console.error('External API request failed:', response.status, response.statusText);
+                return [];
             }
 
             const data = await response.json();
-            console.log(`📡 API-Sports returned ${data.response?.length || 0} teams for "${searchTerm}"`);
-            
-            return data.response || [];
-
+            return data.teams || [];
         } catch (error) {
-            console.error('Error fetching from API-Sports:', error);
+            console.error('Error searching teams from external API:', error);
             return [];
         }
     }
 
-    // Removed unused methods - API-Sports uses direct team search
-
     /**
-     * Cache teams in our database
+     * Cache management
      */
-    async cacheTeams(apiTeams) {
-        const savedTeams = [];
-
-        for (const apiTeam of apiTeams) {
-            try {
-                // Validate API team structure
-                if (!apiTeam.team || !apiTeam.team.id) {
-                    console.warn('Invalid API team structure:', apiTeam);
-                    continue;
-                }
-
-                // Check if team already exists
-                let existingTeam = await Team.findOne({ apiId: apiTeam.team.id.toString() });
-
-                if (existingTeam) {
-                    // Update existing team if data is stale
-                    if (existingTeam.isStale()) {
-                        existingTeam = await this.updateTeamFromAPI(existingTeam, apiTeam);
-                    }
-                    savedTeams.push(existingTeam);
-                } else {
-                    // Create new team
-                    const newTeam = await this.createTeamFromAPI(apiTeam);
-                    savedTeams.push(newTeam);
-                }
-            } catch (error) {
-                console.error(`Error caching team ${apiTeam.team?.name || 'unknown'}:`, error);
-            }
-        }
-
-        return savedTeams;
+    clearCache() {
+        this.cache.clear();
+        console.log('Team service cache cleared');
     }
 
-    /**
-     * Create a new team from API data
-     */
-    async createTeamFromAPI(apiTeam) {
-        const teamData = {
-            apiId: apiTeam.team.id.toString(),
-            name: apiTeam.team.name,
-            aliases: [
-                apiTeam.team.name,
-                apiTeam.team.code
-            ].filter(Boolean),
-            code: apiTeam.team.code,
-            founded: apiTeam.team.founded,
-            logo: apiTeam.team.logo,
-            country: apiTeam.team.country,
-            city: this.extractCity(apiTeam.venue?.name),
-            venue: {
-                name: apiTeam.venue?.name || 'Unknown Venue',
-                capacity: apiTeam.venue?.capacity || null,
-                coordinates: [] // API-Sports doesn't provide coordinates
-            },
-            lastUpdated: new Date(),
-            apiSource: 'api-sports'
+    getCacheStats() {
+        return {
+            cacheSize: this.cache.size,
+            cacheEntries: Array.from(this.cache.keys())
         };
-
-        console.log(`💾 Caching new team: ${teamData.name} (${teamData.country})`);
-        return await Team.create(teamData);
-    }
-
-    /**
-     * Update existing team with fresh API data
-     */
-    async updateTeamFromAPI(existingTeam, apiTeam) {
-        existingTeam.name = apiTeam.team.name;
-        existingTeam.aliases = [
-            apiTeam.team.name,
-            apiTeam.team.code
-        ].filter(Boolean);
-        existingTeam.code = apiTeam.team.code;
-        existingTeam.founded = apiTeam.team.founded;
-        existingTeam.logo = apiTeam.team.logo;
-        existingTeam.country = apiTeam.team.country;
-        existingTeam.lastUpdated = new Date();
-
-        console.log(`🔄 Updated team: ${existingTeam.name}`);
-        return await existingTeam.save();
-    }
-
-    /**
-     * Sort teams by relevance to search term
-     */
-    sortTeamsByRelevance(teams, searchTerm) {
-        const term = searchTerm.toLowerCase();
-        
-        return teams.sort((a, b) => {
-            // Exact name match gets highest priority
-            const aExactMatch = a.name.toLowerCase() === term;
-            const bExactMatch = b.name.toLowerCase() === term;
-            if (aExactMatch && !bExactMatch) return -1;
-            if (!aExactMatch && bExactMatch) return 1;
-
-            // Name starts with search term
-            const aStartsWith = a.name.toLowerCase().startsWith(term);
-            const bStartsWith = b.name.toLowerCase().startsWith(term);
-            if (aStartsWith && !bStartsWith) return -1;
-            if (!aStartsWith && bStartsWith) return 1;
-
-            // Fall back to popularity
-            return b.popularity - a.popularity;
-        });
-    }
-
-    /**
-     * Format teams for API response
-     */
-    formatTeamsForResponse(teams) {
-        return teams.map(team => ({
-            id: team._id,
-            apiId: team.apiId,
-            name: team.name,
-            code: team.code,
-            country: team.country,
-            city: team.city,
-            logo: team.logo,
-            venue: team.venue?.name,
-            popularity: team.popularity,
-            searchCount: team.searchCount
-        }));
-    }
-
-    /**
-     * Extract city from venue string
-     */
-    extractCity(venue) {
-        // This is a simple extraction - could be improved with geocoding
-        return venue || null;
-    }
-
-    /**
-     * Populate database with popular teams by searching common team names
-     */
-    async populatePopularTeams() {
-        try {
-            console.log('🌍 Populating database with popular teams...');
-            
-            // Common team names to search for
-            const popularTeamNames = [
-                'Liverpool', 'Manchester United', 'Real Madrid', 'Barcelona', 
-                'Bayern Munich', 'Juventus', 'Chelsea', 'Arsenal', 'PSG',
-                'Manchester City', 'Tottenham', 'Ajax', 'Inter Milan', 'AC Milan'
-            ];
-
-            for (const teamName of popularTeamNames) {
-                try {
-                    const teams = await this.fetchTeamsFromAPI(teamName);
-                    if (teams.length > 0) {
-                        await this.cacheTeams(teams.slice(0, 3)); // Take top 3 results
-                        console.log(`✅ Cached teams for "${teamName}"`);
-                    }
-                    
-                    // Delay to respect rate limits
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch (error) {
-                    console.warn(`⚠️  Failed to populate "${teamName}":`, error.message);
-                }
-            }
-
-            console.log('🎉 Finished populating popular teams');
-        } catch (error) {
-            console.error('Error populating teams:', error);
-        }
     }
 }
 

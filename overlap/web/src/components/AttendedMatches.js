@@ -436,7 +436,7 @@ const AttendedMatches = () => {
         gap: { xs: 2, sm: 0 }
       }}>
         <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
-          Matches I've Been To
+          Memories
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, width: { xs: '100%', sm: 'auto' } }}>
           <Button

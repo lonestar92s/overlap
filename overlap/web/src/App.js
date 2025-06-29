@@ -10,6 +10,8 @@ import Preferences from './components/Preferences';
 import Stadiums from './components/Stadiums';
 import Explore from './components/Explore';
 import AttendedMatches from './components/AttendedMatches';
+import AdminDashboard from './components/AdminDashboard';
+import { SubscriptionProvider } from './hooks/useSubscription';
 
 const theme = createTheme({
   palette: {
@@ -76,6 +78,7 @@ function AppContent() {
           <Route path="/preferences" element={user ? <Preferences /> : <Auth />} />
           <Route path="/stadiums" element={<Stadiums />} />
           <Route path="/explore" element={<Explore />} />
+          <Route path="/admin" element={user && user.role === 'admin' ? <AdminDashboard /> : <Auth />} />
         </Routes>
       </Box>
     </Box>
@@ -87,9 +90,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <SubscriptionProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </SubscriptionProvider>
       </AuthProvider>
     </ThemeProvider>
   );

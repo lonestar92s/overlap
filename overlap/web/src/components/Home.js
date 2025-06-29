@@ -11,15 +11,22 @@ import {
     Fab,
     Zoom,
     IconButton,
-    TextField
+    TextField,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Chip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { TuneRounded, KeyboardArrowUp, SearchRounded, CloseRounded } from '@mui/icons-material';
+import { TuneRounded, KeyboardArrowUp, SearchRounded, CloseRounded, Clear, ClearAll } from '@mui/icons-material';
 import format from 'date-fns/format';
 import startOfToday from 'date-fns/startOfToday';
 import isAfter from 'date-fns/isAfter';
+import addDays from 'date-fns/addDays';
+import differenceInDays from 'date-fns/differenceInDays';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import SearchBar from './SearchBar';
@@ -30,6 +37,7 @@ import { getAllLeagues, getCountryCode, getLeaguesForCountry, getLeagueById } fr
 import NaturalLanguageSearch from './NaturalLanguageSearch';
 import LocationSearch from './LocationSearch';
 import useVisitedStadiums from '../hooks/useVisitedStadiums';
+import { useSubscription } from '../hooks/useSubscription';
 import TripModal from './TripModal';
 import { getBackendUrl } from '../utils/api';
 // getVenueForTeam and calculateDistance removed - distances now calculated in backend
@@ -54,6 +62,25 @@ const Home = ({ searchState, setSearchState }) => {
     
     // Use shared visited stadiums hook
     const { visitedStadiums, handleStadiumClick, isStadiumVisited } = useVisitedStadiums();
+    
+    // Use subscription hook
+    const { subscriptionTier, accessibleLeagues, hasLeagueAccess, getUpgradeMessage } = useSubscription();
+
+    // Date restriction for freemium users (60 days max)
+    const FREEMIUM_MAX_DAYS = 60;
+    
+    // Modal state for date restriction
+    const [dateRestrictionModalOpen, setDateRestrictionModalOpen] = useState(false);
+    const [restrictedDateType, setRestrictedDateType] = useState(''); // 'departure' or 'return'
+    
+    const handleDateRestrictionModal = (dateType) => {
+        if (subscriptionTier === 'freemium') {
+            setRestrictedDateType(dateType);
+            setDateRestrictionModalOpen(true);
+            return true; // Indicates restriction was triggered
+        }
+        return false; // No restriction
+    };
 
     // Load saved matches on component mount
     useEffect(() => {
@@ -81,6 +108,19 @@ const Home = ({ searchState, setSearchState }) => {
     };
 
     const handleDepartureDateChange = (newValue) => {
+        // Only update if the date is valid or null
+        const isValidDate = newValue === null || (newValue instanceof Date && !isNaN(newValue));
+        if (!isValidDate) {
+            console.warn('Invalid departure date attempted:', newValue);
+            return false;
+        }
+        
+        // Check for freemium date restriction
+        if (newValue && subscriptionTier === 'freemium' && differenceInDays(newValue, today) > FREEMIUM_MAX_DAYS) {
+            handleDateRestrictionModal('departure');
+            return false; // Date was rejected
+        }
+        
         setSearchState(prev => ({
             ...prev,
             dates: {
@@ -88,9 +128,24 @@ const Home = ({ searchState, setSearchState }) => {
                 return: prev.dates.return && isAfter(newValue, prev.dates.return) ? null : prev.dates.return
             }
         }));
+        
+        return true; // Date was accepted
     };
 
     const handleReturnDateChange = (newValue) => {
+        // Only update if the date is valid or null
+        const isValidDate = newValue === null || (newValue instanceof Date && !isNaN(newValue));
+        if (!isValidDate) {
+            console.warn('Invalid return date attempted:', newValue);
+            return false;
+        }
+        
+        // Check for freemium date restriction
+        if (newValue && subscriptionTier === 'freemium' && differenceInDays(newValue, today) > FREEMIUM_MAX_DAYS) {
+            handleDateRestrictionModal('return');
+            return false; // Date was rejected
+        }
+        
         setSearchState(prev => ({
             ...prev,
             dates: {
@@ -98,6 +153,8 @@ const Home = ({ searchState, setSearchState }) => {
                 return: newValue
             }
         }));
+        
+        return true; // Date was accepted
     };
 
     useEffect(() => {
@@ -156,11 +213,17 @@ const Home = ({ searchState, setSearchState }) => {
             };
             
             try {
-                const leagues = getAllLeagues();
+                // Filter leagues based on subscription
+                const allLeagues = getAllLeagues();
+                const leagues = allLeagues.filter(league => hasLeagueAccess(league.id));
+                
                 console.log('🔍 Starting match search with dates:', formattedDates);
-                console.log(`Fetching matches for ${leagues.length} leagues`);
+                console.log(`📊 Subscription tier: ${subscriptionTier}`);
+                console.log(`🌍 All available leagues: ${allLeagues.length}`, allLeagues.map(l => `${l.name} (${l.id})`));
+                console.log(`✅ Accessible leagues: ${leagues.length}`, leagues.map(l => `${l.name} (${l.id})`));
+                console.log(`❌ Restricted leagues:`, allLeagues.filter(league => !hasLeagueAccess(league.id)).map(l => `${l.name} (${l.id})`));
 
-                // Fetch all leagues in parallel
+                // Fetch all accessible leagues in parallel
                 const responses = await Promise.all(
                     leagues.map(async (league) => {
                         const url = `${BACKEND_URL}/competitions/${league.id}/matches`;
@@ -173,13 +236,17 @@ const Home = ({ searchState, setSearchState }) => {
                                     userLon: currentLocation?.lon
                                 },
                                 headers: {
-                                    'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                    'Content-Type': 'application/json'
                                 }
                             });
                             return { success: true, data: response.data, league };
                         } catch (error) {
                             console.error(`Error fetching matches for league ${league.name}:`, error);
-                            return { success: false, data: { matches: [] }, league };
+                            if (error.response?.status === 403) {
+                                console.log(`⚠️ Access denied to ${league.name} - subscription required`);
+                            }
+                            return { success: false, data: { response: [] }, league };
                         }
                     })
                 );
@@ -328,6 +395,17 @@ const Home = ({ searchState, setSearchState }) => {
                 .flatMap(m => [m.teams.home.name, m.teams.away.name])
         )].sort()
     });
+
+    // Debug: Log when filteredMatches changes
+    useEffect(() => {
+        console.log('🏠 HOME: filteredMatches changed:', {
+            count: filteredMatches.length,
+            matchIds: filteredMatches.map(m => m.fixture.id),
+            selectedLeagues,
+            selectedTeams,
+            selectedDistance
+        });
+    }, [filteredMatches, selectedLeagues, selectedTeams, selectedDistance]);
 
     // Helper function to get teams by league from current matches
     const getTeamsByLeague = useMemo(() => {
@@ -574,7 +652,14 @@ const Home = ({ searchState, setSearchState }) => {
             error: null
         }));
 
-        // Update search parameters
+        // Helper function to safely create a Date object
+        const createSafeDate = (dateString) => {
+            if (!dateString) return null;
+            const date = new Date(dateString);
+            return (date instanceof Date && !isNaN(date)) ? date : null;
+        };
+
+        // Update search parameters with validated dates
         setSearchState(prev => ({
             ...prev,
             location: searchParams.location ? {
@@ -585,8 +670,8 @@ const Home = ({ searchState, setSearchState }) => {
                 lon: searchParams.location.coordinates[0]
             } : null,
             dates: {
-                departure: searchParams.dateRange?.start ? new Date(searchParams.dateRange.start) : null,
-                return: searchParams.dateRange?.end ? new Date(searchParams.dateRange.end) : null
+                departure: createSafeDate(searchParams.dateRange?.start),
+                return: createSafeDate(searchParams.dateRange?.end)
             },
             selectedLeagues: searchParams.leagues || []
         }));
@@ -611,7 +696,23 @@ const Home = ({ searchState, setSearchState }) => {
         }));
     };
 
-
+    const clearDistanceFilter = () => {
+        setSelectedDistance(null);
+    };
+    
+    const clearLeagueFilter = (leagueId) => {
+        setSelectedLeagues(prev => prev.filter(id => id !== leagueId));
+    };
+    
+    const clearTeamFilter = (teamId) => {
+        setSelectedTeams(prev => prev.filter(id => id !== teamId));
+    };
+    
+    const clearAllFilters = () => {
+        setSelectedDistance(null);
+        setSelectedLeagues([]);
+        setSelectedTeams([]);
+    };
 
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -708,11 +809,11 @@ const Home = ({ searchState, setSearchState }) => {
                             {/* Compact Search Bar - Only visible when matches are shown */}
                             <Box sx={{ 
                                 position: 'absolute',
-                                top: 0,
+                                top: '64px', // Position below the fixed header navigation
                                 left: 0,
                                 right: 0,
                                 backgroundColor: 'white',
-                                zIndex: 5, // Lower than header nav
+                                zIndex: 5,
                                 p: { xs: 1, sm: 1.5 },
                                 borderBottom: '1px solid',
                                 borderColor: 'grey.200',
@@ -755,7 +856,7 @@ const Home = ({ searchState, setSearchState }) => {
                             {/* Full-screen Map with Rail */}
                             <Box sx={{ 
                                 position: 'absolute',
-                                top: { xs: 76, sm: 82 }, // Adjust for mobile vs desktop compact search bar height
+                                top: { xs: '140px', sm: '146px' }, // Header (64px) + compact search bar height
                                 left: 0,
                                 right: 0,
                                 bottom: 0,
@@ -793,6 +894,105 @@ const Home = ({ searchState, setSearchState }) => {
                                                 {selectedTeams.length > 0 && ` featuring ${selectedTeams.length} teams`}
                                             </Typography>
                                         </Box>
+                                        
+                                        {/* Applied Filters */}
+                                        {(selectedDistance || selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                                            <Box sx={{ mb: 2 }}>
+                                                <Box sx={{ 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'space-between',
+                                                    mb: 1 
+                                                }}>
+                                                    <Typography variant="caption" sx={{ 
+                                                        fontWeight: 600, 
+                                                        color: '#666',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.5px'
+                                                    }}>
+                                                        Applied Filters
+                                                    </Typography>
+                                                    <Button
+                                                        size="small"
+                                                        startIcon={<ClearAll />}
+                                                        onClick={clearAllFilters}
+                                                        sx={{ 
+                                                            color: '#666',
+                                                            fontSize: '0.75rem',
+                                                            minWidth: 'auto',
+                                                            px: 1,
+                                                            '&:hover': {
+                                                                backgroundColor: '#f5f5f5'
+                                                            }
+                                                        }}
+                                                    >
+                                                        Clear All
+                                                    </Button>
+                                                </Box>
+                                                
+                                                <Box sx={{ 
+                                                    display: 'flex', 
+                                                    flexWrap: 'wrap', 
+                                                    gap: 1 
+                                                }}>
+                                                    {/* Distance Filter */}
+                                                    {selectedDistance && (
+                                                        <Chip
+                                                            label={`Within ${selectedDistance} miles`}
+                                                            onDelete={clearDistanceFilter}
+                                                            deleteIcon={<Clear />}
+                                                            size="small"
+                                                            sx={{
+                                                                backgroundColor: '#e3f2fd',
+                                                                color: '#1976d2',
+                                                                '& .MuiChip-deleteIcon': {
+                                                                    color: '#1976d2'
+                                                                }
+                                                            }}
+                                                        />
+                                                    )}
+                                                    
+                                                    {/* League Filters */}
+                                                    {selectedLeagues.map(leagueId => {
+                                                        const league = getLeagueById(leagueId);
+                                                        return (
+                                                            <Chip
+                                                                key={leagueId}
+                                                                label={league?.name || `League ${leagueId}`}
+                                                                onDelete={() => clearLeagueFilter(leagueId)}
+                                                                deleteIcon={<Clear />}
+                                                                size="small"
+                                                                sx={{
+                                                                    backgroundColor: '#f3e5f5',
+                                                                    color: '#7b1fa2',
+                                                                    '& .MuiChip-deleteIcon': {
+                                                                        color: '#7b1fa2'
+                                                                    }
+                                                                }}
+                                                            />
+                                                        );
+                                                    })}
+                                                    
+                                                    {/* Team Filters */}
+                                                    {selectedTeams.map(teamName => (
+                                                        <Chip
+                                                            key={teamName}
+                                                            label={teamName}
+                                                            onDelete={() => clearTeamFilter(teamName)}
+                                                            deleteIcon={<Clear />}
+                                                            size="small"
+                                                            sx={{
+                                                                backgroundColor: '#e8f5e8',
+                                                                color: '#2e7d32',
+                                                                '& .MuiChip-deleteIcon': {
+                                                                    color: '#2e7d32'
+                                                                }
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </Box>
+                                            </Box>
+                                        )}
                                         
                                         <Matches 
                                             matches={filteredMatches}
@@ -896,6 +1096,78 @@ const Home = ({ searchState, setSearchState }) => {
                         <KeyboardArrowUp />
                     </Fab>
                 </Zoom>
+
+                {/* Date Restriction Modal */}
+                <Dialog
+                    open={dateRestrictionModalOpen}
+                    onClose={() => setDateRestrictionModalOpen(false)}
+                    maxWidth="sm"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 3,
+                            p: 1
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ 
+                        fontWeight: 600, 
+                        color: '#FF385C',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1
+                    }}>
+                        🔒 Date Restriction
+                    </DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body1" sx={{ mb: 2 }}>
+                            Sorry! As a <strong>Freemium</strong> user, you can only search for matches up to <strong>60 days</strong> in advance.
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                            You tried to select a {restrictedDateType} date that's more than 60 days from today. 
+                            To search for matches further in the future, please upgrade to a Pro subscription.
+                        </Typography>
+                        <Box sx={{ 
+                            p: 2, 
+                            backgroundColor: '#f8f9fa', 
+                            borderRadius: 2, 
+                            border: '1px solid #e9ecef' 
+                        }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                                ✨ Upgrade to Pro to unlock:
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#666' }}>
+                                • Unlimited date range for match searches<br/>
+                                • Access to Championship league matches<br/>
+                                • Priority customer support
+                            </Typography>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions sx={{ p: 3, pt: 1 }}>
+                        <Button 
+                            onClick={() => setDateRestrictionModalOpen(false)}
+                            sx={{ color: '#666' }}
+                        >
+                            Got it
+                        </Button>
+                        <Button 
+                            variant="contained"
+                            onClick={() => {
+                                setDateRestrictionModalOpen(false);
+                                // TODO: Navigate to upgrade page
+                                console.log('Navigate to upgrade page');
+                            }}
+                            sx={{
+                                backgroundColor: '#FF385C',
+                                '&:hover': {
+                                    backgroundColor: '#E61E4D'
+                                }
+                            }}
+                        >
+                            Upgrade to Pro
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 {/* Trip Modal */}
                 <TripModal

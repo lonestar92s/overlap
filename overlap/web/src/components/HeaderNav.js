@@ -15,7 +15,8 @@ import {
     ListItemIcon,
     Divider,
     useMediaQuery,
-    useTheme
+    useTheme,
+    Chip
 } from '@mui/material';
 import { 
     AccountCircle, 
@@ -25,7 +26,8 @@ import {
     Logout,
     Menu as MenuIcon,
     Stadium,
-    Explore as ExploreIcon
+    Explore as ExploreIcon,
+    Dashboard as DashboardIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './Auth';
@@ -94,6 +96,12 @@ const HeaderNav = () => {
         handleMobileMenuClose();
     };
 
+    const handleAdminClick = () => {
+        navigate('/admin');
+        handleMenuClose();
+        handleMobileMenuClose();
+    };
+
     const handleLogout = () => {
         logout();
         navigate('/');
@@ -110,9 +118,19 @@ const HeaderNav = () => {
     const userMenuItems = [
         { text: 'Profile', icon: <Person />, onClick: handleProfileClick },
         { text: 'My Trips', icon: <FlightTakeoff />, onClick: handleTripsClick },
-        { text: 'Matches I\'ve Been To', icon: <Stadium />, onClick: handleMatchesClick },
+        { text: 'Memories', icon: <Stadium />, onClick: handleMatchesClick },
         { text: 'Preferences', icon: <Settings />, onClick: handlePreferencesClick },
     ];
+
+    // Add admin menu item if user is admin
+    if (user?.role === 'admin') {
+        userMenuItems.unshift({
+            text: 'Admin Dashboard',
+            icon: <DashboardIcon />,
+            onClick: handleAdminClick,
+            isAdmin: true
+        });
+    }
 
     return (
         <>
@@ -258,19 +276,38 @@ const HeaderNav = () => {
                         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                     >
                         <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #eee' }}>
-                            <Typography variant="subtitle2" fontWeight="bold">
-                                {user?.profile?.firstName} {user?.profile?.lastName}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="subtitle2" fontWeight="bold">
+                                    {user?.profile?.firstName} {user?.profile?.lastName}
+                                </Typography>
+                                {user?.role === 'admin' && (
+                                    <Chip 
+                                        label="Admin" 
+                                        size="small" 
+                                        color="primary" 
+                                        variant="outlined"
+                                    />
+                                )}
+                            </Box>
                             <Typography variant="body2" color="text.secondary">
                                 {user?.email}
                             </Typography>
                         </Box>
                         
                         {userMenuItems.map((item, index) => (
-                            <MenuItem key={index} onClick={item.onClick}>
+                            <MenuItem 
+                                key={index} 
+                                onClick={item.onClick}
+                                sx={item.isAdmin ? { 
+                                    backgroundColor: 'primary.50',
+                                    '&:hover': { backgroundColor: 'primary.100' }
+                                } : {}}
+                            >
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     {item.icon}
-                                    <Typography>{item.text}</Typography>
+                                    <Typography color={item.isAdmin ? 'primary.main' : 'inherit'}>
+                                        {item.text}
+                                    </Typography>
                                 </Box>
                             </MenuItem>
                         ))}

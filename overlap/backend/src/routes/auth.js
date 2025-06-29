@@ -1,20 +1,25 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const auth = require('../middleware/auth');
+const subscriptionService = require('../services/subscriptionService');
+const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Register a new user
 router.post('/register', async (req, res) => {
     try {
-        const { email, password, profile } = req.body;
+        const { email, password, profile, subscriptionTier } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ error: 'Email already registered' });
         }
+
+        // Validate subscription tier
+        const validTiers = ['freemium', 'pro', 'planner'];
+        const selectedTier = subscriptionTier && validTiers.includes(subscriptionTier) ? subscriptionTier : 'freemium';
 
         // Create new user
         const user = new User({
@@ -38,6 +43,9 @@ router.post('/register', async (req, res) => {
             }
         });
 
+        // Set subscription tier using the service
+        subscriptionService.updateUserTier(user, selectedTier);
+
         await user.save();
 
         // Generate token
@@ -51,8 +59,10 @@ router.post('/register', async (req, res) => {
             user: {
                 id: user._id,
                 email: user.email,
+                role: user.role,
                 profile: user.profile,
-                preferences: user.preferences
+                preferences: user.preferences,
+                subscription: user.subscription
             },
             token
         });
@@ -89,8 +99,10 @@ router.post('/login', async (req, res) => {
             user: {
                 id: user._id,
                 email: user.email,
+                role: user.role,
                 profile: user.profile,
-                preferences: user.preferences
+                preferences: user.preferences,
+                subscription: user.subscription
             },
             token
         });
@@ -106,8 +118,10 @@ router.get('/me', auth, async (req, res) => {
             user: {
                 id: req.user._id,
                 email: req.user.email,
+                role: req.user.role,
                 profile: req.user.profile,
-                preferences: req.user.preferences
+                preferences: req.user.preferences,
+                subscription: req.user.subscription
             }
         });
     } catch (error) {
@@ -119,6 +133,97 @@ router.get('/me', auth, async (req, res) => {
 router.post('/logout', auth, async (req, res) => {
     try {
         res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ADMIN ROUTES
+
+// Get all users (admin only)
+router.get('/admin/users', adminAuth, async (req, res) => {
+    try {
+        const users = await User.find({})
+            .select('-password')
+            .sort({ createdAt: -1 });
+        
+        res.json({
+            success: true,
+            users: users.map(user => ({
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                profile: user.profile,
+                createdAt: user.createdAt
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Promote user to admin (admin only)
+router.post('/admin/promote/:userId', adminAuth, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        if (user.role === 'admin') {
+            return res.status(400).json({ error: 'User is already an admin' });
+        }
+        
+        user.role = 'admin';
+        await user.save();
+        
+        res.json({
+            success: true,
+            message: `${user.email} has been promoted to admin`,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Demote admin to user (admin only)
+router.post('/admin/demote/:userId', adminAuth, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        
+        // Prevent self-demotion
+        if (userId === req.user._id.toString()) {
+            return res.status(400).json({ error: 'Cannot demote yourself' });
+        }
+        
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        if (user.role === 'user') {
+            return res.status(400).json({ error: 'User is already a regular user' });
+        }
+        
+        user.role = 'user';
+        await user.save();
+        
+        res.json({
+            success: true,
+            message: `${user.email} has been demoted to regular user`,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

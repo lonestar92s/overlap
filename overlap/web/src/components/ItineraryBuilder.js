@@ -21,7 +21,7 @@ import {
     Schedule,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { getVenueForTeam } from '../data/venues';
+// Note: Venue data is now included in match objects from backend
 import { getTransportationOptions } from '../services/transportationService';
 
 const TransportOption = ({ 
@@ -111,8 +111,8 @@ const ItineraryBuilder = ({
                 const currentMatch = selectedMatches[i];
                 const nextMatch = selectedMatches[i + 1];
                 
-                const currentVenue = getVenueForTeam(currentMatch.homeTeam.name);
-                const nextVenue = getVenueForTeam(nextMatch.homeTeam.name);
+                const currentVenue = currentMatch.fixture?.venue;
+                const nextVenue = nextMatch.fixture?.venue;
                 
                 if (!currentVenue?.coordinates || !nextVenue?.coordinates) continue;
 
@@ -175,7 +175,7 @@ const ItineraryBuilder = ({
 
             <Stepper orientation="vertical">
                 {selectedMatches.map((match, index) => {
-                    const venue = getVenueForTeam(match.homeTeam.name);
+                    const venue = match.fixture?.venue;
                     const matchDate = new Date(match.utcDate);
                     const nextMatch = selectedMatches[index + 1];
                     const transportKey = nextMatch ? `${match.id}-${nextMatch.id}` : null;
@@ -199,7 +199,7 @@ const ItineraryBuilder = ({
                                         {match.homeTeam.name} vs {match.awayTeam.name}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        {venue?.stadium}, {venue?.location}
+                                        {venue?.name}, {venue?.city}
                                     </Typography>
                                 </Box>
 

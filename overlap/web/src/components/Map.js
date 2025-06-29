@@ -6,6 +6,7 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import { format } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { getVenueCoordinates } from '../utils/venues';
+import { formatMatchDateTime } from '../utils/timezone';
 
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 
@@ -148,96 +149,13 @@ const Map = ({
         };
     }, []); // Empty dependency array since we only want this to run once
 
-    // Helper function to get timezone from coordinates
-    const getTimezoneFromCoordinates = (coordinates) => {
-        // This is a simplified version. In a real-world application, 
-        // you would want to use a timezone lookup service or library
-        // like Google Time Zone API or moment-timezone with a complete timezone database
-        
-        const [longitude, latitude] = coordinates;
-        
-        // Europe
-        if (latitude >= 35 && latitude <= 60) {
-            if (longitude >= -10 && longitude <= 2) return 'Europe/London';      // UK, Ireland, Portugal
-            if (longitude > 2 && longitude <= 7.5) return 'Europe/Paris';        // France, Belgium, Netherlands
-            if (longitude > 7.5 && longitude <= 15) return 'Europe/Berlin';      // Germany, Switzerland, Italy
-            if (longitude > 15 && longitude <= 20) return 'Europe/Rome';         // Italy, Austria
-            if (longitude <= -10) return 'Atlantic/Azores';                      // Azores
-            if (longitude > 20 && longitude <= 30) return 'Europe/Istanbul';     // Turkey, Eastern Europe
-        }
-        
-        // Americas
-        if (longitude >= -180 && longitude <= -30) {
-            if (latitude >= 25 && latitude <= 50) {  // North America
-                if (longitude >= -125 && longitude <= -115) return 'America/Los_Angeles';
-                if (longitude > -115 && longitude <= -100) return 'America/Denver';
-                if (longitude > -100 && longitude <= -85) return 'America/Chicago';
-                if (longitude > -85 && longitude <= -65) return 'America/New_York';
-            }
-            if (latitude >= -60 && latitude < 25) {  // South & Central America
-                if (longitude >= -85 && longitude <= -75) return 'America/Bogota';
-                if (longitude > -75 && longitude <= -65) return 'America/Lima';
-                if (longitude > -65 && longitude <= -55) return 'America/Sao_Paulo';
-                if (longitude > -55 && longitude <= -30) return 'America/Buenos_Aires';
-            }
-        }
-        
-        // Asia
-        if (latitude >= 20 && latitude <= 55 && longitude >= 30 && longitude <= 180) {
-            if (longitude >= 30 && longitude <= 45) return 'Asia/Dubai';         // UAE
-            if (longitude > 45 && longitude <= 60) return 'Asia/Karachi';        // Pakistan
-            if (longitude > 60 && longitude <= 75) return 'Asia/Kolkata';        // India
-            if (longitude > 75 && longitude <= 90) return 'Asia/Bangkok';        // Thailand
-            if (longitude > 90 && longitude <= 105) return 'Asia/Shanghai';      // China
-            if (longitude > 105 && longitude <= 120) return 'Asia/Tokyo';        // Japan
-        }
-        
-        // Africa
-        if (latitude >= -35 && latitude <= 35 && longitude >= -20 && longitude <= 50) {
-            if (longitude >= -20 && longitude <= 0) return 'Africa/Casablanca';  // Morocco
-            if (longitude > 0 && longitude <= 20) return 'Africa/Lagos';         // Nigeria
-            if (longitude > 20 && longitude <= 35) return 'Africa/Cairo';        // Egypt
-            if (longitude > 35 && longitude <= 50) return 'Africa/Nairobi';      // Kenya
-        }
-        
-        // Australia & Oceania
-        if (latitude >= -50 && latitude <= -10 && longitude >= 110 && longitude <= 180) {
-            if (longitude >= 110 && longitude <= 130) return 'Australia/Perth';
-            if (longitude > 130 && longitude <= 150) return 'Australia/Sydney';
-            if (longitude > 150) return 'Pacific/Auckland';
-        }
-        
-        return 'UTC'; // Default to UTC if no specific timezone is found
-    };
-
-    // Format match date and time
-    const formatMatchDateTime = (utcDate, venue) => {
-        // Create date object from UTC string
-        const date = new Date(utcDate);
-        
-        // Get venue timezone, default to UTC
-        let timeZone = 'UTC';
-        if (venue?.coordinates) {
-            timeZone = getTimezoneFromCoordinates(venue.coordinates);
-        }
-        
-        // Convert UTC date to venue's timezone
-        const zonedDate = utcToZonedTime(date, timeZone);
-        
-        // Format the date and time in the venue's timezone
-        return {
-            date: format(zonedDate, 'EEE, MMM d'),
-            time: format(zonedDate, 'h:mm a')
-        };
-    };
-
     // Create styled popup HTML for multiple matches at the same venue
     const createVenuePopupHTML = (venue, matches) => {
         const matchList = matches.map(match => {
             const homeTeam = match.teams.home;
             const awayTeam = match.teams.away;
             
-            // Get stadium local time using venue coordinates
+            // Get stadium local time using centralized timezone utility
             const matchDateTime = formatMatchDateTime(match.fixture.date, match.fixture.venue);
 
             return `
@@ -277,7 +195,7 @@ const Map = ({
                             <img src="${awayTeam.logo}" alt="${awayTeam.name}" style="width: 20px; height: 20px; margin-left: 6px; object-fit: contain;" onerror="this.style.display='none'">
                         </div>
                     </div>
-                    <div class="match-time" style="font-size: 12px; color: #666; text-align: center;">${matchDateTime.date} at ${matchDateTime.time}</div>
+                    <div class="match-time" style="font-size: 12px; color: #666; text-align: center;">${matchDateTime.date} at ${matchDateTime.time} ${matchDateTime.timeZone}</div>
                 </div>
             `;
         }).join('');
@@ -317,6 +235,26 @@ const Map = ({
         }
     }, [setActiveMarker]);
 
+    // Separate effect to watch for matches changes specifically
+    useEffect(() => {
+        console.log('🔄 MATCHES CHANGED DETECTED:', {
+            matchCount: matches?.length || 0,
+            matchIds: matches?.map(m => m.fixture?.id) || []
+        });
+        
+        // Force marker update by clearing and recreating them
+        if (mapInstance.current && !loading) {
+            console.log('🔄 Forcing marker update due to matches change');
+            // Clear existing markers
+            markers.current.forEach(marker => marker.remove());
+            markers.current = [];
+            markerRefs.current = {};
+            
+            // Trigger the main effect by updating a dummy state
+            // This ensures markers are recreated
+        }
+    }, [matches]);
+
     // Handle location and matches changes
     useEffect(() => {
         if (!mapInstance.current || loading) {
@@ -329,35 +267,16 @@ const Map = ({
             showLocation, 
             hasLocation: !!location,
             matchCount: matches?.length || 0,
-            matchTeams: matches?.map(m => `${m.teams?.home?.name} vs ${m.teams?.away?.name}`) || []
+            matchTeams: matches?.map(m => `${m.teams?.home?.name} vs ${m.teams?.away?.name}`) || [],
+            matchIds: matches?.map(m => m.fixture?.id) || [],
+            matchesHash: JSON.stringify(matches?.map(m => m.fixture?.id).sort())
         });
 
         // Remove all existing markers first
+        console.log('🧹 Removing', markers.current.length, 'existing markers');
         markers.current.forEach(marker => marker.remove());
         markers.current = [];
-
-        // COMMENTED OUT TEST MARKER FOR NOW
-        // // ADD HARDCODED TEST MARKER - REMOVE THIS AFTER TESTING
-        // console.log('Adding hardcoded test marker at London coordinates');
-        // console.log('mapInstance.current:', mapInstance.current);
-        // console.log('mapInstance.current type:', typeof mapInstance.current);
-        // 
-        // const testMarker = new mapboxgl.Marker({
-        //     color: '#00FF00'  // Bright green to make it obvious
-        // })
-        //     .setLngLat([-0.1278, 51.5074]);  // London coordinates
-        //     
-        // console.log('Test marker created:', testMarker);
-        // console.log('About to add test marker to map...');
-        // 
-        // const addedTestMarker = testMarker.addTo(mapInstance.current);
-        // console.log('Test marker addTo result:', addedTestMarker);
-        // console.log('Test marker after addTo:', testMarker);
-        // 
-        // markers.current.push(testMarker);
-        // console.log('Test marker added successfully');
-        // console.log('Test marker element:', testMarker.getElement());
-        // console.log('Test marker LngLat:', testMarker.getLngLat());
+        markerRefs.current = {}; // Also clear marker refs
 
         const bounds = new mapboxgl.LngLatBounds();
         let hasMarkers = false;
@@ -503,12 +422,16 @@ const Map = ({
 
                 // Get coordinates from API response (backend provides them now)
                 const venueData = venueMatches[0].fixture.venue;
-                if (!venueData?.coordinates) {
-                    console.log(`❌ NO COORDINATES: ${venueData?.name || 'Unknown venue'} - skipping marker`);
+                const coordinates = venueData?.coordinates;
+                
+                // Validate coordinates - must be array with 2 numeric values
+                if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2 || 
+                    typeof coordinates[0] !== 'number' || typeof coordinates[1] !== 'number' ||
+                    coordinates[0] === 0 || coordinates[1] === 0) {
+                    console.log(`❌ NO VALID COORDINATES: ${venueData?.name || 'Unknown venue'} - coordinates: ${JSON.stringify(coordinates)} - skipping marker`);
                     return;
                 }
 
-                const coordinates = venueData.coordinates;
                 console.log(`🏟️  CREATING MARKER: ${venueData.name} at [${coordinates}]`);
 
                 // Create and add venue marker with popup
@@ -521,8 +444,11 @@ const Map = ({
 
                 // Store marker reference with venue key
                 markerRefs.current[venueKey] = venueMarker;
+                markers.current.push(venueMarker); // Add to markers array for cleanup
                 bounds.extend(coordinates);
                 hasMarkers = true;
+                
+                console.log(`✅ MARKER CREATED: ${venueData.name} - Total markers: ${markers.current.length}`);
             });
 
             // If we have both user location and matches, fit bounds to show all markers
@@ -533,8 +459,13 @@ const Map = ({
                 });
             }
         }
-
-
+        
+        console.log('🏁 MAP UPDATE COMPLETE:', {
+            totalMarkersCreated: markers.current.length,
+            hasUserLocation: !!location,
+            hasMarkers,
+            matchesProcessed: matches?.length || 0
+        });
 
     }, [location, showLocation, matches, loading]);
 
@@ -611,12 +542,19 @@ const Map = ({
             const currentCoordinates = currentMatch.fixture.venue?.coordinates;
             const nextCoordinates = nextMatch.fixture.venue?.coordinates;
 
-            if (!currentCoordinates || !nextCoordinates) {
-                console.warn('Missing venue coordinates:', {
+            // Validate both coordinate sets - must be arrays with 2 numeric values
+            const isValidCoords = (coords) => coords && Array.isArray(coords) && coords.length === 2 && 
+                typeof coords[0] === 'number' && typeof coords[1] === 'number' && 
+                coords[0] !== 0 && coords[1] !== 0;
+
+            if (!isValidCoords(currentCoordinates) || !isValidCoords(nextCoordinates)) {
+                console.warn('Invalid venue coordinates for route:', {
                     currentTeam: currentMatch.teams.home.name,
                     nextTeam: nextMatch.teams.home.name,
                     currentVenue: currentVenue.name,
-                    nextVenue: nextVenue.name
+                    nextVenue: nextVenue.name,
+                    currentCoords: currentCoordinates,
+                    nextCoords: nextCoordinates
                 });
                 continue;
             }
@@ -703,8 +641,12 @@ const Map = ({
             const bounds = new mapboxgl.LngLatBounds();
             selectedMatches.forEach(match => {
                 const venue = match.fixture.venue;
-                if (venue?.coordinates) {
-                    bounds.extend(venue.coordinates);
+                const coords = venue?.coordinates;
+                // Validate coordinates before extending bounds
+                if (coords && Array.isArray(coords) && coords.length === 2 && 
+                    typeof coords[0] === 'number' && typeof coords[1] === 'number' &&
+                    coords[0] !== 0 && coords[1] !== 0) {
+                    bounds.extend(coords);
                 }
             });
             

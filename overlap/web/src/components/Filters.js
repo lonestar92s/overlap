@@ -13,10 +13,12 @@ import {
     Box,
     IconButton,
     Checkbox,
-    Divider
+    Divider,
+    Tooltip
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Lock as LockIcon } from '@mui/icons-material';
 import { getAllLeagues, LEAGUES } from '../data/leagues';
+import { useSubscription } from '../hooks/useSubscription';
 
 const DISTANCE_OPTIONS = [
     { value: 50, label: '50 miles' },
@@ -48,12 +50,20 @@ const Filters = ({
     onTeamsChange,
     teamsByLeague
 }) => {
+    const { hasLeagueAccess, getUpgradeMessage } = useSubscription();
+
     const handleDistanceChange = (event) => {
         const value = event.target.value === 'all' ? null : Number(event.target.value);
         onDistanceChange(value);
     };
 
     const handleLeagueChange = (leagueId) => {
+        // Check if user has access to this league
+        if (!hasLeagueAccess(leagueId)) {
+            // Don't allow selection of restricted leagues
+            return;
+        }
+
         const newSelectedLeagues = selectedLeagues.includes(leagueId)
             ? selectedLeagues.filter(id => id !== leagueId)
             : [...selectedLeagues, leagueId];
@@ -100,29 +110,32 @@ const Filters = ({
 
     const handleCountryChange = (countryCode) => {
         const countryLeagues = LEAGUES[countryCode] || [];
-        const countryLeagueIds = countryLeagues.map(league => league.id);
+        // Only include leagues that the user has access to
+        const accessibleCountryLeagueIds = countryLeagues
+            .filter(league => hasLeagueAccess(league.id))
+            .map(league => league.id);
         
-        // Check if all leagues from this country are already selected
-        const allCountryLeaguesSelected = countryLeagueIds.every(id => 
+        // Check if all accessible leagues from this country are already selected
+        const allAccessibleCountryLeaguesSelected = accessibleCountryLeagueIds.every(id => 
             selectedLeagues.includes(id)
         );
 
-        if (allCountryLeaguesSelected) {
-            // If all selected, remove all leagues from this country
+        if (allAccessibleCountryLeaguesSelected) {
+            // If all selected, remove all accessible leagues from this country
             const newSelectedLeagues = selectedLeagues.filter(id => 
-                !countryLeagueIds.includes(id)
+                !accessibleCountryLeagueIds.includes(id)
             );
             onLeaguesChange(newSelectedLeagues);
             
             // Also remove all teams from the deselected leagues
-            const countryTeams = countryLeagueIds.flatMap(leagueId => teamsByLeague[leagueId] || []);
+            const countryTeams = accessibleCountryLeagueIds.flatMap(leagueId => teamsByLeague[leagueId] || []);
             const newSelectedTeams = selectedTeams.filter(team => !countryTeams.includes(team));
             onTeamsChange(newSelectedTeams);
         } else {
-            // If not all selected, add all leagues from this country
+            // If not all selected, add all accessible leagues from this country
             const newSelectedLeagues = [
-                ...selectedLeagues.filter(id => !countryLeagueIds.includes(id)),
-                ...countryLeagueIds
+                ...selectedLeagues.filter(id => !accessibleCountryLeagueIds.includes(id)),
+                ...accessibleCountryLeagueIds
             ];
             onLeaguesChange(newSelectedLeagues);
         }
@@ -130,7 +143,11 @@ const Filters = ({
 
     const handleSelectAllLeagues = (event) => {
         if (event.target.checked) {
-            onLeaguesChange(getAllLeagues().map(l => l.id));
+            // Only select leagues that the user has access to
+            const accessibleLeagues = getAllLeagues()
+                .filter(league => hasLeagueAccess(league.id))
+                .map(l => l.id);
+            onLeaguesChange(accessibleLeagues);
         } else {
             onLeaguesChange([]);
             // When deselecting all leagues, also clear all team selections
@@ -138,21 +155,26 @@ const Filters = ({
         }
     };
 
-    // Check if all leagues are selected
-    const allLeaguesSelected = selectedLeagues.length === getAllLeagues().length;
+    // Check if all accessible leagues are selected
+    const accessibleLeagues = getAllLeagues().filter(league => hasLeagueAccess(league.id));
+    const allLeaguesSelected = selectedLeagues.length === accessibleLeagues.length && 
+        accessibleLeagues.every(league => selectedLeagues.includes(league.id));
     const someLeaguesSelected = selectedLeagues.length > 0 && !allLeaguesSelected;
 
     // Helper function to check country selection state
     const getCountrySelectionState = (countryCode) => {
         const countryLeagues = LEAGUES[countryCode] || [];
-        const countryLeagueIds = countryLeagues.map(league => league.id);
+        // Only consider leagues that the user has access to
+        const accessibleCountryLeagueIds = countryLeagues
+            .filter(league => hasLeagueAccess(league.id))
+            .map(league => league.id);
         
-        const selectedCountryLeagues = countryLeagueIds.filter(id => 
+        const selectedAccessibleCountryLeagues = accessibleCountryLeagueIds.filter(id => 
             selectedLeagues.includes(id)
         );
 
-        if (selectedCountryLeagues.length === 0) return 'none';
-        if (selectedCountryLeagues.length === countryLeagueIds.length) return 'all';
+        if (selectedAccessibleCountryLeagues.length === 0) return 'none';
+        if (selectedAccessibleCountryLeagues.length === accessibleCountryLeagueIds.length) return 'all';
         return 'some';
     };
 
@@ -254,6 +276,15 @@ const Filters = ({
                     >
                         Leagues
                     </Typography>
+                    
+                    {/* Subscription note */}
+                    <Box sx={{ mb: 2, p: 1.5, backgroundColor: '#f8f9fa', borderRadius: 1, border: '1px solid #e9ecef' }}>
+                        <Typography variant="caption" sx={{ color: '#666', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <LockIcon sx={{ fontSize: 12 }} />
+                            Leagues with a lock icon require a Pro subscription
+                        </Typography>
+                    </Box>
+                    
                     <FormControl component="fieldset">
                         <FormControlLabel
                             control={
@@ -297,30 +328,75 @@ const Filters = ({
                                         {leagues.map((league) => {
                                             const leagueTeams = teamsByLeague[league.id] || [];
                                             const teamSelectionState = getLeagueTeamSelectionState(league.id);
+                                            const hasAccess = hasLeagueAccess(league.id);
+                                            const isRestricted = !hasAccess;
                                             
                                             return (
                                                 <Box key={league.id} sx={{ mb: 1 }}>
                                                     {/* League checkbox */}
-                                                    <FormControlLabel
-                                                        control={
-                                                            <Checkbox
-                                                                checked={selectedLeagues.includes(league.id)}
-                                                                onChange={() => handleLeagueChange(league.id)}
-                                                                size="small"
-                                                            />
-                                                        }
-                                                        label={league.name}
-                                                        sx={{ 
-                                                            mb: 0.5,
-                                                            '& .MuiTypography-root': {
-                                                                fontSize: '0.9rem',
-                                                                color: '#666'
+                                                    {isRestricted ? (
+                                                        <Tooltip 
+                                                            title={getUpgradeMessage(league.id)}
+                                                            arrow
+                                                            placement="top"
+                                                        >
+                                                            <Box>
+                                                                <FormControlLabel
+                                                                    control={
+                                                                        <Checkbox
+                                                                            checked={false}
+                                                                            disabled={true}
+                                                                            size="small"
+                                                                        />
+                                                                    }
+                                                                    label={
+                                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                            <Typography
+                                                                                sx={{
+                                                                                    fontSize: '0.9rem',
+                                                                                    color: '#bbb',
+                                                                                    textDecoration: 'none'
+                                                                                }}
+                                                                            >
+                                                                                {league.name}
+                                                                            </Typography>
+                                                                            <LockIcon sx={{ fontSize: 16, color: '#bbb' }} />
+                                                                        </Box>
+                                                                    }
+                                                                    sx={{ 
+                                                                        mb: 0.5,
+                                                                        opacity: 0.5,
+                                                                        cursor: 'not-allowed',
+                                                                        '& .MuiTypography-root': {
+                                                                            fontSize: '0.9rem',
+                                                                            color: '#bbb'
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </Box>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <FormControlLabel
+                                                            control={
+                                                                <Checkbox
+                                                                    checked={selectedLeagues.includes(league.id)}
+                                                                    onChange={() => handleLeagueChange(league.id)}
+                                                                    size="small"
+                                                                />
                                                             }
-                                                        }}
-                                                    />
+                                                            label={league.name}
+                                                            sx={{ 
+                                                                mb: 0.5,
+                                                                '& .MuiTypography-root': {
+                                                                    fontSize: '0.9rem',
+                                                                    color: '#666'
+                                                                }
+                                                            }}
+                                                        />
+                                                    )}
                                                     
                                                     {/* Team checkboxes - only show if league is selected and has teams */}
-                                                    {selectedLeagues.includes(league.id) && leagueTeams.length > 0 && (
+                                                    {selectedLeagues.includes(league.id) && leagueTeams.length > 0 && hasAccess && (
                                                         <Box sx={{ ml: 4, mt: 1 }}>
                                                             {/* Select all teams for this league */}
                                                             <FormControlLabel

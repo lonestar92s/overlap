@@ -25,11 +25,17 @@ export const LEAGUES = {
     'IT': [ // Italy
         { id: '135', name: 'Serie A', tier: 1, country: 'Italy', countryCode: 'IT' }
     ],
+    'BE': [ // Belgium
+        { id: '144', name: 'Belgian Pro League', tier: 1, country: 'Belgium', countryCode: 'BE' }
+    ],
     'BR': [ // Brazil
         { id: '71', name: 'Série A', tier: 1, country: 'Brazil', countryCode: 'BR' }
     ],
     'US': [ // United States
         { id: '253', name: 'Major League Soccer', tier: 1, country: 'United States', countryCode: 'US' }
+    ],
+    'JP': [ // Japan
+        { id: '98', name: 'J1 League', tier: 1, country: 'Japan', countryCode: 'JP' }
     ],
     'INT': [ // International Competitions
         { id: '2', name: 'UEFA Champions League', tier: 1, country: 'Europe', countryCode: 'INT' },
@@ -61,9 +67,11 @@ export const getCountryCode = (countryName) => {
         'Netherlands': 'NL',
         'Portugal': 'PT',
         'Italy': 'IT',
+        'Belgium': 'BE',
         'Brazil': 'BR',
         'United States': 'US',
         'USA': 'US',
+        'Japan': 'JP',
         'International': 'INT'
     };
     return countryMapping[countryName];
