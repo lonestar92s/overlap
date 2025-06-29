@@ -11,13 +11,21 @@ import {
   CircularProgress,
   Link,
   InputAdornment,
-  IconButton
+  IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+  Chip
 } from '@mui/material';
 import {
   Login as LoginIcon,
   PersonAdd as PersonAddIcon,
   Visibility,
-  VisibilityOff
+  VisibilityOff,
+  Star as StarIcon,
+  StarBorder as StarBorderIcon
 } from '@mui/icons-material';
 import { getBackendUrl } from '../utils/api';
 
@@ -97,7 +105,8 @@ const Auth = () => {
     password: '',
     confirmPassword: '',
     firstName: '',
-    lastName: ''
+    lastName: '',
+    subscriptionTier: 'freemium'
   });
 
   const handleTabChange = (event, newValue) => {
@@ -176,6 +185,7 @@ const Auth = () => {
         body: JSON.stringify({
           email: registerForm.email,
           password: registerForm.password,
+          subscriptionTier: registerForm.subscriptionTier,
           profile: {
             firstName: registerForm.firstName,
             lastName: registerForm.lastName
@@ -318,7 +328,7 @@ const Auth = () => {
               value={registerForm.confirmPassword}
               onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
               required
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -333,6 +343,64 @@ const Auth = () => {
                 )
               }}
             />
+            
+            {/* Subscription Tier Selector */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
+                Choose Your Plan
+              </Typography>
+              <FormControl fullWidth>
+                <Select
+                  value={registerForm.subscriptionTier}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, subscriptionTier: e.target.value }))}
+                  displayEmpty
+                >
+                  <MenuItem value="freemium">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          Freemium
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          All leagues except Championship • Free
+                        </Typography>
+                      </Box>
+                      <Chip label="Free" color="success" size="small" />
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="pro">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          Pro
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          All leagues including Championship • $9.99 (never expires)
+                        </Typography>
+                      </Box>
+                      <Chip label="Popular" color="warning" size="small" />
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="planner">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          Planner
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          All leagues + premium features • $19.99 (never expires)
+                        </Typography>
+                      </Box>
+                      <Chip label="Premium" color="error" size="small" />
+                    </Box>
+                  </MenuItem>
+                </Select>
+                <FormHelperText>
+                  You can change your plan anytime. For testing purposes, all tiers are free.
+                </FormHelperText>
+              </FormControl>
+            </Box>
+            
             <Button
               type="submit"
               fullWidth

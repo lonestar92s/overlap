@@ -16,6 +16,30 @@ const userSchema = new mongoose.Schema({
         minlength: 8,
         select: false // Don't include password in queries by default
     },
+    role: {
+        type: String,
+        enum: ['user', 'admin'],
+        default: 'user'
+    },
+    subscription: {
+        tier: {
+            type: String,
+            enum: ['freemium', 'pro', 'planner'],
+            default: 'freemium'
+        },
+        startDate: {
+            type: Date,
+            default: Date.now
+        },
+        endDate: {
+            type: Date,
+            default: null // null for freemium (unlimited), date for paid tiers
+        },
+        isActive: {
+            type: Boolean,
+            default: true
+        }
+    },
     profile: {
         firstName: String,
         lastName: String,

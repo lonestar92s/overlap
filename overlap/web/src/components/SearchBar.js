@@ -25,6 +25,19 @@ import {
 import LocationAutocomplete from './LocationAutocomplete';
 import { format } from 'date-fns';
 
+// Helper function to safely format dates
+const safeFormatDate = (date, formatString) => {
+    if (!date || !(date instanceof Date) || isNaN(date)) {
+        return '';
+    }
+    try {
+        return format(date, formatString);
+    } catch (error) {
+        console.warn('Error formatting date:', error);
+        return '';
+    }
+};
+
 const SearchBar = ({ 
     searchState, 
     onLocationChange, 
@@ -88,7 +101,7 @@ const SearchBar = ({
                         >
                             {searchState.location ? searchState.location.name : 'Search location...'}
                         </Typography>
-                        {searchState.dates.departure && (
+                        {searchState.dates.departure && searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) && (
                             <>
                                 <Divider orientation="vertical" flexItem sx={{ mx: { xs: 0.5, sm: 1 } }} />
                                 <DateRange sx={{ color: '#666', fontSize: { xs: 18, sm: 20 } }} />
@@ -102,8 +115,8 @@ const SearchBar = ({
                                         whiteSpace: 'nowrap'
                                     }}
                                 >
-                                    {format(searchState.dates.departure, 'MMM d')}
-                                    {searchState.dates.return && ` - ${format(searchState.dates.return, 'MMM d')}`}
+                                    {safeFormatDate(searchState.dates.departure, 'MMM d')}
+                                    {searchState.dates.return && searchState.dates.return instanceof Date && !isNaN(searchState.dates.return) && ` - ${safeFormatDate(searchState.dates.return, 'MMM d')}`}
                                 </Typography>
                             </>
                         )}
@@ -181,10 +194,10 @@ const SearchBarContent = ({
     const [returnDatePickerOpen, setReturnDatePickerOpen] = useState(false);
 
     const handleDepartureDateChange = (date) => {
-        onDepartureDateChange(date);
+        const wasAccepted = onDepartureDateChange(date);
         
-        // Auto-open return date picker when departure date is selected
-        if (date && !searchState.dates.return) {
+        // Only auto-open return date picker if departure date was successfully accepted
+        if (date && !searchState.dates.return && wasAccepted) {
             setTimeout(() => {
                 setReturnDatePickerOpen(true);
             }, 100);
@@ -326,6 +339,9 @@ const SearchBarContent = ({
                             backgroundColor: '#FF385C',
                             '&:hover': {
                                 backgroundColor: '#E61E4D'
+                            },
+                            '&:disabled': {
+                                backgroundColor: '#ccc'
                             }
                         }}
                     >

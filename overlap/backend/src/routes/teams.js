@@ -1,32 +1,35 @@
 const express = require('express');
-const router = express.Router();
+const { auth, adminAuth } = require('../middleware/auth');
 const teamService = require('../services/teamService');
-const auth = require('../middleware/auth');
+
+const router = express.Router();
 
 /**
- * GET /api/teams/search?q=searchTerm&limit=20
- * Search for teams by name, code, or alias
+ * GET /api/teams/search
+ * Search teams by name or city
  */
 router.get('/search', async (req, res) => {
     try {
-        const { q: searchTerm, limit = 20 } = req.query;
-        
-        if (!searchTerm || searchTerm.trim().length < 2) {
-            return res.status(400).json({
-                success: false,
-                message: 'Search term must be at least 2 characters long'
-            });
-        }
+        const { 
+            query, 
+            country, 
+            league, 
+            limit = 10,
+            includeInactive = false 
+        } = req.query;
 
-        const teams = await teamService.searchTeams(searchTerm.trim(), parseInt(limit));
-        
+        const teams = await teamService.searchTeams({
+            query,
+            country,
+            league,
+            limit: parseInt(limit),
+            includeInactive: includeInactive === 'true'
+        });
+
         res.json({
             success: true,
-            data: {
-                teams,
-                searchTerm,
-                count: teams.length
-            }
+            results: teams,
+            count: teams.length
         });
     } catch (error) {
         console.error('Team search error:', error);
@@ -38,26 +41,32 @@ router.get('/search', async (req, res) => {
 });
 
 /**
- * GET /api/teams/popular?limit=50
- * Get popular teams for autocomplete suggestions
+ * GET /api/teams/popular
+ * Get popular/featured teams
  */
 router.get('/popular', async (req, res) => {
     try {
-        const { limit = 50 } = req.query;
-        const teams = await teamService.getPopularTeams(parseInt(limit));
-        
+        const { 
+            country, 
+            league,
+            limit = 20 
+        } = req.query;
+
+        const teams = await teamService.getPopularTeams({
+            country,
+            league,
+            limit: parseInt(limit)
+        });
+
         res.json({
             success: true,
-            data: {
-                teams,
-                count: teams.length
-            }
+            teams
         });
     } catch (error) {
         console.error('Popular teams error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to get popular teams'
+            message: 'Failed to fetch popular teams'
         });
     }
 });
@@ -65,11 +74,10 @@ router.get('/popular', async (req, res) => {
 /**
  * POST /api/teams/populate
  * Admin endpoint to populate database with teams from major leagues
- * Requires authentication
+ * Requires admin authentication
  */
-router.post('/populate', auth, async (req, res) => {
+router.post('/populate', adminAuth, async (req, res) => {
     try {
-        // In a real app, you'd want admin-only access
         await teamService.populatePopularTeams();
         
         res.json({

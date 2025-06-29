@@ -3,8 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const User = require('../models/User');
-const { getVenueForTeam } = require('../data/venues');
-const auth = require('../middleware/auth');
+const venueService = require('../services/venueService');
+const { auth } = require('../middleware/auth');
 const router = express.Router();
 
 // Configure multer for photo uploads
@@ -156,13 +156,13 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
         // Generate unique match ID
         const matchId = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
 
-        // For API matches, try to enrich venue data from cache
+        // For API matches, try to enrich venue data from database
         if (matchType === 'api' && homeTeam.name) {
-            const cachedVenue = getVenueForTeam(homeTeam.name);
-            if (cachedVenue && venue) {
-                venue.city = venue.city || cachedVenue.city;
-                venue.country = venue.country || cachedVenue.country;
-                venue.coordinates = venue.coordinates || cachedVenue.coordinates;
+            const venueData = await venueService.getVenueForTeam(homeTeam.name);
+            if (venueData && venue) {
+                venue.city = venue.city || venueData.city;
+                venue.country = venue.country || venueData.country;
+                venue.coordinates = venue.coordinates || (venueData.location ? venueData.location.coordinates : null);
             }
         }
 
