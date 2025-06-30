@@ -131,6 +131,9 @@ matchSchema.index({ lastUpdated: 1 });
 // Compound index for date range queries
 matchSchema.index({ leagueId: 1, kickoff: 1, status: 1 });
 
+// Add geospatial index for venue coordinates
+matchSchema.index({ "venue.coordinates": "2dsphere" });
+
 // Method to check if match data is fresh
 matchSchema.methods.isFresh = function(hours = 6) {
     const staleTime = new Date(Date.now() - hours * 60 * 60 * 1000);

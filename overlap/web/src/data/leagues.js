@@ -2,7 +2,8 @@
 export const LEAGUES = {
     'GB': [ // United Kingdom
         { id: '39', name: 'Premier League', tier: 1, country: 'England', countryCode: 'GB' },
-        { id: '40', name: 'Championship', tier: 2, country: 'England', countryCode: 'GB' }
+        { id: '40', name: 'Championship', tier: 2, country: 'England', countryCode: 'GB' },
+        { id: '41', name: 'League One', tier: 3, country: 'England', countryCode: 'GB' }
     ],
     'FR': [ // France
         { id: '61', name: 'Ligue 1', tier: 1, country: 'France', countryCode: 'FR' }

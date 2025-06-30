@@ -14,6 +14,8 @@ class LeagueService {
             '253': { name: 'Major League Soccer', country: 'USA' },
             '71': { name: 'Série A', country: 'Brazil' },
             '39': { name: 'Premier League', country: 'England' },
+            '40': { name: 'Championship', country: 'England' },
+            '41': { name: 'League One', country: 'England' },
             '140': { name: 'La Liga', country: 'Spain' },
             '78': { name: 'Bundesliga', country: 'Germany' },
             '135': { name: 'Serie A', country: 'Italy' },
@@ -232,6 +234,54 @@ class LeagueService {
             cacheEntries: Array.from(this.cache.keys())
         };
         return stats;
+    }
+
+    /**
+     * Search leagues by name or aliases
+     */
+    async searchLeagues(searchTerm, options = {}) {
+        const limit = options.limit || 10;
+        
+        try {
+            // Search in database first
+            const query = {
+                $or: [
+                    { name: { $regex: searchTerm, $options: 'i' } },
+                    { aliases: { $regex: searchTerm, $options: 'i' } },
+                    { apiId: searchTerm }
+                ],
+                isActive: true
+            };
+
+            const leagues = await League.find(query)
+                .sort({ tier: 1, name: 1 })
+                .limit(limit);
+
+            if (leagues.length > 0) {
+                return leagues;
+            }
+
+            // If no database results, search in API mappings
+            const apiResults = [];
+            const searchLower = searchTerm.toLowerCase();
+            
+            Object.entries(this.apiLeagueMappings).forEach(([apiId, leagueData]) => {
+                if (leagueData.name.toLowerCase().includes(searchLower) ||
+                    leagueData.country.toLowerCase().includes(searchLower)) {
+                    apiResults.push({
+                        apiId: apiId,
+                        name: leagueData.name,
+                        country: leagueData.country,
+                        isActive: true
+                    });
+                }
+            });
+
+            return apiResults.slice(0, limit);
+        } catch (error) {
+            console.error('Error searching leagues:', error);
+            return [];
+        }
     }
 }
 

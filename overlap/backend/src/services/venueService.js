@@ -10,11 +10,72 @@ class VenueService {
             misses: 0,
             dbQueries: 0
         };
+        
+        // API team name to venue mapping for League One
+        this.apiTeamToVenueMapping = {
+            'Birmingham': 'St. Andrew\'s Stadium',
+            'Blackpool': 'Bloomfield Road',
+            'Bolton': 'Toughsheet Community Stadium',
+            'Bristol Rovers': 'Memorial Stadium',
+            'Burton Albion': 'Pirelli Stadium',
+            'Cambridge United': 'Cledara Abbey Stadium',
+            'Charlton': 'The Valley',
+            'Crawley Town': 'The Recreation Ground',
+            'Exeter City': 'St James Park',
+            'Huddersfield': 'John Smith\'s Stadium',
+            'Lincoln': 'LNER Stadium',
+            'Mansfield Town': 'One Call Stadium',
+            'Northampton': 'Sixfields Stadium',
+            'Peterborough': 'London Road',
+            'Plymouth Argyle': 'Home Park',
+            'Portsmouth': 'Fratton Park',
+            'Rotherham': 'AESSEAL New York Stadium',
+            'Shrewsbury': 'The Croud Meadow',
+            'Stockport County': 'Edgeley Park',
+            'Stevenage': 'Broadhall Way',
+            'Wycombe': 'Adams Park',
+            'Leyton Orient': 'Brisbane Road',
+            'Reading': 'Select Car Leasing Stadium',
+            'Barnsley': 'Oakwell',
+            'Wigan': 'The Brick Community Stadium',
+            'Wrexham': 'Racecourse Ground'
+        };
     }
 
     /**
-     * Get venue information for a team by name
-     * @param {string} teamName - Name of the team
+     * Get venue by direct venue name lookup (new method for API-first approach)
+     */
+    async getVenueByName(venueName, city = null) {
+        try {
+            let query = { name: venueName };
+            if (city) {
+                query.city = city;
+            }
+            
+            const venue = await Venue.findOne(query);
+            
+            if (venue && venue.location?.coordinates) {
+                return {
+                    stadium: venue.name,
+                    name: venue.name,
+                    city: venue.city,
+                    country: venue.country,
+                    coordinates: venue.location.coordinates,
+                    capacity: venue.capacity,
+                    surface: venue.surface
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error(`Error getting venue by name ${venueName}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Get venue information for a team by name (enhanced with API mapping)
+     * @param {string} teamName - Name of the team (could be API name or full name)
      * @returns {Object|null} Venue information
      */
     async getVenueForTeam(teamName) {
@@ -28,7 +89,18 @@ class VenueService {
         this.cacheStats.dbQueries++;
 
         try {
-            // Find team and populate venue information
+            // Method 1: Check if we have a direct API team to venue mapping
+            const mappedVenueName = this.apiTeamToVenueMapping[teamName];
+            if (mappedVenueName) {
+                console.log(`🎯 API MAPPING: ${teamName} → ${mappedVenueName}`);
+                const venue = await this.getVenueByName(mappedVenueName);
+                if (venue) {
+                    this.cache.set(teamName, venue);
+                    return venue;
+                }
+            }
+
+            // Method 2: Try to find team in database
             const team = await Team.findOne({ name: teamName })
                 .populate('venueId')
                 .populate('leagueId');
@@ -47,21 +119,30 @@ class VenueService {
                 return legacyVenue;
             }
 
-            // Debug logging to identify structure issues
-            console.log(`Debug: Team ${teamName} venue structure:`, {
-                hasVenueId: !!team.venueId,
-                venueIdName: team.venueId?.name,
-                hasLocation: !!team.venueId?.location,
-                locationStructure: team.venueId?.location ? Object.keys(team.venueId.location) : 'no location',
-                coordinates: team.venueId?.location?.coordinates || 'no coordinates'
+            // Get coordinates from venue data - handle both formats
+            let coordinates = null;
+            if (team.venueId.location?.coordinates && team.venueId.location.coordinates.length === 2) {
+                coordinates = team.venueId.location.coordinates;
+            } else if (team.venueId.coordinates && team.venueId.coordinates.length === 2) {
+                coordinates = team.venueId.coordinates;
+            } else if (team.venue?.coordinates && team.venue.coordinates.length === 2) {
+                coordinates = team.venue.coordinates;
+            }
+
+            // Debug logging
+            console.log(`🏟️ Venue data for ${teamName}:`, {
+                name: team.venueId.name,
+                coordinates: coordinates,
+                source: coordinates ? (team.venueId.location ? 'GeoJSON' : 'Legacy') : 'None'
             });
 
             // Transform to expected format for backwards compatibility
             const venueInfo = {
                 stadium: team.venueId.name,
+                name: team.venueId.name,
                 city: team.venueId.city,
                 country: team.venueId.country,
-                coordinates: team.venueId.location?.coordinates || null,
+                coordinates: coordinates,
                 ticketUrl: team.venueId.ticketUrl,
                 capacity: team.venueId.capacity,
                 surface: team.venueId.surface,

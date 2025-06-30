@@ -74,16 +74,40 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                 id: fixture.fixture.id,
                 date: fixture.fixture.date,
                 venue: await (async () => {
-                    // API-FIRST APPROACH: Use API venue data directly
-                    const apiVenue = fixture.fixture.venue;
+                    // First try to get venue from our database using home team name
+                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
+                    const venueData = await venueService.getVenueForTeam(mappedTeamName);
                     
-                    // Get proper country information from league service
+                    if (venueData) {
+                        // Get coordinates from venue data
+                        let coordinates = venueData.coordinates;
+                        
+                        if (coordinates && coordinates.length === 2) {
+                            // Calculate distance if user location is provided
+                            let distance = null;
+                            if (userLocation) {
+                                const [venueLon, venueLat] = coordinates;
+                                distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
+                            }
+                            
+                            console.log(`🏟️  DB VENUE: ${fixture.teams.home.name} → ${mappedTeamName} → ${venueData.stadium || venueData.name} at [${coordinates}] ${distance ? `(${distance.toFixed(1)}mi)` : '(no distance)'}`);
+                            
+                            return {
+                                id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
+                                name: venueData.stadium || venueData.name,
+                                city: venueData.city,
+                                country: venueData.country,
+                                distance: distance,
+                                coordinates: coordinates
+                            };
+                        }
+                    }
+                    
+                    // If no database venue or no coordinates, try API venue data
+                    const apiVenue = fixture.fixture.venue;
                     const properCountry = await leagueService.getCountryByLeagueId(competitionId) || fixture.league.country || 'Unknown Country';
                     
-                    // Check if API provides venue data
                     if (apiVenue && apiVenue.name && apiVenue.city) {
-                        // Calculate distance if user location is provided and we have coordinates
-                        let distance = null;
                         let coordinates = null;
                         
                         // Check for coordinates in different possible formats from API
@@ -100,6 +124,7 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                             coordinates = coordinateService.getCoordinatesByStadium(apiVenue.name);
                         }
                         
+                        let distance = null;
                         if (userLocation && coordinates && coordinates.length === 2) {
                             const [venueLon, venueLat] = coordinates;
                             distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
@@ -116,30 +141,6 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                             country: properCountry,
                             distance: distance,
                             coordinates: coordinates
-                        };
-                    }
-                    
-                    // Fallback: Try database lookup for legacy support (mainly Chicago Fire)
-                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                    const venueData = await venueService.getVenueForTeam(mappedTeamName);
-                    
-                    if (venueData && venueData.coordinates && venueData.coordinates.length === 2) {
-                        // Calculate distance if user location is provided
-                        let distance = null;
-                        if (userLocation) {
-                            const [venueLon, venueLat] = venueData.coordinates;
-                            distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
-                        }
-                        
-                        console.log(`🏟️  DB FALLBACK: ${fixture.teams.home.name} → ${mappedTeamName} → ${venueData.stadium || venueData.name} at [${venueData.coordinates}] ${distance ? `(${distance.toFixed(1)}mi)` : '(no distance)'}`);
-                        
-                        return {
-                            id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
-                            name: venueData.stadium || venueData.name,
-                            city: venueData.city,
-                            country: venueData.country,
-                            distance: distance,
-                            coordinates: venueData.coordinates
                         };
                     }
                     
@@ -218,18 +219,16 @@ router.get('/competitions/:competitionId/matches', authenticateToken, async (req
         if (!subscriptionService.hasLeagueAccess(user, competitionId)) {
             return res.status(403).json({
                 error: 'Subscription Required',
-                message: `Access to this league requires a ${competitionId === '40' ? 'Pro' : 'higher'} subscription`,
-                requiredTier: competitionId === '40' ? 'pro' : 'planner',
+                message: `Access to this league requires a ${competitionId === '40' || competitionId === '41' ? 'Pro' : 'higher'} subscription`,
+                requiredTier: competitionId === '40' || competitionId === '41' ? 'pro' : 'planner',
                 currentTier: user?.subscription?.tier || 'freemium'
             });
         }
         
-        // Removed verbose API logs - keeping only marker debugging logs
-
         // Build API-Sports request parameters
-        const params = {
+        let params = {
             league: competitionId,
-            season: 2025  // 2025-26 season for most leagues
+            season: 2025  // Try 2025 season first
         };
 
         // Add date filters if provided
@@ -240,24 +239,56 @@ router.get('/competitions/:competitionId/matches', authenticateToken, async (req
             params.to = dateTo;
         }
 
-        // API request details removed - focusing on marker debugging
+        console.log(`🔍 Fetching matches for league ${competitionId}, season ${params.season}`);
 
-        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            headers: {
-                'x-apisports-key': API_SPORTS_KEY
-            },
-            params,
-            httpsAgent
-        });
+        let response;
+        try {
+            response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                headers: {
+                    'x-apisports-key': API_SPORTS_KEY
+                },
+                params,
+                httpsAgent
+            });
+
+            // Check if no fixtures found and handle League One specifically
+            if (!response.data?.response || response.data.response.length === 0) {
+                console.log(`⚠️  No fixtures found for league ${competitionId} in 2025`);
+                
+                // For League One, return helpful message about fixtures not being available yet
+                if (competitionId === '41') {
+                    return res.json({
+                        filters: {},
+                        resultSet: {
+                            count: 0,
+                            competitions: competitionId.toString(),
+                            first: null,
+                            last: null
+                        },
+                        competition: {
+                            id: competitionId.toString(),
+                            name: 'League One',
+                            code: 'L1',
+                            type: 'LEAGUE',
+                            emblem: 'https://media.api-sports.io/football/leagues/41.png'
+                        },
+                        response: [],
+                        message: 'League One 2025-26 fixtures not yet published. Fixtures are typically released in June/July before the August season start.',
+                        seasonStart: '2025-08-01'
+                    });
+                }
+            } else {
+                console.log(`✅ Found ${response.data.response.length} fixtures for league ${competitionId} in 2025`);
+            }
+        } catch (apiError) {
+            console.error('API request failed:', apiError.message);
+            throw apiError;
+        }
         
-        // Removed verbose API response logging
-
         // Transform the API-Sports response to match frontend expectations
         const userLocation = (userLat && userLon) ? { lat: parseFloat(userLat), lon: parseFloat(userLon) } : null;
         const transformedData = await transformApiSportsData(response.data, competitionId, userLocation);
         
-        // Keep only essential marker debugging logs
-
         res.json(transformedData);
     } catch (error) {
         console.error('Error fetching matches:', {
