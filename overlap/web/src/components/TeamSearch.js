@@ -46,7 +46,7 @@ const TeamSearch = ({ onTeamSelect, placeholder = "Search for teams...", selecte
             const response = await fetch(`${BACKEND_URL}/api/teams/popular?limit=20`);
             const data = await response.json();
             if (data.success) {
-                setPopularTeams(data.data.teams);
+                setPopularTeams(data.teams);
             }
         } catch (error) {
             console.error('Error loading popular teams:', error);
@@ -56,10 +56,10 @@ const TeamSearch = ({ onTeamSelect, placeholder = "Search for teams...", selecte
     const searchTeams = async (term) => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${BACKEND_URL}/api/teams/search?q=${encodeURIComponent(term)}&limit=15`);
+            const response = await fetch(`${BACKEND_URL}/api/teams/search?query=${encodeURIComponent(term)}&limit=15`);
             const data = await response.json();
             if (data.success) {
-                setSearchResults(data.data.teams);
+                setSearchResults(data.results);
                 setShowDropdown(true);
             }
         } catch (error) {

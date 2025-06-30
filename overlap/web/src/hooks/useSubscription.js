@@ -7,17 +7,17 @@ const SubscriptionContext = createContext();
 export const SubscriptionProvider = ({ children }) => {
     const { user } = useAuth();
     const [subscriptionTier, setSubscriptionTier] = useState("freemium");
-    const [restrictedLeagues, setRestrictedLeagues] = useState(["40"]); // Championship restricted for freemium
+    const [restrictedLeagues, setRestrictedLeagues] = useState(["40", "41"]); // Championship and League One restricted for freemium
     const [loading, setLoading] = useState(true);
 
     const tierAccess = {
         freemium: {
-            restrictedLeagues: ["40"], // Championship is restricted
-            description: "Access to all leagues except Championship"
+            restrictedLeagues: ["40", "41"], // Championship and League One are restricted
+            description: "Access to Premier League and international competitions only"
         },
         pro: {
             restrictedLeagues: [], // No restrictions
-            description: "Access to all leagues including Championship"
+            description: "Access to leagues around the world"
         },
         planner: {
             restrictedLeagues: [], // No restrictions
@@ -72,6 +72,9 @@ export const SubscriptionProvider = ({ children }) => {
     const getUpgradeMessage = (leagueId) => {
         if (leagueId === "40") {
             return "Upgrade to Pro to access Championship matches";
+        }
+        if (leagueId === "41") {
+            return "Upgrade to Pro to access League One matches";
         }
         return "Upgrade to access this league";
     };

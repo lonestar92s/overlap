@@ -16,7 +16,8 @@ import {
     Divider,
     useMediaQuery,
     useTheme,
-    Chip
+    Chip,
+    Badge
 } from '@mui/material';
 import { 
     AccountCircle, 
@@ -31,10 +32,12 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './Auth';
+import { useSubscription } from '../hooks/useSubscription';
 
 const HeaderNav = () => {
     const navigate = useNavigate();
     const { user, logout } = useContext(AuthContext);
+    const { subscriptionTier } = useSubscription();
     const [anchorEl, setAnchorEl] = useState(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     
@@ -107,6 +110,47 @@ const HeaderNav = () => {
         navigate('/');
         handleMenuClose();
         handleMobileMenuClose();
+    };
+
+    // Helper function to get subscription badge
+    const getSubscriptionBadge = () => {
+        if (subscriptionTier === 'pro') {
+            return (
+                <Chip 
+                    label="PRO" 
+                    size="small" 
+                    sx={{ 
+                        backgroundColor: '#FF385C',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '0.65rem',
+                        height: '18px',
+                        '& .MuiChip-label': {
+                            px: 0.5
+                        }
+                    }}
+                />
+            );
+        }
+        if (subscriptionTier === 'planner') {
+            return (
+                <Chip 
+                    label="PLANNER" 
+                    size="small" 
+                    sx={{ 
+                        backgroundColor: '#9C27B0',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '0.65rem',
+                        height: '18px',
+                        '& .MuiChip-label': {
+                            px: 0.5
+                        }
+                    }}
+                />
+            );
+        }
+        return null;
     };
 
     const mobileMenuItems = [
@@ -226,29 +270,34 @@ const HeaderNav = () => {
                     </Box>
                     
                     {/* Right Side - User Menu */}
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         {user ? (
-                            <IconButton
-                                onClick={handleMenuClick}
-                                sx={{ 
-                                    p: 0.5,
-                                    border: '2px solid transparent',
-                                    '&:hover': {
-                                        borderColor: '#FF385C'
-                                    }
-                                }}
-                            >
-                                <Avatar 
+                            <>
+                                {/* Subscription Badge */}
+                                {getSubscriptionBadge()}
+                                
+                                <IconButton
+                                    onClick={handleMenuClick}
                                     sx={{ 
-                                        width: { xs: 32, sm: 40 }, 
-                                        height: { xs: 32, sm: 40 },
-                                        backgroundColor: '#FF385C',
-                                        fontSize: { xs: '0.875rem', sm: '1rem' }
+                                        p: 0.5,
+                                        border: '2px solid transparent',
+                                        '&:hover': {
+                                            borderColor: '#FF385C'
+                                        }
                                     }}
                                 >
-                                    {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase()}
-                                </Avatar>
-                            </IconButton>
+                                    <Avatar 
+                                        sx={{ 
+                                            width: { xs: 32, sm: 40 }, 
+                                            height: { xs: 32, sm: 40 },
+                                            backgroundColor: '#FF385C',
+                                            fontSize: { xs: '0.875rem', sm: '1rem' }
+                                        }}
+                                    >
+                                        {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase()}
+                                    </Avatar>
+                                </IconButton>
+                            </>
                         ) : (
                             <IconButton onClick={() => navigate('/auth')}>
                                 <AccountCircle />
@@ -280,6 +329,7 @@ const HeaderNav = () => {
                                 <Typography variant="subtitle2" fontWeight="bold">
                                     {user?.profile?.firstName} {user?.profile?.lastName}
                                 </Typography>
+                                {getSubscriptionBadge()}
                                 {user?.role === 'admin' && (
                                     <Chip 
                                         label="Admin" 
@@ -335,17 +385,18 @@ const HeaderNav = () => {
                 }}
             >
                 <Box sx={{ pt: 2, pb: 1 }}>
-                    <Typography 
-                        variant="h6" 
-                        sx={{ 
-                            fontWeight: 700,
-                            color: '#FF385C',
-                            px: 2,
-                            mb: 1
-                        }}
-                    >
-                        Overlap
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, mb: 1 }}>
+                        <Typography 
+                            variant="h6" 
+                            sx={{ 
+                                fontWeight: 700,
+                                color: '#FF385C'
+                            }}
+                        >
+                            Overlap
+                        </Typography>
+                        {user && getSubscriptionBadge()}
+                    </Box>
                     <Divider />
                 </Box>
                 

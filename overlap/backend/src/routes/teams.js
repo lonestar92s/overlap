@@ -18,8 +18,7 @@ router.get('/search', async (req, res) => {
             includeInactive = false 
         } = req.query;
 
-        const teams = await teamService.searchTeams({
-            query,
+        const teams = await teamService.searchTeams(query, {
             country,
             league,
             limit: parseInt(limit),
@@ -52,11 +51,7 @@ router.get('/popular', async (req, res) => {
             limit = 20 
         } = req.query;
 
-        const teams = await teamService.getPopularTeams({
-            country,
-            league,
-            limit: parseInt(limit)
-        });
+        const teams = await teamService.getPopularTeams(parseInt(limit));
 
         res.json({
             success: true,

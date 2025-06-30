@@ -19,13 +19,19 @@ import {
   CardContent,
   Chip,
   IconButton,
-  Divider
+  Divider,
+  Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+  Autocomplete
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Edit as EditIcon,
   Close as CloseIcon,
-  PhotoCamera as PhotoIcon
+  PhotoCamera as PhotoIcon,
+  History as HistoryIcon,
+  CalendarToday as CalendarIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -36,6 +42,7 @@ import { formatMatchDateTime } from '../utils/timezone';
 const AddAttendedMatch = ({ open, onClose, onSave }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [searchMode, setSearchMode] = useState('search'); // 'search' or 'manual'
+  const [timeMode, setTimeMode] = useState('historical'); // 'historical' or 'recent'
   const [searchResults, setSearchResults] = useState([]);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +52,8 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
     homeTeam: null,
     awayTeam: null,
     dateFrom: null,
-    dateTo: null
+    dateTo: null,
+    season: new Date().getFullYear() - 1 // Default to last year for memories
   });
 
   // Manual form state
@@ -62,9 +70,23 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
   // Photo state
   const [photos, setPhotos] = useState([]);
 
+  // Generate season options (current year back to 2010)
+  const currentYear = new Date().getFullYear();
+  const seasonOptions = [];
+  for (let year = currentYear; year >= 2010; year--) {
+    seasonOptions.push({
+      value: year,
+      label: `${year}-${(year + 1).toString().slice(-2)}`,
+      description: year === currentYear ? 'Current Season' : 
+                  year === currentYear - 1 ? 'Last Season' : ''
+    });
+  }
+
   const steps = ['Find Match', 'Match Details', 'Add Media'];
 
   const handleSearchMatches = async () => {
+    // For historical mode, allow search with just season + team
+    // For recent mode, require at least one team
     if (!searchForm.homeTeam && !searchForm.awayTeam) {
       return;
     }
@@ -74,6 +96,11 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
       const params = new URLSearchParams();
       if (searchForm.homeTeam) params.append('homeTeam', searchForm.homeTeam.name);
       if (searchForm.awayTeam) params.append('awayTeam', searchForm.awayTeam.name);
+      
+      // Add season parameter for historical search
+      params.append('season', searchForm.season.toString());
+      
+      // Only add date range if provided (truly optional)
       if (searchForm.dateFrom) params.append('dateFrom', searchForm.dateFrom.toISOString().split('T')[0]);
       if (searchForm.dateTo) params.append('dateTo', searchForm.dateTo.toISOString().split('T')[0]);
 
@@ -95,6 +122,12 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
   };
 
   const handleSelectMatch = (match) => {
+    console.log('🔍 DEBUG: Selected match venue structure:', {
+      venue: match.fixture.venue,
+      venueType: typeof match.fixture.venue,
+      venueKeys: match.fixture.venue ? Object.keys(match.fixture.venue) : 'null'
+    });
+    
     setSelectedMatch({
       matchType: 'api',
       homeTeam: match.teams.home,
@@ -208,7 +241,7 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
     setSearchMode('search');
     setSearchResults([]);
     setSelectedMatch(null);
-    setSearchForm({ homeTeam: null, awayTeam: null, dateFrom: null, dateTo: null });
+    setSearchForm({ homeTeam: null, awayTeam: null, dateFrom: null, dateTo: null, season: new Date().getFullYear() - 1 });
     setManualForm({
       homeTeam: { name: '', logo: '' },
       awayTeam: { name: '', logo: '' },
@@ -227,6 +260,50 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
       case 0:
         return (
           <Box>
+            {/* Time Mode Toggle */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
+                What type of match are you adding?
+              </Typography>
+              <ToggleButtonGroup
+                value={timeMode}
+                exclusive
+                onChange={(e, newMode) => {
+                  if (newMode !== null) {
+                    setTimeMode(newMode);
+                    // Reset search form when switching modes
+                    setSearchForm(prev => ({
+                      ...prev,
+                      season: newMode === 'historical' ? currentYear - 1 : currentYear,
+                      dateFrom: null,
+                      dateTo: null
+                    }));
+                    setSearchResults([]);
+                  }
+                }}
+                size="small"
+                fullWidth
+              >
+                <ToggleButton value="historical" sx={{ flex: 1 }}>
+                  <HistoryIcon sx={{ mr: 1 }} />
+                  Past Memory
+                </ToggleButton>
+                <ToggleButton value="recent" sx={{ flex: 1 }}>
+                  <CalendarIcon sx={{ mr: 1 }} />
+                  Recent Match
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+
+            {timeMode === 'historical' && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  <strong>Adding a Memory:</strong> Search for matches from past seasons that you attended. 
+                  Select a season and at least one team to search. Date range is optional for more specific results.
+                </Typography>
+              </Alert>
+            )}
+
             <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
               <Button
                 variant={searchMode === 'search' ? 'contained' : 'outlined'}
@@ -247,9 +324,66 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
             {searchMode === 'search' ? (
               <Box>
                 <Typography variant="h6" gutterBottom>
-                  Search for Match
+                  {timeMode === 'historical' ? 'Search Historical Matches' : 'Search Recent Matches'}
                 </Typography>
+                
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Season Selector for Historical Mode */}
+                  {timeMode === 'historical' && (
+                    <Autocomplete
+                      value={seasonOptions.find(option => option.value === searchForm.season) || null}
+                      onChange={(event, newValue) => {
+                        if (newValue) {
+                          setSearchForm(prev => ({ ...prev, season: newValue.value }));
+                        }
+                      }}
+                      options={seasonOptions}
+                      getOptionLabel={(option) => option.label}
+                      renderOption={(props, option) => {
+                        const { key, ...otherProps } = props;
+                        return (
+                          <Box component="li" key={key} {...otherProps}>
+                            <Box>
+                              <Typography variant="body1">
+                                {option.label}
+                              </Typography>
+                              {option.description && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {option.description}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Season" fullWidth />
+                      )}
+                      disablePortal={true}
+                      slotProps={{
+                        popper: {
+                          style: {
+                            zIndex: 1000000,
+                          },
+                          placement: 'bottom-start',
+                        },
+                        paper: {
+                          style: {
+                            zIndex: 1000000,
+                          },
+                        },
+                      }}
+                      sx={{
+                        '& .MuiAutocomplete-popper': {
+                          zIndex: '1000000 !important',
+                        },
+                        '& .MuiPaper-root': {
+                          zIndex: '1000000 !important',
+                        },
+                      }}
+                    />
+                  )}
+
                   <Box>
                     <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
                       Home Team {searchForm.homeTeam && (
@@ -284,28 +418,33 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                       onTeamSelect={(team) => setSearchForm(prev => ({ ...prev, awayTeam: team }))}
                     />
                   </Box>
+                  
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
                     <Box sx={{ display: 'flex', gap: 2 }}>
                       <DatePicker
-                        label="Date From"
+                        label="Date From (optional)"
                         value={searchForm.dateFrom}
                         onChange={(date) => setSearchForm(prev => ({ ...prev, dateFrom: date }))}
                         slotProps={{ textField: { fullWidth: true } }}
+                        maxDate={timeMode === 'historical' ? new Date() : undefined}
                       />
                       <DatePicker
-                        label="Date To"
+                        label="Date To (optional)"
                         value={searchForm.dateTo}
                         onChange={(date) => setSearchForm(prev => ({ ...prev, dateTo: date }))}
                         slotProps={{ textField: { fullWidth: true } }}
+                        maxDate={timeMode === 'historical' ? new Date() : undefined}
+                        minDate={searchForm.dateFrom || undefined}
                       />
                     </Box>
                   </LocalizationProvider>
+                  
                   <Button
                     variant="contained"
                     onClick={handleSearchMatches}
-                    disabled={!searchForm.homeTeam && !searchForm.awayTeam || loading}
+                    disabled={(!searchForm.homeTeam && !searchForm.awayTeam) || loading}
                   >
-                    {loading ? 'Searching...' : 'Search Matches'}
+                    {loading ? 'Searching...' : `Search ${timeMode === 'historical' ? 'Historical' : 'Recent'} Matches`}
                   </Button>
                 </Box>
 
@@ -313,34 +452,70 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                   <Box sx={{ mt: 3 }}>
                     <Typography variant="h6" gutterBottom>
                       Found {searchResults.length} matches
+                      {timeMode === 'historical' && (
+                        <Chip 
+                          label={`${searchForm.season}-${(searchForm.season + 1).toString().slice(-2)} Season`} 
+                          size="small" 
+                          sx={{ ml: 1 }} 
+                        />
+                      )}
                     </Typography>
-                    {searchResults.map((match, index) => (
-                      <Card key={index} sx={{ mb: 2, cursor: 'pointer' }} onClick={() => handleSelectMatch(match)}>
-                        <CardContent>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box>
-                              <Typography variant="subtitle1">
-                                {match.teams.home.name} vs {match.teams.away.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {(() => {
-                  const { fullDateTime, timeZone } = formatMatchDateTime(match.fixture.date, match.fixture.venue);
-                  return `${match.fixture.venue.name} • ${fullDateTime} ${timeZone}`;
-                })()}
-                              </Typography>
+                    {searchResults.map((match, index) => {
+                      console.log(`🔍 DEBUG: Rendering match ${index}:`, {
+                        venue: match.fixture.venue,
+                        venueType: typeof match.fixture.venue,
+                        venueKeys: match.fixture.venue ? Object.keys(match.fixture.venue) : 'null'
+                      });
+                      
+                      return (
+                        <Card key={index} sx={{ mb: 2, cursor: 'pointer' }} onClick={() => handleSelectMatch(match)}>
+                          <CardContent>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Box>
+                                <Typography variant="subtitle1">
+                                  {match.teams.home.name} vs {match.teams.away.name}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {(() => {
+                                    try {
+                                      const { fullDateTime, timeZone } = formatMatchDateTime(match.fixture.date, match.fixture.venue);
+                                      return `${match.fixture.venue.name} • ${fullDateTime} ${timeZone}`;
+                                    } catch (error) {
+                                      console.error('Error formatting match datetime:', error);
+                                      return `${match.fixture.venue?.name || 'Unknown Venue'} • ${new Date(match.fixture.date).toLocaleDateString()}`;
+                                    }
+                                  })()}
+                                </Typography>
+                                {/* Show score if match is finished */}
+                                {match.goals.home !== null && match.goals.away !== null && (
+                                  <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 'bold', color: 'primary.main' }}>
+                                    Final Score: {match.goals.home} - {match.goals.away}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Box sx={{ textAlign: 'right' }}>
+                                <Chip label={match.league.name} size="small" />
+                                {timeMode === 'historical' && (
+                                  <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                                    {new Date(match.fixture.date).getFullYear()} Season
+                                  </Typography>
+                                )}
+                              </Box>
                             </Box>
-                            <Chip label={match.league.name} size="small" />
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    ))}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </Box>
                 )}
 
                 {searchResults.length === 0 && (searchForm.homeTeam || searchForm.awayTeam) && !loading && (
                   <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      No matches found. Try adjusting your search or use manual entry.
+                      {timeMode === 'historical' 
+                        ? `No matches found for the ${searchForm.season}-${(searchForm.season + 1).toString().slice(-2)} season. Try a different season or use manual entry.`
+                        : 'No matches found. Try adjusting your search or use manual entry.'
+                      }
                     </Typography>
                   </Box>
                 )}
@@ -424,6 +599,7 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                       value={manualForm.date}
                       onChange={(date) => setManualForm(prev => ({ ...prev, date }))}
                       slotProps={{ textField: { fullWidth: true } }}
+                      maxDate={timeMode === 'historical' ? new Date() : undefined}
                     />
                   </LocalizationProvider>
                   <Button
@@ -533,6 +709,7 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                       value={selectedMatch.date}
                       onChange={(date) => setSelectedMatch(prev => ({ ...prev, date }))}
                       slotProps={{ textField: { fullWidth: true } }}
+                      maxDate={timeMode === 'historical' ? new Date() : undefined}
                     />
                   </LocalizationProvider>
 
@@ -646,7 +823,19 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
                     <Typography><strong>Location:</strong> {[selectedMatch.venue?.city, selectedMatch.venue?.country].filter(Boolean).join(', ')}</Typography>
                   )}
                   {selectedMatch.competition && <Typography><strong>Competition:</strong> {selectedMatch.competition}</Typography>}
-                  {selectedMatch.date && <Typography><strong>Date:</strong> {formatMatchDateTime(selectedMatch.date.toISOString(), selectedMatch.venue).fullDate}</Typography>}
+                  {selectedMatch.date && (
+                    <Typography>
+                      <strong>Date:</strong> {(() => {
+                        try {
+                          const { fullDate } = formatMatchDateTime(selectedMatch.date.toISOString(), selectedMatch.venue);
+                          return fullDate;
+                        } catch (error) {
+                          console.error('Error formatting date:', error);
+                          return selectedMatch.date.toLocaleDateString();
+                        }
+                      })()}
+                    </Typography>
+                  )}
                   {selectedMatch.userScore && <Typography><strong>Score:</strong> {selectedMatch.userScore}</Typography>}
                   {selectedMatch.userNotes && <Typography><strong>Notes:</strong> {selectedMatch.userNotes}</Typography>}
                   <Typography><strong>Media:</strong> {photos.length} file(s)</Typography>
@@ -691,7 +880,7 @@ const AddAttendedMatch = ({ open, onClose, onSave }) => {
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          Add Match I've Been To
+          {timeMode === 'historical' ? 'Add Match Memory' : 'Add Recent Match'}
           <IconButton onClick={handleClose}>
             <CloseIcon />
           </IconButton>

@@ -447,7 +447,7 @@ const MatchesInterestedInSection = () => {
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <StadiumIcon sx={{ mr: 0.5, color: '#666', fontSize: 16 }} />
                             <Typography variant="body2" color="text.secondary">
-                              {match.venue}
+                              {typeof match.venue === 'string' ? match.venue : match.venue?.name || 'Unknown Venue'}
                             </Typography>
                           </Box>
                         </Box>

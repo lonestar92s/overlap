@@ -27,8 +27,20 @@ class TeamService {
                 return cached.result;
             }
 
-            let result = apiSportsName; // Default fallback
+            // Special case for Bayern Munich variations
+            if (apiSportsName.match(/bayern|münchen|munich/i)) {
+                const bayernTeam = await Team.findOne({ name: 'FC Bayern München' });
+                if (bayernTeam) {
+                    this.cache.set(cacheKey, {
+                        result: bayernTeam.name,
+                        timestamp: Date.now()
+                    });
+                    return bayernTeam.name;
+                }
+            }
 
+            let result = apiSportsName; // Default fallback
+            
             // Method 1: Direct API name match
             let team = await Team.findOne({ apiName: apiSportsName });
             
@@ -47,12 +59,30 @@ class TeamService {
                     if (team) {
                         result = team.name;
                     } else {
-                        // Team not found - log as unmapped
-                        console.log(`❌ NO MAPPING: ${apiSportsName} (unmapped team)`);
-                        if (this.logUnmappedTeam) {
-                            this.logUnmappedTeam(apiSportsName);
+                        // Method 4: Try normalized name comparison
+                        const normalizedApiName = apiSportsName.toLowerCase()
+                            .replace(/\s+/g, ' ')
+                            .replace(/munich/i, 'münchen')
+                            .trim();
+                        
+                        team = await Team.findOne({
+                            $or: [
+                                { name: { $regex: new RegExp(normalizedApiName, 'i') } },
+                                { aliases: { $in: [new RegExp(normalizedApiName, 'i')] } },
+                                { apiName: { $regex: new RegExp(normalizedApiName, 'i') } }
+                            ]
+                        });
+                        
+                        if (team) {
+                            result = team.name;
+                        } else {
+                            // Team not found - log as unmapped
+                            console.log(`❌ NO MAPPING: ${apiSportsName} (unmapped team)`);
+                            if (this.logUnmappedTeam) {
+                                this.logUnmappedTeam(apiSportsName);
+                            }
+                            result = apiSportsName; // Keep original name
                         }
-                        result = apiSportsName; // Keep original name
                     }
                 }
             }

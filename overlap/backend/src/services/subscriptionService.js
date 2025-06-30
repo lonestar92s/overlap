@@ -2,12 +2,12 @@ class SubscriptionService {
     constructor() {
         this.tierAccess = {
             freemium: {
-                restrictedLeagues: ["40"], // Championship is restricted for freemium
-                description: "Access to all leagues except Championship"
+                restrictedLeagues: ["40", "41"], // Championship and League One are restricted for freemium
+                description: "Access to Premier League and international competitions only"
             },
             pro: {
                 restrictedLeagues: [], // No restrictions
-                description: "Access to all leagues including Championship"
+                description: "Access to leagues around the world"
             },
             planner: {
                 restrictedLeagues: [], // No restrictions
@@ -37,7 +37,7 @@ class SubscriptionService {
     getAccessibleLeagues(user) {
         // This method is now less useful since we use blacklist approach
         // But keeping for compatibility - return all leagues except restricted ones
-        const allLeagues = ["39", "40", "61", "140", "78", "207", "88", "94", "135", "144", "71", "253", "98", "2", "4", "13", "1"];
+        const allLeagues = ["39", "40", "41", "61", "140", "78", "207", "88", "94", "135", "144", "71", "253", "98", "2", "4", "13", "1"];
         
         if (!user || !user.subscription) {
             return allLeagues.filter(leagueId => !this.tierAccess.freemium.restrictedLeagues.includes(leagueId));

@@ -362,7 +362,7 @@ const Auth = () => {
                           Freemium
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          All leagues except Championship • Free
+                          Premier League + international only • Free
                         </Typography>
                       </Box>
                       <Chip label="Free" color="success" size="small" />
@@ -375,7 +375,7 @@ const Auth = () => {
                           Pro
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          All leagues including Championship • $9.99 (never expires)
+                         Access to leagues around the world • $9.99 (never expires)
                         </Typography>
                       </Box>
                       <Chip label="Popular" color="warning" size="small" />
