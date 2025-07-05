@@ -30,8 +30,7 @@ import differenceInDays from 'date-fns/differenceInDays';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import SearchBar from './SearchBar';
-
-import Map from './Map'; // Uncomment Map import
+import Map from './Map';
 import Filters from './Filters';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry, getLeagueById } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
@@ -40,6 +39,8 @@ import useVisitedStadiums from '../hooks/useVisitedStadiums';
 import { useSubscription } from '../hooks/useSubscription';
 import TripModal from './TripModal';
 import { getBackendUrl } from '../utils/api';
+import { MatchCarousel } from './carousel/MatchCarousel';
+import { mockMatches } from './carousel/mockMatches';
 // getVenueForTeam and calculateDistance removed - distances now calculated in backend
 
 const BACKEND_URL = `${getBackendUrl()}/v4`;
@@ -71,7 +72,7 @@ const Home = ({ searchState, setSearchState }) => {
     
     // Modal state for date restriction
     const [dateRestrictionModalOpen, setDateRestrictionModalOpen] = useState(false);
-    const [restrictedDateType, setRestrictedDateType] = useState(''); // 'departure' or 'return'
+    const [restrictedDateType, setRestrictedDateType] = useState(''); // 'from' or 'to'
     
     const handleDateRestrictionModal = (dateType) => {
         if (subscriptionTier === 'freemium') {
@@ -107,42 +108,42 @@ const Home = ({ searchState, setSearchState }) => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const handleDepartureDateChange = (newValue) => {
+    const handleFromDateChange = (newValue) => {
         // Only update if the date is valid or null
         const isValidDate = newValue === null || (newValue instanceof Date && !isNaN(newValue));
         if (!isValidDate) {
-            console.warn('Invalid departure date attempted:', newValue);
+            console.warn('Invalid from date attempted:', newValue);
             return false;
         }
         
         // Check for freemium date restriction
         if (newValue && subscriptionTier === 'freemium' && differenceInDays(newValue, today) > FREEMIUM_MAX_DAYS) {
-            handleDateRestrictionModal('departure');
+            handleDateRestrictionModal('from');
             return false; // Date was rejected
         }
         
         setSearchState(prev => ({
             ...prev,
             dates: {
-                departure: newValue,
-                return: prev.dates.return && isAfter(newValue, prev.dates.return) ? null : prev.dates.return
+                from: newValue,
+                to: prev.dates.to && isAfter(newValue, prev.dates.to) ? null : prev.dates.to
             }
         }));
         
         return true; // Date was accepted
     };
 
-    const handleReturnDateChange = (newValue) => {
+    const handleToDateChange = (newValue) => {
         // Only update if the date is valid or null
         const isValidDate = newValue === null || (newValue instanceof Date && !isNaN(newValue));
         if (!isValidDate) {
-            console.warn('Invalid return date attempted:', newValue);
+            console.warn('Invalid to date attempted:', newValue);
             return false;
         }
         
         // Check for freemium date restriction
         if (newValue && subscriptionTier === 'freemium' && differenceInDays(newValue, today) > FREEMIUM_MAX_DAYS) {
-            handleDateRestrictionModal('return');
+            handleDateRestrictionModal('to');
             return false; // Date was rejected
         }
         
@@ -150,7 +151,7 @@ const Home = ({ searchState, setSearchState }) => {
             ...prev,
             dates: {
                 ...prev.dates,
-                return: newValue
+                to: newValue
             }
         }));
         
@@ -201,15 +202,15 @@ const Home = ({ searchState, setSearchState }) => {
         setSelectedLeagues([]);
         setSelectedTeams([]);
         
-        if (searchState.dates.departure && searchState.dates.return &&
-            searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) &&
-            searchState.dates.return instanceof Date && !isNaN(searchState.dates.return)) {
+        if (searchState.dates.from && searchState.dates.to &&
+            searchState.dates.from instanceof Date && !isNaN(searchState.dates.from) &&
+            searchState.dates.to instanceof Date && !isNaN(searchState.dates.to)) {
             const currentLocation = searchState.location;
             setSearchState(prev => ({ ...prev, loading: true, error: null }));
             setHasSearched(true);
             const formattedDates = {
-                departure: format(searchState.dates.departure, 'yyyy-MM-dd'),
-                return: format(searchState.dates.return, 'yyyy-MM-dd')
+                from: format(searchState.dates.from, 'yyyy-MM-dd'),
+                to: format(searchState.dates.to, 'yyyy-MM-dd')
             };
             
             try {
@@ -230,8 +231,8 @@ const Home = ({ searchState, setSearchState }) => {
                         try {
                             const response = await axios.get(url, {
                                 params: {
-                                    dateFrom: formattedDates.departure,
-                                    dateTo: formattedDates.return,
+                                    dateFrom: formattedDates.from,
+                                    dateTo: formattedDates.to,
                                     userLat: currentLocation?.lat,
                                     userLon: currentLocation?.lon
                                 },
@@ -331,8 +332,8 @@ const Home = ({ searchState, setSearchState }) => {
         setSearchState(prev => ({
             ...prev,
             dates: {
-                departure: null,
-                return: null
+                from: null,
+                to: null
             },
             location: null,
             matches: [],
@@ -670,8 +671,8 @@ const Home = ({ searchState, setSearchState }) => {
                 lon: searchParams.location.coordinates[0]
             } : null,
             dates: {
-                departure: createSafeDate(searchParams.dateRange?.start),
-                return: createSafeDate(searchParams.dateRange?.end)
+                from: createSafeDate(searchParams.dateRange?.start),
+                to: createSafeDate(searchParams.dateRange?.end)
             },
             selectedLeagues: searchParams.leagues || []
         }));
@@ -717,101 +718,70 @@ const Home = ({ searchState, setSearchState }) => {
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
             <Box sx={{ 
-                height: '100vh', 
+                minHeight: '100vh', 
                 display: 'flex', 
-                flexDirection: 'column', 
-                overflow: 'hidden',
-                position: 'relative'
+                flexDirection: 'column',
+                position: 'relative',
+                pt: '64px' // Add padding top to account for fixed header
             }}>
-                
-                {/* Search Section - Only visible when no matches are shown */}
-                {(!searchState.matches.length || !hasSearched) && (
-                    <Box sx={{ 
-                        p: { xs: 2, sm: 3 }, 
-                        backgroundColor: 'white', 
-                        borderBottom: '1px solid', 
-                        borderColor: 'grey.200',
-                        zIndex: 2,
-                        mt: '64px' // Add margin top to account for fixed header
-                    }}>
-                        <NaturalLanguageSearch
-                            onSearch={handleNaturalLanguageSearch}
-                            onError={handleNaturalLanguageError}
+                {/* Search Section - Always visible below header */}
+                <Box sx={{ 
+                    position: 'sticky',
+                    top: '64px',
+                    backgroundColor: 'white',
+                    borderBottom: '1px solid',
+                    borderColor: 'grey.200',
+                    zIndex: 10,
+                    p: { xs: 2, sm: 3 }
+                }}>
+                    <NaturalLanguageSearch
+                        onSearch={handleNaturalLanguageSearch}
+                        onError={handleNaturalLanguageError}
+                    />
+                    
+                    <Box sx={{ mt: 2, maxWidth: 900, mx: 'auto' }}>
+                        <SearchBar
+                            searchState={searchState}
+                            onLocationChange={handleLocationSelect}
+                            onFromDateChange={handleFromDateChange}
+                            onToDateChange={handleToDateChange}
+                            onSearch={handleSearch}
+                            compact={false}
                         />
-                        
-                        <Box sx={{ mt: 2, maxWidth: 900, mx: 'auto' }}>
-                            <SearchBar
-                                searchState={searchState}
-                                onLocationChange={handleLocationSelect}
-                                onDepartureDateChange={handleDepartureDateChange}
-                                onReturnDateChange={handleReturnDateChange}
-                                onSearch={handleSearch}
-                                compact={false}
-                            />
-                        </Box>
                     </Box>
-                )}
+                </Box>
 
                 {/* Main Content Area */}
                 <Box sx={{ 
                     flex: 1,
                     position: 'relative',
-                    overflow: 'hidden',
-                    mt: searchState.matches.length > 0 && hasSearched ? '64px' : 0 // Add margin top to account for fixed header when showing matches
+                    pt: 2
                 }}>
-                    {searchState.error && hasSearched && (
-                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
-                            <Typography color="error">{searchState.error}</Typography>
+                    {/* Carousels */}
+                    {(!searchState.matches.length || !hasSearched) && (
+                        <Box sx={{ pb: 4 }}>
+                            <MatchCarousel 
+                                title="Popular matches in England" 
+                                matches={mockMatches.filter(m => m.stadium.country === 'England')} 
+                            />
+                            
+                            <MatchCarousel 
+                                title="Matches next month in Europe" 
+                                matches={mockMatches.filter(m => ['Spain', 'Germany', 'Italy'].includes(m.stadium.country))} 
+                            />
+                            
+                            <MatchCarousel 
+                                title="Watch a match in Switzerland" 
+                                matches={mockMatches.slice(2)} 
+                            />
                         </Box>
                     )}
 
-                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
-                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
-                            <Paper 
-                                elevation={1}
-                                sx={{ 
-                                    p: { xs: 3, sm: 4 }, 
-                                    borderRadius: 2,
-                                    backgroundColor: '#FFF8F9',
-                                    maxWidth: 600,
-                                    mx: 'auto'
-                                }}
-                            >
-                                <Typography 
-                                    variant="h6"
-                                    sx={{ 
-                                        color: '#666',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    No matches are scheduled between {
-                                        searchState.dates.departure && searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) ?
-                                        format(searchState.dates.departure, 'MMMM d') : 'selected dates'
-                                    } and {
-                                        searchState.dates.return && searchState.dates.return instanceof Date && !isNaN(searchState.dates.return) ?
-                                        format(searchState.dates.return, 'MMMM d, yyyy') : 'selected dates'
-                                    }.
-                                </Typography>
-                                <Typography 
-                                    sx={{ 
-                                        mt: 1,
-                                        color: '#888'
-                                    }}
-                                >
-                                    Try selecting different dates to find matches.
-                                </Typography>
-                            </Paper>
-                        </Box>
-                    )}
-
+                    {/* Search Results */}
                     {searchState.matches.length > 0 && hasSearched && (
                         <>
                             {/* Compact Search Bar - Only visible when matches are shown */}
                             <Box sx={{ 
-                                position: 'absolute',
-                                top: '64px', // Position below the fixed header navigation
-                                left: 0,
-                                right: 0,
                                 backgroundColor: 'white',
                                 zIndex: 5,
                                 p: { xs: 1, sm: 1.5 },
@@ -826,8 +796,8 @@ const Home = ({ searchState, setSearchState }) => {
                                     <SearchBar
                                         searchState={searchState}
                                         onLocationChange={handleLocationSelect}
-                                        onDepartureDateChange={handleDepartureDateChange}
-                                        onReturnDateChange={handleReturnDateChange}
+                                        onFromDateChange={handleFromDateChange}
+                                        onToDateChange={handleToDateChange}
                                         onSearch={handleSearch}
                                         compact={true}
                                     />
@@ -851,15 +821,10 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Box>
                             </Box>
 
-
-
-                            {/* Full-screen Map with Rail */}
+                            {/* Map and Results */}
                             <Box sx={{ 
-                                position: 'absolute',
-                                top: { xs: '140px', sm: '146px' }, // Header (64px) + compact search bar height
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
+                                position: 'relative',
+                                height: 'calc(100vh - 64px - 56px)', // Viewport height minus header and search bar
                                 display: 'flex'
                             }}>
                                 {/* Left Rail with Matches */}
@@ -1060,6 +1025,52 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Box>
                             </Box>
                         </>
+                    )}
+
+                    {/* Error States */}
+                    {searchState.error && hasSearched && (
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
+                            <Typography color="error">{searchState.error}</Typography>
+                        </Box>
+                    )}
+
+                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
+                            <Paper 
+                                elevation={1}
+                                sx={{ 
+                                    p: { xs: 3, sm: 4 }, 
+                                    borderRadius: 2,
+                                    backgroundColor: '#FFF8F9',
+                                    maxWidth: 600,
+                                    mx: 'auto'
+                                }}
+                            >
+                                <Typography 
+                                    variant="h6"
+                                    sx={{ 
+                                        color: '#666',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    No matches are scheduled between {
+                                        searchState.dates.from && searchState.dates.from instanceof Date && !isNaN(searchState.dates.from) ?
+                                        format(searchState.dates.from, 'MMMM d') : 'selected dates'
+                                    } and {
+                                        searchState.dates.to && searchState.dates.to instanceof Date && !isNaN(searchState.dates.to) ?
+                                        format(searchState.dates.to, 'MMMM d, yyyy') : 'selected dates'
+                                    }.
+                                </Typography>
+                                <Typography 
+                                    sx={{ 
+                                        mt: 1,
+                                        color: '#888'
+                                    }}
+                                >
+                                    Try selecting different dates to find matches.
+                                </Typography>
+                            </Paper>
+                        </Box>
                     )}
                 </Box>
 

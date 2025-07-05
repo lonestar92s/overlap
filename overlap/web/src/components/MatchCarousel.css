@@ -1,0 +1,99 @@
+.match-carousel {
+  padding: 24px 0;
+}
+
+.carousel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 24px;
+}
+
+.carousel-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.carousel-header .see-all {
+  color: #717171;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.carousel-container {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 16px;
+  padding: 0 24px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.carousel-container::-webkit-scrollbar {
+  display: none;
+}
+
+.match-card {
+  flex: 0 0 300px;
+  scroll-snap-align: start;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.match-card:hover {
+  transform: scale(1.02);
+}
+
+.match-card-image {
+  height: 200px;
+  background-color: #f5f5f5;
+  position: relative;
+}
+
+.favorite-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: white;
+  border-radius: 50%;
+  padding: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.favorite-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.match-card-content {
+  padding: 16px;
+}
+
+.match-teams {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.match-date {
+  color: #717171;
+  margin-bottom: 4px;
+}
+
+.match-location {
+  color: #717171;
+  margin-bottom: 4px;
+}
+
+.match-competition {
+  color: #717171;
+  font-size: 14px;
+} 

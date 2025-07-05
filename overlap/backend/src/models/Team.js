@@ -15,35 +15,13 @@ const teamSchema = new mongoose.Schema({
         index: true // For fast text searches
     },
     
-    // API-Sports specific name (for mapping API responses)
-    apiName: {
-        type: String,
-        index: true // For fast API name lookups
-    },
-    
     // Alternative names for better search (Ajax, AFC Ajax, etc.)
     aliases: [String],
     
     // Team details
-    shortName: String, // FCZ, FCB, etc.
-    fullName: String, // Full official name
     code: String, // 3-letter code like "LIV", "MUN"
     founded: Number,
     logo: String,
-    website: String,
-    
-    // Team colors for UI
-    colors: {
-        primary: String,
-        secondary: String
-    },
-    
-    // Social media
-    social: {
-        twitter: String,
-        instagram: String,
-        facebook: String
-    },
     
     // Location info
     country: {
@@ -51,26 +29,23 @@ const teamSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    countryCode: String,
     city: String,
-    
-    // References to related entities
-    leagueId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'League',
-        required: true
-    },
-    venueId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Venue'
-    },
-    
-    // Legacy venue data (for backwards compatibility during migration)
     venue: {
         name: String,
         capacity: Number,
         coordinates: [Number] // [longitude, latitude]
     },
+    
+    // League associations
+    leagues: [{
+        leagueId: String,
+        leagueName: String,
+        season: String,
+        isActive: {
+            type: Boolean,
+            default: true
+        }
+    }],
     
     // Caching metadata
     searchCount: {
@@ -97,7 +72,6 @@ const teamSchema = new mongoose.Schema({
 
 // Indexes for efficient searching
 teamSchema.index({ name: 'text', aliases: 'text' }); // Full-text search
-// Note: apiName index already defined as field-level index: true
 teamSchema.index({ country: 1, name: 1 }); // Country + name lookup
 teamSchema.index({ searchCount: -1 }); // Popular teams first
 teamSchema.index({ 'leagues.leagueId': 1 }); // League-based queries

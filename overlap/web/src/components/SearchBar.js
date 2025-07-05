@@ -41,8 +41,8 @@ const safeFormatDate = (date, formatString) => {
 const SearchBar = ({ 
     searchState, 
     onLocationChange, 
-    onDepartureDateChange, 
-    onReturnDateChange, 
+    onFromDateChange,
+    onToDateChange, 
     onSearch,
     compact = false,
     className = ""
@@ -101,7 +101,7 @@ const SearchBar = ({
                         >
                             {searchState.location ? searchState.location.name : 'Search location...'}
                         </Typography>
-                        {searchState.dates.departure && searchState.dates.departure instanceof Date && !isNaN(searchState.dates.departure) && (
+                        {searchState.dates.from && searchState.dates.from instanceof Date && !isNaN(searchState.dates.from) && (
                             <>
                                 <Divider orientation="vertical" flexItem sx={{ mx: { xs: 0.5, sm: 1 } }} />
                                 <DateRange sx={{ color: '#666', fontSize: { xs: 18, sm: 20 } }} />
@@ -115,8 +115,8 @@ const SearchBar = ({
                                         whiteSpace: 'nowrap'
                                     }}
                                 >
-                                    {safeFormatDate(searchState.dates.departure, 'MMM d')}
-                                    {searchState.dates.return && searchState.dates.return instanceof Date && !isNaN(searchState.dates.return) && ` - ${safeFormatDate(searchState.dates.return, 'MMM d')}`}
+                                    {safeFormatDate(searchState.dates.from, 'MMM d')}
+                                    {searchState.dates.to && searchState.dates.to instanceof Date && !isNaN(searchState.dates.to) && ` - ${safeFormatDate(searchState.dates.to, 'MMM d')}`}
                                 </Typography>
                             </>
                         )}
@@ -153,8 +153,8 @@ const SearchBar = ({
                             <SearchBarContent 
                                 searchState={searchState}
                                 onLocationChange={onLocationChange}
-                                onDepartureDateChange={onDepartureDateChange}
-                                onReturnDateChange={onReturnDateChange}
+                                onFromDateChange={onFromDateChange}
+                                onToDateChange={onToDateChange}
                                 onSearch={handleExpandedSearch}
                                 today={today}
                             />
@@ -171,8 +171,8 @@ const SearchBar = ({
             <SearchBarContent 
                 searchState={searchState}
                 onLocationChange={onLocationChange}
-                onDepartureDateChange={onDepartureDateChange}
-                onReturnDateChange={onReturnDateChange}
+                onFromDateChange={onFromDateChange}
+                onToDateChange={onToDateChange}
                 onSearch={onSearch}
                 today={today}
                 fullMode={true}
@@ -185,24 +185,25 @@ const SearchBar = ({
 const SearchBarContent = ({ 
     searchState, 
     onLocationChange, 
-    onDepartureDateChange, 
-    onReturnDateChange, 
+    onFromDateChange, 
+    onToDateChange, 
     onSearch,
     today,
     fullMode = false
 }) => {
-    const [returnDatePickerOpen, setReturnDatePickerOpen] = useState(false);
+    const [toDatePickerOpen, setToDatePickerOpen] = useState(false);
 
-    const handleDepartureDateChange = (date) => {
-        const wasAccepted = onDepartureDateChange(date);
+    const handleFromDateChange = (date) => {
+        const wasAccepted = onFromDateChange(date);
         
-        // Only auto-open return date picker if departure date was successfully accepted
-        if (date && !searchState.dates.return && wasAccepted) {
+        // Only auto-open to date picker if from date was successfully accepted
+        if (date && !searchState.dates.to && wasAccepted) {
             setTimeout(() => {
-                setReturnDatePickerOpen(true);
+                setToDatePickerOpen(true);
             }, 100);
         }
     };
+
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
             <Paper 
@@ -246,7 +247,7 @@ const SearchBarContent = ({
                         />
                     </Box>
 
-                    {/* Departure Date */}
+                    {/* From Date */}
                     <Box 
                         sx={{ 
                             flex: 1,
@@ -264,11 +265,11 @@ const SearchBarContent = ({
                                 fontSize: fullMode ? '14px' : '12px'
                             }}
                         >
-                            Departure
+                            From
                         </Typography>
                         <DatePicker
-                            value={searchState.dates.departure}
-                            onChange={handleDepartureDateChange}
+                            value={searchState.dates.from}
+                            onChange={handleFromDateChange}
                             minDate={today}
                             slotProps={{
                                 textField: {
@@ -283,7 +284,7 @@ const SearchBarContent = ({
                         />
                     </Box>
 
-                    {/* Return Date */}
+                    {/* To Date */}
                     <Box 
                         sx={{ 
                             flex: 1,
@@ -300,18 +301,18 @@ const SearchBarContent = ({
                                 fontSize: fullMode ? '14px' : '12px'
                             }}
                         >
-                            Return
+                            To
                         </Typography>
                         <DatePicker
-                            value={searchState.dates.return}
+                            value={searchState.dates.to}
                             onChange={(date) => {
-                                onReturnDateChange(date);
-                                setReturnDatePickerOpen(false);
+                                onToDateChange(date);
+                                setToDatePickerOpen(false);
                             }}
-                            minDate={searchState.dates.departure || today}
-                            disabled={!searchState.dates.departure}
-                            open={returnDatePickerOpen}
-                            onClose={() => setReturnDatePickerOpen(false)}
+                            minDate={searchState.dates.from || today}
+                            disabled={!searchState.dates.from}
+                            open={toDatePickerOpen}
+                            onClose={() => setToDatePickerOpen(false)}
                             slotProps={{
                                 textField: {
                                     variant: "standard",
@@ -329,7 +330,7 @@ const SearchBarContent = ({
                     <Button
                         variant="contained"
                         onClick={onSearch}
-                        disabled={!searchState.dates.departure || !searchState.dates.return || searchState.loading}
+                        disabled={!searchState.dates.from || !searchState.dates.to || searchState.loading}
                         sx={{
                             ml: 1,
                             height: fullMode ? 56 : 48,
