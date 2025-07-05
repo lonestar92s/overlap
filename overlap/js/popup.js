@@ -46,13 +46,13 @@ function displayMatches(matches) {
     }
 
     const travelDates = JSON.parse(localStorage.getItem('flightDates'));
-    const departureDate = new Date(travelDates.departure);
-    const returnDate = new Date(travelDates.return);
+    const fromDate = new Date(travelDates.from);
+    const toDate = new Date(travelDates.to);
 
     // Filter matches within the travel dates
     const filteredMatches = matches.filter(match => {
         const matchDate = new Date(match.utcDate.split('T')[0]);
-        return matchDate >= departureDate && matchDate <= returnDate;
+        return matchDate >= fromDate && matchDate <= toDate;
     });
 
     if (filteredMatches.length === 0) {
@@ -123,15 +123,15 @@ function updateDatesDisplay(dates) {
     console.log('[Overlap - Popup] Updating dates display:', dates);
     
     const datesContainer = document.getElementById('travel-dates');
-    if (dates && dates.departure && dates.return) {
+    if (dates && dates.from && dates.to) {
         datesContainer.innerHTML = `
             <div class="date-item">
-                <span class="date-label">Departure:</span>
-                <span class="date-value">${formatDate(dates.departure)}</span>
+                <span class="date-label">From:</span>
+                <span class="date-value">${formatDate(dates.from)}</span>
             </div>
             <div class="date-item">
-                <span class="date-label">Return:</span>
-                <span class="date-value">${formatDate(dates.return)}</span>
+                <span class="date-label">To:</span>
+                <span class="date-value">${formatDate(dates.to)}</span>
             </div>
         `;
     } else {

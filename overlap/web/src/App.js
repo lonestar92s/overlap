@@ -53,8 +53,8 @@ function AppContent() {
   const [searchState, setSearchState] = useState({
     location: null,
     dates: {
-      departure: null,
-      return: null
+      from: null,
+      to: null
     },
     matches: [],
     loading: false,

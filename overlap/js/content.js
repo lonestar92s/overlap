@@ -49,13 +49,13 @@ function formatDateForAPI(dateStr) {
 function sendDatesToBackground(dates) {
     // Format the dates before sending
     const formattedDates = {
-        departure: formatDateForAPI(dates.departure),
-        return: formatDateForAPI(dates.return)
+        from: formatDateForAPI(dates.from),
+        to: formatDateForAPI(dates.to)
     };
     
     console.log('[Overlap] Sending formatted dates to background script:', formattedDates);
 
-    if (formattedDates.departure && formattedDates.return) {
+    if (formattedDates.from && formattedDates.to) {
         chrome.runtime.sendMessage({
             type: 'DATES_SELECTED',
             data: formattedDates
@@ -74,19 +74,19 @@ function sendDatesToBackground(dates) {
 function findFlightDates() {
     console.log('[Overlap] Looking for date elements on page');
     
-    // Find the departure and return input elements
-    const departureInput = document.querySelector('input[aria-label="Departure"]');
-    const returnInput = document.querySelector('input[aria-label="Return"]');
+    // Find the from and to input elements
+    const fromInput = document.querySelector('input[aria-label="Departure"]');
+    const toInput = document.querySelector('input[aria-label="Return"]');
     
-    if (departureInput && returnInput) {
+    if (fromInput && toInput) {
         // Get the values directly from the input elements
         const dates = {
-            departure: departureInput.value,
-            return: returnInput.value
+            from: fromInput.value,
+            to: toInput.value
         };
         
         // Only proceed if both dates are selected
-        if (dates.departure && dates.return) {
+        if (dates.from && dates.to) {
             console.log('[Overlap] Found dates:', dates);
             sendDatesToBackground(dates);
         } else {

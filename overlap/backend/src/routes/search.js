@@ -799,7 +799,7 @@ router.post('/natural-language', async (req, res) => {
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
         }
-        
+
         console.log('Processing natural language query:', query);
         
         const parsed = await parseNaturalLanguage(query);
