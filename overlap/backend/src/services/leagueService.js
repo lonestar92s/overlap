@@ -19,7 +19,8 @@ class LeagueService {
             '140': { name: 'La Liga', country: 'Spain' },
             '78': { name: 'Bundesliga', country: 'Germany' },
             '135': { name: 'Serie A', country: 'Italy' },
-            '61': { name: 'Ligue 1', country: 'France' }
+            '61': { name: 'Ligue 1', country: 'France' },
+            '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' }
         };
     }
 

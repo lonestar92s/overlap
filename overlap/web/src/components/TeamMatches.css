@@ -1,0 +1,133 @@
+.team-matches-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.team-matches-container h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #333;
+}
+
+.search-section {
+    max-width: 600px;
+    margin: 0 auto 40px;
+}
+
+.selected-team-info {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.selected-team-info h2 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    font-size: 24px;
+    color: #333;
+}
+
+.team-header-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 20px;
+    font-size: 18px;
+    color: #666;
+}
+
+.error-message {
+    text-align: center;
+    padding: 20px;
+    color: #dc3545;
+    background-color: #f8d7da;
+    border-radius: 4px;
+    margin: 20px 0;
+}
+
+.matches-list {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.match-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.match-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.match-date {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.match-teams {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.team-logo {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+}
+
+.team span {
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.vs {
+    margin: 0 15px;
+    font-weight: 600;
+    color: #666;
+}
+
+.match-venue {
+    font-size: 13px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.match-venue i {
+    font-size: 14px;
+    color: #999;
+}
+
+.no-matches {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-size: 18px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 20px 0;
+} 

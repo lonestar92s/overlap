@@ -8,7 +8,6 @@ export const getBackendUrl = () => {
 
 // API base URLs
 export const API_BASE_URL = getBackendUrl();
-export const API_V4_URL = `${getBackendUrl()}/v4`;
 
 // Common fetch wrapper with authentication
 export const apiRequest = async (url, options = {}) => {

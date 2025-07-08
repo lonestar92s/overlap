@@ -96,6 +96,16 @@ const LEAGUES_DATA = [
         tier: 1,
         emblem: 'https://media.api-sports.io/football/leagues/135.png',
         season: { start: '2025-08-01', end: '2026-05-31', current: true }
+    },
+    {
+        apiId: '1083',
+        name: 'UEFA Women\'s Euro 2025',
+        shortName: 'WEURO',
+        country: 'Europe',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/1083.png',
+        season: { start: '2025-07-02', end: '2025-07-27', current: true }
     }
 ];
 
@@ -110,18 +120,6 @@ const VENUE_LEAGUES = [
     { venues: PRIMEIRA_LIGA_VENUES, leagueApiId: '94' },
     { venues: ITALIAN_SERIE_A_VENUES, leagueApiId: '135' }
 ];
-
-async function connectToDatabase() {
-    try {
-        const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/overlap';
-        await mongoose.connect(mongoUri);
-        console.log('✅ Connected to MongoDB');
-        return true;
-    } catch (error) {
-        console.error('❌ MongoDB connection failed:', error.message);
-        return false;
-    }
-}
 
 async function migrateLeagues() {
     console.log('🏆 Migrating leagues...');
@@ -143,149 +141,25 @@ async function migrateLeagues() {
     }
 }
 
-async function migrateVenuesAndTeams() {
-    console.log('🏟️  Migrating venues and teams...');
-    
-    for (const { venues, leagueApiId } of VENUE_LEAGUES) {
-        const league = await League.findOne({ apiId: leagueApiId });
-        if (!league) {
-            console.error(`❌ League not found for API ID: ${leagueApiId}`);
-            continue;
-        }
-        
-        console.log(`\n📍 Processing ${league.name} venues...`);
-        
-        for (const [teamName, venueData] of Object.entries(venues)) {
-            try {
-                // Create venue
-                const existingVenue = await Venue.findOne({ 
-                    name: venueData.stadium,
-                    city: venueData.city 
-                });
-                
-                let venue;
-                if (!existingVenue) {
-                    venue = new Venue({
-                        name: venueData.stadium,
-                        city: venueData.city,
-                        country: venueData.country,
-                        countryCode: league.countryCode,
-                        location: {
-                            type: 'Point',
-                            coordinates: venueData.coordinates
-                        },
-                        capacity: venueData.capacity || null,
-                        ticketUrl: venueData.ticketUrl || null,
-                        website: venueData.website || null,
-                        surface: 'Natural grass'
-                    });
-                    await venue.save();
-                    console.log(`  ✅ Created venue: ${venueData.stadium}`);
-                } else {
-                    venue = existingVenue;
-                    console.log(`  ⏭️  Venue already exists: ${venueData.stadium}`);
-                }
-                
-                // Create or update team
-                const existingTeam = await Team.findOne({ name: teamName });
-                
-                if (!existingTeam) {
-                    const team = new Team({
-                        apiId: `temp-${Date.now()}-${Math.random()}`, // Temporary until we get real API IDs
-                        name: teamName,
-                        shortName: teamName.split(' ').pop(), // Simple short name extraction
-                        country: venueData.country,
-                        countryCode: league.countryCode,
-                        city: venueData.city,
-                        leagueId: league._id,
-                        venueId: venue._id,
-                        // Legacy venue data for backwards compatibility
-                        venue: {
-                            name: venueData.stadium,
-                            capacity: venueData.capacity,
-                            coordinates: venueData.coordinates
-                        }
-                    });
-                    await team.save();
-                    
-                    // Update venue with home team reference
-                    venue.homeTeamId = team._id;
-                    await venue.save();
-                    
-                    console.log(`  ✅ Created team: ${teamName}`);
-                } else {
-                    // Update existing team with new relationships
-                    existingTeam.leagueId = league._id;
-                    existingTeam.venueId = venue._id;
-                    existingTeam.countryCode = league.countryCode;
-                    await existingTeam.save();
-                    
-                    // Update venue with home team reference
-                    venue.homeTeamId = existingTeam._id;
-                    await venue.save();
-                    
-                    console.log(`  ✅ Updated team: ${teamName}`);
-                }
-                
-            } catch (error) {
-                console.error(`❌ Error processing ${teamName}:`, error.message);
-            }
-        }
-    }
-}
-
-async function generateStats() {
-    const leagueCount = await League.countDocuments();
-    const teamCount = await Team.countDocuments();
-    const venueCount = await Venue.countDocuments();
-    
-    console.log('\n📊 Migration Statistics:');
-    console.log(`  Leagues: ${leagueCount}`);
-    console.log(`  Teams: ${teamCount}`);
-    console.log(`  Venues: ${venueCount}`);
-    
-    // Show sample data
-    console.log('\n🏆 Sample leagues:');
-    const leagues = await League.find().limit(3);
-    leagues.forEach(league => {
-        console.log(`  ${league.name} (${league.country})`);
-    });
-    
-    console.log('\n🏟️  Sample venues:');
-    const venues = await Venue.find().populate('homeTeamId').limit(3);
-    venues.forEach(venue => {
-        const team = venue.homeTeamId ? venue.homeTeamId.name : 'No team';
-        console.log(`  ${venue.name} in ${venue.city} - Home: ${team}`);
-    });
-}
-
-async function runMigration() {
-    console.log('🚀 Starting database migration...\n');
-    
-    const connected = await connectToDatabase();
-    if (!connected) {
-        process.exit(1);
-    }
-    
+async function main() {
     try {
+        // Connect to MongoDB
+        await mongoose.connect('mongodb://localhost:27017/overlap', {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        });
+        console.log('📦 Connected to MongoDB');
+        
+        // Migrate leagues
         await migrateLeagues();
-        await migrateVenuesAndTeams();
-        await generateStats();
         
-        console.log('\n🎉 Migration completed successfully!');
-        
+        console.log('✨ Migration completed');
     } catch (error) {
         console.error('❌ Migration failed:', error);
-        process.exit(1);
     } finally {
         await mongoose.disconnect();
         console.log('👋 Disconnected from MongoDB');
     }
 }
 
-// Run migration if called directly
-if (require.main === module) {
-    runMigration();
-}
-
-module.exports = { runMigration }; 
+main(); 

@@ -88,6 +88,102 @@ const BUNDESLIGA_VENUES: VenueMap = {
         location: "Dortmund",
         coordinates: [7.451667, 51.492778],
         ticketUrl: ''
+    },
+    "RB Leipzig": {
+        stadium: "Red Bull Arena",
+        location: "Leipzig",
+        coordinates: [12.348889, 51.345833],
+        ticketUrl: ''
+    },
+    "Bayer 04 Leverkusen": {
+        stadium: "BayArena",
+        location: "Leverkusen",
+        coordinates: [7.002778, 51.038889],
+        ticketUrl: ''
+    },
+    "Eintracht Frankfurt": {
+        stadium: "Deutsche Bank Park",
+        location: "Frankfurt",
+        coordinates: [8.645278, 50.068611],
+        ticketUrl: ''
+    },
+    "VfL Wolfsburg": {
+        stadium: "Volkswagen Arena",
+        location: "Wolfsburg",
+        coordinates: [10.804167, 52.432222],
+        ticketUrl: ''
+    },
+    "SC Freiburg": {
+        stadium: "Europa-Park Stadion",
+        location: "Freiburg",
+        coordinates: [7.893333, 48.021667],
+        ticketUrl: ''
+    },
+    "1. FC Union Berlin": {
+        stadium: "Stadion An der Alten Försterei",
+        location: "Berlin",
+        coordinates: [13.568889, 52.457222],
+        ticketUrl: ''
+    },
+    "VfB Stuttgart": {
+        stadium: "Mercedes-Benz Arena",
+        location: "Stuttgart",
+        coordinates: [9.232222, 48.792500],
+        ticketUrl: ''
+    },
+    "Werder Bremen": {
+        stadium: "Weserstadion",
+        location: "Bremen",
+        coordinates: [8.837500, 53.066389],
+        ticketUrl: ''
+    },
+    "Borussia Mönchengladbach": {
+        stadium: "Stadion im Borussia-Park",
+        location: "Mönchengladbach",
+        coordinates: [6.385833, 51.174722],
+        ticketUrl: ''
+    },
+    "1. FC Heidenheim": {
+        stadium: "Voith-Arena",
+        location: "Heidenheim",
+        coordinates: [10.157500, 48.671944],
+        ticketUrl: ''
+    },
+    "TSG Hoffenheim": {
+        stadium: "PreZero Arena",
+        location: "Sinsheim",
+        coordinates: [8.887500, 49.239444],
+        ticketUrl: ''
+    },
+    "1. FSV Mainz 05": {
+        stadium: "MEWA Arena",
+        location: "Mainz",
+        coordinates: [8.224167, 49.984167],
+        ticketUrl: ''
+    },
+    "FC Augsburg": {
+        stadium: "WWK Arena",
+        location: "Augsburg",
+        coordinates: [10.886111, 48.323333],
+        ticketUrl: ''
+    },
+    "FC St. Pauli": {
+        stadium: "Millerntor-Stadion",
+        location: "Hamburg",
+        coordinates: [9.968056, 53.554444],
+        ticketUrl: ''
+    },
+    "VfL Bochum": {
+        stadium: "Vonovia Ruhrstadion",
+        location: "Bochum",
+        coordinates: [7.241389, 51.490278],
+        ticketUrl: ''
+    },
+    "Holstein Kiel": {
+        stadium: "Holstein-Stadion",
+        location: "Kiel",
+        coordinates: [10.124722, 54.349167],
+        ticketUrl: ''
     }
 };
 

@@ -9,6 +9,8 @@ const subscriptionService = require('../services/subscriptionService');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
+const Team = require('../models/Team');
+const { matchesCache } = require('../utils/cache');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
 const httpsAgent = new https.Agent({
@@ -24,8 +26,13 @@ const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 // Function to transform API-Sports data to match frontend expectations
 async function transformApiSportsData(apiResponse, competitionId, userLocation = null) {
     const fixtures = apiResponse.response || [];
-            const leagueName = await leagueService.getLeagueNameById(competitionId);
+    const leagueName = await leagueService.getLeagueNameById(competitionId);
     
+    console.log(`\n🔄 Transforming ${fixtures.length} matches for league ${leagueName} (ID: ${competitionId})`);
+    if (userLocation) {
+        console.log(`📍 User location: [${userLocation.lat}, ${userLocation.lon}]`);
+    }
+
     return {
         filters: {},
         resultSet: {
@@ -41,56 +48,69 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
             type: 'LEAGUE',
             emblem: fixtures.length > 0 ? fixtures[0].league.logo : null
         },
-        response: await Promise.all(fixtures.map(async fixture => ({
-            area: {
-                id: 2072,
-                name: fixture.league.country || 'Unknown',
-                code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
-                flag: fixture.league.flag || null
-            },
-            competition: {
-                id: competitionId.toString(),
-                name: leagueName,
-                code: leagueName.replace(/\s+/g, '').substring(0, 3).toUpperCase(),
-                type: 'LEAGUE',
-                emblem: fixture.league.logo
-            },
-            season: {
-                id: fixture.league.season || new Date().getFullYear(),
-                startDate: `${fixture.league.season || new Date().getFullYear()}-08-01`,
-                endDate: `${(fixture.league.season || new Date().getFullYear()) + 1}-05-31`,
-                currentMatchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
-                winner: null
-            },
-            id: fixture.fixture.id,
-            utcDate: fixture.fixture.date,
-            status: fixture.fixture.status.long === 'Match Finished' ? 'FINISHED' : 
-                   fixture.fixture.status.long === 'Not Started' ? 'SCHEDULED' : 'LIVE',
-            matchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
-            stage: 'REGULAR_SEASON',
-            group: null,
-            lastUpdated: new Date().toISOString(),
-            fixture: {
-                id: fixture.fixture.id,
-                date: fixture.fixture.date,
-                venue: await (async () => {
-                    // First try to get venue from our database using home team name
-                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                    const venueData = await venueService.getVenueForTeam(mappedTeamName);
-                    
-                    if (venueData) {
-                        // Get coordinates from venue data
-                        let coordinates = venueData.coordinates;
+        response: await (async () => {
+            const transformedFixtures = [];
+            
+            // Process fixtures sequentially to avoid rate limiting
+            for (let i = 0; i < fixtures.length; i++) {
+                const fixture = fixtures[i];
+                console.log(`\n📅 Processing match ${i + 1}/${fixtures.length}: ${fixture.teams.home.name} vs ${fixture.teams.away.name}`);
+                
+                const transformedFixture = await (async () => {
+                    // Get venue data
+                    const venue = await (async () => {
+                        const apiVenue = fixture.fixture.venue;
+                        console.log(`🔍 Looking up venue:`, {
+                            venueName: apiVenue?.name,
+                            venueCity: apiVenue?.city,
+                            homeTeam: fixture.teams.home.name,
+                            competitionId,
+                            homeTeamId: fixture.teams.home.id
+                        });
+
+                        // ✅ METHOD 1: Check MongoDB by venue name (fast, no rate limits)
+                        if (apiVenue?.name) {
+                            console.log(`🗄️ Checking MongoDB for venue: "${apiVenue.name}"`);
+                            const venueByName = await venueService.getVenueByName(apiVenue.name, apiVenue.city);
+                            if (venueByName?.coordinates) {
+                                console.log(`✅ Found venue in MongoDB with coordinates:`, venueByName.coordinates);
+                                
+                                // Calculate distance if user location provided
+                                let distance = null;
+                                if (userLocation && venueByName.coordinates.length === 2) {
+                                    const [venueLon, venueLat] = venueByName.coordinates;
+                                    distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
+                                    console.log(`📏 Calculated distance: ${distance} miles`);
+                                }
+
+                                return {
+                                    id: apiVenue.id || `venue-${apiVenue.name.replace(/\s+/g, '-').toLowerCase()}`,
+                                    name: venueByName.name,
+                                    city: venueByName.city,
+                                    country: venueByName.country,
+                                    distance: distance,
+                                    coordinates: venueByName.coordinates
+                                };
+                            } else {
+                                console.log(`❌ Venue not found in MongoDB by name: ${apiVenue.name}`);
+                            }
+                        }
+
+                        // ✅ METHOD 2: Try team mapping (fallback)
+                        console.log('🔄 Trying team mapping fallback...');
+                        const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
+                        console.log(`🔄 Team mapping: ${fixture.teams.home.name} → ${mappedTeamName}`);
                         
-                        if (coordinates && coordinates.length === 2) {
-                            // Calculate distance if user location is provided
+                        const venueData = await venueService.getVenueForTeam(mappedTeamName);
+                        if (venueData?.coordinates) {
+                            console.log(`✅ Found venue through team with coordinates:`, venueData.coordinates);
+                            
                             let distance = null;
                             if (userLocation) {
-                                const [venueLon, venueLat] = coordinates;
+                                const [venueLon, venueLat] = venueData.coordinates;
                                 distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
+                                console.log(`📏 Calculated distance: ${distance} miles`);
                             }
-                            
-                            console.log(`🏟️  DB VENUE: ${fixture.teams.home.name} → ${mappedTeamName} → ${venueData.stadium || venueData.name} at [${coordinates}] ${distance ? `(${distance.toFixed(1)}mi)` : '(no distance)'}`);
                             
                             return {
                                 id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
@@ -98,96 +118,104 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                                 city: venueData.city,
                                 country: venueData.country,
                                 distance: distance,
-                                coordinates: coordinates
+                                coordinates: venueData.coordinates
                             };
                         }
-                    }
-                    
-                    // If no database venue or no coordinates, try API venue data
-                    const apiVenue = fixture.fixture.venue;
-                    const properCountry = await leagueService.getCountryByLeagueId(competitionId) || fixture.league.country || 'Unknown Country';
-                    
-                    if (apiVenue && apiVenue.name && apiVenue.city) {
-                        let coordinates = null;
+                        console.log(`❌ No venue found through team mapping`);
                         
-                        // Check for coordinates in different possible formats from API
-                        if (apiVenue.coordinates && apiVenue.coordinates.length === 2) {
-                            coordinates = apiVenue.coordinates;
-                        } else if (apiVenue.latitude && apiVenue.longitude) {
-                            coordinates = [parseFloat(apiVenue.longitude), parseFloat(apiVenue.latitude)];
-                        } else if (apiVenue.lat && apiVenue.lng) {
-                            coordinates = [parseFloat(apiVenue.lng), parseFloat(apiVenue.lat)];
-                        }
-                        
-                        // If no coordinates from API, try to enrich with our coordinate service
-                        if (!coordinates) {
-                            coordinates = coordinateService.getCoordinatesByStadium(apiVenue.name);
-                        }
-                        
-                        let distance = null;
-                        if (userLocation && coordinates && coordinates.length === 2) {
-                            const [venueLon, venueLat] = coordinates;
-                            distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
-                        }
-                        
-                        const coordsDisplay = coordinates ? coordinates.join(', ') : 'no coords';
-                        const sourceLabel = coordinates ? (apiVenue.coordinates ? 'API' : 'ENRICHED') : 'API';
-                        console.log(`🏟️  ${sourceLabel} VENUE: ${fixture.teams.home.name} → ${apiVenue.name} at [${coordsDisplay}] ${distance ? `(${distance.toFixed(1)}mi)` : '(no distance)'}`);
-                        
+                        // Final fallback: Basic venue info without coordinates
+                        console.log(`⚠️ Using fallback venue data without coordinates`);
                         return {
-                            id: apiVenue.id || `venue-${apiVenue.name.replace(/\s+/g, '-').toLowerCase()}`,
-                            name: apiVenue.name,
-                            city: apiVenue.city,
-                            country: properCountry,
-                            distance: distance,
-                            coordinates: coordinates
+                            id: apiVenue?.id || null,
+                            name: apiVenue?.name || `${fixture.teams.home.name} Stadium`,
+                            city: apiVenue?.city || fixture.teams.home.name,
+                            country: fixture.league.country,
+                            distance: null,
+                            coordinates: null
                         };
-                    }
-                    
-                    // Final fallback: Basic venue info without coordinates
-                    console.log(`⚠️  NO VENUE DATA: ${fixture.teams.home.name} - using basic fallback`);
-                    
+                    })();
+
                     return {
-                        id: apiVenue?.id || null,
-                        name: apiVenue?.name || `${fixture.teams.home.name} Stadium`,
-                        city: apiVenue?.city || fixture.teams.home.name,
-                        country: properCountry,
-                        distance: null,
-                        coordinates: null
+                        area: {
+                            id: 2072,
+                            name: fixture.league.country || 'Unknown',
+                            code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
+                            flag: fixture.league.flag || null
+                        },
+                        competition: {
+                            id: competitionId.toString(),
+                            name: leagueName,
+                            code: leagueName.replace(/\s+/g, '').substring(0, 3).toUpperCase(),
+                            type: 'LEAGUE',
+                            emblem: fixture.league.logo
+                        },
+                        season: {
+                            id: fixture.league.season || new Date().getFullYear(),
+                            startDate: `${fixture.league.season || new Date().getFullYear()}-08-01`,
+                            endDate: `${(fixture.league.season || new Date().getFullYear()) + 1}-05-31`,
+                            currentMatchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
+                            winner: null
+                        },
+                        id: fixture.fixture.id,
+                        utcDate: fixture.fixture.date,
+                        status: fixture.fixture.status.long === 'Match Finished' ? 'FINISHED' : 
+                               fixture.fixture.status.long === 'Not Started' ? 'SCHEDULED' : 'LIVE',
+                        matchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
+                        stage: 'REGULAR_SEASON',
+                        group: null,
+                        lastUpdated: new Date().toISOString(),
+                        fixture: {
+                            id: fixture.fixture.id,
+                            date: fixture.fixture.date,
+                            venue: venue,
+                            status: fixture.fixture.status
+                        },
+                        league: {
+                            id: competitionId.toString(),
+                            name: leagueName
+                        },
+                        teams: {
+                            home: {
+                                id: fixture.teams.home.id,
+                                name: await teamService.mapApiNameToTeam(fixture.teams.home.name),
+                                logo: await (async () => {
+                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
+                                    const team = await Team.findOne({ name: mappedTeamName });
+                                    return team?.logo || fixture.teams.home.logo;
+                                })()
+                            },
+                            away: {
+                                id: fixture.teams.away.id,
+                                name: await teamService.mapApiNameToTeam(fixture.teams.away.name),
+                                logo: await (async () => {
+                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.away.name);
+                                    const team = await Team.findOne({ name: mappedTeamName });
+                                    return team?.logo || fixture.teams.away.logo;
+                                })()
+                            }
+                        },
+                        score: {
+                            winner: fixture.goals.home > fixture.goals.away ? 'HOME' : 
+                                   fixture.goals.away > fixture.goals.home ? 'AWAY' : 
+                                   fixture.goals.home === fixture.goals.away && fixture.goals.home !== null ? 'DRAW' : null,
+                            duration: 'REGULAR',
+                            fullTime: {
+                                home: fixture.goals.home,
+                                away: fixture.goals.away
+                            },
+                            halfTime: {
+                                home: fixture.score?.halftime?.home || null,
+                                away: fixture.score?.halftime?.away || null
+                            }
+                        }
                     };
-                })()
-            },
-            league: {
-                id: competitionId.toString(),
-                name: leagueName
-            },
-            teams: {
-                home: {
-                    id: fixture.teams.home.id,
-                    name: await teamService.mapApiNameToTeam(fixture.teams.home.name),
-                    logo: fixture.teams.home.logo
-                },
-                away: {
-                    id: fixture.teams.away.id,
-                    name: await teamService.mapApiNameToTeam(fixture.teams.away.name),
-                    logo: fixture.teams.away.logo
-                }
-            },
-            score: {
-                winner: fixture.goals.home > fixture.goals.away ? 'HOME' : 
-                       fixture.goals.away > fixture.goals.home ? 'AWAY' : 
-                       fixture.goals.home === fixture.goals.away && fixture.goals.home !== null ? 'DRAW' : null,
-                duration: 'REGULAR',
-                fullTime: {
-                    home: fixture.goals.home,
-                    away: fixture.goals.away
-                },
-                halfTime: {
-                    home: fixture.score?.halftime?.home || null,
-                    away: fixture.score?.halftime?.away || null
-                }
+                })();
+                
+                transformedFixtures.push(transformedFixture);
             }
-        })))
+            
+            return transformedFixtures;
+        })()
     };
 }
 
@@ -204,115 +232,103 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 // Get matches for a competition
-router.get('/competitions/:competitionId/matches', authenticateToken, async (req, res) => {
+router.get('/competitions/:competitionId', authenticateToken, async (req, res) => {
     try {
         const { competitionId } = req.params;
         const { dateFrom, dateTo, userLat, userLon } = req.query;
         
+        console.log('\n🔍 MATCH REQUEST:', {
+            competitionId,
+            dateFrom,
+            dateTo,
+            userLocation: { userLat, userLon }
+        });
+
         // Get user from token (optional - if no token, default to freemium)
         let user = null;
         if (req.user) {
+            console.log('🔑 Token user:', req.user);
             user = await User.findById(req.user.id);
+            
+            if (!user) {
+                console.log('⚠️ User from token not found in database:', req.user.id);
+                // Create a temporary user object with pro subscription
+                // This is safe because the token was valid, user just needs to be recreated
+                user = {
+                    _id: req.user.id,
+                    subscription: {
+                        tier: 'pro',
+                        isActive: true,
+                        startDate: new Date(),
+                        endDate: null
+                    }
+                };
+                console.log('🔄 Created temporary user:', user);
+            } else {
+                console.log('👤 Found database user:', {
+                    id: user._id,
+                    subscription: user.subscription
+                });
+            }
         }
         
         // Check if user has access to this league
-        if (!subscriptionService.hasLeagueAccess(user, competitionId)) {
+        const hasAccess = subscriptionService.hasLeagueAccess(user, competitionId);
+        console.log('🔒 Access check:', {
+            competitionId,
+            userTier: user?.subscription?.tier || 'freemium',
+            hasAccess
+        });
+        
+        if (!hasAccess) {
+            console.log('🚫 Access denied:', {
+                competitionId,
+                currentTier: user?.subscription?.tier || 'freemium'
+            });
             return res.status(403).json({
                 error: 'Subscription Required',
-                message: `Access to this league requires a ${competitionId === '40' || competitionId === '41' ? 'Pro' : 'higher'} subscription`,
-                requiredTier: competitionId === '40' || competitionId === '41' ? 'pro' : 'planner',
+                message: 'Access to this league requires a higher subscription tier',
                 currentTier: user?.subscription?.tier || 'freemium'
             });
         }
-        
-        // Build API-Sports request parameters
-        let params = {
-            league: competitionId,
-            season: 2025  // Try 2025 season first
-        };
 
-        // Add date filters if provided
-        if (dateFrom) {
-            params.from = dateFrom;
-        }
-        if (dateTo) {
-            params.to = dateTo;
-        }
-
-        console.log(`🔍 Fetching matches for league ${competitionId}, season ${params.season}`);
-
-        let response;
-        try {
-            response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                headers: {
-                    'x-apisports-key': API_SPORTS_KEY
-                },
-                params,
-                httpsAgent
-            });
-
-            // Check if no fixtures found and handle League One specifically
-            if (!response.data?.response || response.data.response.length === 0) {
-                console.log(`⚠️  No fixtures found for league ${competitionId} in 2025`);
-                
-                // For League One, return helpful message about fixtures not being available yet
-                if (competitionId === '41') {
-                    return res.json({
-                        filters: {},
-                        resultSet: {
-                            count: 0,
-                            competitions: competitionId.toString(),
-                            first: null,
-                            last: null
-                        },
-                        competition: {
-                            id: competitionId.toString(),
-                            name: 'League One',
-                            code: 'L1',
-                            type: 'LEAGUE',
-                            emblem: 'https://media.api-sports.io/football/leagues/41.png'
-                        },
-                        response: [],
-                        message: 'League One 2025-26 fixtures not yet published. Fixtures are typically released in June/July before the August season start.',
-                        seasonStart: '2025-08-01'
-                    });
-                }
-            } else {
-                console.log(`✅ Found ${response.data.response.length} fixtures for league ${competitionId} in 2025`);
-            }
-        } catch (apiError) {
-            console.error('API request failed:', apiError.message);
-            throw apiError;
+        // Check if we have cached data
+        const cacheKey = `matches:${competitionId}:${dateFrom}:${dateTo}`;
+        const cachedData = matchesCache.get(cacheKey);
+        if (cachedData) {
+            console.log(`📦 Using cached data for ${cacheKey}`);
+            return res.json(cachedData);
         }
         
-        // Transform the API-Sports response to match frontend expectations
-        const userLocation = (userLat && userLon) ? { lat: parseFloat(userLat), lon: parseFloat(userLon) } : null;
-        const transformedData = await transformApiSportsData(response.data, competitionId, userLocation);
+        // Get matches from API-Sports
+        const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+            params: {
+                league: competitionId,
+                season: '2025', // Fixed to 2025 season
+                from: dateFrom,
+                to: dateTo
+            },
+            headers: {
+                'x-apisports-key': API_SPORTS_KEY
+            },
+            httpsAgent
+        });
+
+        console.log(`📊 API returned ${apiResponse.data.response?.length || 0} matches`);
         
+        // Transform data
+        const userLocation = userLat && userLon ? { lat: parseFloat(userLat), lon: parseFloat(userLon) } : null;
+        const transformedData = await transformApiSportsData(apiResponse.data, competitionId, userLocation);
+        
+        console.log(`✨ Transformed ${transformedData.response?.length || 0} matches`);
+
+        // Cache the transformed data
+        matchesCache.set(cacheKey, transformedData);
+
         res.json(transformedData);
     } catch (error) {
-        console.error('Error fetching matches:', {
-            competitionId: req.params.competitionId,
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            data: error.response?.data,
-            message: error.message
-        });
-
-        // If the error is from the API-Sports API
-        if (error.response?.data) {
-            return res.status(error.response.status || 500).json({
-                error: 'API-Sports Error',
-                message: error.response.data.message || 'Unknown API error',
-                details: error.response.data
-            });
-        }
-
-        // For all other errors
-        res.status(500).json({ 
-            error: 'Failed to fetch matches',
-            message: error.message
-        });
+        console.error('Error fetching matches by competition:', error);
+        res.status(500).json({ error: 'Failed to fetch matches' });
     }
 });
 
@@ -425,12 +441,20 @@ router.get('/matches/search', async (req, res) => {
                     home: {
                         id: fixture.teams.home.id,
                         name: homeTeamName,
-                        logo: fixture.teams.home.logo
+                        logo: await (async () => {
+                            const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
+                            const team = await Team.findOne({ name: mappedTeamName });
+                            return team?.logo || fixture.teams.home.logo;
+                        })()
                     },
                     away: {
                         id: fixture.teams.away.id,
                         name: await teamService.mapApiNameToTeam(fixture.teams.away.name),
-                        logo: fixture.teams.away.logo
+                        logo: await (async () => {
+                            const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.away.name);
+                            const team = await Team.findOne({ name: mappedTeamName });
+                            return team?.logo || fixture.teams.away.logo;
+                        })()
                     }
                 },
                 goals: {
@@ -454,6 +478,246 @@ router.get('/matches/search', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to search matches',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/matches/by-team
+ * Get matches for a specific team
+ */
+router.get('/by-team', async (req, res) => {
+    try {
+        const { teamId, teamName, dateFrom, dateTo } = req.query;
+        
+        // Validate required parameters
+        if (!teamId && !teamName) {
+            return res.status(400).json({
+                success: false,
+                message: 'Either teamId or teamName is required'
+            });
+        }
+
+        // Create cache key including date range
+        const cacheKey = `matches_${teamId || teamName}_${dateFrom || 'all'}_${dateTo || 'all'}`;
+        
+        // Check cache first
+        const cachedMatches = matchesCache.get(cacheKey);
+        if (cachedMatches) {
+            return res.json({
+                success: true,
+                matches: cachedMatches,
+                fromCache: true
+            });
+        }
+
+        // Build API request parameters
+        const params = {
+            team: teamId,
+            season: new Date().getFullYear(), // Current year
+        };
+
+        // Add optional date range if provided
+        if (dateFrom) params.from = dateFrom;
+        if (dateTo) params.to = dateTo;
+
+        // Call API-Sports fixtures endpoint
+        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+            params,
+            headers: {
+                'x-apisports-key': API_SPORTS_KEY
+            }
+        });
+
+        // Transform the response
+        const matches = await transformApiSportsData(response.data, null);
+
+        // Cache the results
+        matchesCache.set(cacheKey, matches.response);
+
+        res.json({
+            success: true,
+            matches: matches.response,
+            fromCache: false
+        });
+
+    } catch (error) {
+        console.error('Error fetching team matches:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch team matches'
+        });
+    }
+});
+
+/**
+ * GET /api/matches/cache/stats
+ * Get cache statistics (for monitoring)
+ */
+router.get('/cache/stats', async (req, res) => {
+    const stats = matchesCache.getStats();
+    res.json({
+        success: true,
+        stats
+    });
+});
+
+/**
+ * POST /api/matches/cache/clear
+ * Clear the matches cache
+ */
+router.post('/cache/clear', async (req, res) => {
+    matchesCache.clear();
+    res.json({
+        success: true,
+        message: 'Matches cache cleared'
+    });
+});
+
+/**
+ * GET /api/matches/by-team/:id
+ * Get matches for a specific team
+ */
+router.get('/by-team/:id', async (req, res) => {
+    try {
+        const teamId = req.params.id;
+        const cacheKey = `team_matches_${teamId}`;
+        
+        // Check cache first
+        const cachedMatches = matchesCache.get(cacheKey);
+        if (cachedMatches) {
+            return res.json({
+                success: true,
+                matches: cachedMatches,
+                fromCache: true
+            });
+        }
+
+        console.log(`Fetching matches for team ${teamId} for season 2025-2026`);
+
+        // Fetch both upcoming and past matches from API-Sports
+        const [upcomingResponse, pastResponse] = await Promise.all([
+            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                params: {
+                    team: teamId,
+                    season: 2025,
+                    from: '2025-07-01', // Start of 2025-2026 season
+                    to: '2026-06-30'    // End of 2025-2026 season
+                },
+                headers: {
+                    'x-apisports-key': API_SPORTS_KEY
+                }
+            }),
+            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                params: {
+                    team: teamId,
+                    season: 2025,
+                    from: '2025-07-01', // Start of 2025-2026 season
+                    to: '2026-06-30',   // End of 2025-2026 season
+                    status: 'FT-AET-PEN' // Finished matches
+                },
+                headers: {
+                    'x-apisports-key': API_SPORTS_KEY
+                }
+            })
+        ]);
+
+        console.log('API Responses:', {
+            upcoming: {
+                results: upcomingResponse.data.results,
+                matches: upcomingResponse.data.response?.length
+            },
+            past: {
+                results: pastResponse.data.results,
+                matches: pastResponse.data.response?.length
+            }
+        });
+
+        // Check for valid responses
+        if (!upcomingResponse.data.response && !pastResponse.data.response) {
+            console.log('No matches found in API response');
+            return res.json({
+                success: true,
+                matches: [],
+                message: 'No matches found for this team'
+            });
+        }
+
+        // Combine and sort all matches
+        const allMatches = [
+            ...(upcomingResponse.data.response || []),
+            ...(pastResponse.data.response || [])
+        ];
+        
+        // Sort by date
+        allMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+
+        console.log(`Found ${allMatches.length} total matches`);
+
+        // Transform the matches data
+        const matches = await Promise.all(allMatches.map(async match => {
+            // Get team data from our database first
+            const [homeTeam, awayTeam] = await Promise.all([
+                Team.findOne({ apiId: match.teams.home.id }),
+                Team.findOne({ apiId: match.teams.away.id })
+            ]);
+
+            return {
+                id: match.fixture.id,
+                fixture: {
+                    id: match.fixture.id,
+                    date: match.fixture.date,
+                    venue: {
+                        id: match.fixture.venue?.id,
+                        name: match.fixture.venue?.name || (homeTeam?.venue?.stadium || 'Unknown Venue'),
+                        city: match.fixture.venue?.city || (homeTeam?.venue?.city || 'Unknown City'),
+                        country: match.league?.country || (homeTeam?.venue?.country || 'Unknown Country')
+                    },
+                    status: {
+                        long: match.fixture.status?.long || 'Not Started',
+                        short: match.fixture.status?.short || 'NS',
+                        elapsed: match.fixture.status?.elapsed || null
+                    }
+                },
+                teams: {
+                    home: {
+                        id: match.teams.home.id,
+                        name: homeTeam?.name || match.teams.home.name,
+                        logo: homeTeam?.logo || match.teams.home.logo
+                    },
+                    away: {
+                        id: match.teams.away.id,
+                        name: awayTeam?.name || match.teams.away.name,
+                        logo: awayTeam?.logo || match.teams.away.logo
+                    }
+                },
+                league: {
+                    id: match.league.id,
+                    name: match.league.name,
+                    country: match.league.country,
+                    logo: match.league.logo,
+                    season: match.league.season
+                },
+                goals: match.goals || { home: null, away: null },
+                score: match.score || {}
+            };
+        }));
+
+        // Cache the results
+        matchesCache.set(cacheKey, matches);
+
+        res.json({
+            success: true,
+            matches,
+            fromCache: false
+        });
+
+    } catch (error) {
+        console.error('Error fetching team matches:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch matches',
             error: error.message
         });
     }

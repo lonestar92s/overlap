@@ -37,90 +37,60 @@ const Map = ({
     const timeoutRef = useRef(null);
     const markerRefs = useRef({});
     const markers = useRef([]);
+    const userMarker = useRef(null);
+    const mapLoaded = useRef(false);
 
     // Initialize map
     useEffect(() => {
-        console.log('Map initialization started');
-        
+        if (!mapContainer.current) return;
+
         if (mapInstance.current) {
-            console.log('Map already initialized, skipping');
             return;
         }
 
-        if (!MAPBOX_TOKEN) {
-            setMapError('Mapbox token is not configured');
+        const map = new mapboxgl.Map({
+            container: mapContainer.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [-0.118092, 51.509865],
+            zoom: 3,
+            attributionControl: false
+        });
+
+        map.addControl(new mapboxgl.AttributionControl(), 'bottom-left');
+        map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+        map.on('load', () => {
+            mapInstance.current = map;
+            mapLoaded.current = true;
             setLoading(false);
-            return;
-        }
+        });
 
-        if (!mapContainer.current) {
-            setMapError('Map container not found');
-            setLoading(false);
-            return;
-        }
-
-        let map = null;
-
-        try {
-            console.log('Creating new map instance...');
-            map = new mapboxgl.Map({
-                container: mapContainer.current,
-                style: 'mapbox://styles/mapbox/streets-v12',
-                center: [-0.118092, 51.509865], // London coordinates
-                zoom: 3,
-                interactive: true,
-                attributionControl: true,
-            });
-
-            map.addControl(new mapboxgl.NavigationControl());
-
-            map.on('load', () => {
-                console.log('Map loaded successfully');
-                setLoading(false);
-                mapInstance.current = map;
-                if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current);
-                    timeoutRef.current = null;
-                }
-            });
-
-            map.on('error', (e) => {
-                console.error('Mapbox error:', e);
-                setMapError(`Error loading map: ${e.error?.message || 'Unknown error'}`);
-                setLoading(false);
-                if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current);
-                    timeoutRef.current = null;
-                }
-            });
-
-            map.on('style.load', () => {
-                console.log('Map style loaded');
-            });
-
-            // Set timeout for map load
-            timeoutRef.current = setTimeout(() => {
-                if (loading && !mapInstance.current) {
-                    console.error('Map load timeout');
-                    setMapError('Map took too long to load');
-                    setLoading(false);
-                    if (map && !map._removed) {
-                        map.remove();
-                    }
-                }
-            }, 10000);
-
-        } catch (error) {
-            console.error('Error initializing map:', error);
-            setMapError(`Error initializing map: ${error.message}`);
+        map.on('error', (e) => {
+            console.error('Mapbox error:', e);
+            setMapError(`Error loading map: ${e.error?.message || 'Unknown error'}`);
             setLoading(false);
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
                 timeoutRef.current = null;
             }
-        }
+        });
 
-        // Cleanup function
+        map.on('style.load', () => {
+            console.log('Map style loaded');
+        });
+
+        // Set timeout for map load
+        timeoutRef.current = setTimeout(() => {
+            if (loading && !mapInstance.current) {
+                console.error('Map load timeout');
+                setMapError('Map took too long to load');
+                setLoading(false);
+                if (map && !map._removed) {
+                    map.remove();
+                }
+            }
+        }, 10000);
+
         return () => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
@@ -147,7 +117,7 @@ const Map = ({
             
             mapInstance.current = null;
         };
-    }, []); // Empty dependency array since we only want this to run once
+    }, []);
 
     // Create styled popup HTML for multiple matches at the same venue
     const createVenuePopupHTML = (venue, matches) => {

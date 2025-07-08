@@ -20,83 +20,47 @@ class TeamService {
      */
     async mapApiNameToTeam(apiSportsName) {
         try {
+            // console.log(`\n🔍 Mapping team: "${apiSportsName}"`);
+            
             // Check cache first
             const cacheKey = `map_${apiSportsName}`;
             const cached = this.cache.get(cacheKey);
             if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
+                console.log(`✅ Cache hit for "${apiSportsName}" → "${cached.result}"`);
                 return cached.result;
             }
+            console.log(`❌ Cache miss for "${apiSportsName}"`);
 
-            // Special case for Bayern Munich variations
-            if (apiSportsName.match(/bayern|münchen|munich/i)) {
-                const bayernTeam = await Team.findOne({ name: 'FC Bayern München' });
-                if (bayernTeam) {
-                    this.cache.set(cacheKey, {
-                        result: bayernTeam.name,
-                        timestamp: Date.now()
-                    });
-                    return bayernTeam.name;
-                }
-            }
-
-            let result = apiSportsName; // Default fallback
-            
-            // Method 1: Direct API name match
+            // Try direct match first
             let team = await Team.findOne({ apiName: apiSportsName });
-            
             if (team) {
-                result = team.name;
-            } else {
-                // Method 2: Exact name match
-                team = await Team.findOne({ name: apiSportsName });
-                
-                if (team) {
-                    result = team.name;
-                } else {
-                    // Method 3: Search in aliases
-                    team = await Team.findOne({ aliases: { $in: [apiSportsName] } });
-                    
-                    if (team) {
-                        result = team.name;
-                    } else {
-                        // Method 4: Try normalized name comparison
-                        const normalizedApiName = apiSportsName.toLowerCase()
-                            .replace(/\s+/g, ' ')
-                            .replace(/munich/i, 'münchen')
-                            .trim();
-                        
-                        team = await Team.findOne({
-                            $or: [
-                                { name: { $regex: new RegExp(normalizedApiName, 'i') } },
-                                { aliases: { $in: [new RegExp(normalizedApiName, 'i')] } },
-                                { apiName: { $regex: new RegExp(normalizedApiName, 'i') } }
-                            ]
-                        });
-                        
-                        if (team) {
-                            result = team.name;
-                        } else {
-                            // Team not found - log as unmapped
-                            console.log(`❌ NO MAPPING: ${apiSportsName} (unmapped team)`);
-                            if (this.logUnmappedTeam) {
-                                this.logUnmappedTeam(apiSportsName);
-                            }
-                            result = apiSportsName; // Keep original name
-                        }
-                    }
-                }
+                console.log(`✅ Found by apiName: "${team.name}"`);
+                return team.name;
             }
-            
-            // Cache the result
-            this.cache.set(cacheKey, {
-                result,
-                timestamp: Date.now()
-            });
-            
-            return result;
+            // console.log(`❌ No match by apiName`);
+
+            // Try exact name match
+            team = await Team.findOne({ name: apiSportsName });
+            if (team) {
+                console.log(`✅ Found by exact name: "${team.name}"`);
+                return team.name;
+            }
+            // console.log(`❌ No match by exact name`);
+
+            // Try aliases
+            team = await Team.findOne({ aliases: apiSportsName });
+            if (team) {
+                console.log(`✅ Found by alias: "${team.name}"`);
+                return team.name;
+            }
+            // console.log(`❌ No match by alias`);
+
+            // If still not found, return the original name
+            console.log(`⚠️ No mapping found, using original: "${apiSportsName}"`);
+            return apiSportsName;
         } catch (error) {
-            console.error(`Error mapping API name ${apiSportsName}:`, error);
-            return apiSportsName; // Fallback to original name
+            console.error('❌ Error in mapApiNameToTeam:', error);
+            return apiSportsName;
         }
     }
 

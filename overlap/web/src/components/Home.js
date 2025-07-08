@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
     Container, 
@@ -30,7 +31,8 @@ import differenceInDays from 'date-fns/differenceInDays';
 import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import SearchBar from './SearchBar';
-import Map from './Map';
+
+import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry, getLeagueById } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
@@ -39,13 +41,12 @@ import useVisitedStadiums from '../hooks/useVisitedStadiums';
 import { useSubscription } from '../hooks/useSubscription';
 import TripModal from './TripModal';
 import { getBackendUrl } from '../utils/api';
-import { MatchCarousel } from './carousel/MatchCarousel';
-import { mockMatches } from './carousel/mockMatches';
 // getVenueForTeam and calculateDistance removed - distances now calculated in backend
 
-const BACKEND_URL = `${getBackendUrl()}/v4`;
+const BACKEND_URL = getBackendUrl();
 
 const Home = ({ searchState, setSearchState }) => {
+    const navigate = useNavigate();
     const today = startOfToday();
     const [hasSearched, setHasSearched] = useState(false);
     const mapRef = useRef(null);
@@ -227,7 +228,7 @@ const Home = ({ searchState, setSearchState }) => {
                 // Fetch all accessible leagues in parallel
                 const responses = await Promise.all(
                     leagues.map(async (league) => {
-                        const url = `${BACKEND_URL}/competitions/${league.id}/matches`;
+                        const url = `${BACKEND_URL}/api/matches/competitions/${league.id}`;
                         try {
                             const response = await axios.get(url, {
                                 params: {
@@ -286,6 +287,20 @@ const Home = ({ searchState, setSearchState }) => {
                 });
 
                 console.log(`\n📅 Total matches found: ${sortedMatches.length}`);
+                // Log matches by competition for debugging
+                const matchesByCompetition = {};
+                sortedMatches.forEach(match => {
+                    const compId = match.competition?.id;
+                    const compName = match.competition?.name;
+                    if (!matchesByCompetition[compId]) {
+                        matchesByCompetition[compId] = { name: compName, count: 0 };
+                    }
+                    matchesByCompetition[compId].count++;
+                });
+                console.log('Matches by competition:', matchesByCompetition);
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('Sample match structure:', sortedMatches[0]);
+                }
 
                 // Store all matches in state, filtering will be handled by the UI
                 setSearchState(prev => ({
@@ -324,6 +339,13 @@ const Home = ({ searchState, setSearchState }) => {
         }
     };
 
+    // Update URL when hasSearched changes
+    useEffect(() => {
+        if (hasSearched) {
+            navigate('/matches');
+        }
+    }, [hasSearched, navigate]);
+
     // Reset hasSearched when resetting the form
     const handleReset = () => {
         setHasSearched(false);
@@ -340,29 +362,24 @@ const Home = ({ searchState, setSearchState }) => {
             loading: false,
             error: null
         }));
+        navigate('/');
     };
 
-    // Filter matches based on selected distance, leagues, and teams
+    // Filter and sort matches based on selected criteria
     const filteredMatches = useMemo(() => {
-        // First filter by leagues
-        let filtered = searchState.matches.filter(match => {
-            // Add null safety for competition data
-            if (!match.competition) {
-                console.warn('Match missing competition data:', match);
-                return false; // Skip matches without competition data
-            }
-            
-            const isIncluded = selectedLeagues.length === 0 || selectedLeagues.includes(match.competition.id);
-            return isIncluded;
-        });
+        let filtered = searchState.matches;
 
-        // Then filter by teams if any teams are selected
+        // Filter by selected leagues
+        if (selectedLeagues.length > 0) {
+            filtered = filtered.filter(match => selectedLeagues.includes(match.competition.id));
+        }
+
+        // Filter by selected teams
         if (selectedTeams.length > 0) {
-            filtered = filtered.filter(match => {
-                const homeTeamName = match.teams.home.name;
-                const awayTeamName = match.teams.away.name;
-                return selectedTeams.includes(homeTeamName) || selectedTeams.includes(awayTeamName);
-            });
+            filtered = filtered.filter(match =>
+                selectedTeams.includes(match.teams.home.name) ||
+                selectedTeams.includes(match.teams.away.name)
+            );
         }
 
         // Then filter by distance if location is selected
@@ -383,30 +400,16 @@ const Home = ({ searchState, setSearchState }) => {
 
     }, [searchState.matches, searchState.location, selectedDistance, selectedLeagues, selectedTeams]);
 
-    console.log('🔍 FILTERING DEBUG:', {
-        totalMatches: searchState.matches.length,
-        selectedLeagues: selectedLeagues,
-        selectedTeams: selectedTeams,
-        filteredMatchesLength: filteredMatches.length,
-        filteredMatchTeams: filteredMatches.map(m => `${m.teams.home.name} vs ${m.teams.away.name}`),
-        // Debug: Show all unique team names in Premier League matches
-        premierLeagueTeams: [...new Set(
-            searchState.matches
-                .filter(m => m.competition.id === '39')
-                .flatMap(m => [m.teams.home.name, m.teams.away.name])
-        )].sort()
-    });
-
     // Debug: Log when filteredMatches changes
     useEffect(() => {
-        console.log('🏠 HOME: filteredMatches changed:', {
-            count: filteredMatches.length,
-            matchIds: filteredMatches.map(m => m.fixture.id),
-            selectedLeagues,
-            selectedTeams,
-            selectedDistance
-        });
-    }, [filteredMatches, selectedLeagues, selectedTeams, selectedDistance]);
+        if (process.env.NODE_ENV === 'development') {
+            console.log('Matches filtered:', {
+                total: filteredMatches.length,
+                withCoordinates: filteredMatches.filter(m => m.fixture.venue?.coordinates).length,
+                withDistance: filteredMatches.filter(m => m.fixture.venue?.distance !== null).length
+            });
+        }
+    }, [filteredMatches]);
 
     // Helper function to get teams by league from current matches
     const getTeamsByLeague = useMemo(() => {
@@ -441,12 +444,10 @@ const Home = ({ searchState, setSearchState }) => {
     };
 
     const handleDistanceChange = (distance) => {
-        console.log('Distance changed:', distance); // Add logging
         setSelectedDistance(distance);
     };
 
     const handleTeamsChange = (teams) => {
-        console.log('Teams changed:', teams);
         setSelectedTeams(teams);
     };
 
@@ -470,8 +471,6 @@ const Home = ({ searchState, setSearchState }) => {
             console.error('Error loading saved matches:', error);
         }
     };
-
-
 
     const saveMatch = async (match) => {
         try {
@@ -718,12 +717,13 @@ const Home = ({ searchState, setSearchState }) => {
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
             <Box sx={{ 
-                minHeight: '100vh', 
+                height: '100vh', 
                 display: 'flex', 
-                flexDirection: 'column',
-                position: 'relative',
-                pt: '64px' // Add padding top to account for fixed header
+                flexDirection: 'column', 
+                overflow: 'hidden',
+                position: 'relative'
             }}>
+                
                 {/* Search Section - Always visible below header */}
                 <Box sx={{ 
                     position: 'sticky',
@@ -732,7 +732,8 @@ const Home = ({ searchState, setSearchState }) => {
                     borderBottom: '1px solid',
                     borderColor: 'grey.200',
                     zIndex: 10,
-                    p: { xs: 2, sm: 3 }
+                    p: { xs: 2, sm: 3 },
+                    display: hasSearched ? 'none' : 'block' // Hide when matches are shown
                 }}>
                     <NaturalLanguageSearch
                         onSearch={handleNaturalLanguageSearch}
@@ -755,33 +756,62 @@ const Home = ({ searchState, setSearchState }) => {
                 <Box sx={{ 
                     flex: 1,
                     position: 'relative',
-                    pt: 2
+                    overflow: 'hidden',
+                    mt: searchState.matches.length > 0 && hasSearched ? '64px' : 0 // Add margin top to account for fixed header when showing matches
                 }}>
-                    {/* Carousels */}
-                    {(!searchState.matches.length || !hasSearched) && (
-                        <Box sx={{ pb: 4 }}>
-                            <MatchCarousel 
-                                title="Popular matches in England" 
-                                matches={mockMatches.filter(m => m.stadium.country === 'England')} 
-                            />
-                            
-                            <MatchCarousel 
-                                title="Matches next month in Europe" 
-                                matches={mockMatches.filter(m => ['Spain', 'Germany', 'Italy'].includes(m.stadium.country))} 
-                            />
-                            
-                            <MatchCarousel 
-                                title="Watch a match in Switzerland" 
-                                matches={mockMatches.slice(2)} 
-                            />
+                    {searchState.error && hasSearched && (
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
+                            <Typography color="error">{searchState.error}</Typography>
                         </Box>
                     )}
 
-                    {/* Search Results */}
+                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
+                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
+                            <Paper 
+                                elevation={1}
+                                sx={{ 
+                                    p: { xs: 3, sm: 4 }, 
+                                    borderRadius: 2,
+                                    backgroundColor: '#FFF8F9',
+                                    maxWidth: 600,
+                                    mx: 'auto'
+                                }}
+                            >
+                                <Typography 
+                                    variant="h6"
+                                    sx={{ 
+                                        color: '#666',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    No matches are scheduled between {
+                                        searchState.dates.from && searchState.dates.from instanceof Date && !isNaN(searchState.dates.from) ?
+                                        format(searchState.dates.from, 'MMMM d') : 'selected dates'
+                                    } and {
+                                        searchState.dates.to && searchState.dates.to instanceof Date && !isNaN(searchState.dates.to) ?
+                                        format(searchState.dates.to, 'MMMM d, yyyy') : 'selected dates'
+                                    }.
+                                </Typography>
+                                <Typography 
+                                    sx={{ 
+                                        mt: 1,
+                                        color: '#888'
+                                    }}
+                                >
+                                    Try selecting different dates to find matches.
+                                </Typography>
+                            </Paper>
+                        </Box>
+                    )}
+
                     {searchState.matches.length > 0 && hasSearched && (
                         <>
                             {/* Compact Search Bar - Only visible when matches are shown */}
                             <Box sx={{ 
+                                position: 'absolute',
+                                top: '64px', // Position below the fixed header navigation
+                                left: 0,
+                                right: 0,
                                 backgroundColor: 'white',
                                 zIndex: 5,
                                 p: { xs: 1, sm: 1.5 },
@@ -821,10 +851,15 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Box>
                             </Box>
 
-                            {/* Map and Results */}
+
+
+                            {/* Full-screen Map with Rail */}
                             <Box sx={{ 
-                                position: 'relative',
-                                height: 'calc(100vh - 64px - 56px)', // Viewport height minus header and search bar
+                                position: 'absolute',
+                                top: { xs: '140px', sm: '146px' }, // Header (64px) + compact search bar height
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
                                 display: 'flex'
                             }}>
                                 {/* Left Rail with Matches */}
@@ -1025,52 +1060,6 @@ const Home = ({ searchState, setSearchState }) => {
                                 </Box>
                             </Box>
                         </>
-                    )}
-
-                    {/* Error States */}
-                    {searchState.error && hasSearched && (
-                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
-                            <Typography color="error">{searchState.error}</Typography>
-                        </Box>
-                    )}
-
-                    {!searchState.loading && searchState.matches.length === 0 && hasSearched && !searchState.error && (
-                        <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
-                            <Paper 
-                                elevation={1}
-                                sx={{ 
-                                    p: { xs: 3, sm: 4 }, 
-                                    borderRadius: 2,
-                                    backgroundColor: '#FFF8F9',
-                                    maxWidth: 600,
-                                    mx: 'auto'
-                                }}
-                            >
-                                <Typography 
-                                    variant="h6"
-                                    sx={{ 
-                                        color: '#666',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    No matches are scheduled between {
-                                        searchState.dates.from && searchState.dates.from instanceof Date && !isNaN(searchState.dates.from) ?
-                                        format(searchState.dates.from, 'MMMM d') : 'selected dates'
-                                    } and {
-                                        searchState.dates.to && searchState.dates.to instanceof Date && !isNaN(searchState.dates.to) ?
-                                        format(searchState.dates.to, 'MMMM d, yyyy') : 'selected dates'
-                                    }.
-                                </Typography>
-                                <Typography 
-                                    sx={{ 
-                                        mt: 1,
-                                        color: '#888'
-                                    }}
-                                >
-                                    Try selecting different dates to find matches.
-                                </Typography>
-                            </Paper>
-                        </Box>
                     )}
                 </Box>
 

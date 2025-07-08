@@ -8,37 +8,17 @@ const matchSchema = new mongoose.Schema({
         index: true
     },
     
-    // Team references - now optional for TBD matches
+    // Team references
     homeTeamId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Team'
+        ref: 'Team',
+        required: true
     },
     awayTeamId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Team'
+        ref: 'Team',
+        required: true
     },
-
-    // TBD team information
-    teamsNotDetermined: {
-        type: Boolean,
-        default: false
-    },
-    homeTeamContext: {
-        type: String,
-        // e.g. "Winner of Match 12", "Group A Winner", "Semi-Final 1 Winner"
-    },
-    awayTeamContext: {
-        type: String,
-        // e.g. "Winner of Match 13", "Group B Runner-up", "Semi-Final 2 Winner"
-    },
-    potentialHomeTeams: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Team'
-    }],
-    potentialAwayTeams: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Team'
-    }],
     
     // Venue and league references
     venueId: {
@@ -73,17 +53,12 @@ const matchSchema = new mongoose.Schema({
     // Match details
     status: {
         type: String,
-        enum: ['SCHEDULED', 'TEAMS_TBD', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED'],
+        enum: ['SCHEDULED', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED'],
         default: 'SCHEDULED'
     },
     stage: {
         type: String,
         default: 'REGULAR_SEASON'
-    },
-    roundInfo: {
-        name: String,        // e.g. "Quarter-final", "Semi-final", "Final"
-        leg: Number,         // For two-legged ties
-        matchInRound: Number // e.g. QF1, QF2, etc.
     },
     
     // Score information
@@ -152,8 +127,6 @@ matchSchema.index({ leagueId: 1, kickoff: 1 });
 matchSchema.index({ venueId: 1, kickoff: 1 });
 matchSchema.index({ status: 1 });
 matchSchema.index({ lastUpdated: 1 });
-matchSchema.index({ teamsNotDetermined: 1 });
-matchSchema.index({ 'roundInfo.name': 1 });
 
 // Compound index for date range queries
 matchSchema.index({ leagueId: 1, kickoff: 1, status: 1 });
@@ -171,9 +144,9 @@ matchSchema.methods.isFresh = function(hours = 6) {
 matchSchema.statics.findUpcoming = function(limit = 50) {
     return this.find({
         kickoff: { $gte: new Date() },
-        status: { $in: ['SCHEDULED', 'TEAMS_TBD'] }
+        status: 'SCHEDULED'
     })
-    .populate('homeTeamId awayTeamId venueId leagueId potentialHomeTeams potentialAwayTeams')
+    .populate('homeTeamId awayTeamId venueId leagueId')
     .sort({ kickoff: 1 })
     .limit(limit);
 };

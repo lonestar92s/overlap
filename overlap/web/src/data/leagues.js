@@ -42,7 +42,8 @@ export const LEAGUES = {
         { id: '2', name: 'UEFA Champions League', tier: 1, country: 'Europe', countryCode: 'INT' },
         { id: '4', name: 'European Championship', tier: 1, country: 'Europe', countryCode: 'INT' },
         { id: '13', name: 'Copa Libertadores', tier: 1, country: 'South America', countryCode: 'INT' },
-        { id: '1', name: 'FIFA World Cup', tier: 1, country: 'International', countryCode: 'INT' }
+        { id: '1', name: 'FIFA World Cup', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '1083', name: 'UEFA Women\'s Euro 2025', tier: 1, country: 'Europe', countryCode: 'INT' }
     ]
 };
 

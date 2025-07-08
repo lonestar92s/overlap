@@ -1,6 +1,11 @@
 const League = require('../models/League');
 const Team = require('../models/Team');
 const Venue = require('../models/Venue');
+const axios = require('axios');
+
+// API-Sports configuration
+const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
+const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 
 class VenueService {
     constructor() {
@@ -10,49 +15,109 @@ class VenueService {
             misses: 0,
             dbQueries: 0
         };
-        
-        // API team name to venue mapping for League One
-        this.apiTeamToVenueMapping = {
-            'Birmingham': 'St. Andrew\'s Stadium',
-            'Blackpool': 'Bloomfield Road',
-            'Bolton': 'Toughsheet Community Stadium',
-            'Bristol Rovers': 'Memorial Stadium',
-            'Burton Albion': 'Pirelli Stadium',
-            'Cambridge United': 'Cledara Abbey Stadium',
-            'Charlton': 'The Valley',
-            'Crawley Town': 'The Recreation Ground',
-            'Exeter City': 'St James Park',
-            'Huddersfield': 'John Smith\'s Stadium',
-            'Lincoln': 'LNER Stadium',
-            'Mansfield Town': 'One Call Stadium',
-            'Northampton': 'Sixfields Stadium',
-            'Peterborough': 'London Road',
-            'Plymouth Argyle': 'Home Park',
-            'Portsmouth': 'Fratton Park',
-            'Rotherham': 'AESSEAL New York Stadium',
-            'Shrewsbury': 'The Croud Meadow',
-            'Stockport County': 'Edgeley Park',
-            'Stevenage': 'Broadhall Way',
-            'Wycombe': 'Adams Park',
-            'Leyton Orient': 'Brisbane Road',
-            'Reading': 'Select Car Leasing Stadium',
-            'Barnsley': 'Oakwell',
-            'Wigan': 'The Brick Community Stadium',
-            'Wrexham': 'Racecourse Ground'
-        };
     }
 
     /**
-     * Get venue by direct venue name lookup (new method for API-first approach)
+     * Get venue by direct venue name lookup
      */
     async getVenueByName(venueName, city = null) {
         try {
-            let query = { name: venueName };
-            if (city) {
-                query.city = city;
+            if (!venueName) {
+                console.log('❌ No venue name provided');
+                return null;
+            }
+
+            console.log(`\n🔍 Looking up venue by name:`, {
+                venueName,
+                city,
+                includeCity: !!city
+            });
+            
+            // Normalize venue name and city
+            const normalizeString = (str) => {
+                if (!str) return '';
+                return str.toLowerCase()
+                    .replace(/\s+/g, ' ')  // normalize spaces
+                    .replace(/^the\s+/, '') // remove 'the' prefix
+                    .replace(/\s*@.*$/, '') // remove anything after @
+                    .replace(/[.,'"]/g, '') // remove punctuation
+                    .trim();
+            };
+
+            const normalizedVenueName = normalizeString(venueName);
+            const normalizedCity = city ? normalizeString(city.split(',')[0]) : null;
+            
+            console.log('🔍 Normalized search:', {
+                venueName: normalizedVenueName,
+                city: normalizedCity
+            });
+            
+            // Try multiple search strategies
+            let venue = null;
+            
+            // Strategy 1: Exact match with name and city if provided
+            const exactMatchQuery = city 
+                ? { name: venueName, city: city }
+                : { name: venueName };
+            
+            console.log('🔍 Exact match query:', exactMatchQuery);
+            venue = await Venue.findOne(exactMatchQuery);
+            
+            if (venue) {
+                console.log('✅ Found venue by exact match');
+            } else {
+                console.log('❌ Venue not found by exact match');
             }
             
-            const venue = await Venue.findOne(query);
+            // Strategy 2: Case-insensitive match with name and city if provided
+            if (!venue) {
+                const escapeRegex = (string) => {
+                    return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                };
+
+                const caseInsensitiveQuery = {
+                    name: { $regex: new RegExp(`^${escapeRegex(venueName)}$`, 'i') }
+                };
+                if (city) {
+                    caseInsensitiveQuery.city = { $regex: new RegExp(`^${escapeRegex(city)}$`, 'i') };
+                }
+                
+                console.log('🔍 Case-insensitive query:', caseInsensitiveQuery);
+                venue = await Venue.findOne(caseInsensitiveQuery);
+                
+                if (venue) {
+                    console.log('✅ Found venue by case-insensitive match');
+                } else {
+                    console.log('❌ Venue not found with case-insensitive match');
+                }
+            }
+            
+            // Strategy 3: Normalized search (fallback)
+            if (!venue) {
+                const allVenues = await Venue.find({});
+                venue = allVenues.find(v => {
+                    const venueNameMatch = normalizeString(v.name) === normalizedVenueName;
+                    if (!normalizedCity) return venueNameMatch;
+                    return venueNameMatch && normalizeString(v.city) === normalizedCity;
+                });
+                
+                if (venue) {
+                    console.log('✅ Found venue by normalized search');
+                } else {
+                    console.log('❌ No venue found in database');
+                }
+            }
+            
+            if (!venue) {
+                return null;
+            }
+            
+            console.log('✅ Found venue:', {
+                name: venue.name,
+                city: venue.city,
+                hasCoordinates: !!venue.location?.coordinates,
+                coordinates: venue.location?.coordinates
+            });
             
             if (venue && venue.location?.coordinates) {
                 return {
@@ -61,8 +126,7 @@ class VenueService {
                     city: venue.city,
                     country: venue.country,
                     coordinates: venue.location.coordinates,
-                    capacity: venue.capacity,
-                    surface: venue.surface
+                    capacity: venue.capacity
                 };
             }
             
@@ -74,14 +138,15 @@ class VenueService {
     }
 
     /**
-     * Get venue information for a team by name (enhanced with API mapping)
-     * @param {string} teamName - Name of the team (could be API name or full name)
-     * @returns {Object|null} Venue information
+     * Get venue information for a team by name
      */
     async getVenueForTeam(teamName) {
+        console.log(`\n🔍 getVenueForTeam called for: "${teamName}"`);
+        
         // Check cache first
         if (this.cache.has(teamName)) {
             this.cacheStats.hits++;
+            console.log(`✅ Cache hit for "${teamName}"`);
             return this.cache.get(teamName);
         }
 
@@ -89,89 +154,42 @@ class VenueService {
         this.cacheStats.dbQueries++;
 
         try {
-            // Method 1: Check if we have a direct API team to venue mapping
-            const mappedVenueName = this.apiTeamToVenueMapping[teamName];
-            if (mappedVenueName) {
-                console.log(`🎯 API MAPPING: ${teamName} → ${mappedVenueName}`);
-                const venue = await this.getVenueByName(mappedVenueName);
-                if (venue) {
-                    this.cache.set(teamName, venue);
-                    return venue;
-                }
-            }
-
-            // Method 2: Try to find team in database
-            const team = await Team.findOne({ name: teamName })
-                .populate('venueId')
-                .populate('leagueId');
-
-            if (!team || !team.venueId) {
-                // Fallback to legacy venue data if exists
-                const legacyVenue = team?.venue ? {
-                    stadium: team.venue.name,
-                    city: team.city,
-                    country: team.country,
-                    coordinates: team.venue.coordinates,
-                    ticketUrl: null
-                } : null;
-
-                this.cache.set(teamName, legacyVenue);
-                return legacyVenue;
-            }
-
-            // Get coordinates from venue data - handle both formats
-            let coordinates = null;
-            if (team.venueId.location?.coordinates && team.venueId.location.coordinates.length === 2) {
-                coordinates = team.venueId.location.coordinates;
-            } else if (team.venueId.coordinates && team.venueId.coordinates.length === 2) {
-                coordinates = team.venueId.coordinates;
-            } else if (team.venue?.coordinates && team.venue.coordinates.length === 2) {
-                coordinates = team.venue.coordinates;
-            }
-
-            // Debug logging
-            console.log(`🏟️ Venue data for ${teamName}:`, {
-                name: team.venueId.name,
-                coordinates: coordinates,
-                source: coordinates ? (team.venueId.location ? 'GeoJSON' : 'Legacy') : 'None'
+            // Try to find team in database
+            console.log(`🔍 Looking up team in database: "${teamName}"`);
+            const team = await Team.findOne({ 
+                $or: [
+                    { name: teamName },
+                    { apiName: teamName },
+                    { aliases: teamName }
+                ]
             });
 
-            // Transform to expected format for backwards compatibility
-            const venueInfo = {
-                stadium: team.venueId.name,
-                name: team.venueId.name,
-                city: team.venueId.city,
-                country: team.venueId.country,
-                coordinates: coordinates,
-                ticketUrl: team.venueId.ticketUrl,
-                capacity: team.venueId.capacity,
-                surface: team.venueId.surface,
-                // Additional venue data
-                venue: {
-                    _id: team.venueId._id,
-                    name: team.venueId.name,
-                    address: team.venueId.address,
-                    website: team.venueId.website,
-                    publicTransport: team.venueId.publicTransport
-                },
-                team: {
-                    _id: team._id,
-                    name: team.name,
-                    shortName: team.shortName,
-                    logo: team.logo,
-                    colors: team.colors
-                },
-                league: team.leagueId ? {
-                    _id: team.leagueId._id,
-                    name: team.leagueId.name,
-                    shortName: team.leagueId.shortName,
-                    country: team.leagueId.country
-                } : null
-            };
+            if (!team) {
+                console.log(`❌ No team found for: "${teamName}" (checked name, apiName, and aliases)`);
+                this.cache.set(teamName, null);
+                return null;
+            }
 
-            // Cache the result
-            this.cache.set(teamName, venueInfo);
-            return venueInfo;
+            console.log(`✅ Found team: ${team.name} (apiName: ${team.apiName})`);
+
+            // Use venue data directly from the team
+            if (team.venue?.coordinates) {
+                console.log(`✅ Found venue with coordinates:`, team.venue.coordinates);
+                const venue = {
+                    stadium: team.venue.name,
+                    name: team.venue.name,
+                    city: team.venue.city,
+                    country: team.country,
+                    coordinates: team.venue.coordinates,
+                    capacity: team.venue.capacity
+                };
+                this.cache.set(teamName, venue);
+                return venue;
+            }
+
+            console.log(`❌ No venue found for team: ${teamName}`);
+            this.cache.set(teamName, null);
+            return null;
 
         } catch (error) {
             console.error(`Error getting venue for team ${teamName}:`, error);
@@ -181,17 +199,22 @@ class VenueService {
 
     /**
      * Find venues near a location
-     * @param {number} longitude 
-     * @param {number} latitude 
-     * @param {number} maxDistance - in meters
-     * @returns {Array} Array of venues
      */
     async findVenuesNear(longitude, latitude, maxDistance = 50000) {
         this.cacheStats.dbQueries++;
 
         try {
-            const venues = await Venue.findNear(longitude, latitude, maxDistance)
-                .populate('homeTeamId');
+            const venues = await Venue.find({
+                location: {
+                    $near: {
+                        $geometry: {
+                            type: "Point",
+                            coordinates: [longitude, latitude]
+                        },
+                        $maxDistance: maxDistance
+                    }
+                }
+            }).populate('homeTeamId');
 
             return venues.map(venue => ({
                 _id: venue._id,
@@ -199,27 +222,27 @@ class VenueService {
                 city: venue.city,
                 country: venue.country,
                 coordinates: venue.location.coordinates,
+                distance: this.calculateDistance(
+                    latitude,
+                    longitude,
+                    venue.location.coordinates[1],
+                    venue.location.coordinates[0]
+                ),
                 capacity: venue.capacity,
                 homeTeam: venue.homeTeamId ? {
                     name: venue.homeTeamId.name,
                     logo: venue.homeTeamId.logo
-                } : null,
-                distance: this.calculateDistance(
-                    latitude, longitude,
-                    venue.location.coordinates[1], venue.location.coordinates[0]
-                )
+                } : null
             }));
 
         } catch (error) {
-            console.error('Error finding venues near location:', error);
+            console.error(`Error finding venues near [${longitude}, ${latitude}]:`, error);
             return [];
         }
     }
 
     /**
      * Get all venues in a specific country
-     * @param {string} country - Country name
-     * @returns {Array} Array of venues
      */
     async getVenuesByCountry(country) {
         this.cacheStats.dbQueries++;
@@ -249,8 +272,6 @@ class VenueService {
 
     /**
      * Get venues by league
-     * @param {string} leagueApiId - API ID of the league
-     * @returns {Array} Array of venues
      */
     async getVenuesByLeague(leagueApiId) {
         this.cacheStats.dbQueries++;
@@ -345,7 +366,4 @@ class VenueService {
     }
 }
 
-// Create singleton instance
-const venueService = new VenueService();
-
-module.exports = venueService; 
+module.exports = new VenueService();

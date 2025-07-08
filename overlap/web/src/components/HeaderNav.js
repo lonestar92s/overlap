@@ -28,7 +28,8 @@ import {
     Menu as MenuIcon,
     Stadium,
     Explore as ExploreIcon,
-    Dashboard as DashboardIcon
+    Dashboard as DashboardIcon,
+    SportsSoccer
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './Auth';
@@ -112,6 +113,11 @@ const HeaderNav = () => {
         handleMobileMenuClose();
     };
 
+    const handleTeamMatchesClick = () => {
+        navigate('/team-matches');
+        handleMobileMenuClose();
+    };
+
     // Helper function to get subscription badge
     const getSubscriptionBadge = () => {
         if (subscriptionTier === 'pro') {
@@ -155,6 +161,7 @@ const HeaderNav = () => {
 
     const mobileMenuItems = [
         { text: 'Home', icon: <ExploreIcon />, onClick: handleHomeClick },
+        { text: 'Team Matches', icon: <SportsSoccer />, onClick: handleTeamMatchesClick },
         { text: 'Stadiums', icon: <Stadium />, onClick: handleStadiumsClick },
         { text: 'Explore', icon: <ExploreIcon />, onClick: handleExploreClick },
     ];
@@ -233,6 +240,23 @@ const HeaderNav = () => {
                         left: '50%',
                         transform: 'translateX(-50%)'
                     }}>
+                        <Typography
+                            variant="body1"
+                            onClick={handleTeamMatchesClick}
+                            sx={{ 
+                                color: '#666',
+                                cursor: 'pointer',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                fontWeight: 500,
+                                '&:hover': {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                                    color: '#333'
+                                }
+                            }}
+                        >
+                            Team Matches
+                        </Typography>
                         <Typography
                             variant="body1"
                             onClick={handleStadiumsClick}

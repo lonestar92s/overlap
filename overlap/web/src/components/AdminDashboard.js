@@ -197,9 +197,12 @@ const AdminDashboard = () => {
             if (data.success) {
                 setUsers(data.data.users);
                 setUserPagination(data.data.pagination);
+                // Set subscription stats from the combined response
+                setSubscriptionStats(data.data.stats);
             }
         } catch (error) {
             console.error('Error fetching users:', error);
+            setError('Failed to fetch users and subscription data');
         }
     };
 
@@ -239,28 +242,20 @@ const AdminDashboard = () => {
         }
     };
 
+    // Add useEffect to load data on mount
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
-            await Promise.all([
-                fetchStats(), 
-                fetchUnmappedTeams(), 
-                fetchVenues(), 
-                fetchDataFreshness(),
-                fetchUsers(),
-                fetchSubscriptionStats()
-            ]);
-            setLoading(false);
+            try {
+                await fetchUsers();
+            } catch (error) {
+                setError('Failed to load dashboard data');
+            } finally {
+                setLoading(false);
+            }
         };
         loadData();
-    }, []);
-
-    // Refresh users when search/filter changes
-    useEffect(() => {
-        if (currentTab === 3) { // Subscription tab
-            fetchUsers();
-        }
-    }, [userSearch, selectedTier, userPage, currentTab]);
+    }, [userPage, userSearch, selectedTier]); // Re-fetch when these values change
 
     // Check admin access AFTER all hooks
     if (!user || user.role !== 'admin') {
