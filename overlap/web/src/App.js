@@ -11,6 +11,7 @@ import Stadiums from './components/Stadiums';
 import Explore from './components/Explore';
 import AttendedMatches from './components/AttendedMatches';
 import AdminDashboard from './components/AdminDashboard';
+import TeamMatches from './components/TeamMatches';
 import { SubscriptionProvider } from './hooks/useSubscription';
 
 const theme = createTheme({
@@ -71,6 +72,8 @@ function AppContent() {
       <Box component="main" sx={{ flexGrow: 1, backgroundColor: '#F7F7F7' }}>
         <Routes>
           <Route path="/" element={<Home searchState={searchState} setSearchState={setSearchState} />} />
+          <Route path="/matches" element={<Home searchState={searchState} setSearchState={setSearchState} />} />
+          <Route path="/team-matches" element={<TeamMatches />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/profile" element={user ? <Profile /> : <Auth />} />
           <Route path="/trips" element={user ? <Trips /> : <Auth />} />

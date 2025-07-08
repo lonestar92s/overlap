@@ -238,12 +238,12 @@ userSchema.pre('save', async function(next) {
     }
 });
 
-// Method to check password
+// Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
     try {
         return await bcrypt.compare(candidatePassword, this.password);
     } catch (error) {
-        throw error;
+        throw new Error(error);
     }
 };
 

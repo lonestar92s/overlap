@@ -13,9 +13,8 @@ import { format } from 'date-fns';
 import { formatMatchDateTime } from '../utils/timezone';
 // getVenueForTeam import removed - distances now calculated in backend
 
-
-
-const MatchCard = ({ 
+// Export MatchCard component
+export const MatchCard = ({ 
     match, 
     onClick, 
     distance, 
@@ -25,13 +24,13 @@ const MatchCard = ({
     onStadiumClick = () => {},
     isStadiumVisited = false,
 }) => {
-    // Extract data from the new API response format
-    const fixture = match.fixture;
-    const teams = match.teams;
-    const league = match.league;
-    const venue = fixture.venue;
+    // Extract data from the new API response format and provide defaults
+    const fixture = match?.fixture || {};
+    const teams = match?.teams || { home: {}, away: {} };
+    const league = match?.league || {};
+    const venue = fixture?.venue || { name: 'Unknown Venue', city: 'Unknown City' };
     
-    const { date, time } = formatMatchDateTime(fixture.date, venue);
+    const { date, time } = formatMatchDateTime(fixture.date || new Date(), venue);
     const cardRef = useRef(null);
 
     useEffect(() => {
@@ -70,10 +69,13 @@ const MatchCard = ({
                         <AccessTime sx={{ mr: 1, color: '#666', fontSize: { xs: 18, sm: 24 } }} />
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                             <Typography variant="subtitle1" color="textSecondary" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+                                {formatMatchDateTime(fixture.date || new Date(), venue).fullDate}
+                            </Typography>
+                            <Typography variant="subtitle2" color="textSecondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>
                                 {time}
                             </Typography>
                             <Typography variant="caption" color="textSecondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, lineHeight: 1 }}>
-                                {formatMatchDateTime(fixture.date, venue).timeZone}
+                                {formatMatchDateTime(fixture.date || new Date(), venue).timeZone}
                             </Typography>
                         </Box>
                     </Box>
@@ -90,7 +92,7 @@ const MatchCard = ({
                                 fontSize: { xs: '0.7rem', sm: '0.75rem' }
                             }}
                         >
-                            {league.name}
+                            {league.name || 'Unknown League'}
                         </Typography>
                         <IconButton
                             size="small"
@@ -146,8 +148,8 @@ const MatchCard = ({
                         justifyContent: { xs: 'center', sm: 'flex-start' }
                     }}>
                         <Avatar 
-                            src={teams.home.logo} 
-                            alt={teams.home.name}
+                            src={teams.home?.logo} 
+                            alt={teams.home?.name}
                             sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
                         />
                         <Typography 
@@ -158,7 +160,7 @@ const MatchCard = ({
                                 textAlign: { xs: 'center', sm: 'left' }
                             }}
                         >
-                            {teams.home.name}
+                            {teams.home?.name || 'Unknown Team'}
                         </Typography>
                     </Box>
                     <Typography 
@@ -187,26 +189,19 @@ const MatchCard = ({
                                 textAlign: { xs: 'center', sm: 'right' }
                             }}
                         >
-                            {teams.away.name}
+                            {teams.away?.name || 'Unknown Team'}
                         </Typography>
                         <Avatar 
-                            src={teams.away.logo} 
-                            alt={teams.away.name}
+                            src={teams.away?.logo} 
+                            alt={teams.away?.name}
                             sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
                         />
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: { xs: 1.5, sm: 2 } }}>
                     <Stadium sx={{ color: '#666', fontSize: { xs: 18, sm: 20 } }} />
-                    <Typography 
-                        variant="body2" 
-                        color="textSecondary"
-                        sx={{ 
-                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                            lineHeight: 1.3
-                        }}
-                    >
-                        {venue.name}, {venue.city}, {venue.country}
+                    <Typography variant="body2" color="textSecondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                        {venue.name}{venue.city ? `, ${venue.city}` : ''}
                     </Typography>
                 </Box>
                 {distance && (

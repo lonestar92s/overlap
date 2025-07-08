@@ -584,10 +584,37 @@ router.get('/users', adminAuth, async (req, res) => {
         
         const total = await User.countDocuments(query);
         
+        // Add subscription stats to the response
+        const subscriptionStats = await User.aggregate([
+            {
+                $group: {
+                    _id: '$subscription.tier',
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // Format subscription stats
+        const tierStats = {
+            freemium: 0,
+            pro: 0,
+            planner: 0
+        };
+        
+        subscriptionStats.forEach(stat => {
+            const tier = stat._id || 'freemium';
+            tierStats[tier] = stat.count;
+        });
+        
         res.json({
             success: true,
             data: {
                 users,
+                stats: {
+                    total,
+                    tierStats,
+                    tierAccess: subscriptionService.getAllTiers()
+                },
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
@@ -701,131 +728,4 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
 });
 
 module.exports = router; 
-// GET /api/admin/users - Get all users with pagination and subscription info
-router.get("/users", adminAuth, async (req, res) => {
-    try {
-        const { page = 1, limit = 50, search = "", tier = "" } = req.query;
-        const query = {};
-        
-        if (search) {
-            query.$or = [
-                { email: { $regex: search, $options: "i" } },
-                { "profile.firstName": { $regex: search, $options: "i" } },
-                { "profile.lastName": { $regex: search, $options: "i" } }
-            ];
-        }
-        
-        if (tier) {
-            query["subscription.tier"] = tier;
-        }
-        
-        const users = await User.find(query)
-            .select("-password")
-            .sort({ createdAt: -1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
-        
-        const total = await User.countDocuments(query);
-        
-        res.json({
-            success: true,
-            data: {
-                users,
-                pagination: {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    total,
-                    pages: Math.ceil(total / limit)
-                }
-            }
-        });
-    } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch users"
-        });
-    }
-});
-
-// PUT /api/admin/users/:userId/subscription - Update user subscription tier
-router.put("/users/:userId/subscription", adminAuth, async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const { tier } = req.body;
-        
-        if (!tier || !["freemium", "pro", "planner"].includes(tier)) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid subscription tier is required (freemium, pro, planner)"
-            });
-        }
-        
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-        
-        subscriptionService.updateUserTier(user, tier);
-        await user.save();
-        
-        res.json({
-            success: true,
-            message: `Successfully updated ${user.email} to ${tier} tier`,
-            user: {
-                id: user._id,
-                email: user.email,
-                subscription: user.subscription
-            }
-        });
-    } catch (error) {
-        console.error("Error updating user subscription:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to update subscription"
-        });
-    }
-});
-
-// GET /api/admin/subscription-stats - Get subscription statistics
-router.get("/subscription-stats", adminAuth, async (req, res) => {
-    try {
-        const stats = await User.aggregate([
-            {
-                $group: {
-                    _id: "$subscription.tier",
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
-        
-        const totalUsers = await User.countDocuments();
-        
-        const tierStats = { freemium: 0, pro: 0, planner: 0 };
-        stats.forEach(stat => {
-            const tier = stat._id || "freemium";
-            tierStats[tier] = stat.count;
-        });
-        
-        const tierAccess = subscriptionService.getAllTiers();
-        
-        res.json({
-            success: true,
-            data: {
-                totalUsers,
-                tierStats,
-                tierAccess
-            }
-        });
-    } catch (error) {
-        console.error("Error fetching subscription stats:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch subscription stats"
-        });
-    }
-});
 

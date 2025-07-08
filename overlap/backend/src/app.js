@@ -69,17 +69,17 @@ if (process.env.MONGODB_URI) {
     console.log('⚠️  MONGODB_URI not found - auth features will be disabled');
 }
 
-// Use routes
-app.use('/api', transportationRoutes);
-app.use('/api/search', searchRoutes);
+// Mount routes
+app.use('/api/matches', matchesRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/preferences', preferencesRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/leagues', leaguesRoutes);
-app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/trips', tripsRoutes);
-app.use('/v4', matchesRoutes);
+app.use('/api/preferences', preferencesRoutes);
+app.use('/api/attended-matches', attendedMatchesRoutes);
 app.use('/api/admin', adminRouter);
+app.use('/api/search', searchRoutes);
+app.use('/api/transportation', transportationRoutes);
 
 // Set up unmapped team logging after routes are loaded
 const teamService = require('./services/teamService');

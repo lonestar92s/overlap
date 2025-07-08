@@ -140,28 +140,6 @@ router.post('/logout', auth, async (req, res) => {
 
 // ADMIN ROUTES
 
-// Get all users (admin only)
-router.get('/admin/users', adminAuth, async (req, res) => {
-    try {
-        const users = await User.find({})
-            .select('-password')
-            .sort({ createdAt: -1 });
-        
-        res.json({
-            success: true,
-            users: users.map(user => ({
-                id: user._id,
-                email: user.email,
-                role: user.role,
-                profile: user.profile,
-                createdAt: user.createdAt
-            }))
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // Promote user to admin (admin only)
 router.post('/admin/promote/:userId', adminAuth, async (req, res) => {
     try {
