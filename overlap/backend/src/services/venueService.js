@@ -156,11 +156,25 @@ class VenueService {
         try {
             // Try to find team in database
             console.log(`🔍 Looking up team in database: "${teamName}"`);
+            console.log('🔍 Using query:', { 
+                $or: [
+                    { name: teamName },
+                    { name: { $regex: new RegExp(`^${teamName}$`, 'i') } },
+                    { apiName: teamName },
+                    { apiName: { $regex: new RegExp(`^${teamName}$`, 'i') } },
+                    { aliases: teamName },
+                    { aliases: { $regex: new RegExp(`^${teamName}$`, 'i') } }
+                ]
+            });
+            
             const team = await Team.findOne({ 
                 $or: [
                     { name: teamName },
+                    { name: { $regex: new RegExp(`^${teamName}$`, 'i') } },
                     { apiName: teamName },
-                    { aliases: teamName }
+                    { apiName: { $regex: new RegExp(`^${teamName}$`, 'i') } },
+                    { aliases: teamName },
+                    { aliases: { $regex: new RegExp(`^${teamName}$`, 'i') } }
                 ]
             });
 
@@ -170,7 +184,18 @@ class VenueService {
                 return null;
             }
 
-            console.log(`✅ Found team: ${team.name} (apiName: ${team.apiName})`);
+            console.log(`✅ Found team:`, {
+                name: team.name,
+                apiName: team.apiName,
+                aliases: team.aliases,
+                hasVenue: !!team.venue,
+                hasVenueCoordinates: !!team.venue?.coordinates,
+                venueDetails: team.venue ? {
+                    name: team.venue.name,
+                    city: team.venue.city,
+                    coordinates: team.venue.coordinates
+                } : null
+            });
 
             // Use venue data directly from the team
             if (team.venue?.coordinates) {
@@ -183,6 +208,7 @@ class VenueService {
                     coordinates: team.venue.coordinates,
                     capacity: team.venue.capacity
                 };
+                console.log('✅ Returning venue data:', venue);
                 this.cache.set(teamName, venue);
                 return venue;
             }
