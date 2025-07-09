@@ -101,35 +101,69 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                         const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
                         console.log(`🔄 Team mapping: ${fixture.teams.home.name} → ${mappedTeamName}`);
                         
-                        const venueData = await venueService.getVenueForTeam(mappedTeamName);
-                        if (venueData?.coordinates) {
-                            console.log(`✅ Found venue through team with coordinates:`, venueData.coordinates);
+                        // Get team data first
+                        const team = await Team.findOne({ 
+                            $or: [
+                                { name: mappedTeamName },
+                                { name: { $regex: new RegExp(`^${mappedTeamName}$`, 'i') } },
+                                { apiName: mappedTeamName },
+                                { aliases: mappedTeamName }
+                            ]
+                        });
+                        
+                        if (team?.venue?.coordinates) {
+                            console.log(`✅ Found venue through team with coordinates:`, team.venue.coordinates);
                             
                             let distance = null;
                             if (userLocation) {
-                                const [venueLon, venueLat] = venueData.coordinates;
+                                const [venueLon, venueLat] = team.venue.coordinates;
                                 distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
                                 console.log(`📏 Calculated distance: ${distance} miles`);
                             }
                             
                             return {
                                 id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
-                                name: venueData.stadium || venueData.name,
-                                city: venueData.city,
-                                country: venueData.country,
+                                name: team.venue.name,
+                                city: team.city || team.venue.city,
+                                country: team.country,
                                 distance: distance,
-                                coordinates: venueData.coordinates
+                                coordinates: team.venue.coordinates
                             };
                         }
+                        
+                        // If team found but no venue coordinates, try venue service
+                        if (team) {
+                            const venueData = await venueService.getVenueForTeam(mappedTeamName);
+                            if (venueData?.coordinates) {
+                                console.log(`✅ Found venue through venue service with coordinates:`, venueData.coordinates);
+                                
+                                let distance = null;
+                                if (userLocation) {
+                                    const [venueLon, venueLat] = venueData.coordinates;
+                                    distance = calculateDistance(userLocation.lat, userLocation.lon, venueLat, venueLon);
+                                    console.log(`📏 Calculated distance: ${distance} miles`);
+                                }
+                                
+                                return {
+                                    id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
+                                    name: venueData.stadium || venueData.name,
+                                    city: venueData.city,
+                                    country: venueData.country,
+                                    distance: distance,
+                                    coordinates: venueData.coordinates
+                                };
+                            }
+                        }
+                        
                         console.log(`❌ No venue found through team mapping`);
                         
                         // Final fallback: Basic venue info without coordinates
                         console.log(`⚠️ Using fallback venue data without coordinates`);
                         return {
                             id: apiVenue?.id || null,
-                            name: apiVenue?.name || `${fixture.teams.home.name} Stadium`,
-                            city: apiVenue?.city || fixture.teams.home.name,
-                            country: fixture.league.country,
+                            name: apiVenue?.name || null,
+                            city: apiVenue?.city || null,
+                            country: fixture.league.country || null,
                             distance: null,
                             coordinates: null
                         };
@@ -142,6 +176,19 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                             code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
                             flag: fixture.league.flag || null
                         },
+                        // Add logging for final venue data
+                        ...((() => {
+                            console.log(`\n📍 Final venue data for match ${fixture.fixture.id}:`, {
+                                venueName: venue.name,
+                                venueCity: venue.city,
+                                venueCountry: venue.country,
+                                coordinates: venue.coordinates,
+                                homeTeam: fixture.teams.home.name,
+                                awayTeam: fixture.teams.away.name,
+                                league: leagueName
+                            });
+                            return {};
+                        })()),
                         competition: {
                             id: competitionId.toString(),
                             name: leagueName,

@@ -30,6 +30,15 @@ export const MatchCard = ({
     const league = match?.league || {};
     const venue = fixture?.venue || { name: 'Unknown Venue', city: 'Unknown City' };
     
+    // Add logging for venue data
+    console.log(`[MatchCard] Venue data for match ${fixture.id}:`, {
+        venue,
+        homeTeam: teams.home?.name,
+        awayTeam: teams.away?.name,
+        league: league.name,
+        rawMatch: match // Log full match object for debugging
+    });
+
     const { date, time } = formatMatchDateTime(fixture.date || new Date(), venue);
     const cardRef = useRef(null);
 
@@ -232,6 +241,17 @@ const Matches = ({
     visitedStadiums = [],
     isStadiumVisited = () => false
 }) => {
+    // Add logging when matches are received
+    useEffect(() => {
+        console.log('[Matches] Received matches:', matches.map(match => ({
+            id: match.fixture?.id,
+            venue: match.fixture?.venue,
+            homeTeam: match.teams?.home?.name,
+            awayTeam: match.teams?.away?.name,
+            league: match.league?.name
+        })));
+    }, [matches]);
+
     // Use distances from backend response (calculated server-side)
     const matchesWithDistance = useMemo(() => {
         return matches.map(match => {

@@ -7,8 +7,32 @@ const User = require('../models/User');
 const teamService = require('../services/teamService');
 const venueService = require('../services/venueService');
 const subscriptionService = require('../services/subscriptionService');
+const { authenticateToken } = require('../middleware/auth');
+const { teamSearchCache, matchesCache } = require('../utils/cache');
 
 const router = express.Router();
+
+// Ensure admin role
+const ensureAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Admin access required' });
+    }
+};
+
+// Clear application cache
+router.post('/clear-cache', authenticateToken, ensureAdmin, (req, res) => {
+    try {
+        teamSearchCache.clear();
+        matchesCache.clear();
+        console.log('🧹 Cache cleared successfully');
+        res.json({ message: 'Cache cleared successfully' });
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        res.status(500).json({ message: 'Error clearing cache' });
+    }
+});
 
 // Track unmapped teams for admin dashboard
 const unmappedTeamsCache = {
