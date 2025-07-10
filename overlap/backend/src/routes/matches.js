@@ -24,7 +24,7 @@ const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 // Hardcoded constants removed - now using database services
 
 // Function to transform API-Sports data to match frontend expectations
-async function transformApiSportsData(apiResponse, competitionId, userLocation = null) {
+async function transformApiSportsData(apiResponse, competitionId, userLocation = null, maxDistance = null) {
     const fixtures = apiResponse.response || [];
     const leagueName = await leagueService.getLeagueNameById(competitionId);
     
@@ -258,7 +258,33 @@ async function transformApiSportsData(apiResponse, competitionId, userLocation =
                     };
                 })();
                 
-                transformedFixtures.push(transformedFixture);
+                // Only include matches that have coordinates and distance calculations
+                if (userLocation && transformedFixture.fixture.venue.distance !== null) {
+                    // We have distance data - now check if it's within the specified range
+                    if (maxDistance) {
+                        if (transformedFixture.fixture.venue.distance <= maxDistance) {
+                            transformedFixtures.push(transformedFixture);
+                            console.log(`✅ Match included (${transformedFixture.fixture.venue.distance.toFixed(1)} mi ≤ ${maxDistance} mi)`);
+                        } else {
+                            console.log(`❌ Match excluded by distance (${transformedFixture.fixture.venue.distance.toFixed(1)} mi > ${maxDistance} mi)`);
+                        }
+                    } else {
+                        // No distance limit specified, but we have coordinates - include it
+                        transformedFixtures.push(transformedFixture);
+                        console.log(`✅ Match included (${transformedFixture.fixture.venue.distance.toFixed(1)} mi, no distance limit)`);
+                    }
+                } else {
+                    // No coordinates or no user location - exclude this match
+                    console.log(`❌ Match excluded (missing coordinates or user location)`);
+                }
+            }
+            
+            console.log(`\n📏 Distance filtering results:`);
+            console.log(`📊 Total matches after filtering: ${transformedFixtures.length}`);
+            if (maxDistance && userLocation) {
+                const withDistance = transformedFixtures.filter(m => m.fixture.venue.distance !== null);
+                console.log(`📍 Matches with distance data: ${withDistance.length}`);
+                console.log(`📏 Max distance filter: ${maxDistance} miles`);
             }
             
             return transformedFixtures;
@@ -282,13 +308,14 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 router.get('/competitions/:competitionId', authenticateToken, async (req, res) => {
     try {
         const { competitionId } = req.params;
-        const { dateFrom, dateTo, userLat, userLon } = req.query;
+        const { dateFrom, dateTo, userLat, userLon, maxDistance } = req.query;
         
         console.log('\n🔍 MATCH REQUEST:', {
             competitionId,
             dateFrom,
             dateTo,
-            userLocation: { userLat, userLon }
+            userLocation: { userLat, userLon },
+            maxDistance: maxDistance ? `${maxDistance} miles` : 'no limit'
         });
 
         // Get user from token (optional - if no token, default to freemium)
@@ -339,8 +366,11 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
             });
         }
 
-        // Check if we have cached data
-        const cacheKey = `matches:${competitionId}:${dateFrom}:${dateTo}`;
+        // Parse distance parameter first
+        const maxDistanceNum = maxDistance ? parseFloat(maxDistance) : null;
+        
+        // Check if we have cached data (include maxDistance in cache key)
+        const cacheKey = `matches:${competitionId}:${dateFrom}:${dateTo}:${maxDistanceNum || 'unlimited'}`;
         const cachedData = matchesCache.get(cacheKey);
         if (cachedData) {
             console.log(`📦 Using cached data for ${cacheKey}`);
@@ -365,7 +395,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         
         // Transform data
         const userLocation = userLat && userLon ? { lat: parseFloat(userLat), lon: parseFloat(userLon) } : null;
-        const transformedData = await transformApiSportsData(apiResponse.data, competitionId, userLocation);
+        const transformedData = await transformApiSportsData(apiResponse.data, competitionId, userLocation, maxDistanceNum);
         
         console.log(`✨ Transformed ${transformedData.response?.length || 0} matches`);
 
