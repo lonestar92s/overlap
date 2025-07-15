@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { Card, Avatar, Divider, Button, ButtonGroup } from 'react-native-elements';
 import ApiService from '../services/api';
 
 const ResultsScreen = ({ route, navigation }) => {
   const { matches: initialMatches = [], searchParams = {} } = route.params || {};
+  const [allMatches, setAllMatches] = useState(initialMatches); // Keep all matches
   const [matches, setMatches] = useState(initialMatches);
   const [loading, setLoading] = useState(false);
   const [showDistanceFilter, setShowDistanceFilter] = useState(false);
@@ -24,12 +26,110 @@ const ResultsScreen = ({ route, navigation }) => {
     return distanceOptions.indexOf(currentDistance) !== -1 ? distanceOptions.indexOf(currentDistance) : 1;
   });
 
+  // Filter states
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedLeagues, setSelectedLeagues] = useState([]);
+  const [selectedClubs, setSelectedClubs] = useState([]);
+
   // Distance options
   const distanceOptions = [
     { label: '50 mi', value: 50 },
     { label: '100 mi', value: 100 },
     { label: '250 mi', value: 250 }
   ];
+
+  // Get available leagues and clubs from current matches
+  const { availableLeagues, availableClubs } = useMemo(() => {
+    const leagues = new Map();
+    const clubs = new Map();
+    
+    allMatches.forEach(match => {
+      const league = match.competition || match.league;
+      const homeTeam = match.teams?.home;
+      const awayTeam = match.teams?.away;
+      
+      if (league) {
+        // Add league
+        if (!leagues.has(league.id)) {
+          leagues.set(league.id, {
+            id: league.id,
+            name: league.name,
+            logo: league.logo,
+            matchCount: 0
+          });
+        }
+        leagues.get(league.id).matchCount++;
+        
+        // Add clubs for this league
+        [homeTeam, awayTeam].forEach(team => {
+          if (team) {
+            const clubKey = `${team.id}-${league.id}`;
+            if (!clubs.has(clubKey)) {
+              clubs.set(clubKey, {
+                id: team.id,
+                name: team.name,
+                logo: team.logo,
+                leagueId: league.id,
+                leagueName: league.name,
+                matchCount: 0
+              });
+            }
+            clubs.get(clubKey).matchCount++;
+          }
+        });
+      }
+    });
+
+    return {
+      availableLeagues: Array.from(leagues.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      availableClubs: Array.from(clubs.values()).sort((a, b) => a.name.localeCompare(b.name))
+    };
+  }, [allMatches]);
+
+  // Get clubs for selected leagues
+  const clubsForSelectedLeagues = useMemo(() => {
+    if (selectedLeagues.length === 0) return [];
+    return availableClubs.filter(club => selectedLeagues.includes(club.leagueId));
+  }, [availableClubs, selectedLeagues]);
+
+  // Apply filters to matches
+  const filteredMatches = useMemo(() => {
+    let filtered = allMatches;
+
+    // Filter by selected clubs (if any clubs are selected)
+    if (selectedClubs.length > 0) {
+      filtered = filtered.filter(match => {
+        const homeTeamId = match.teams?.home?.id;
+        const awayTeamId = match.teams?.away?.id;
+        return selectedClubs.includes(homeTeamId) || selectedClubs.includes(awayTeamId);
+      });
+    }
+    // If no clubs selected but leagues are selected, show all matches from selected leagues
+    else if (selectedLeagues.length > 0) {
+      filtered = filtered.filter(match => {
+        const leagueId = match.competition?.id || match.league?.id;
+        return selectedLeagues.includes(leagueId);
+      });
+    }
+
+    return filtered;
+  }, [allMatches, selectedLeagues, selectedClubs]);
+
+  // Update matches when filters change
+  React.useEffect(() => {
+    setMatches(filteredMatches);
+  }, [filteredMatches]);
+
+  // Update filters when allMatches changes (distance filter)
+  React.useEffect(() => {
+    // Remove selected leagues that no longer exist
+    const currentLeagueIds = availableLeagues.map(l => l.id);
+    setSelectedLeagues(prev => prev.filter(id => currentLeagueIds.includes(id)));
+    
+    // Remove selected clubs that no longer exist
+    const currentClubIds = availableClubs.map(c => c.id);
+    setSelectedClubs(prev => prev.filter(id => currentClubIds.includes(id)));
+  }, [availableLeagues, availableClubs]);
 
   const handleDistanceChange = async (newDistanceIndex) => {
     if (newDistanceIndex === selectedDistance) {
@@ -49,7 +149,7 @@ const ResultsScreen = ({ route, navigation }) => {
       const response = await ApiService.searchAllMatchesByLocation(newSearchParams);
       
       if (response.success) {
-        setMatches(response.data);
+        setAllMatches(response.data); // This will trigger filter updates
         setShowDistanceFilter(false);
         
         // Update the route params for consistency
@@ -66,6 +166,44 @@ const ResultsScreen = ({ route, navigation }) => {
       setLoading(false);
     }
   };
+
+  const handleLeagueToggle = (leagueId) => {
+    setSelectedLeagues(prev => {
+      const newSelected = prev.includes(leagueId) 
+        ? prev.filter(id => id !== leagueId)
+        : [...prev, leagueId];
+      
+      // Clear club selections when league selection changes
+      if (!prev.includes(leagueId)) {
+        // League was added - no need to clear clubs
+      } else {
+        // League was removed - clear clubs from that league
+        setSelectedClubs(prevClubs => 
+          prevClubs.filter(clubId => {
+            const club = availableClubs.find(c => c.id === clubId);
+            return club && club.leagueId !== leagueId;
+          })
+        );
+      }
+      
+      return newSelected;
+    });
+  };
+
+  const handleClubToggle = (clubId) => {
+    setSelectedClubs(prev => 
+      prev.includes(clubId) 
+        ? prev.filter(id => id !== clubId)
+        : [...prev, clubId]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedLeagues([]);
+    setSelectedClubs([]);
+  };
+
+  const hasActiveFilters = selectedLeagues.length > 0 || selectedClubs.length > 0;
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -106,7 +244,6 @@ const ResultsScreen = ({ route, navigation }) => {
 
   const handlePlanTrip = (match) => {
     // TODO: Navigate to trip planning screen
-    console.log('Plan trip for match:', match.fixture.id);
   };
 
   const renderMatchItem = ({ item }) => {
@@ -205,6 +342,7 @@ const ResultsScreen = ({ route, navigation }) => {
       <Text style={styles.headerTitle}>Available Matches</Text>
       <Text style={styles.headerSubtitle}>
         {matches.length} matches found within {distanceOptions[selectedDistance].label}
+        {hasActiveFilters && ` (filtered from ${allMatches.length})`}
       </Text>
       {searchParams.location && (
         <Text style={styles.searchInfo}>
@@ -215,15 +353,27 @@ const ResultsScreen = ({ route, navigation }) => {
         📅 {searchParams.dateFrom} to {searchParams.dateTo}
       </Text>
       
-      <TouchableOpacity 
-        style={styles.distanceFilterButton}
-        onPress={() => setShowDistanceFilter(!showDistanceFilter)}
-        disabled={loading}
-      >
-        <Text style={styles.distanceFilterButtonText}>
-          📏 Change Distance ({distanceOptions[selectedDistance].label})
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.filterButtonsContainer}>
+        <TouchableOpacity 
+          style={styles.distanceFilterButton}
+          onPress={() => setShowDistanceFilter(!showDistanceFilter)}
+          disabled={loading}
+        >
+          <Text style={styles.distanceFilterButtonText}>
+            📏 Distance ({distanceOptions[selectedDistance].label})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.filtersButton, hasActiveFilters && styles.filtersButtonActive]}
+          onPress={() => setShowFilters(!showFilters)}
+          disabled={loading}
+        >
+          <Text style={[styles.filtersButtonText, hasActiveFilters && styles.filtersButtonTextActive]}>
+            🔍 Filters {hasActiveFilters && '●'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {showDistanceFilter && (
         <View style={styles.distanceFilterContainer}>
@@ -239,6 +389,83 @@ const ResultsScreen = ({ route, navigation }) => {
           />
         </View>
       )}
+
+              {showFilters && (
+          <View style={styles.filtersContainer}>
+            <Text style={styles.filterSectionTitle}>Leagues ({availableLeagues.length})</Text>
+            <ScrollView style={styles.leagueFiltersContainer} showsVerticalScrollIndicator={false}>
+              {availableLeagues.map(league => (
+                <TouchableOpacity
+                  key={league.id}
+                  style={styles.leagueFilterItem}
+                  onPress={() => handleLeagueToggle(league.id)}
+                >
+                  <View style={styles.leagueFilterContent}>
+                    <Avatar
+                      source={{ uri: league.logo }}
+                      size={20}
+                      rounded
+                      containerStyle={styles.leagueFilterLogo}
+                    />
+                    <Text style={styles.leagueFilterName}>{league.name}</Text>
+                    <Text style={styles.leagueFilterCount}>({league.matchCount})</Text>
+                  </View>
+                  <View style={[
+                    styles.leagueFilterCheckbox,
+                    selectedLeagues.includes(league.id) && styles.leagueFilterCheckboxSelected
+                  ]}>
+                    {selectedLeagues.includes(league.id) && (
+                      <Text style={styles.leagueFilterCheckmark}>✓</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedLeagues.length > 0 && (
+              <View style={styles.clubFiltersContainer}>
+                <Text style={styles.filterSectionTitle}>
+                  Clubs from Selected Leagues ({clubsForSelectedLeagues.length})
+                </Text>
+                <ScrollView style={styles.clubScrollContainer} showsVerticalScrollIndicator={false}>
+                  {clubsForSelectedLeagues.map(club => (
+                    <TouchableOpacity
+                      key={`${club.id}-${club.leagueId}`}
+                      style={styles.clubFilterItem}
+                      onPress={() => handleClubToggle(club.id)}
+                    >
+                      <View style={styles.clubFilterContent}>
+                        <Avatar
+                          source={{ uri: club.logo }}
+                          size={18}
+                          rounded
+                          containerStyle={styles.clubFilterLogo}
+                        />
+                        <Text style={styles.clubFilterName}>{club.name}</Text>
+                        <Text style={styles.clubFilterLeague}>({club.leagueName})</Text>
+                        <Text style={styles.clubFilterCount}>{club.matchCount}</Text>
+                      </View>
+                      <View style={[
+                        styles.clubFilterCheckbox,
+                        selectedClubs.includes(club.id) && styles.clubFilterCheckboxSelected
+                      ]}>
+                        {selectedClubs.includes(club.id) && (
+                          <Text style={styles.clubFilterCheckmark}>✓</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {hasActiveFilters && (
+              <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+                <Text style={styles.clearFiltersButtonText}>Clear All Filters</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
       {loading && (
         <Text style={styles.loadingText}>Searching...</Text>
@@ -323,18 +550,45 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  filterButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 15,
+  },
   distanceFilterButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
-    marginTop: 10,
-    alignSelf: 'center',
+    flex: 1,
+    marginHorizontal: 5,
   },
   distanceFilterButtonText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  filtersButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  filtersButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  filtersButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  filtersButtonTextActive: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   distanceFilterContainer: {
     marginTop: 10,
@@ -544,6 +798,146 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  filtersContainer: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+  },
+  leagueFiltersContainer: {
+    maxHeight: 200,
+    marginBottom: 15,
+  },
+  leagueFilterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 5,
+    borderRadius: 5,
+    marginBottom: 5,
+  },
+  leagueFilterContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  leagueFilterLogo: {
+    marginRight: 10,
+  },
+  leagueFilterName: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  leagueFilterCount: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    marginLeft: 5,
+  },
+  leagueFilterCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  leagueFilterCheckboxSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'white',
+  },
+  leagueFilterCheckmark: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  clearFiltersButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  clearFiltersButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterSectionTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  clubFiltersContainer: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  clubScrollContainer: {
+    maxHeight: 150,
+    marginBottom: 10,
+  },
+  clubFilterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginLeft: 15,
+    borderRadius: 5,
+    marginBottom: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  clubFilterContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  clubFilterLogo: {
+    marginRight: 8,
+  },
+  clubFilterName: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  clubFilterLeague: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 11,
+    marginLeft: 5,
+    fontStyle: 'italic',
+  },
+  clubFilterCount: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    marginLeft: 5,
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  clubFilterCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clubFilterCheckboxSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'white',
+  },
+  clubFilterCheckmark: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
 

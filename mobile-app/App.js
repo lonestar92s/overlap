@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet } from 'react-native';
 
 import SearchScreen from './screens/SearchScreen';
+import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
 
 const Stack = createStackNavigator();
@@ -30,6 +31,14 @@ export default function App() {
           component={SearchScreen}
           options={{
             title: 'Find Matches',
+            headerTitleAlign: 'center',
+          }}
+        />
+        <Stack.Screen
+          name="MapResults"
+          component={MapResultsScreen}
+          options={{
+            title: 'Match Results',
             headerTitleAlign: 'center',
           }}
         />
