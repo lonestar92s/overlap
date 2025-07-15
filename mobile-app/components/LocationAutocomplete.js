@@ -68,7 +68,6 @@ const LocationAutocomplete = ({
       // Check if we have a valid API key
       if (LOCATIONIQ_API_KEY === 'pk.test.key' || !LOCATIONIQ_API_KEY) {
         // Use mock data for testing
-        console.log('Using mock location data for testing');
         await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
         
         const filteredMockData = MOCK_LOCATIONS.filter(location =>
@@ -185,6 +184,13 @@ const LocationAutocomplete = ({
     onSelect(location);
   };
 
+  const handleClearLocation = () => {
+    setInputValue('');
+    setOptions([]);
+    setShowDropdown(false);
+    onSelect(null);
+  };
+
   const renderLocationItem = ({ item }) => (
     <TouchableOpacity
       style={styles.locationItem}
@@ -214,6 +220,14 @@ const LocationAutocomplete = ({
           autoCapitalize="words"
           autoCorrect={false}
         />
+        {inputValue.length > 0 && (
+          <TouchableOpacity 
+            onPress={handleClearLocation}
+            style={styles.clearButton}
+          >
+            <Text style={styles.clearButtonText}>×</Text>
+          </TouchableOpacity>
+        )}
         {loading && (
           <ActivityIndicator 
             size="small" 
@@ -268,6 +282,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#333',
+  },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  clearButtonText: {
+    fontSize: 20,
+    color: '#999',
+    fontWeight: 'bold',
   },
   loadingIndicator: {
     marginLeft: 8,

@@ -7,10 +7,13 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { Button, Card } from 'react-native-elements';
+import { Button, Card, ButtonGroup } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import ApiService from '../services/api';
+
+// BACKUP OF ORIGINAL SEARCH SCREEN - DISTANCE-BASED SEARCH
+// This file is kept for reference - contains the old search logic
 
 const SearchScreen = ({ navigation }) => {
   const [location, setLocation] = useState(null);
@@ -18,7 +21,15 @@ const SearchScreen = ({ navigation }) => {
   const [dateFrom, setDateFrom] = useState(null);
   const [dateTo, setDateTo] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedDistance, setSelectedDistance] = useState(1); // Index for 100 miles (default)
   const [showCalendar, setShowCalendar] = useState(false);
+
+  // Distance options
+  const distanceOptions = [
+    { label: '50 mi', value: 50 },
+    { label: '100 mi', value: 100 },
+    { label: '250 mi', value: 250 }
+  ];
 
   const formatDate = (date) => {
     if (!date) return null;
@@ -125,19 +136,28 @@ const SearchScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      // Navigate to map results screen with search parameters
       const searchParams = {
         location,
         dateFrom: formatDate(dateFrom),
-        dateTo: formatDate(dateTo)
+        dateTo: formatDate(dateTo),
+        maxDistance: distanceOptions[selectedDistance].value
       };
+
+      // Search matches from all leagues with distance filter
+      const response = await ApiService.searchAllMatchesByLocation(searchParams);
       
-      console.log('SearchScreen: Navigating with params:', searchParams);
-      console.log('SearchScreen: Location details:', location);
-      
-      navigation.navigate('MapResults', { 
-        searchParams
-      });
+      if (response.success) {
+        navigation.navigate('Results', { 
+          matches: response.data,
+          searchParams: {
+            ...searchParams,
+            location,
+            maxDistance: distanceOptions[selectedDistance].value
+          }
+        });
+      } else {
+        Alert.alert('Error', response.error || 'No matches found for your search criteria');
+      }
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to search matches');
     } finally {
@@ -210,10 +230,23 @@ const SearchScreen = ({ navigation }) => {
           </View>
         )}
 
-
+        <Text style={styles.sectionTitle}>Search Distance</Text>
+        <Text style={styles.distanceSubtitle}>
+          Find matches within {distanceOptions[selectedDistance].label} of your destination
+        </Text>
+        
+        <ButtonGroup
+          onPress={setSelectedDistance}
+          selectedIndex={selectedDistance}
+          buttons={distanceOptions.map(option => option.label)}
+          containerStyle={styles.distanceButtonGroup}
+          selectedButtonStyle={styles.selectedDistanceButton}
+          textStyle={styles.distanceButtonText}
+          selectedTextStyle={styles.selectedDistanceButtonText}
+        />
 
         <Button
-          title="Search Matches"
+          title="Find Matches"
           onPress={handleSearch}
           loading={loading}
           disabled={loading || !location || !dateFrom || !dateTo}
@@ -231,7 +264,7 @@ const SearchScreen = ({ navigation }) => {
         />
 
         <Text style={styles.helpText}>
-          Select your travel destination and dates to find football matches you can attend.
+          Select your travel destination, dates, and search distance to find football matches you can attend.
         </Text>
       </Card>
     </ScrollView>
@@ -273,7 +306,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#555',
   },
-
+  distanceSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  distanceButtonGroup: {
+    marginTop: 10,
+    marginBottom: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  distanceButtonText: {
+    fontSize: 16,
+    color: '#1976d2',
+  },
+  selectedDistanceButton: {
+    backgroundColor: '#1976d2',
+    borderColor: '#1976d2',
+  },
+  selectedDistanceButtonText: {
+    color: 'white',
+  },
   inputContainer: {
     marginBottom: 15,
   },
@@ -347,7 +403,6 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontStyle: 'italic',
   },
-
 });
 
 export default SearchScreen; 
