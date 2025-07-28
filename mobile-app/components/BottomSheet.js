@@ -4,16 +4,15 @@ import {
   Text,
   StyleSheet,
   Animated,
-  PanGestureHandler,
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import { PanGestureHandler as GestureHandler } from 'react-native-gesture-handler';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Bottom sheet positions as percentages of screen height
-const COLLAPSED_HEIGHT = 0.25;    // 25% of screen
+const COLLAPSED_HEIGHT = 0.08;    // 8% of screen (very small like Zillow)
 const HALF_EXPANDED_HEIGHT = 0.55; // 55% of screen  
 const FULL_EXPANDED_HEIGHT = 0.85; // 85% of screen
 
@@ -24,7 +23,8 @@ const BottomSheet = ({
 }) => {
   const [sheetState, setSheetState] = useState(initialState);
   const translateY = useRef(new Animated.Value(getTranslateY(initialState))).current;
-  const gestureHandler = useRef();
+  const lastTranslateY = useRef(0);
+  const isAnimating = useRef(false);
 
   // Calculate translateY value for each state
   function getTranslateY(state) {
@@ -42,6 +42,9 @@ const BottomSheet = ({
 
   // Animate to a specific state
   const animateToState = (targetState) => {
+    if (isAnimating.current) return;
+    
+    isAnimating.current = true;
     const targetY = getTranslateY(targetState);
     
     Animated.spring(translateY, {
@@ -53,57 +56,88 @@ const BottomSheet = ({
       restSpeedThreshold: 0.1,
       restDisplacementThreshold: 0.1,
       useNativeDriver: true,
-    }).start();
+    }).start(() => {
+      isAnimating.current = false;
+    });
 
     setSheetState(targetState);
     onStateChange(targetState);
   };
 
   // Handle pan gesture
-  const handleGestureEvent = Animated.event(
+  const onGestureEvent = Animated.event(
     [{ nativeEvent: { translationY: translateY } }],
-    { useNativeDriver: true }
-  );
-
-  const handleGestureStateChange = (event) => {
-    const { translationY, velocityY } = event.nativeEvent;
-    const currentY = getTranslateY(sheetState) + translationY;
-
-    // Determine target state based on position and velocity
-    let targetState = sheetState;
-
-    if (velocityY > 500) {
-      // Fast downward swipe
-      if (sheetState === 'full') targetState = 'half';
-      else if (sheetState === 'half') targetState = 'collapsed';
-    } else if (velocityY < -500) {
-      // Fast upward swipe
-      if (sheetState === 'collapsed') targetState = 'half';
-      else if (sheetState === 'half') targetState = 'full';
-    } else {
-      // Slow movement - snap to nearest position
-      const collapsedY = getTranslateY('collapsed');
-      const halfY = getTranslateY('half');
-      const fullY = getTranslateY('full');
-
-      const distanceToCollapsed = Math.abs(currentY - collapsedY);
-      const distanceToHalf = Math.abs(currentY - halfY);
-      const distanceToFull = Math.abs(currentY - fullY);
-
-      if (distanceToCollapsed < distanceToHalf && distanceToCollapsed < distanceToFull) {
-        targetState = 'collapsed';
-      } else if (distanceToHalf < distanceToFull) {
-        targetState = 'half';
-      } else {
-        targetState = 'full';
+    { 
+      useNativeDriver: true,
+      listener: (event) => {
+        // Update the translateY value during gesture
+        const newTranslateY = getTranslateY(sheetState) + event.nativeEvent.translationY;
+        translateY.setValue(newTranslateY);
       }
     }
+  );
 
-    animateToState(targetState);
+  const onHandlerStateChange = (event) => {
+    const { translationY, velocityY, state } = event.nativeEvent;
+    
+    if (state === State.BEGAN) {
+      lastTranslateY.current = 0;
+      return;
+    }
+    
+    if (state === State.ACTIVE) {
+      return;
+    }
+    
+    if (state === State.END || state === State.CANCELLED) {
+      // Determine target state based on position and velocity
+      let targetState = sheetState;
+      const currentY = getTranslateY(sheetState) + translationY;
+      
+      // Velocity thresholds for quick gestures
+      const VELOCITY_THRESHOLD = 800;
+      
+      if (velocityY > VELOCITY_THRESHOLD) {
+        // Fast downward swipe
+        if (sheetState === 'full') targetState = 'half';
+        else if (sheetState === 'half') targetState = 'collapsed';
+      } else if (velocityY < -VELOCITY_THRESHOLD) {
+        // Fast upward swipe
+        if (sheetState === 'collapsed') targetState = 'half';
+        else if (sheetState === 'half') targetState = 'full';
+      } else {
+        // Slow movement - snap to nearest position
+        const collapsedY = getTranslateY('collapsed');
+        const halfY = getTranslateY('half');
+        const fullY = getTranslateY('full');
+
+        const distanceToCollapsed = Math.abs(currentY - collapsedY);
+        const distanceToHalf = Math.abs(currentY - halfY);
+        const distanceToFull = Math.abs(currentY - fullY);
+
+        if (distanceToCollapsed < distanceToHalf && distanceToCollapsed < distanceToFull) {
+          targetState = 'collapsed';
+        } else if (distanceToHalf < distanceToFull) {
+          targetState = 'half';
+        } else {
+          targetState = 'full';
+        }
+      }
+
+      // Only animate if state actually changed
+      if (targetState !== sheetState) {
+        animateToState(targetState);
+      } else {
+        // Snap back to current state if no change
+        translateY.setValue(getTranslateY(sheetState));
+      }
+    }
   };
 
   // Handle drag handle tap
   const handleDragHandleTap = () => {
+    if (isAnimating.current) return;
+    
     if (sheetState === 'collapsed') {
       animateToState('half');
     } else if (sheetState === 'half') {
@@ -120,10 +154,11 @@ const BottomSheet = ({
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <GestureHandler
-        ref={gestureHandler}
-        onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleGestureStateChange}
+      <PanGestureHandler
+        onGestureEvent={onGestureEvent}
+        onHandlerStateChange={onHandlerStateChange}
+        activeOffsetY={[-10, 10]} // Only activate after 10px movement
+        failOffsetX={[-20, 20]} // Fail if horizontal movement > 20px
       >
         <Animated.View
           style={[
@@ -148,7 +183,7 @@ const BottomSheet = ({
             {children}
           </View>
         </Animated.View>
-      </GestureHandler>
+      </PanGestureHandler>
     </View>
   );
 };

@@ -156,6 +156,101 @@ class ApiService {
     }
   }
 
+  // Helper function to calculate distance between two points
+  calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in kilometers
+  }
+
+  // Filter leagues based on search location for efficiency
+  getRelevantLeagues(searchBounds) {
+    if (!searchBounds || !searchBounds.northeast || !searchBounds.southwest) {
+      return AVAILABLE_LEAGUES; // Fallback to all leagues if no bounds
+    }
+
+    // Calculate center point of search bounds
+    const centerLat = (searchBounds.northeast.lat + searchBounds.southwest.lat) / 2;
+    const centerLng = (searchBounds.northeast.lng + searchBounds.southwest.lng) / 2;
+
+    const relevantLeagues = [];
+    
+    // Define regional groupings for smarter filtering
+    const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
+    const isInNorthAmerica = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
+    const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
+
+    for (const league of AVAILABLE_LEAGUES) {
+      let shouldInclude = false;
+
+      // Always include international competitions in their regions
+      if (league.isInternational) {
+        if (isInEurope) {
+          shouldInclude = true; // Champions League, Europa League, etc.
+        }
+      } else {
+        // Skip leagues without coordinates
+        if (!league.coords || league.coords.length !== 2) {
+          continue;
+        }
+
+        // Calculate distance from search center to league center
+        const distance = this.calculateDistance(
+          centerLat, centerLng,
+          league.coords[0], league.coords[1]
+        );
+
+        // Smart distance thresholds based on region
+        let maxDistance;
+        if (isInEurope) {
+          maxDistance = 2500; // Europe is densely packed, include more leagues
+        } else if (isInNorthAmerica || isInSouthAmerica) {
+          maxDistance = 3000; // Large countries, be more inclusive
+        } else {
+          maxDistance = 2000; // Default for other regions
+        }
+
+        // Include league if within range
+        if (distance <= maxDistance) {
+          shouldInclude = true;
+        }
+
+        // Special case: Always include local country leagues
+        const countryMatches = {
+          'England': isInEurope && centerLat > 49 && centerLat < 59 && centerLng > -8 && centerLng < 2,
+          'Spain': isInEurope && centerLat > 35 && centerLat < 44 && centerLng > -10 && centerLng < 5,
+          'Germany': isInEurope && centerLat > 47 && centerLat < 55 && centerLng > 5 && centerLng < 15,
+          'Italy': isInEurope && centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19,
+          'France': isInEurope && centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8,
+          'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
+        };
+
+        if (countryMatches[league.country]) {
+          shouldInclude = true;
+        }
+      }
+
+      if (shouldInclude) {
+        relevantLeagues.push(league);
+      }
+    }
+
+    // If no relevant leagues found (edge case), include at least top European leagues
+    if (relevantLeagues.length === 0) {
+      const fallbackLeagues = AVAILABLE_LEAGUES.filter(l => 
+        ['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Champions League'].includes(l.name)
+      );
+      return fallbackLeagues.length > 0 ? fallbackLeagues : AVAILABLE_LEAGUES;
+    }
+
+    return relevantLeagues;
+  }
+
   // NEW: Bounds-based search for map integration
   async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [] }) {
     try {
@@ -166,14 +261,14 @@ class ApiService {
           southwest: `${bounds.southwest.lat}, ${bounds.southwest.lng}`
         } : 'No bounds provided',
         dateRange: `${dateFrom} to ${dateTo}`,
-        competitions: competitions.length ? competitions : 'All competitions',
+        competitions: competitions.length ? competitions : 'Geographic filtering enabled',
         teams: teams.length ? teams : 'All teams'
       });
 
-      // Use specified competitions or all available leagues
+      // Use specified competitions or geographically filter leagues
       const targetLeagues = competitions.length > 0 
         ? AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id))
-        : AVAILABLE_LEAGUES;
+        : this.getRelevantLeagues(bounds);
 
       console.log(`📡 Searching ${targetLeagues.length} leagues:`, targetLeagues.map(l => l.name));
       console.groupEnd();
@@ -185,55 +280,55 @@ class ApiService {
       };
 
       // Fetch matches from all target leagues in parallel
-      const responses = await Promise.all(
+       const responses = await Promise.all(
         targetLeagues.map(async (league) => {
-          const params = new URLSearchParams({
-            dateFrom: formattedDates.from,
-            dateTo: formattedDates.to,
+           const params = new URLSearchParams({
+             dateFrom: formattedDates.from,
+             dateTo: formattedDates.to,
             // Include bounds for backend filtering
             ...(bounds?.northeast && { neLat: bounds.northeast.lat, neLng: bounds.northeast.lng }),
             ...(bounds?.southwest && { swLat: bounds.southwest.lat, swLng: bounds.southwest.lng }),
             // Include team filter if specified
             ...(teams.length > 0 && { teams: teams.join(',') })
-          });
-          
-          const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
-          
-          try {
-            const headers = {
-              'Content-Type': 'application/json'
-            };
-            
-            const token = getAuthToken();
-            if (token) {
-              headers['Authorization'] = `Bearer ${token}`;
-            }
-            
-            const response = await fetch(url, {
-              method: 'GET',
-              headers
-            });
-            
-            if (!response.ok) {
-              if (response.status === 403) {
-                // Access denied - subscription required
-                console.log(`🚫 ${league.name}: Access denied (subscription required)`);
-                return { success: false, data: { response: [] }, league, restricted: true };
-              }
-              console.log(`❌ ${league.name}: HTTP ${response.status} - ${response.statusText}`);
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            const matchCount = data.response?.length || 0;
-            console.log(`✅ ${league.name}: ${matchCount} matches returned`);
-            return { success: true, data: data, league };
-          } catch (error) {
-            console.error(`❌ ${league.name}: ${error.message}`);
-            return { success: false, data: { response: [] }, league };
-          }
-        })
-      );
+           });
+           
+           const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
+           
+           try {
+             const headers = {
+               'Content-Type': 'application/json'
+             };
+             
+             const token = getAuthToken();
+             if (token) {
+               headers['Authorization'] = `Bearer ${token}`;
+             }
+             
+             const response = await fetch(url, {
+               method: 'GET',
+               headers
+             });
+             
+             if (!response.ok) {
+               if (response.status === 403) {
+                 // Access denied - subscription required
+                 console.log(`🚫 ${league.name}: Access denied (subscription required)`);
+                 return { success: false, data: { response: [] }, league, restricted: true };
+               }
+               console.log(`❌ ${league.name}: HTTP ${response.status} - ${response.statusText}`);
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+             }
+             
+             const data = await response.json();
+             const matchCount = data.response?.length || 0;
+             console.log(`✅ ${league.name}: ${matchCount} matches returned`);
+             return { success: true, data: data, league };
+           } catch (error) {
+             console.error(`❌ ${league.name}: ${error.message}`);
+             return { success: false, data: { response: [] }, league };
+           }
+         })
+       );
 
       // Process all matches
       const allMatches = responses.reduce((acc, { data, league }) => {
