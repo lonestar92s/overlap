@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
   Text,
   StyleSheet,
   ActivityIndicator,
-  Alert
+  Alert,
+  TouchableOpacity,
+  FlatList
 } from 'react-native';
+import Autocomplete from 'react-native-autocomplete-input';
 import axios from 'axios';
 import { debounce } from 'lodash';
 
@@ -35,7 +35,6 @@ const LocationAutocomplete = ({
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [lastRequestTime, setLastRequestTime] = useState(0);
 
   // Set initial input value if value is provided
@@ -57,7 +56,6 @@ const LocationAutocomplete = ({
   const fetchSuggestions = async (query) => {
     if (!query || query.length < 2) {
       setOptions([]);
-      setShowDropdown(false);
       return;
     }
 
@@ -76,7 +74,6 @@ const LocationAutocomplete = ({
         );
         
         setOptions(filteredMockData);
-        setShowDropdown(true);
         return;
       }
 
@@ -130,7 +127,6 @@ const LocationAutocomplete = ({
       );
       
       setOptions(uniqueSuggestions);
-      setShowDropdown(true);
     } catch (error) {
       console.error('Error fetching location suggestions:', error);
       if (error.response?.status === 429) {
@@ -143,11 +139,9 @@ const LocationAutocomplete = ({
           location.country.toLowerCase().includes(query.toLowerCase())
         );
         setOptions(filteredMockData);
-        setShowDropdown(true);
       } else {
         setError('Error fetching locations');
         setOptions([]);
-        setShowDropdown(false);
       }
     } finally {
       setLoading(false);
@@ -169,7 +163,6 @@ const LocationAutocomplete = ({
     setInputValue(text);
     if (text.length === 0) {
       setOptions([]);
-      setShowDropdown(false);
       onSelect(null);
     } else {
       debouncedFetchSuggestions(text);
@@ -179,22 +172,15 @@ const LocationAutocomplete = ({
   const handleSelectLocation = (location) => {
     const displayText = formatLocationDisplay(location);
     setInputValue(displayText);
-    setShowDropdown(false);
-    setOptions([]);
+    setOptions([]); // Clear options to close dropdown
     onSelect(location);
   };
 
-  const handleClearLocation = () => {
-    setInputValue('');
-    setOptions([]);
-    setShowDropdown(false);
-    onSelect(null);
-  };
-
-  const renderLocationItem = ({ item }) => (
+  const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.locationItem}
       onPress={() => handleSelectLocation(item)}
+      activeOpacity={0.7}
     >
       <View style={styles.locationIcon}>
         <Text style={styles.locationIconText}>📍</Text>
@@ -210,32 +196,48 @@ const LocationAutocomplete = ({
 
   return (
     <View style={[styles.container, style]}>
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
+      <View style={styles.autocompleteWrapper}>
+        <Autocomplete
+          data={options}
           value={inputValue}
           onChangeText={handleInputChange}
           placeholder={placeholder}
-          placeholderTextColor="#999"
-          autoCapitalize="words"
-          autoCorrect={false}
+          flatListProps={{
+            keyExtractor: (item) => item.place_id,
+            renderItem: renderItem,
+            keyboardShouldPersistTaps: "handled",
+            showsVerticalScrollIndicator: false,
+          }}
+          inputContainerStyle={styles.inputContainer}
+          containerStyle={styles.autocompleteContainer}
+          listContainerStyle={styles.listContainer}
+          listStyle={styles.listStyle}
+          hideResults={options.length === 0}
         />
         {inputValue.length > 0 && (
           <TouchableOpacity 
-            onPress={handleClearLocation}
+            onPress={() => {
+              setInputValue('');
+              setOptions([]);
+              onSelect(null);
+            }}
             style={styles.clearButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            pointerEvents="box-only"
           >
             <Text style={styles.clearButtonText}>×</Text>
           </TouchableOpacity>
         )}
-        {loading && (
-          <ActivityIndicator 
-            size="small" 
-            color="#007AFF" 
-            style={styles.loadingIndicator}
-          />
-        )}
       </View>
+      
+      {loading && (
+        <ActivityIndicator 
+          size="small" 
+          color="#007AFF" 
+          style={styles.loadingIndicator}
+        />
+      )}
       
       {error && (
         <Text style={styles.errorText}>{error}</Text>
@@ -246,19 +248,6 @@ const LocationAutocomplete = ({
           Using mock data. Get a free API key from locationiq.com for real location search.
         </Text>
       )}
-      
-      {showDropdown && options.length > 0 && (
-        <View style={styles.dropdown}>
-          <FlatList
-            data={options}
-            renderItem={renderLocationItem}
-            keyExtractor={(item) => item.place_id}
-            style={styles.dropdownList}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          />
-        </View>
-      )}
     </View>
   );
 };
@@ -266,34 +255,97 @@ const LocationAutocomplete = ({
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
-    zIndex: 1000,
+    zIndex: 9999,
+  },
+  autocompleteWrapper: {
+    position: 'relative',
+    flex: 1,
+  },
+  autocompleteContainer: {
+    flex: 1,
+    zIndex: 9999,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: '#fff',
+    minHeight: 48,
   },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
+
   clearButton: {
-    padding: 4,
-    marginLeft: 8,
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10001,
+    elevation: 5,
   },
   clearButtonText: {
-    fontSize: 20,
-    color: '#999',
+    fontSize: 16,
+    color: '#666',
     fontWeight: 'bold',
+    lineHeight: 16,
   },
   loadingIndicator: {
     marginLeft: 8,
+  },
+  listContainer: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 15,
+    zIndex: 10000,
+  },
+  listStyle: {
+    maxHeight: 200,
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  locationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#fff',
+  },
+  locationIcon: {
+    marginRight: 12,
+  },
+  locationIconText: {
+    fontSize: 16,
+  },
+  locationTextContainer: {
+    flex: 1,
+  },
+  locationMainText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  locationSecondaryText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 18,
   },
   errorText: {
     color: '#ff4444',
@@ -307,55 +359,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 12,
     fontStyle: 'italic',
-  },
-  dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  dropdownList: {
-    maxHeight: 200,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  locationIcon: {
-    marginRight: 12,
-  },
-  locationIconText: {
-    fontSize: 16,
-  },
-  locationTextContainer: {
-    flex: 1,
-  },
-  locationMainText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  locationSecondaryText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
   },
 });
 

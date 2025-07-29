@@ -56,7 +56,7 @@ const MapSearchScreen = ({ navigation }) => {
 
         if (response.success) {
           setMatches(response.data);
-          console.log(`🏟️ Found ${response.data.length} matches in current map area`);
+  
         } else {
           Alert.alert('Search Error', response.error || 'Failed to search matches');
         }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,13 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  FlatList,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Avatar, Button } from 'react-native-elements';
-import { debounce } from 'lodash';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import BottomSheet from '../components/BottomSheet';
 import MatchMapView from '../components/MapView';
 import MatchModal from '../components/MatchModal';
 import ApiService from '../services/api';
@@ -32,10 +34,18 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Bottom sheet state
   const [sheetState, setSheetState] = useState('collapsed');
+  const bottomSheetRef = useRef(null);
+  
+  // Snap points for bottom sheet
+  const snapPoints = useMemo(() => ['8%', '55%', '85%'], []);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMatchForModal, setSelectedMatchForModal] = useState(null);
+  
+  // Manual search state
+  const [hasMovedFromOriginal, setHasMovedFromOriginal] = useState(false);
+  const [originalSearchRegion, setOriginalSearchRegion] = useState(null);
   
   // Phase 1: Request cancellation and tracking
   const [currentRequestId, setCurrentRequestId] = useState(0);
@@ -45,17 +55,50 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Refs
   const mapRef = useRef();
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
+  
+  // Calculate available height for FlatList
+  const calculateFlatListHeight = useCallback(() => {
+    const screenHeight = Dimensions.get('window').height;
+    const snapPointPercentage = sheetState === 'full' ? 0.85 : 0.55; // Reduced from 90% to 85% to avoid header overlap
+    const bottomSheetHeight = screenHeight * snapPointPercentage;
+    
+    // Approximate header height (search summary + results header + padding)
+    const headerHeight = 80; // Reduced from 120 to 80
+    
+    // Bottom tab navigation height
+    const bottomTabHeight = 60; // Reduced from 80 to 60
+    
+    // Safe area bottom inset
+    const safeAreaBottom = insets.bottom;
+    
+    // Calculate available height for FlatList
+    const availableHeight = bottomSheetHeight - headerHeight - bottomTabHeight - safeAreaBottom - 50; // Increased padding to reduce white space
+    
+    
+    return Math.max(availableHeight, 200); // Minimum height of 200px
+  }, [sheetState, insets.bottom]);
 
   // Track when matches state changes
+
+
+  // Calculate smart zoom level based on result count
+  const calculateSmartZoom = (matchCount) => {
+    if (matchCount === 0) return 0.2;
+    if (matchCount <= 2) return 0.2;
+    if (matchCount <= 5) return 0.3;
+    if (matchCount <= 10) return 0.4;
+    return 0.5; // Cap at wide view
+  };
+
+  // Initialize original search region
   useEffect(() => {
-    console.log('🔄 Matches state changed to:', matches.length, 'items');
-    if (matches.length > 0) {
-      console.log('🔄 First match in state:', {
-        id: matches[0].fixture?.id,
-        teams: matches[0].teams ? `${matches[0].teams.home?.name} vs ${matches[0].teams.away?.name}` : 'No teams'
-      });
+    if (initialRegion && !originalSearchRegion) {
+      setOriginalSearchRegion(initialRegion);
     }
-  }, [matches]);
+  }, [initialRegion, originalSearchRegion]);
 
   // No initial search needed - matches are passed via navigation params
 
@@ -63,7 +106,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   const performBoundsSearch = async (region, requestId) => {
     if (!dateFrom || !dateTo || !region) return;
     
-    console.log('🔍 Starting search with request ID:', requestId);
+    
     
     setIsSearching(true);
     try {
@@ -91,12 +134,12 @@ const MapResultsScreen = ({ navigation, route }) => {
           Math.abs(bounds.northeast.lng - lastSearchBounds.northeast.lng) < 0.01 &&
           Math.abs(bounds.southwest.lat - lastSearchBounds.southwest.lat) < 0.01 &&
           Math.abs(bounds.southwest.lng - lastSearchBounds.southwest.lng) < 0.01) {
-        console.log('📍 Bounds unchanged, skipping search');
+
         setIsSearching(false);
         return;
       }
 
-      console.log('🔍 Performing bounds search:', bounds);
+      
       
       const response = await ApiService.searchMatchesByBounds({
         bounds,
@@ -109,14 +152,14 @@ const MapResultsScreen = ({ navigation, route }) => {
       const isSignificantlyStale = requestId < (currentRequestId - 1);
       
       if (isSignificantlyStale) {
-        console.log('🔄 Significantly stale response ignored:', requestId, 'current:', currentRequestId);
+
         return;
       }
 
-      console.log('✅ Search completed for request ID:', requestId);
+      
 
       if (response.success) {
-        console.log('📊 Received', response.data?.length || 0, 'matches from API');
+
         
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
@@ -124,6 +167,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Phase 1: Diff-based updates
         updateMatchesEfficiently(response.data);
         setLastSearchBounds(bounds);
+        
+        // Don't recenter the map - let the user keep their current view
+        // The search results will appear as markers on the current map view
       } else {
         console.error('❌ API returned error:', response.error);
         Alert.alert('Search Error', response.error || 'Failed to search matches');
@@ -144,18 +190,16 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Phase 1: Efficient marker updates (diff-based)
   const updateMatchesEfficiently = (newMatches) => {
-    console.log('📊 Updating matches efficiently. Current count:', matches.length, 'New count:', newMatches.length);
-    console.log('📊 New matches data structure:', JSON.stringify(newMatches.slice(0, 2), null, 2));
+    
     
     setMatches(prevMatches => {
-      console.log('📊 Previous matches count:', prevMatches.length);
+      
       
       // Create sets for efficient comparison
       const prevIds = new Set(prevMatches.map(m => m.fixture?.id));
       const newIds = new Set(newMatches.map(m => m.fixture?.id));
       
-      console.log('📊 Previous IDs:', Array.from(prevIds));
-      console.log('📊 New IDs:', Array.from(newIds));
+      
       
       // Find matches to add (new IDs not in previous)
       const toAdd = newMatches.filter(m => !prevIds.has(m.fixture?.id));
@@ -169,11 +213,10 @@ const MapResultsScreen = ({ navigation, route }) => {
         return prevMatch && JSON.stringify(prevMatch) !== JSON.stringify(newMatch);
       });
       
-      console.log(`📊 Match diff: +${toAdd.length} -${toRemove.length} ~${toUpdate.length}`);
+      
       
       if (toAdd.length === 0 && toRemove.length === 0 && toUpdate.length === 0) {
-        console.log('✅ No changes needed');
-        return prevMatches;
+                    return prevMatches;
       }
       
       // Apply changes efficiently
@@ -202,49 +245,33 @@ const MapResultsScreen = ({ navigation, route }) => {
         return dateA.getTime() - dateB.getTime();
       });
       
-      console.log('✅ Final match count:', updatedMatches.length);
-      console.log('✅ First match in updated list:', updatedMatches[0] ? {
-        id: updatedMatches[0].fixture?.id,
-        teams: updatedMatches[0].teams ? `${updatedMatches[0].teams.home?.name} vs ${updatedMatches[0].teams.away?.name}` : 'No teams',
-        date: updatedMatches[0].fixture?.date
-      } : 'No matches');
-      
-      // Log when state is actually being updated
-      console.log('🔄 State update: matches array will be updated to', updatedMatches.length, 'items');
+
       
       return updatedMatches;
     });
   };
 
-  // Phase 1: Improved debounced search with request cancellation
-  const debouncedSearch = useCallback(
-    debounce(async (region) => {
-      console.log('🚀 Debounced search triggered for region:', {
-        lat: region.latitude,
-        lng: region.longitude,
-        latDelta: region.latitudeDelta,
-        lngDelta: region.longitudeDelta
-      });
-      
-      const requestId = currentRequestId + 1;
-      console.log('🚀 Creating new request ID:', requestId, 'from current:', currentRequestId);
-      setCurrentRequestId(requestId);
-      await performBoundsSearch(region, requestId);
-    }, 800),
-    [dateFrom, dateTo, currentRequestId]
-  );
+
 
   // Handle map region change (when user pans/zooms)
   const handleMapRegionChange = (region, bounds) => {
-    console.log('🗺️ Map region changed:', {
-      lat: region.latitude,
-      lng: region.longitude,
-      latDelta: region.latitudeDelta,
-      lngDelta: region.longitudeDelta
-    });
+
     
     setMapRegion(region);
-    debouncedSearch(region);
+    
+    // Check if user has moved or zoomed significantly from original search area
+    if (originalSearchRegion) {
+      const latDiff = Math.abs(region.latitude - originalSearchRegion.latitude);
+      const lngDiff = Math.abs(region.longitude - originalSearchRegion.longitude);
+      const hasMoved = latDiff > 0.1 || lngDiff > 0.1; // 0.1 degree threshold
+      
+      // Check if user has zoomed out significantly (larger delta = more zoomed out)
+      const originalLatDelta = originalSearchRegion.latitudeDelta || 0.5;
+      const originalLngDelta = originalSearchRegion.longitudeDelta || 0.5;
+      const hasZoomedOut = region.latitudeDelta > originalLatDelta * 1.5 || region.longitudeDelta > originalLngDelta * 1.5;
+      
+      setHasMovedFromOriginal(hasMoved || hasZoomedOut);
+    }
   };
 
   // Handle marker press
@@ -371,77 +398,118 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Render bottom sheet content
   const renderBottomSheetContent = () => {
-    console.log('🎯 Rendering bottom sheet content. Matches count:', matches?.length || 0);
-    console.log('🎯 Sheet state:', sheetState);
-    
-    if (sheetState === 'collapsed') {
-      return (
-        <View style={styles.collapsedContent}>
-          {/* Match count - prominent display like Zillow */}
-          <Text style={styles.collapsedMatchCount}>
-            {matches?.length || 0} results
-          </Text>
-        </View>
-      );
-    }
-
-    // List view (expanded state)
     return (
-      <View style={styles.expandedContent}>
-        {renderSearchSummary()}
-        
-        {isSearching && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#1976d2" />
-            <Text style={styles.loadingText}>Searching matches...</Text>
+      <BottomSheetView style={styles.bottomSheetContent}>
+        {/* Show results count when collapsed */}
+        {sheetState === 'collapsed' && (
+          <View style={styles.collapsedIndicator}>
+            <Text style={styles.collapsedMatchCount}>
+              {matches?.length || 0} results
+            </Text>
           </View>
         )}
 
-        <Text style={styles.resultsHeader}>
-          {matches?.length || 0} matches found
-        </Text>
+        {/* Show full content when expanded */}
+        {sheetState !== 'collapsed' && (
+          <>
+            <View style={styles.bottomSheetHeader}>
+              {isSearching && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#1976d2" />
+                  <Text style={styles.loadingText}>Searching matches...</Text>
+                </View>
+              )}
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={styles.matchList}
-          contentContainerStyle={styles.matchListContent}
-        >
-          {matches?.map((match, index) => {
-            console.log('🎯 Rendering match:', index, match.fixture?.id, match.teams?.home?.name, 'vs', match.teams?.away?.name);
-            return (
-              <View key={match.fixture?.id?.toString() || `match-${index}`}>
-                {renderMatchItem({ item: match })}
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
+              <Text style={styles.resultsHeader}>
+                {matches?.length || 0} matches found
+              </Text>
+            </View>
+
+            <FlatList
+              data={matches || []}
+              renderItem={renderMatchItem}
+              keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.matchListContent}
+              style={[styles.bottomSheetScrollView, { height: calculateFlatListHeight() }]}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: 10,
+              }}
+            />
+          </>
+        )}
+      </BottomSheetView>
     );
   };
 
-  // Calculate initial region based on searched location
+  // Manual search function
+  const handleSearchThisArea = async () => {
+    if (!mapRegion || !dateFrom || !dateTo) return;
+    
+    const requestId = currentRequestId + 1;
+    setCurrentRequestId(requestId);
+    await performBoundsSearch(mapRegion, requestId);
+  };
+
+  // Calculate initial region based on searched location with smart zoom
   const getInitialRegion = () => {
+    let baseRegion;
+    
     if (initialRegion) {
-      return initialRegion;
-    }
-    if (location && location.lat && location.lon) {
-      return {
+      baseRegion = initialRegion;
+    } else if (location && location.lat && location.lon) {
+      baseRegion = {
         latitude: location.lat,
         longitude: location.lon,
         latitudeDelta: 0.5,
         longitudeDelta: 0.5,
       };
+    } else {
+      baseRegion = {
+        latitude: 51.5074, // London default
+        longitude: -0.1278,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
+      };
     }
+    
+    // Apply smart zoom based on initial match count
+    const smartZoom = calculateSmartZoom(initialMatches?.length || 0);
     return {
-      latitude: 51.5074, // London default
-      longitude: -0.1278,
-      latitudeDelta: 0.5,
-      longitudeDelta: 0.5,
+      ...baseRegion,
+      latitudeDelta: smartZoom,
+      longitudeDelta: smartZoom,
     };
   };
 
   return (
     <View style={styles.container}>
+      {/* Header Navigation */}
+      <View style={styles.headerNav}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>
+            Matches in {location?.city}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
+          </Text>
+        </View>
+        
+        <View style={styles.headerRight}>
+        
+        </View>
+      </View>
+
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
@@ -453,10 +521,37 @@ const MapResultsScreen = ({ navigation, route }) => {
         style={styles.map}
       />
 
+      {/* Floating Search Button */}
+      {hasMovedFromOriginal && (
+        <TouchableOpacity
+          style={styles.floatingSearchButton}
+          onPress={handleSearchThisArea}
+          disabled={isSearching}
+        >
+          {isSearching ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.floatingSearchText}>Search this area</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+
       {/* Bottom Sheet */}
       <BottomSheet
-        onStateChange={setSheetState}
-        initialState="collapsed"
+        ref={bottomSheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        onChange={(index) => {
+          const states = ['collapsed', 'half', 'full'];
+          setSheetState(states[index]);
+        }}
+        enablePanDownToClose={false}
+        enableContentPanningGesture={false}
+        keyboardBehavior="interactive"
+        backgroundStyle={styles.bottomSheetBackground}
+        handleIndicatorStyle={styles.bottomSheetIndicator}
       >
         {renderBottomSheetContent()}
       </BottomSheet>
@@ -478,8 +573,81 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  headerNav: {
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 60, // Increased from 50 to 60 for more top padding
+    paddingBottom: 16, // Increased from 12 to 16 for more bottom padding
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  backButton: {
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: '#000',
+    fontWeight: '600',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  headerRight: {
+    padding: 8,
+  },
+  filterIcon: {
+    fontSize: 18,
+  },
   map: {
     flex: 1,
+  },
+  floatingSearchButton: {
+    position: 'absolute',
+    top: 130, // Adjusted to account for increased header height
+    left: '50%',
+    transform: [{ translateX: -100 }],
+    width: 200,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  floatingSearchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  floatingSearchText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
   },
   searchSummary: {
     backgroundColor: '#f8f9fa',
@@ -497,44 +665,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  collapsedContent: {
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 80,
-  },
-
-  collapsedMatchCount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#333',
-  },
-  matchCount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 12,
-    color: '#333',
-  },
-  quickMatchItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  quickMatchText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  quickMatchDate: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  expandedContent: {
+  bottomSheetContent: {
     flex: 1,
     padding: 16,
+    paddingBottom: 60, // Extra padding to account for bottom tab navigation
+  },
+  bottomSheetHeader: {
+    // Fixed header section
+  },
+  bottomSheetScrollView: {
+    // Height will be set dynamically via calculateFlatListHeight()
+  },
+  bottomSheetBackground: {
+    backgroundColor: '#fff',
+  },
+  bottomSheetIndicator: {
+    backgroundColor: '#D1D5DB',
+    width: 40,
+    height: 4,
+  },
+  collapsedIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    height: '100%',
+  },
+  collapsedMatchCount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -552,11 +716,8 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
-  matchList: {
-    flex: 1,
-  },
   matchListContent: {
-    paddingBottom: 20,
+    paddingBottom: 60, // Reduced padding to eliminate excessive space at bottom
   },
   matchCard: {
     backgroundColor: 'white',

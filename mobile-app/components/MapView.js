@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -32,18 +32,19 @@ const MatchMapView = ({
     }
   }, [initialRegion]);
 
-  // Log when matches prop changes
+
+
+  // Auto-fit to markers when matches load
   useEffect(() => {
-    console.log('🗺️ MapView received new matches:', matches?.length || 0);
-    if (matches && matches.length > 0) {
-      console.log('🗺️ First match sample:', {
-        id: matches[0].fixture?.id,
-        teams: matches[0].teams ? `${matches[0].teams.home?.name} vs ${matches[0].teams.away?.name}` : 'No teams',
-        venue: matches[0].fixture?.venue?.name,
-        coordinates: matches[0].fixture?.venue?.coordinates
-      });
+    if (matches && matches.length > 0 && mapReady && mapRef.current) {
+      // Small delay to ensure map is fully ready
+      const timer = setTimeout(() => {
+        fitToMatches();
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
-  }, [matches]);
+  }, [matches, mapReady]);
 
 
   // Request location permission and get user location
@@ -52,7 +53,6 @@ const MatchMapView = ({
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          console.log('Location permission denied');
           return;
         }
 
@@ -62,7 +62,6 @@ const MatchMapView = ({
           longitude: location.coords.longitude,
         });
       } catch (error) {
-        console.log('Error getting location:', error);
       }
     })();
   }, []);
@@ -137,34 +136,22 @@ const MatchMapView = ({
 
     if (coordinates.length > 0) {
       mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 50, right: 50, bottom: 300, left: 50 }, // Account for bottom sheet
+        edgePadding: { top: 100, right: 50, bottom: 300, left: 50 }, // Increased top padding for header
         animated: true,
       });
     }
   };
 
-  // Render match markers
-  const renderMarkers = () => {
-    console.log('🗺️ Rendering markers. Total matches:', matches?.length || 0);
-    
-    if (!matches) {
-      console.log('🗺️ No matches provided');
+  // Render match markers with memoization
+  const markers = useMemo(() => {
+    if (!matches || matches.length === 0) {
       return null;
     }
     
     const validMatches = matches.filter(match => {
       const venue = match.fixture?.venue;
-      const hasCoordinates = venue?.coordinates && venue.coordinates.length === 2;
-      console.log('🗺️ Match venue check:', {
-        id: match.fixture?.id,
-        venueName: venue?.name,
-        hasCoordinates,
-        coordinates: venue?.coordinates
-      });
-      return hasCoordinates;
+      return venue?.coordinates && venue.coordinates.length === 2;
     });
-    
-    console.log('🗺️ Valid matches for markers:', validMatches.length);
     
     return validMatches.map(match => {
       const venue = match.fixture.venue;
@@ -174,26 +161,17 @@ const MatchMapView = ({
         longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
       };
       
-      console.log('🗺️ Creating marker for:', {
-        id: match.fixture.id,
-        teams: `${match.teams.home.name} vs ${match.teams.away.name}`,
-        coordinate,
-        venue: venue.name
-      });
-      
       return (
         <Marker
           key={`match-${match.fixture.id}`} // Stable key based only on match ID
           coordinate={coordinate}
-          title={`${match.teams.home.name} vs ${match.teams.away.name}`}
-          description={`${venue.name}, ${venue.city}`}
           onPress={() => handleMarkerPress(match)}
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
           tracksViewChanges={false} // Improve performance
         />
       );
     });
-  };
+  }, [matches, selectedMatchId, handleMarkerPress]);
 
   return (
     <View style={[styles.container, style]}>
@@ -212,7 +190,7 @@ const MatchMapView = ({
         mapType="standard"
         moveOnMarkerPress={false} // Prevent map movement when pressing markers
       >
-        {renderMarkers()}
+        {markers}
       </MapView>
     </View>
   );
