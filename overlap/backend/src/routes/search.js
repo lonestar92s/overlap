@@ -347,7 +347,7 @@ const simpleParseQuery = (query) => {
 const parseQuery = async (query) => {
     try {
         // First try OpenAI
-        console.log('Attempting to use OpenAI for parsing...');
+
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
@@ -419,11 +419,11 @@ const parseQuery = async (query) => {
         });
 
         const parsedResponse = JSON.parse(completion.choices[0].message.content);
-        console.log('OpenAI parsed response:', parsedResponse);
+
         return parsedResponse;
     } catch (error) {
         // If OpenAI fails, use simple parser
-        console.log('OpenAI parsing failed, using simple parser instead:', error.message);
+
         return simpleParseQuery(query);
     }
 };
@@ -668,7 +668,7 @@ const extractDistance = (query) => {
 
 // Enhanced natural language parser
 const parseNaturalLanguage = async (query) => {
-    console.log('Enhanced NL Parser - Processing query:', query);
+    
     
     const result = {
         location: null,
@@ -729,13 +729,7 @@ const parseNaturalLanguage = async (query) => {
         
         result.confidence = Math.min(confidence, 100);
 
-        console.log('Enhanced NL Parser - Results:', {
-            teams: result.teams.any.length,
-            leagues: result.leagues.length,
-            location: result.location?.city,
-            dateRange: result.dateRange,
-            confidence: result.confidence
-        });
+
 
         return result;
 
@@ -800,13 +794,12 @@ router.post('/natural-language', async (req, res) => {
             return res.status(400).json({ error: 'Query is required' });
         }
 
-        console.log('Processing natural language query:', query);
+
         
         const parsed = await parseNaturalLanguage(query);
         const searchParams = buildSearchParameters(parsed);
         
-        console.log('Parsed entities:', parsed);
-        console.log('Search parameters:', searchParams);
+
         
         // If confidence is too low, return suggested clarifications
         if (parsed.confidence < 25) {
@@ -956,7 +949,7 @@ router.post('/natural-language', async (req, res) => {
             count: matches.length
         };
 
-        console.log(`Found ${matches.length} matches for query: "${query}"`);
+
         res.json(response);
 
     } catch (error) {
@@ -971,12 +964,12 @@ router.post('/natural-language', async (req, res) => {
 router.post('/parse', async (req, res) => {
     try {
         const { query } = req.body;
-        console.log('Received query for parsing:', query);
+
 
         // Use simple parser directly instead of trying OpenAI first
-        console.log('Using simple parser...');
+
         const parsedResponse = parseQuery(query);
-        console.log('Simple parser response:', parsedResponse);
+
 
         res.json(parsedResponse);
     } catch (error) {

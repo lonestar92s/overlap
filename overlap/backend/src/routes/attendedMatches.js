@@ -106,9 +106,7 @@ router.get('/:id', auth, async (req, res) => {
  */
 router.post('/', auth, upload.array('photos', 10), async (req, res) => {
     try {
-        console.log('📝 POST /api/matches/attended - Request received');
-        console.log('🔍 Request body keys:', Object.keys(req.body));
-        console.log('📸 Files uploaded:', req.files ? req.files.length : 0);
+
         
         // Parse JSON strings from FormData
         const {

@@ -16,17 +16,10 @@ const adminRouter = require('./routes/admin');
 
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
-console.log('Loading .env file from:', envPath);
+
 dotenv.config({ path: envPath });
 
-// Log environment status
-console.log('Environment check:', {
-    nodeEnv: process.env.NODE_ENV,
-    port: process.env.PORT,
-    rapidApiKey: process.env.RAPIDAPI_KEY ? 'Present' : 'Missing',
-    envPath: envPath,
-    envFileExists: require('fs').existsSync(envPath)
-});
+
 
 const app = express();
 
@@ -63,10 +56,10 @@ if (process.env.MONGODB_URI) {
         useNewUrlParser: true,
         useUnifiedTopology: true
     })
-    .then(() => console.log('✅ Connected to MongoDB'))
-    .catch((error) => console.error('❌ MongoDB connection error:', error));
+    .then(() => {})
+    .catch((error) => {});
 } else {
-    console.log('⚠️  MONGODB_URI not found - auth features will be disabled');
+    // MongoDB URI not found - auth features will be disabled
 }
 
 // Mount routes
@@ -76,7 +69,7 @@ app.use('/api/teams', teamsRoutes);
 app.use('/api/leagues', leaguesRoutes);
 app.use('/api/trips', tripsRoutes);
 app.use('/api/preferences', preferencesRoutes);
-app.use('/api/attended-matches', attendedMatchesRoutes);
+app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
@@ -88,7 +81,5 @@ teamService.setUnmappedLogger(adminRouter.logUnmappedTeam);
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT} and accessible from all network interfaces`);
-    console.log(`Local access: http://localhost:${PORT}`);
-    console.log(`Network access: http://[YOUR-IP-ADDRESS]:${PORT}`);
+    // Server is running
 }); 

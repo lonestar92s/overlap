@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TeamSearch from './TeamSearch';
+import TeamLogo from './TeamLogo';
 import { Box, Typography, Container, Alert } from '@mui/material';
 import { MatchCard } from './Matches';
 import { useAuth } from './Auth';
@@ -130,13 +131,12 @@ const TeamMatches = () => {
             {selectedTeam && (
                 <Box sx={{ mb: 4, textAlign: 'center' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                        {selectedTeam.logo && (
-                            <img 
-                                src={selectedTeam.logo} 
-                                alt={`${selectedTeam.name} logo`}
-                                style={{ width: 48, height: 48, objectFit: 'contain' }}
-                            />
-                        )}
+                        <TeamLogo 
+                            src={selectedTeam.logo} 
+                            alt={`${selectedTeam.name} logo`}
+                            teamName={selectedTeam.name}
+                            size={48}
+                        />
                         <Typography variant="h5" component="h2">
                             {selectedTeam.name}
                         </Typography>

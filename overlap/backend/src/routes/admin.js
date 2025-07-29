@@ -26,7 +26,7 @@ router.post('/clear-cache', authenticateToken, ensureAdmin, (req, res) => {
     try {
         teamSearchCache.clear();
         matchesCache.clear();
-        console.log('🧹 Cache cleared successfully');
+
         res.json({ message: 'Cache cleared successfully' });
     } catch (error) {
         console.error('Error clearing cache:', error);

@@ -6,11 +6,14 @@ import {
     Box,
     Avatar,
     Button,
-    IconButton
+    IconButton,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import { Stadium, AccessTime, LocationOn, FavoriteBorder, Favorite } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { formatMatchDateTime } from '../utils/timezone';
+import TeamLogo from './TeamLogo';
 // getVenueForTeam import removed - distances now calculated in backend
 
 // Export MatchCard component
@@ -24,6 +27,9 @@ export const MatchCard = ({
     onStadiumClick = () => {},
     isStadiumVisited = false,
 }) => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    
     // Extract data from the new API response format and provide defaults
     const fixture = match?.fixture || {};
     const teams = match?.teams || { home: {}, away: {} };
@@ -156,10 +162,11 @@ export const MatchCard = ({
                         flex: 1,
                         justifyContent: { xs: 'center', sm: 'flex-start' }
                     }}>
-                        <Avatar 
+                        <TeamLogo 
                             src={teams.home?.logo} 
                             alt={teams.home?.name}
-                            sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
+                            teamName={teams.home?.name}
+                            size={isMobile ? 32 : 40}
                         />
                         <Typography 
                             variant="subtitle1" 
@@ -200,10 +207,11 @@ export const MatchCard = ({
                         >
                             {teams.away?.name || 'Unknown Team'}
                         </Typography>
-                        <Avatar 
+                        <TeamLogo 
                             src={teams.away?.logo} 
                             alt={teams.away?.name}
-                            sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}
+                            teamName={teams.away?.name}
+                            size={isMobile ? 32 : 40}
                         />
                     </Box>
                 </Box>

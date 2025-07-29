@@ -26,15 +26,15 @@ class TeamService {
             const cacheKey = `map_${apiSportsName}`;
             const cached = this.cache.get(cacheKey);
             if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
-                console.log(`✅ Cache hit for "${apiSportsName}" → "${cached.result}"`);
+        
                 return cached.result;
             }
-            console.log(`❌ Cache miss for "${apiSportsName}"`);
+    
 
             // Try direct match first
             let team = await Team.findOne({ apiName: apiSportsName });
             if (team) {
-                console.log(`✅ Found by apiName: "${team.name}"`);
+
                 return team.name;
             }
             // console.log(`❌ No match by apiName`);
@@ -42,7 +42,7 @@ class TeamService {
             // Try exact name match
             team = await Team.findOne({ name: apiSportsName });
             if (team) {
-                console.log(`✅ Found by exact name: "${team.name}"`);
+
                 return team.name;
             }
             // console.log(`❌ No match by exact name`);
@@ -50,13 +50,13 @@ class TeamService {
             // Try aliases
             team = await Team.findOne({ aliases: apiSportsName });
             if (team) {
-                console.log(`✅ Found by alias: "${team.name}"`);
+
                 return team.name;
             }
             // console.log(`❌ No match by alias`);
 
             // If still not found, return the original name
-            console.log(`⚠️ No mapping found, using original: "${apiSportsName}"`);
+    
             return apiSportsName;
         } catch (error) {
             console.error('❌ Error in mapApiNameToTeam:', error);
@@ -86,7 +86,7 @@ class TeamService {
         let updated = 0;
         let errors = 0;
 
-        console.log(`🔄 Updating ${Object.keys(teamNameMapping).length} teams with API names...`);
+
 
         for (const [apiName, teamName] of Object.entries(teamNameMapping)) {
             try {
@@ -101,10 +101,10 @@ class TeamService {
                 if (result.modifiedCount > 0) {
                     updated++;
                     if (updated % 50 === 0) {
-                        console.log(`✅ Updated ${updated} teams so far...`);
+        
                     }
                 } else {
-                    console.log(`⚠️  Team not found in database: ${teamName} (API: ${apiName})`);
+
                 }
             } catch (error) {
                 console.error(`❌ Error updating ${teamName}:`, error.message);
@@ -112,9 +112,7 @@ class TeamService {
             }
         }
 
-        console.log(`\n📊 API Name Update Summary:`);
-        console.log(`✅ Successfully updated: ${updated} teams`);
-        console.log(`❌ Errors: ${errors}`);
+
         
         return { updated, errors };
     }
@@ -242,7 +240,7 @@ class TeamService {
      */
     clearCache() {
         this.cache.clear();
-        console.log('Team service cache cleared');
+
     }
 
     getCacheStats() {
