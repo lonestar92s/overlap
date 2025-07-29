@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Alert,
-  ScrollView,
   TouchableOpacity,
   FlatList,
   SafeAreaView,
@@ -13,6 +12,8 @@ import {
 import { Button, Card } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from '../components/LocationAutocomplete';
+import PopularMatches from '../components/PopularMatches';
+import PopularMatchModal from '../components/PopularMatchModal';
 import ApiService from '../services/api';
 
 const SearchScreen = ({ navigation }) => {
@@ -25,22 +26,24 @@ const SearchScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
+  const [popularMatches, setPopularMatches] = useState([]);
+  const [showPopularMatchModal, setShowPopularMatchModal] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
-  // Placeholder data for horizontal sections
-  const destinationCards = [
-    { id: '1', location: 'London', cost: '£150' },
-    { id: '2', location: 'Barcelona', cost: '€200' },
-    { id: '3', location: 'Munich', cost: '€180' },
-    { id: '4', location: 'Paris', cost: '€220' },
-    { id: '5', location: 'Amsterdam', cost: '€160' },
-  ];
-
-  const popularDestinations = [
-    { id: '1', location: 'Madrid', cost: '€190' },
-    { id: '2', location: 'Rome', cost: '€170' },
-    { id: '3', location: 'Berlin', cost: '€140' },
-    { id: '4', location: 'Milan', cost: '€200' },
-    { id: '5', location: 'Dortmund', cost: '€120' },
+  // Combined data for the main FlatList
+  const sections = [
+    {
+      id: 'popular-destinations',
+      title: 'Popular Destinations',
+      type: 'horizontal',
+      data: [
+        { id: '1', location: 'Madrid', cost: '€190' },
+        { id: '2', location: 'Rome', cost: '€170' },
+        { id: '3', location: 'Berlin', cost: '€140' },
+        { id: '4', location: 'Milan', cost: '€200' },
+        { id: '5', location: 'Dortmund', cost: '€120' },
+      ]
+    }
   ];
 
   // Recent searches data
@@ -173,8 +176,7 @@ const SearchScreen = ({ navigation }) => {
         dateTo: formatDate(dateTo)
       };
       
-      console.log('SearchScreen: Performing search with params:', searchParams);
-      console.log('SearchScreen: Location details:', location);
+      
       
       const bounds = {
         northeast: {
@@ -195,7 +197,7 @@ const SearchScreen = ({ navigation }) => {
       
       const matches = response.data || [];
       
-      console.log('SearchScreen: Found matches:', matches.length);
+      
       
       const initialRegion = {
         latitude: location.lat,
@@ -253,61 +255,84 @@ const SearchScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderSection = ({ item }) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{item.title}</Text>
+      <FlatList
+        data={item.data}
+        renderItem={renderDestinationCard}
+        keyExtractor={(cardItem) => cardItem.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+        scrollEnabled={true}
+      />
+    </View>
+  );
+
+  const renderHeader = () => (
+    <View>
+      {/* Top Search Bar */}
+      <View style={styles.searchBarContainer}>
+        <TouchableOpacity 
+          style={styles.searchBar}
+          onPress={() => setShowSearchModal(true)}
+        >
+          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchPlaceholder}>Start your lap</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Buttons */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity style={styles.filterButton}>
+          <Text style={styles.filterButtonText}>Calendar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterButton}>
+          <Text style={styles.filterButtonText}>Location</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterButton}>
+          <Text style={styles.filterButtonText}>League</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   const today = new Date().toISOString().split('T')[0];
+
+  const handlePopularMatchPress = (match) => {
+    // Find the index of the pressed match in the popular matches array
+    const matchIndex = popularMatches.findIndex(m => m.id === match.id);
+    if (matchIndex !== -1) {
+      setCurrentMatchIndex(matchIndex);
+      setShowPopularMatchModal(true);
+    }
+  };
+
+  const handlePopularMatchNavigate = (newIndex) => {
+    setCurrentMatchIndex(newIndex);
+  };
+
+  const handlePopularMatchModalClose = () => {
+    setShowPopularMatchModal(false);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Top Search Bar */}
-        <View style={styles.searchBarContainer}>
-          <TouchableOpacity 
-            style={styles.searchBar}
-            onPress={() => setShowSearchModal(true)}
-          >
-            <Text style={styles.searchIcon}>🔍</Text>
-            <Text style={styles.searchPlaceholder}>Start your lap</Text>
-          </TouchableOpacity>
-        </View>
+      <FlatList
+        data={sections}
+        renderItem={renderSection}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={renderHeader}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContainer}
+      />
 
-        {/* Filter Buttons */}
-        <View style={styles.filterContainer}>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterButtonText}>Calendar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterButtonText}>Location</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterButtonText}>League</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Popular Matches Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Popular Matches</Text>
-          <FlatList
-            data={destinationCards}
-            renderItem={renderDestinationCard}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-          />
-        </View>
-
-        {/* Popular Destinations Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Popular Destinations</Text>
-          <FlatList
-            data={popularDestinations}
-            renderItem={renderDestinationCard}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-          />
-        </View>
-      </ScrollView>
+      {/* Popular Matches Section */}
+      <PopularMatches 
+        onMatchPress={handlePopularMatchPress}
+        onMatchesLoaded={setPopularMatches}
+      />
 
       {/* New Search Modal */}
       <Modal
@@ -338,80 +363,85 @@ const SearchScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Main Search Content */}
-            <View style={styles.modalSearchCard}>
-              <Text style={styles.modalSearchTitle}>Where?</Text>
-              
-              <LocationAutocomplete
-                value={location}
-                onSelect={setLocation}
-                placeholder="Search destinations"
-                style={styles.modalLocationInput}
-              />
+          <FlatList
+            data={[{ id: 'modal-content' }]}
+            renderItem={() => (
+              <View style={styles.modalSearchCard}>
+                <Text style={styles.modalSearchTitle}>Where?</Text>
+                
+                <LocationAutocomplete
+                  value={location}
+                  onSelect={setLocation}
+                  placeholder="Search destinations"
+                  style={styles.modalLocationInput}
+                />
 
-              {/* Recent Searches */}
-              <Text style={styles.modalSectionTitle}>Recent searches</Text>
-              <FlatList
-                data={recentSearches}
-                renderItem={renderRecentSearch}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-              />
+                {/* Recent Searches */}
+                <Text style={styles.modalSectionTitle}>Recent searches</Text>
+                <FlatList
+                  data={recentSearches}
+                  renderItem={renderRecentSearch}
+                  keyExtractor={(item) => item.id}
+                  scrollEnabled={false}
+                />
 
-              {/* Suggested Destinations */}
-              <Text style={styles.modalSectionTitle}>Suggested destinations</Text>
-              <View style={styles.suggestedDestinationsGrid}>
-                {suggestedDestinations.map((item) => (
-                  <TouchableOpacity key={item.id} style={styles.suggestedDestinationItem}>
-                    <Text style={styles.suggestedDestinationIcon}>{item.icon}</Text>
-                    <Text style={styles.suggestedDestinationName}>{item.name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {/* Suggested Destinations - Hidden for now */}
+                {/* <Text style={styles.modalSectionTitle}>Suggested destinations</Text>
+                <View style={styles.suggestedDestinationsGrid}>
+                  {suggestedDestinations.map((item) => (
+                    <TouchableOpacity key={item.id} style={styles.suggestedDestinationItem}>
+                      <Text style={styles.suggestedDestinationIcon}>{item.icon}</Text>
+                      <Text style={styles.suggestedDestinationName}>{item.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View> */}
+
+                {/* When Input */}
+                <Text style={styles.modalSearchTitle}>When?</Text>
+                <TouchableOpacity 
+                  style={styles.modalSearchInput}
+                  onPress={() => setShowCalendar(!showCalendar)}
+                >
+                  <Text style={styles.modalSearchIcon}>📅</Text>
+                  <Text style={styles.modalSearchPlaceholder}>{formatDateRange()}</Text>
+                </TouchableOpacity>
+
+                {/* Calendar */}
+                {showCalendar && (
+                  <View style={styles.modalCalendarContainer}>
+                    <Calendar
+                      onDayPress={onDayPress}
+                      markingType={'period'}
+                      markedDates={selectedDates}
+                      minDate={today}
+                      theme={{
+                        selectedDayBackgroundColor: '#1976d2',
+                        selectedDayTextColor: 'white',
+                        todayTextColor: '#1976d2',
+                        dayTextColor: '#333',
+                        textDisabledColor: '#ccc',
+                        arrowColor: '#1976d2',
+                        monthTextColor: '#333',
+                        textDayFontWeight: '500',
+                        textMonthFontWeight: 'bold',
+                        textDayHeaderFontWeight: '600',
+                      }}
+                    />
+                  </View>
+                )}
+
+                {/* Who Input */}
+                <Text style={styles.modalSearchTitle}>Who?</Text>
+                <TouchableOpacity style={styles.modalSearchInput}>
+                  <Text style={styles.modalSearchIcon}>👥</Text>
+                  <Text style={styles.modalSearchPlaceholder}>Add team</Text>
+                </TouchableOpacity>
               </View>
-
-              {/* When Input */}
-              <Text style={styles.modalSearchTitle}>When?</Text>
-              <TouchableOpacity 
-                style={styles.modalSearchInput}
-                onPress={() => setShowCalendar(!showCalendar)}
-              >
-                <Text style={styles.modalSearchIcon}>📅</Text>
-                <Text style={styles.modalSearchPlaceholder}>{formatDateRange()}</Text>
-              </TouchableOpacity>
-
-              {/* Calendar */}
-              {showCalendar && (
-                <View style={styles.modalCalendarContainer}>
-                  <Calendar
-                    onDayPress={onDayPress}
-                    markingType={'period'}
-                    markedDates={selectedDates}
-                    minDate={today}
-                    theme={{
-                      selectedDayBackgroundColor: '#1976d2',
-                      selectedDayTextColor: 'white',
-                      todayTextColor: '#1976d2',
-                      dayTextColor: '#333',
-                      textDisabledColor: '#ccc',
-                      arrowColor: '#1976d2',
-                      monthTextColor: '#333',
-                      textDayFontWeight: '500',
-                      textMonthFontWeight: 'bold',
-                      textDayHeaderFontWeight: '600',
-                    }}
-                  />
-                </View>
-              )}
-
-              {/* Who Input */}
-              <Text style={styles.modalSearchTitle}>Who?</Text>
-              <TouchableOpacity style={styles.modalSearchInput}>
-                <Text style={styles.modalSearchIcon}>👥</Text>
-                <Text style={styles.modalSearchPlaceholder}>Add team</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+            )}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            style={styles.modalContent}
+          />
 
           {/* Bottom Action Bar */}
           <View style={styles.modalActionBar}>
@@ -426,12 +456,21 @@ const SearchScreen = ({ navigation }) => {
               onPress={handleSearch}
               disabled={loading || !location || !dateFrom || !dateTo}
             >
-              <Text style={styles.modalSearchIcon}>🔍</Text>
+              
               <Text style={styles.modalSearchButtonText}>Search</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Popular Match Modal */}
+      <PopularMatchModal
+        visible={showPopularMatchModal}
+        matches={popularMatches}
+        currentMatchIndex={currentMatchIndex}
+        onClose={handlePopularMatchModalClose}
+        onNavigate={handlePopularMatchNavigate}
+      />
     </SafeAreaView>
   );
 };
@@ -441,8 +480,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  scrollView: {
-    flex: 1,
+  listContainer: {
+    paddingBottom: 20,
   },
   searchBarContainer: {
     paddingHorizontal: 20,

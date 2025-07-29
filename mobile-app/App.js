@@ -44,8 +44,7 @@ function SearchStack() {
         name="MapResults"
         component={MapResultsScreen}
         options={{
-          title: 'Match Results',
-          headerTitleAlign: 'center',
+          headerShown: false,
         }}
       />
       <Stack.Screen

@@ -254,24 +254,10 @@ class ApiService {
   // NEW: Bounds-based search for map integration
   async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [] }) {
     try {
-      console.group('🗺️ BOUNDS-BASED SEARCH');
-      console.log('Search Parameters:', {
-        bounds: bounds ? {
-          northeast: `${bounds.northeast.lat}, ${bounds.northeast.lng}`,
-          southwest: `${bounds.southwest.lat}, ${bounds.southwest.lng}`
-        } : 'No bounds provided',
-        dateRange: `${dateFrom} to ${dateTo}`,
-        competitions: competitions.length ? competitions : 'Geographic filtering enabled',
-        teams: teams.length ? teams : 'All teams'
-      });
-
       // Use specified competitions or geographically filter leagues
       const targetLeagues = competitions.length > 0 
         ? AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id))
         : this.getRelevantLeagues(bounds);
-
-      console.log(`📡 Searching ${targetLeagues.length} leagues:`, targetLeagues.map(l => l.name));
-      console.groupEnd();
 
       // Format dates for API
       const formattedDates = {
@@ -312,19 +298,14 @@ class ApiService {
              if (!response.ok) {
                if (response.status === 403) {
                  // Access denied - subscription required
-                 console.log(`🚫 ${league.name}: Access denied (subscription required)`);
                  return { success: false, data: { response: [] }, league, restricted: true };
                }
-               console.log(`❌ ${league.name}: HTTP ${response.status} - ${response.statusText}`);
                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
              }
              
              const data = await response.json();
-             const matchCount = data.response?.length || 0;
-             console.log(`✅ ${league.name}: ${matchCount} matches returned`);
              return { success: true, data: data, league };
            } catch (error) {
-             console.error(`❌ ${league.name}: ${error.message}`);
              return { success: false, data: { response: [] }, league };
            }
          })
@@ -360,7 +341,7 @@ class ApiService {
         return dateA.getTime() - dateB.getTime();
       });
 
-      console.log(`🏟️ Found ${sortedMatches.length} matches total`);
+
 
       return {
         success: true,
@@ -414,6 +395,30 @@ class ApiService {
       dateFrom: params.dateFrom,
       dateTo: params.dateTo
     });
+  }
+
+  async getPopularMatches(leagueIds = null) {
+    try {
+      let url = `${this.baseURL}/matches/popular`;
+      
+      if (leagueIds) {
+        const params = new URLSearchParams();
+        params.append('leagueIds', leagueIds.join(','));
+        url += `?${params.toString()}`;
+      }
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch popular matches');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching popular matches:', error);
+      throw error;
+    }
   }
 }
 
