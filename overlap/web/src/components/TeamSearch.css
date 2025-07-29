@@ -110,19 +110,10 @@
     min-width: 0;
 }
 
-.team-logo {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    margin-right: 12px;
-    border-radius: 4px;
-    background-color: #f8f9fa;
-    padding: 2px;
-}
-
 .team-details {
     flex: 1;
     min-width: 0;
+    margin-left: 12px;
 }
 
 .team-name {
@@ -195,10 +186,8 @@
         padding: 10px 12px;
     }
     
-    .team-logo {
-        width: 28px;
-        height: 28px;
-        margin-right: 10px;
+    .team-details {
+        margin-left: 10px;
     }
     
     .team-meta {

@@ -28,6 +28,7 @@ import { format } from 'date-fns';
 import { formatMatchDateTime } from '../utils/timezone';
 import useVisitedStadiums from '../hooks/useVisitedStadiums';
 import TripModal from './TripModal';
+import TeamLogo from './TeamLogo';
 
 // Component for displaying trips
 const TripsSection = () => {
@@ -199,17 +200,11 @@ const TripsSection = () => {
                                   }}>
                                     <Box sx={{ flex: 1 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                        <img 
+                                        <TeamLogo 
                                           src={match.homeTeam.logo} 
                                           alt={match.homeTeam.name}
-                                          style={{ 
-                                            width: 16, 
-                                            height: 16, 
-                                            objectFit: 'contain'
-                                          }}
-                                          onError={(e) => {
-                                            e.target.style.display = 'none';
-                                          }}
+                                          teamName={match.homeTeam.name}
+                                          size={16}
                                         />
                                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                           {match.homeTeam.name}
@@ -217,17 +212,11 @@ const TripsSection = () => {
                                         <Typography variant="caption" sx={{ mx: 0.5 }}>
                                           vs
                                         </Typography>
-                                        <img 
+                                        <TeamLogo 
                                           src={match.awayTeam.logo} 
                                           alt={match.awayTeam.name}
-                                          style={{ 
-                                            width: 16, 
-                                            height: 16, 
-                                            objectFit: 'contain'
-                                          }}
-                                          onError={(e) => {
-                                            e.target.style.display = 'none';
-                                          }}
+                                          teamName={match.awayTeam.name}
+                                          size={16}
                                         />
                                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                           {match.awayTeam.name}
@@ -396,17 +385,11 @@ const MatchesInterestedInSection = () => {
                             <FavoriteBorderIcon sx={{ mr: 1, color: '#FF385C', fontSize: 20 }} />
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <img 
+                                <TeamLogo 
                                   src={match.homeTeam.logo} 
                                   alt={match.homeTeam.name}
-                                  style={{ 
-                                    width: 20, 
-                                    height: 20, 
-                                    objectFit: 'contain'
-                                  }}
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
+                                  teamName={match.homeTeam.name}
+                                  size={20}
                                 />
                                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                                   {match.homeTeam.name}
@@ -416,17 +399,11 @@ const MatchesInterestedInSection = () => {
                                 vs
                               </Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <img 
+                                <TeamLogo 
                                   src={match.awayTeam.logo} 
                                   alt={match.awayTeam.name}
-                                  style={{ 
-                                    width: 20, 
-                                    height: 20, 
-                                    objectFit: 'contain'
-                                  }}
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
+                                  teamName={match.awayTeam.name}
+                                  size={20}
                                 />
                                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                                   {match.awayTeam.name}

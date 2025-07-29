@@ -124,10 +124,19 @@ const Map = ({
         const matchList = matches.map(match => {
             const homeTeam = match.teams.home;
             const awayTeam = match.teams.away;
+            const isMatchFavorited = favoritedMatches.includes(match.fixture.id);
             
-            // Get stadium local time using centralized timezone utility
-            const matchDateTime = formatMatchDateTime(match.fixture.date, match.fixture.venue);
-
+            const matchDateTime = formatMatchDateTime(match.fixture.date, venue);
+            
+            // Create team initials as fallback
+            const getInitials = (name) => {
+                if (!name) return '?';
+                return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            };
+            
+            const homeInitials = getInitials(homeTeam.name);
+            const awayInitials = getInitials(awayTeam.name);
+            
             return `
                 <div class="match-item" style="margin-bottom: 12px; padding: 8px; border-radius: 6px; background: #f8f9fa; position: relative;">
                     <button 
@@ -150,19 +159,23 @@ const Map = ({
                         onmouseover="this.style.backgroundColor='rgba(255, 56, 92, 0.1)'"
                         onmouseout="this.style.backgroundColor='transparent'"
                     >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="${isMatchFavorited ? '#FF385C' : 'none'}" stroke="${isMatchFavorited ? '#FF385C' : '#666'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                         </svg>
                     </button>
                     <div class="match-teams" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-right: 24px;">
                         <div style="display: flex; align-items: center; flex: 1;">
-                            <img src="${homeTeam.logo}" alt="${homeTeam.name}" style="width: 20px; height: 20px; margin-right: 6px; object-fit: contain;" onerror="this.style.display='none'">
+                            <img src="${homeTeam.logo || ''}" alt="${homeTeam.name}" style="width: 20px; height: 20px; margin-right: 6px; object-fit: contain;" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div style="width: 20px; height: 20px; margin-right: 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: none; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 50%; min-width: 20px; min-height: 20px;">${homeInitials}</div>
                             <span class="team home" style="font-size: 13px; font-weight: 500;">${homeTeam.name}</span>
                         </div>
                         <span class="vs" style="margin: 0 8px; color: #666; font-size: 12px;">vs</span>
                         <div style="display: flex; align-items: center; flex: 1; justify-content: flex-end;">
                             <span class="team away" style="font-size: 13px; font-weight: 500;">${awayTeam.name}</span>
-                            <img src="${awayTeam.logo}" alt="${awayTeam.name}" style="width: 20px; height: 20px; margin-left: 6px; object-fit: contain;" onerror="this.style.display='none'">
+                            <img src="${awayTeam.logo || ''}" alt="${awayTeam.name}" style="width: 20px; height: 20px; margin-left: 6px; object-fit: contain;" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div style="width: 20px; height: 20px; margin-left: 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: none; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 50%; min-width: 20px; min-height: 20px;">${awayInitials}</div>
                         </div>
                     </div>
                     <div class="match-time" style="font-size: 12px; color: #666; text-align: center;">${matchDateTime.date} at ${matchDateTime.time} ${matchDateTime.timeZone}</div>

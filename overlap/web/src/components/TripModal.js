@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { formatMatchDateTime } from '../utils/timezone';
+import TeamLogo from './TeamLogo';
 
 const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
   const [trips, setTrips] = useState([]);
@@ -237,17 +238,11 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <img 
+                    <TeamLogo 
                       src={match.teams.home.logo} 
                       alt={match.teams.home.name}
-                      style={{ 
-                        width: 20, 
-                        height: 20, 
-                        objectFit: 'contain'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
+                      teamName={match.teams.home.name}
+                      size={20}
                     />
                     <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                       {match.teams.home.name}
@@ -257,17 +252,11 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
                     vs
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <img 
+                    <TeamLogo 
                       src={match.teams.away.logo} 
                       alt={match.teams.away.name}
-                      style={{ 
-                        width: 20, 
-                        height: 20, 
-                        objectFit: 'contain'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
+                      teamName={match.teams.away.name}
+                      size={20}
                     />
                     <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                       {match.teams.away.name}

@@ -10,12 +10,7 @@ const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
-// Add debug logging for environment variables
-console.log('Environment check:', {
-    googleApiKey: process.env.GOOGLE_API_KEY ? 'Present' : 'Missing',
-    amadeusClientId: process.env.AMADEUS_CLIENT_ID ? 'Present' : 'Missing',
-    nodeEnv: process.env.NODE_ENV || 'not set'
-});
+
 
 // Cache for Amadeus token
 let amadeusToken = null;
@@ -51,7 +46,7 @@ const getAmadeusToken = async () => {
         tokenExpiration = new Date(Date.now() + response.data.expires_in * 1000);
         return amadeusToken;
     } catch (error) {
-        console.error('Error getting Amadeus token:', error);
+
         throw error;
     }
 };
@@ -60,10 +55,8 @@ const getAmadeusToken = async () => {
 const verifyGoogleApiKey = () => {
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-        console.error('ERROR: Google API key is not set in environment variables');
         return false;
     }
-    console.log('Google API key is configured:', apiKey.substring(0, 8) + '...');
     return true;
 };
 
@@ -78,12 +71,7 @@ router.get('/directions/driving', async (req, res) => {
             throw new Error('Google API key is not configured');
         }
 
-        console.log('Fetching driving directions:', {
-            origin,
-            destination,
-            timestamp: new Date().toISOString(),
-            apiKeyConfigured: !!process.env.GOOGLE_API_KEY
-        });
+
 
         const response = await axios.get(
             'https://maps.googleapis.com/maps/api/directions/json',
@@ -104,24 +92,14 @@ router.get('/directions/driving', async (req, res) => {
 
         if (response.data.status === 'OK') {
             const route = response.data.routes[0].legs[0];
-            console.log('Driving route found:', {
-                distance: route.distance.text,
-                duration: route.duration.text,
-                steps: route.steps.length
-            });
+
         } else {
-            console.log('No driving route found:', {
-                status: response.data.status,
-                error: response.data.error_message
-            });
+
         }
 
         res.json(response.data);
     } catch (error) {
-        console.error('Error fetching driving directions:', {
-            error: error.message,
-            googleApiKey: process.env.GOOGLE_API_KEY ? 'Configured' : 'Missing'
-        });
+
         res.status(500).json({ 
             error: 'Failed to fetch driving directions',
             details: error.message
@@ -137,12 +115,7 @@ router.get('/directions/walking', async (req, res) => {
             throw new Error('Google API key is not configured');
         }
 
-        console.log('Fetching walking directions:', {
-            origin,
-            destination,
-            timestamp: new Date().toISOString(),
-            apiKeyConfigured: !!process.env.GOOGLE_API_KEY
-        });
+
 
         const response = await axios.get(
             'https://maps.googleapis.com/maps/api/directions/json',
@@ -164,24 +137,14 @@ router.get('/directions/walking', async (req, res) => {
 
         if (response.data.status === 'OK') {
             const route = response.data.routes[0].legs[0];
-            console.log('Walking route found:', {
-                distance: route.distance.text,
-                duration: route.duration.text,
-                steps: route.steps.length
-            });
+
         } else {
-            console.log('No walking route found:', {
-                status: response.data.status,
-                error: response.data.error_message
-            });
+
         }
 
         res.json(response.data);
     } catch (error) {
-        console.error('Error fetching walking directions:', {
-            error: error.message,
-            googleApiKey: process.env.GOOGLE_API_KEY ? 'Configured' : 'Missing'
-        });
+
         res.status(500).json({ 
             error: 'Failed to fetch walking directions',
             details: error.message
@@ -197,12 +160,7 @@ router.get('/directions/transit', async (req, res) => {
             throw new Error('Google API key is not configured');
         }
 
-        console.log('Fetching transit directions:', {
-            origin,
-            destination,
-            timestamp: new Date().toISOString(),
-            apiKeyConfigured: !!process.env.GOOGLE_API_KEY
-        });
+
 
         const response = await axios.get(
             'https://maps.googleapis.com/maps/api/directions/json',
@@ -264,12 +222,7 @@ router.get('/directions/rail', async (req, res) => {
     try {
         const { origin, destination, date } = req.query;
         
-        console.log('Fetching intercity rail directions:', {
-            origin,
-            destination,
-            date,
-            timestamp: new Date().toISOString()
-        });
+
 
         // For now, return a structured response that matches our transportation option format
         // This will make it easy to integrate real rail APIs later

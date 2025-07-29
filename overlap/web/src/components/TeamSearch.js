@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import TeamLogo from './TeamLogo';
 import './TeamSearch.css';
 
 const BACKEND_URL = 'http://localhost:3001';
@@ -160,26 +161,13 @@ const TeamSearch = ({ onTeamSelect, placeholder = "Search for teams...", selecte
                                 onClick={() => handleTeamSelect(team)}
                             >
                                 <div className="team-info">
-                                    {team.logo && (
-                                        <img 
-                                            src={team.logo} 
-                                            alt={`${team.name} logo`}
-                                            className="team-logo"
-                                            onError={(e) => {
-                                                // Try fallback URL format
-                                                if (team.logo && team.logo.includes('logos.footapi.com')) {
-                                                    // Extract team ID from the old URL format
-                                                    const match = team.logo.match(/\/(\d+)\.png$/);
-                                                    if (match) {
-                                                        e.target.src = `https://media.api-sports.io/football/teams/${match[1]}.png`;
-                                                        return;
-                                                    }
-                                                }
-                                                // If still fails, hide the image
-                                                e.target.style.display = 'none';
-                                            }}
-                                        />
-                                    )}
+                                    <TeamLogo 
+                                        src={team.logo} 
+                                        alt={`${team.name} logo`}
+                                        teamName={team.name}
+                                        size={32}
+                                        className="team-logo"
+                                    />
                                     <div className="team-details">
                                         <div className="team-name">{team.name}</div>
                                         <div className="team-meta">

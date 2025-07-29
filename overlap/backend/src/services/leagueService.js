@@ -223,7 +223,7 @@ class LeagueService {
      */
     clearCache() {
         this.cache.clear();
-        console.log('League service cache cleared');
+
     }
 
     /**
