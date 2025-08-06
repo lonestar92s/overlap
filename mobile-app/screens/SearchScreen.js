@@ -8,6 +8,8 @@ import {
   FlatList,
   SafeAreaView,
   Modal,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Button, Card } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
@@ -37,11 +39,36 @@ const SearchScreen = ({ navigation }) => {
       title: 'Popular Destinations',
       type: 'horizontal',
       data: [
-        { id: '1', location: 'Madrid', cost: '€190' },
-        { id: '2', location: 'Rome', cost: '€170' },
-        { id: '3', location: 'Berlin', cost: '€140' },
-        { id: '4', location: 'Milan', cost: '€200' },
-        { id: '5', location: 'Dortmund', cost: '€120' },
+        { 
+          id: '1', 
+          city: 'Madrid',
+          country: 'Spain',
+          image: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&h=300&fit=crop'
+        },
+        { 
+          id: '2', 
+          city: 'Rome',
+          country: 'Italy', 
+          image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop'
+        },
+        { 
+          id: '3', 
+          city: 'Berlin',
+          country: 'Germany',
+          image: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=400&h=300&fit=crop'
+        },
+        { 
+          id: '4', 
+          city: 'Milan',
+          country: 'Italy',
+          image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop'
+        },
+        { 
+          id: '5', 
+          city: 'Dortmund',
+          country: 'Germany',
+          image: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=400&h=300&fit=crop'
+        },
       ]
     }
   ];
@@ -223,14 +250,14 @@ const SearchScreen = ({ navigation }) => {
 
   const renderDestinationCard = ({ item }) => (
     <TouchableOpacity style={styles.destinationCard}>
-      <View style={styles.cardImagePlaceholder} />
+      <Image 
+        source={{ uri: item.image }} 
+        style={styles.cardImage}
+        resizeMode="cover"
+      />
       <View style={styles.cardContent}>
-        <Text style={styles.cardLocation}>{item.location}</Text>
-        <Text style={styles.cardLocation}>{item.location}</Text>
-        <View style={styles.cardCostContainer}>
-          <Text style={styles.cardCost}>{item.cost}</Text>
-          <Text style={styles.cardCost}>{item.cost}</Text>
-        </View>
+        <Text style={styles.cardCity}>{item.city}</Text>
+        <Text style={styles.cardCountry}>{item.country}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -369,12 +396,12 @@ const SearchScreen = ({ navigation }) => {
               <View style={styles.modalSearchCard}>
                 <Text style={styles.modalSearchTitle}>Where?</Text>
                 
-                <LocationAutocomplete
-                  value={location}
-                  onSelect={setLocation}
+        <LocationAutocomplete
+          value={location}
+          onSelect={setLocation}
                   placeholder="Search destinations"
                   style={styles.modalLocationInput}
-                />
+        />
 
                 {/* Recent Searches */}
                 <Text style={styles.modalSectionTitle}>Recent searches</Text>
@@ -398,37 +425,37 @@ const SearchScreen = ({ navigation }) => {
 
                 {/* When Input */}
                 <Text style={styles.modalSearchTitle}>When?</Text>
-                <TouchableOpacity 
+        <TouchableOpacity
                   style={styles.modalSearchInput}
-                  onPress={() => setShowCalendar(!showCalendar)}
-                >
+          onPress={() => setShowCalendar(!showCalendar)}
+        >
                   <Text style={styles.modalSearchIcon}>📅</Text>
                   <Text style={styles.modalSearchPlaceholder}>{formatDateRange()}</Text>
-                </TouchableOpacity>
+        </TouchableOpacity>
 
                 {/* Calendar */}
-                {showCalendar && (
+        {showCalendar && (
                   <View style={styles.modalCalendarContainer}>
-                    <Calendar
-                      onDayPress={onDayPress}
-                      markingType={'period'}
-                      markedDates={selectedDates}
-                      minDate={today}
-                      theme={{
-                        selectedDayBackgroundColor: '#1976d2',
-                        selectedDayTextColor: 'white',
-                        todayTextColor: '#1976d2',
-                        dayTextColor: '#333',
-                        textDisabledColor: '#ccc',
-                        arrowColor: '#1976d2',
-                        monthTextColor: '#333',
-                        textDayFontWeight: '500',
-                        textMonthFontWeight: 'bold',
-                        textDayHeaderFontWeight: '600',
-                      }}
-                    />
-                  </View>
-                )}
+            <Calendar
+              onDayPress={onDayPress}
+              markingType={'period'}
+              markedDates={selectedDates}
+              minDate={today}
+              theme={{
+                selectedDayBackgroundColor: '#1976d2',
+                selectedDayTextColor: 'white',
+                todayTextColor: '#1976d2',
+                dayTextColor: '#333',
+                textDisabledColor: '#ccc',
+                arrowColor: '#1976d2',
+                monthTextColor: '#333',
+                textDayFontWeight: '500',
+                textMonthFontWeight: 'bold',
+                textDayHeaderFontWeight: '600',
+              }}
+            />
+          </View>
+        )}
 
                 {/* Who Input */}
                 <Text style={styles.modalSearchTitle}>Who?</Text>
@@ -456,8 +483,11 @@ const SearchScreen = ({ navigation }) => {
               onPress={handleSearch}
               disabled={loading || !location || !dateFrom || !dateTo}
             >
-              
-              <Text style={styles.modalSearchButtonText}>Search</Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalSearchButtonText}>Search</Text>
+              )}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -554,28 +584,24 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  cardImagePlaceholder: {
+  cardImage: {
     width: '100%',
-    height: 100,
-    backgroundColor: '#e0e0e0',
+    height: 120,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
   cardContent: {
     padding: 12,
   },
-  cardLocation: {
-    fontSize: 14,
+  cardCity: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#333',
     marginBottom: 2,
   },
-  cardCostContainer: {
-    marginTop: 8,
-  },
-  cardCost: {
+  cardCountry: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
   },
   // Modal Styles
   modalContainer: {
@@ -757,10 +783,12 @@ const styles = StyleSheet.create({
   modalSearchButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#ff385c',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    minWidth: 100,
   },
   modalSearchButtonDisabled: {
     backgroundColor: '#ccc',
@@ -769,7 +797,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-    marginLeft: 8,
   },
 });
 

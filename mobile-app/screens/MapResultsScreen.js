@@ -16,6 +16,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import MatchMapView from '../components/MapView';
 import MatchModal from '../components/MatchModal';
+import HeartButton from '../components/HeartButton';
 import ApiService from '../services/api';
 
 const MapResultsScreen = ({ navigation, route }) => {
@@ -338,19 +339,36 @@ const MapResultsScreen = ({ navigation, route }) => {
         onPress={() => handleMatchPress(item)}
       >
         <View style={styles.matchHeader}>
-          <Text style={styles.matchDate}>
-            {new Date(item.fixture.date).toLocaleDateString('en-US', {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric'
-            })}
-          </Text>
-          <Text style={styles.matchTime}>
-            {new Date(item.fixture.date).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
+          <View style={styles.dateTimeContainer}>
+            <Text style={styles.matchDate}>
+              {new Date(item.fixture.date).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </Text>
+            <Text style={styles.matchTime}>
+              {new Date(item.fixture.date).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </Text>
+          </View>
+          
+          <HeartButton 
+            matchId={item.id.toString()}
+            fixtureId={item.fixture.id.toString()}
+            matchData={{
+              id: item.id.toString(),
+              matchId: item.id.toString(),
+              homeTeam: item.teams.home,
+              awayTeam: item.teams.away,
+              league: item.league?.name || item.competition?.name,
+              venue: item.fixture.venue?.name,
+              date: item.fixture.date
+            }}
+            size={20}
+          />
         </View>
 
         <View style={styles.teamsRow}>
@@ -409,38 +427,43 @@ const MapResultsScreen = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* Show full content when expanded */}
-        {sheetState !== 'collapsed' && (
-          <>
-            <View style={styles.bottomSheetHeader}>
-              {isSearching && (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#1976d2" />
-                  <Text style={styles.loadingText}>Searching matches...</Text>
-                </View>
-              )}
+        {/* Always render the full content, but control visibility */}
+        <View style={[
+          styles.fullContentContainer,
+          sheetState === 'collapsed' && styles.hiddenContent
+        ]}>
+          <View style={styles.bottomSheetHeader}>
+            {isSearching && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#1976d2" />
+                <Text style={styles.loadingText}>Searching matches...</Text>
+              </View>
+            )}
 
-              <Text style={styles.resultsHeader}>
-                {matches?.length || 0} matches found
-              </Text>
-            </View>
+            <Text style={styles.resultsHeader}>
+              {matches?.length || 0} matches found
+            </Text>
+          </View>
 
-            <FlatList
-              data={matches || []}
-              renderItem={renderMatchItem}
-              keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.matchListContent}
-              style={[styles.bottomSheetScrollView, { height: calculateFlatListHeight() }]}
-              nestedScrollEnabled={true}
-              keyboardShouldPersistTaps="handled"
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-                autoscrollToTopThreshold: 10,
-              }}
-            />
-          </>
-        )}
+          <FlatList
+            data={matches || []}
+            renderItem={renderMatchItem}
+            keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.matchListContent}
+            style={[styles.bottomSheetScrollView, { height: calculateFlatListHeight() }]}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10,
+            }}
+            removeClippedSubviews={false}
+            initialNumToRender={matches?.length || 0}
+            maxToRenderPerBatch={matches?.length || 0}
+            windowSize={matches?.length || 0}
+          />
+        </View>
       </BottomSheetView>
     );
   };
@@ -529,7 +552,10 @@ const MapResultsScreen = ({ navigation, route }) => {
           disabled={isSearching}
         >
           {isSearching ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <>
+              <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+              <Text style={styles.floatingSearchText}>Searching...</Text>
+            </>
           ) : (
             <>
               <Text style={styles.floatingSearchText}>Search this area</Text>
@@ -639,6 +665,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+    minHeight: 44, // Ensure consistent height for loading state
   },
   floatingSearchIcon: {
     fontSize: 16,
@@ -669,6 +696,13 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingBottom: 60, // Extra padding to account for bottom tab navigation
+  },
+  fullContentContainer: {
+    flex: 1,
+  },
+  hiddenContent: {
+    opacity: 0,
+    pointerEvents: 'none',
   },
   bottomSheetHeader: {
     // Fixed header section
@@ -738,7 +772,11 @@ const styles = StyleSheet.create({
   matchHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  dateTimeContainer: {
+    flex: 1,
   },
   matchDate: {
     fontSize: 16,

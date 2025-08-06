@@ -1,7 +1,7 @@
 // Auto-detect if running on web or mobile
 const API_BASE_URL = typeof window !== 'undefined' && window.location
   ? `http://localhost:3001/api`  // Web browser
-  : `http://192.168.1.88:3001/api`; // Mobile device
+  : `http://192.168.1.94:3001/api`; // Mobile device
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -12,9 +12,8 @@ const getAuthToken = () => {
     return authToken;
   }
   
-  // For now, we'll work without authentication
-  // In a real app, you'd implement proper login/signup
-  return null;
+  // Test token for heart functionality
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ODhhNmFjMzFlNWVlNTcxNzNjZmY4ZDQiLCJpYXQiOjE3NTM5MDE3NjQsImV4cCI6MTc1NjQ5Mzc2NH0.fif_QqjXTHfDVz8vHJFZddYRrPVE9g1FFPQ08PlYirw';
 };
 
 const setAuthToken = (token) => {
@@ -407,7 +406,15 @@ class ApiService {
         url += `?${params.toString()}`;
       }
 
-      const response = await fetch(url);
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
       const data = await response.json();
 
       if (!response.ok) {
@@ -417,6 +424,135 @@ class ApiService {
       return data;
     } catch (error) {
       console.error('Error fetching popular matches:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - please try again');
+      }
+      throw error;
+    }
+  }
+
+  // Saved Matches API Methods (using existing preferences endpoints)
+  async getSavedMatches() {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch saved matches');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching saved matches:', error);
+      throw error;
+    }
+  }
+
+  async saveMatch(matchId, fixtureId, matchData) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          matchId,
+          homeTeam: matchData.homeTeam,
+          awayTeam: matchData.awayTeam,
+          league: matchData.league,
+          venue: matchData.venue,
+          date: matchData.date
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save match');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error saving match:', error);
+      throw error;
+    }
+  }
+
+  async unsaveMatch(matchId) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${this.baseURL}/preferences/saved-matches/${matchId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unsave match');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error unsaving match:', error);
+      throw error;
+    }
+  }
+
+  async checkIfMatchSaved(matchId) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check saved matches');
+      }
+      
+      return data.savedMatches.some(match => match.matchId === matchId);
+    } catch (error) {
+      console.error('Error checking saved match:', error);
+      throw error;
+    }
+  }
+
+  async getSavedMatchCount() {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get saved matches');
+      }
+      
+      return data.savedMatches.length;
+    } catch (error) {
+      console.error('Error getting saved match count:', error);
       throw error;
     }
   }
