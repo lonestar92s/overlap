@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, TouchableOpacity, Text } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const MatchMapView = ({
   matches = [],
@@ -10,7 +11,8 @@ const MatchMapView = ({
   onRegionChange = () => {},
   onMarkerPress = () => {},
   selectedMatchId = null,
-  style = {}
+  style = {},
+  showLocationButton = true
 }) => {
   const mapRef = useRef();
   
@@ -183,7 +185,7 @@ const MatchMapView = ({
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={handleMapReady}
         showsUserLocation={!!userLocation}
-        showsMyLocationButton={false}
+        showsMyLocationButton={false} // Disable built-in button to use custom one
         showsCompass={false}
         toolbarEnabled={false}
         loadingEnabled={true}
@@ -192,6 +194,47 @@ const MatchMapView = ({
       >
         {markers}
       </MapView>
+      
+      {/* Custom Location Button */}
+      {showLocationButton && (
+        <TouchableOpacity
+          style={[
+            styles.locationButton,
+            !userLocation && styles.locationButtonInactive
+          ]}
+          onPress={() => {
+            if (userLocation) {
+              centerMap(userLocation.latitude, userLocation.longitude, true);
+            } else {
+              // Request location permission and get current location
+              (async () => {
+                try {
+                  const { status } = await Location.requestForegroundPermissionsAsync();
+                  if (status === 'granted') {
+                    const location = await Location.getCurrentPositionAsync({});
+                    const newUserLocation = {
+                      latitude: location.coords.latitude,
+                      longitude: location.coords.longitude,
+                    };
+                    setUserLocation(newUserLocation);
+                    centerMap(newUserLocation.latitude, newUserLocation.longitude, true);
+                  } else {
+                    Alert.alert('Permission Denied', 'Location permission is required to use this feature.');
+                  }
+                } catch (error) {
+                  Alert.alert('Error', 'Failed to get your current location.');
+                }
+              })();
+            }
+          }}
+        >
+          <Icon 
+            name="my-location" 
+            size={24} 
+            color={userLocation ? '#1976d2' : '#999'} 
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -202,6 +245,28 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  locationButton: {
+    position: 'absolute',
+    bottom: 120, // Moved up to be above the bottom sheet
+    right: 20,
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  locationButtonInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
 });
 

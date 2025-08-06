@@ -8,8 +8,10 @@ import {
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import { Avatar, Card } from 'react-native-elements';
+import HeartButton from './HeartButton';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -76,6 +78,20 @@ const MatchModal = ({ visible, match, onClose }) => {
 
               {/* Match content */}
               <View style={styles.content}>
+                {/* Venue Image */}
+                {venue?.image && (
+                  <View style={styles.venueImageContainer}>
+                    <Image 
+                      source={{ uri: venue.image }} 
+                      style={styles.venueImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.venueImageOverlay}>
+                      <Text style={styles.venueImageText}>{venue.name}</Text>
+                    </View>
+                  </View>
+                )}
+
                 {/* Date and time */}
                 <View style={styles.dateTimeSection}>
                   <Text style={styles.dateText}>
@@ -107,6 +123,21 @@ const MatchModal = ({ visible, match, onClose }) => {
 
                   <View style={styles.vsContainer}>
                     <Text style={styles.vsText}>VS</Text>
+                    <HeartButton 
+                      matchId={match.id.toString()}
+                      fixtureId={match.fixture.id.toString()}
+                      matchData={{
+                        id: match.id.toString(),
+                        matchId: match.id.toString(),
+                        homeTeam: match.teams.home,
+                        awayTeam: match.teams.away,
+                        league: match.league?.name,
+                        venue: venue?.name,
+                        date: match.fixture.date
+                      }}
+                      size={28}
+                      style={styles.modalHeartButton}
+                    />
                   </View>
 
                   <View style={styles.teamContainer}>
@@ -150,22 +181,30 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
     paddingBottom: 40,
-    maxHeight: '75%',
-    minHeight: 300,
-    marginBottom: 20, // Add space from bottom of screen
+    maxHeight: '80%',
+    minHeight: 350,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   handleBar: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#ddd',
-    borderRadius: 2,
+    width: 48,
+    height: 5,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 3,
     alignSelf: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   closeButton: {
     position: 'absolute',
@@ -186,6 +225,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  venueImageContainer: {
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  venueImage: {
+    width: '100%',
+    height: '100%',
+  },
+  venueImageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 12,
+  },
+  venueImageText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   dateTimeSection: {
     alignItems: 'center',
@@ -223,11 +286,26 @@ const styles = StyleSheet.create({
   },
   vsContainer: {
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   vsText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1976d2',
+    marginBottom: 8,
+  },
+  modalHeartButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   venueSection: {
     marginBottom: 20,

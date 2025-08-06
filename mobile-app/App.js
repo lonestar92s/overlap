@@ -9,9 +9,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
+import SavedScreen from './screens/SavedScreen';
+import { SavedMatchesProvider } from './contexts/SavedMatchesContext';
 
 // Placeholder screens for other tabs
-const SavedScreen = () => <></>;
 const TripsScreen = () => <></>;
 const MessagesScreen = () => <></>;
 const AccountScreen = () => <></>;
@@ -21,22 +22,22 @@ const Tab = createBottomTabNavigator();
 
 function SearchStack() {
   return (
-    <Stack.Navigator
-      initialRouteName="Search"
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#1976d2',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
-    >
-      <Stack.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{
+      <Stack.Navigator
+        initialRouteName="Search"
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#1976d2',
+          },
+          headerTintColor: '#fff',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        }}
+      >
+        <Stack.Screen
+          name="Search"
+          component={SearchScreen}
+          options={{
           headerShown: false,
         }}
       />
@@ -45,25 +46,26 @@ function SearchStack() {
         component={MapResultsScreen}
         options={{
           headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="Results"
-        component={ResultsScreen}
-        options={{
-          title: 'Match Results',
-          headerTitleAlign: 'center',
-        }}
-      />
-    </Stack.Navigator>
+          }}
+        />
+        <Stack.Screen
+          name="Results"
+          component={ResultsScreen}
+          options={{
+            title: 'Match Results',
+            headerTitleAlign: 'center',
+          }}
+        />
+      </Stack.Navigator>
   );
 }
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <StatusBar style="light" backgroundColor="#1976d2" />
-      <Tab.Navigator
+    <SavedMatchesProvider>
+      <NavigationContainer>
+        <StatusBar style="light" backgroundColor="#1976d2" />
+        <Tab.Navigator
         initialRouteName="SearchTab"
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -102,7 +104,8 @@ export default function App() {
         <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
         <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
       </Tab.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </SavedMatchesProvider>
   );
 }
 

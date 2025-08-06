@@ -10,13 +10,14 @@ import {
   Alert,
 } from 'react-native';
 import ApiService from '../services/api';
+import HeartButton from './HeartButton';
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchPopularMatches = async () => {
+  const fetchPopularMatches = async (retryCount = 0) => {
     try {
       setLoading(true);
       const response = await ApiService.getPopularMatches();
@@ -34,6 +35,14 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       }
     } catch (error) {
       console.error('Error fetching popular matches:', error);
+      
+      // Retry once if it's a timeout error
+      if (error.message.includes('timeout') && retryCount < 1) {
+        console.log('🔄 Retrying popular matches request...');
+        setTimeout(() => fetchPopularMatches(retryCount + 1), 2000);
+        return;
+      }
+      
       Alert.alert('Error', 'Failed to load popular matches');
     } finally {
       setLoading(false);
@@ -80,13 +89,33 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
             <Text style={styles.venueImagePlaceholderText}>🏟️</Text>
           </View>
         )}
+        
+
       </View>
 
       {/* Match Info */}
       <View style={styles.matchInfo}>
-        <Text style={styles.matchTeams}>
-          {item.teams.home.name} vs {item.teams.away.name}
-        </Text>
+        <View style={styles.matchHeader}>
+          <Text style={styles.matchTeams}>
+            {item.teams.home.name} vs {item.teams.away.name}
+          </Text>
+          
+          <HeartButton 
+            matchId={item.id.toString()}
+            fixtureId={item.fixture.id.toString()}
+            matchData={{
+              id: item.id.toString(),
+              matchId: item.id.toString(),
+              homeTeam: item.teams.home,
+              awayTeam: item.teams.away,
+              league: item.league.name,
+              venue: item.fixture.venue.name,
+              date: item.fixture.date
+            }}
+            size={20}
+            style={styles.heartButton}
+          />
+        </View>
         
         <Text style={styles.matchTime}>
           {formatMatchDate(item.fixture.date)}
@@ -159,7 +188,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   matchCard: {
-    width: 280,
+    width: 300,
     backgroundColor: '#fff',
     borderRadius: 12,
     marginRight: 16,
@@ -177,6 +206,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
   },
   venueImage: {
     width: '100%',
@@ -195,11 +225,18 @@ const styles = StyleSheet.create({
   matchInfo: {
     padding: 16,
   },
+  matchHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
   matchTeams: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 12,
   },
   matchTime: {
     fontSize: 14,
@@ -221,6 +258,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1976d2',
     fontWeight: '500',
+  },
+  heartButton: {
+    backgroundColor: 'transparent',
+    padding: 2,
+    marginLeft: 4,
   },
   loadingContainer: {
     padding: 40,

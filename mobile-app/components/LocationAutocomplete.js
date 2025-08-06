@@ -231,13 +231,13 @@ const LocationAutocomplete = ({
         )}
       </View>
       
-      {loading && (
-        <ActivityIndicator 
-          size="small" 
-          color="#007AFF" 
-          style={styles.loadingIndicator}
-        />
-      )}
+        {loading && (
+          <ActivityIndicator 
+            size="small" 
+            color="#007AFF" 
+            style={styles.loadingIndicator}
+          />
+        )}
       
       {error && (
         <Text style={styles.errorText}>{error}</Text>
