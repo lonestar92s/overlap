@@ -49,10 +49,55 @@ export const SavedMatchesProvider = ({ children }) => {
     return savedMatches.has(matchId);
   };
 
-  // Save a match (heart it)
+  // Validate formatted match data before sending to backend
+  const validateMatchData = (data) => {
+    const errors = [];
+    
+    if (!data.homeTeam?.name) {
+      errors.push('Home team name is missing');
+    }
+    
+    if (!data.awayTeam?.name) {
+      errors.push('Away team name is missing');
+    }
+    
+    if (!data.league) {
+      errors.push('League is missing');
+    }
+    
+    if (!data.venue) {
+      errors.push('Venue is missing');
+    }
+    
+    if (!data.date) {
+      errors.push('Date is missing');
+    }
+    
+    // Validate date format
+    try {
+      const date = new Date(data.date);
+      if (isNaN(date.getTime())) {
+        errors.push('Invalid date format');
+      }
+    } catch (error) {
+      errors.push('Date parsing error');
+    }
+    
+    if (errors.length > 0) {
+      console.error('❌ Data validation failed:', errors);
+      return false;
+    }
+    
+    return true;
+  };
+
   const saveMatch = async (matchId, fixtureId, matchData) => {
     try {
       setLoading(true);
+      
+      console.log('🔍 Raw matchData received:', matchData);
+      console.log('🔍 Match ID:', matchId);
+      console.log('🔍 Fixture ID:', fixtureId);
       
       // Optimistic update - update UI immediately
       const newSavedMatches = new Set(savedMatches);
@@ -62,11 +107,69 @@ export const SavedMatchesProvider = ({ children }) => {
       // Save to local storage
       await saveMatchesToStorage(newSavedMatches);
       
-      // Save to backend
-      await ApiService.saveMatch(matchId, fixtureId, matchData);
+      // Format the data for the backend
+      const formattedMatchData = {
+        homeTeam: {
+          name: matchData?.teams?.home?.name || matchData?.homeTeam || 'Unknown Team',
+          logo: matchData?.teams?.home?.logo || ''
+        },
+        awayTeam: {
+          name: matchData?.teams?.away?.name || matchData?.awayTeam || 'Unknown Team',
+          logo: matchData?.teams?.away?.logo || ''
+        },
+        league: (() => {
+          // Extract league name as a string, handling both object and string formats
+          const leagueData = matchData?.league || matchData?.competition;
+          if (typeof leagueData === 'string') {
+            return leagueData;
+          } else if (leagueData && typeof leagueData === 'object' && leagueData.name) {
+            return leagueData.name;
+          }
+          return 'Unknown League';
+        })(),
+        venue: matchData?.fixture?.venue?.name || matchData?.venue || 'Unknown Venue',
+        date: (() => {
+          const dateValue = matchData?.fixture?.date || matchData?.date;
+          if (!dateValue) {
+            console.warn('No date value found, using current date');
+            return new Date().toISOString();
+          }
+          
+          try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) {
+              console.warn('Invalid date value:', dateValue, 'using current date');
+              return new Date().toISOString();
+            }
+            return date.toISOString();
+          } catch (error) {
+            console.warn('Error parsing date:', dateValue, error, 'using current date');
+            return new Date().toISOString();
+          }
+        })()
+      };
       
-      // Update saved matches data
-      setSavedMatchesData(prev => [matchData, ...prev]);
+      console.log('📤 Sending formatted match data to backend:', formattedMatchData);
+      
+      // Validate the formatted data before sending
+      if (!validateMatchData(formattedMatchData)) {
+        throw new Error('Match data validation failed');
+      }
+      
+      // Save to backend
+      await ApiService.saveMatch(matchId, fixtureId, formattedMatchData);
+      
+      // Update saved matches data with the formatted data to maintain consistency
+      const formattedForDisplay = {
+        matchId,
+        homeTeam: formattedMatchData.homeTeam,
+        awayTeam: formattedMatchData.awayTeam,
+        league: formattedMatchData.league,
+        venue: formattedMatchData.venue,
+        date: formattedMatchData.date
+      };
+      
+      setSavedMatchesData(prev => [formattedForDisplay, ...prev]);
       
     } catch (error) {
       // Revert optimistic update on error
@@ -75,7 +178,7 @@ export const SavedMatchesProvider = ({ children }) => {
       setSavedMatches(revertedMatches);
       await saveMatchesToStorage(revertedMatches);
       
-      console.error('Error saving match:', error);
+      console.error('❌ Error saving match:', error);
       throw error;
     } finally {
       setLoading(false);
@@ -166,4 +269,5 @@ export const SavedMatchesProvider = ({ children }) => {
       {children}
     </SavedMatchesContext.Provider>
   );
-}; 
+};
+ 

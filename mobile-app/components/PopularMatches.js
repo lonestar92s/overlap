@@ -11,21 +11,38 @@ import {
 } from 'react-native';
 import ApiService from '../services/api';
 import HeartButton from './HeartButton';
+import MatchCard from './MatchCard';
+import { useSavedMatches } from '../contexts/SavedMatchesContext';
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { isMatchSaved, toggleSaveMatch } = useSavedMatches();
 
   const fetchPopularMatches = async (retryCount = 0) => {
     try {
       setLoading(true);
       const response = await ApiService.getPopularMatches();
       
+      console.log('Popular matches API response:', response);
+      
+      // Handle different response structures
+      let matchesData = [];
       if (response.success && response.matches) {
-        setMatches(response.matches);
+        matchesData = response.matches;
+      } else if (response.matches) {
+        matchesData = response.matches;
+      } else if (Array.isArray(response)) {
+        matchesData = response;
+      } else if (response.data && Array.isArray(response.data)) {
+        matchesData = response.data;
+      }
+      
+      if (matchesData.length > 0) {
+        setMatches(matchesData);
         if (onMatchesLoaded) {
-          onMatchesLoaded(response.matches);
+          onMatchesLoaded(matchesData);
         }
       } else {
         setMatches([]);
@@ -71,69 +88,13 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   };
 
   const renderMatchCard = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.matchCard}
+    <MatchCard
+      match={item}
       onPress={() => onMatchPress(item)}
-      activeOpacity={0.8}
-    >
-      {/* Venue Image */}
-      <View style={styles.venueImageContainer}>
-        {item.fixture.venue.image ? (
-          <Image 
-            source={{ uri: item.fixture.venue.image }} 
-            style={styles.venueImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.venueImagePlaceholder}>
-            <Text style={styles.venueImagePlaceholderText}>🏟️</Text>
-          </View>
-        )}
-        
-
-      </View>
-
-      {/* Match Info */}
-      <View style={styles.matchInfo}>
-        <View style={styles.matchHeader}>
-          <Text style={styles.matchTeams}>
-            {item.teams.home.name} vs {item.teams.away.name}
-          </Text>
-          
-          <HeartButton 
-            matchId={item.id.toString()}
-            fixtureId={item.fixture.id.toString()}
-            matchData={{
-              id: item.id.toString(),
-              matchId: item.id.toString(),
-              homeTeam: item.teams.home,
-              awayTeam: item.teams.away,
-              league: item.league.name,
-              venue: item.fixture.venue.name,
-              date: item.fixture.date
-            }}
-            size={20}
-            style={styles.heartButton}
-          />
-        </View>
-        
-        <Text style={styles.matchTime}>
-          {formatMatchDate(item.fixture.date)}
-        </Text>
-        
-        <Text style={styles.venueName} numberOfLines={1}>
-          {item.fixture.venue.name}
-        </Text>
-        
-        <Text style={styles.venueLocation} numberOfLines={1}>
-          {item.fixture.venue.city}, {item.fixture.venue.country}
-        </Text>
-        
-        <Text style={styles.leagueName}>
-          {item.league.name}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      variant="default"
+      showHeart={true}
+      style={styles.popularMatchCard}
+    />
   );
 
   if (loading) {
@@ -162,7 +123,7 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       <FlatList
         data={matches}
         renderItem={renderMatchCard}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => (item.id || item.fixture?.id || `match-${index}`).toString()}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
@@ -264,6 +225,10 @@ const styles = StyleSheet.create({
     padding: 2,
     marginLeft: 4,
   },
+  popularMatchCard: {
+    marginHorizontal: 8,
+    marginVertical: 4,
+  },
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
@@ -295,4 +260,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PopularMatches; 
+export default PopularMatches;
+ 

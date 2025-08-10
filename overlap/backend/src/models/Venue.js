@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const venueSchema = new mongoose.Schema({
+    venueId: {
+        type: Number,
+        required: true,
+        unique: true
+    },
     name: {
         type: String,
         required: true
@@ -22,11 +27,11 @@ const venueSchema = new mongoose.Schema({
         type: {
             type: String,
             enum: ['Point'],
-            required: true
+            required: false
         },
         coordinates: {
             type: [Number],
-            required: true,
+            required: false,
             validate: {
                 validator: function(v) {
                     return Array.isArray(v) && v.length === 2 &&
@@ -44,16 +49,38 @@ const venueSchema = new mongoose.Schema({
         type: Number,
         min: 0
     },
+    surface: {
+        type: String
+    },
+    image: {
+        type: String
+    },
+    coordinates: {
+        type: [Number],
+        required: false,
+        validate: {
+            validator: function(v) {
+                return Array.isArray(v) && v.length === 2 &&
+                       v[0] >= -180 && v[0] <= 180 && // longitude
+                       v[1] >= -90 && v[1] <= 90;     // latitude
+            },
+            message: 'Coordinates must be [longitude, latitude] array with valid ranges'
+        }
+    },
     isActive: {
         type: Boolean,
         default: true
+    },
+    lastUpdated: {
+        type: Date,
+        default: Date.now
     }
 }, {
     timestamps: true
 });
 
-// Create a 2dsphere index on location for geospatial queries
-venueSchema.index({ location: '2dsphere' });
+// Create a 2dsphere index on location for geospatial queries (only for venues with coordinates)
+venueSchema.index({ location: '2dsphere' }, { sparse: true });
 
 // Other useful indexes
 venueSchema.index({ city: 1 });

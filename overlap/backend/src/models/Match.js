@@ -4,8 +4,7 @@ const matchSchema = new mongoose.Schema({
     apiId: {
         type: String,
         required: true,
-        unique: true,
-        index: true
+        unique: true
     },
     
     // Team references

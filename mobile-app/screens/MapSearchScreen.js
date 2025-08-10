@@ -40,7 +40,6 @@ const MapSearchScreen = ({ navigation }) => {
   const searchTimeoutRef = useRef();
 
 
-
   // Debounced search function
   const debouncedSearch = useCallback(
     debounce(async (bounds, dates) => {
@@ -676,4 +675,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MapSearchScreen; 
+export default MapSearchScreen;
+ 

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSavedMatches } from '../contexts/SavedMatchesContext';
 import HeartButton from '../components/HeartButton';
+import MatchCard from '../components/MatchCard';
 
 const SavedScreen = () => {
   const { 
@@ -34,40 +35,38 @@ const SavedScreen = () => {
     });
   };
 
-  const renderSavedMatch = ({ item }) => (
-    <View style={styles.matchCard}>
-      <View style={styles.matchHeader}>
-        <View style={styles.teamsContainer}>
-          <View style={styles.teamRow}>
-            <Text style={styles.teamName}>{item.homeTeam.name}</Text>
-            <Text style={styles.vs}>vs</Text>
-            <Text style={styles.teamName}>{item.awayTeam.name}</Text>
-          </View>
-        </View>
-        
-        <HeartButton 
-          matchId={item.matchId}
-          fixtureId={item.matchId}
-          matchData={item}
-          size={24}
-        />
-      </View>
+  const renderSavedMatch = ({ item }) => {
+    // Convert saved match data to match format expected by MatchCard
+    const matchData = {
+      id: item.matchId,
+      fixture: {
+        id: item.matchId,
+        date: item.date,
+        venue: {
+          name: item.venue,
+          city: '',
+          country: ''
+        }
+      },
+      teams: {
+        home: item.homeTeam,
+        away: item.awayTeam
+      },
+      league: {
+        name: item.league,
+        logo: ''
+      }
+    };
 
-      <View style={styles.matchDetails}>
-        <Text style={styles.matchTime}>
-          {formatMatchDate(item.date)}
-        </Text>
-        
-        <Text style={styles.venueName} numberOfLines={1}>
-          {item.venue}
-        </Text>
-        
-        <Text style={styles.leagueName}>
-          {item.league}
-        </Text>
-      </View>
-    </View>
-  );
+    return (
+      <MatchCard
+        match={matchData}
+        onPress={() => {}} // No action for saved matches
+        variant="default"
+        showHeart={true}
+      />
+    );
+  };
 
   if (loading) {
     return (
@@ -230,4 +229,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SavedScreen; 
+export default SavedScreen;
+ 

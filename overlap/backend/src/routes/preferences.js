@@ -177,24 +177,66 @@ router.post('/saved-matches', auth, async (req, res) => {
     try {
         const { matchId, homeTeam, awayTeam, league, venue, date } = req.body;
         
+        // Validate required fields
+        if (!matchId) {
+            return res.status(400).json({ error: 'matchId is required' });
+        }
+        
+        if (!homeTeam || !awayTeam) {
+            return res.status(400).json({ error: 'homeTeam and awayTeam are required' });
+        }
+        
+        if (!league) {
+            return res.status(400).json({ error: 'league is required' });
+        }
+        
+        if (!venue) {
+            return res.status(400).json({ error: 'venue is required' });
+        }
+        
+        if (!date) {
+            return res.status(400).json({ error: 'date is required' });
+        }
+        
         // Check if match is already saved
         const existingMatch = req.user.savedMatches.find(match => match.matchId === matchId);
         if (existingMatch) {
             return res.status(400).json({ error: 'Match already saved' });
         }
         
-        req.user.savedMatches.push({
+        // Format the data according to the User model schema
+        const matchData = {
             matchId,
-            homeTeam,
-            awayTeam,
-            league,
-            venue,
+            homeTeam: {
+                name: typeof homeTeam === 'string' ? homeTeam : (homeTeam?.name || 'Unknown Team'),
+                logo: typeof homeTeam === 'object' ? homeTeam?.logo : ''
+            },
+            awayTeam: {
+                name: typeof awayTeam === 'string' ? awayTeam : (awayTeam?.name || 'Unknown Team'),
+                logo: typeof awayTeam === 'object' ? awayTeam?.logo : ''
+            },
+            league: typeof league === 'string' ? league : (league?.name || 'Unknown League'),
+            venue: typeof venue === 'string' ? venue : (venue?.name || 'Unknown Venue'),
             date: new Date(date)
-        });
+        };
+        
+        // Validate the date
+        if (isNaN(matchData.date.getTime())) {
+            return res.status(400).json({ 
+                error: 'Invalid date format', 
+                receivedDate: date,
+                parsedDate: matchData.date.toString()
+            });
+        }
+        
+        console.log('Saving match data:', matchData);
+        
+        req.user.savedMatches.push(matchData);
         
         await req.user.save();
         res.json({ savedMatches: req.user.savedMatches });
     } catch (error) {
+        console.error('Error saving match:', error);
         res.status(400).json({ error: error.message });
     }
 });
