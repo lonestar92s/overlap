@@ -4,45 +4,15 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
-  Animated,
-  Dimensions,
-  TouchableWithoutFeedback,
   Image,
 } from 'react-native';
-import { Avatar, Card } from 'react-native-elements';
+import { Avatar, Card, Overlay } from 'react-native-elements';
 import HeartButton from './HeartButton';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
-const { height: screenHeight } = Dimensions.get('window');
-
-const MatchModal = ({ visible, match, onClose }) => {
-  const slideAnim = React.useRef(new Animated.Value(screenHeight)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 100,
-        friction: 8,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: screenHeight,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, slideAnim]);
-
+const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange }) => {
   const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: screenHeight,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
+    onClose();
   };
 
   if (!match) return null;
@@ -50,294 +20,356 @@ const MatchModal = ({ visible, match, onClose }) => {
   const venue = match.fixture?.venue;
   const matchDate = new Date(match.fixture.date);
 
+  // Navigation logic
+  const sortedMatches = [...allMatches].sort((a, b) => 
+    new Date(a.fixture.date) - new Date(b.fixture.date)
+  );
+  
+  const currentIndex = sortedMatches.findIndex(m => m.id === match.id);
+  const totalMatches = sortedMatches.length;
+  
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      const previousMatch = sortedMatches[currentIndex - 1];
+      onMatchChange(previousMatch);
+    } else if (totalMatches > 1) {
+      // Loop to last match
+      const lastMatch = sortedMatches[totalMatches - 1];
+      onMatchChange(lastMatch);
+    }
+  };
+  
+  const handleNext = () => {
+    if (currentIndex < totalMatches - 1) {
+      const nextMatch = sortedMatches[currentIndex + 1];
+      onMatchChange(nextMatch);
+    } else if (totalMatches > 1) {
+      // Loop to first match
+      const firstMatch = sortedMatches[0];
+      onMatchChange(firstMatch);
+    }
+  };
+  
+  const canNavigate = totalMatches > 1;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={handleClose}
+    <Overlay
+      isVisible={visible}
+      onBackdropPress={handleClose}
+      overlayStyle={styles.overlayStyle}
+      animationType="fade"
     >
-      <TouchableWithoutFeedback onPress={handleClose}>
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback onPress={() => {}}>
-            <Animated.View
-              style={[
-                styles.modalContainer,
-                {
-                  transform: [{ translateY: slideAnim }],
-                },
-              ]}
+      <View style={styles.modalContainer}>
+        {/* Handle bar */}
+        <View style={styles.handleBar} />
+        
+        {/* Close button */}
+        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+
+        {/* Navigation header */}
+        {canNavigate && (
+          <View style={styles.navigationHeader}>
+            <TouchableOpacity 
+              style={styles.navButton} 
+              onPress={handlePrevious}
+              activeOpacity={0.7}
             >
-              {/* Handle bar */}
-              <View style={styles.handleBar} />
-              
-              {/* Close button */}
-              <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.navButtonText}>← Previous</Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.matchCounter}>
+              Match {currentIndex + 1} of {totalMatches}
+            </Text>
+            
+            <TouchableOpacity 
+              style={styles.navButton} 
+              onPress={handleNext}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.navButtonText}>Next →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-              {/* Match content */}
-              <View style={styles.content}>
-                {/* Venue Image */}
-                {venue?.image && (
-                  <View style={styles.venueImageContainer}>
-                    <Image 
-                      source={{ uri: venue.image }} 
-                      style={styles.venueImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.venueImageOverlay}>
-                      <Text style={styles.venueImageText}>{venue.name}</Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* Date and time */}
-                <View style={styles.dateTimeSection}>
-                  <Text style={styles.dateText}>
-                    {matchDate.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </Text>
-                  <Text style={styles.timeText}>
-                    {matchDate.toLocaleTimeString('en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </Text>
-                </View>
-
-                {/* Teams */}
-                <View style={styles.teamsSection}>
-                  <View style={styles.teamContainer}>
-                    <Avatar
-                      source={{ uri: match.teams.home.logo }}
-                      size={70}
-                      containerStyle={styles.teamLogo}
-                    />
-                    <Text style={styles.teamName}>{match.teams.home.name}</Text>
-                  </View>
-
-                  <View style={styles.vsContainer}>
-                    <Text style={styles.vsText}>VS</Text>
-                    <HeartButton 
-                      matchId={match.id.toString()}
-                      fixtureId={match.fixture.id.toString()}
-                      matchData={{
-                        id: match.id.toString(),
-                        matchId: match.id.toString(),
-                        homeTeam: match.teams.home,
-                        awayTeam: match.teams.away,
-                        league: match.league?.name,
-                        venue: venue?.name,
-                        date: match.fixture.date
-                      }}
-                      size={28}
-                      style={styles.modalHeartButton}
-                    />
-                  </View>
-
-                  <View style={styles.teamContainer}>
-                    <Avatar
-                      source={{ uri: match.teams.away.logo }}
-                      size={70}
-                      containerStyle={styles.teamLogo}
-                    />
-                    <Text style={styles.teamName}>{match.teams.away.name}</Text>
-                  </View>
-                </View>
-
-                {/* Venue Info */}
-                {venue && (
-                  <View style={styles.venueSection}>
-                    <Text style={styles.venueTitle}>📍 Venue</Text>
-                    <Text style={styles.venueName}>{venue.name}</Text>
-                    <Text style={styles.venueLocation}>{venue.city}</Text>
-                  </View>
-                )}
-
-                {/* League Info */}
-                <View style={styles.leagueSection}>
-                  <Text style={styles.leagueTitle}>🏆 Competition</Text>
-                  <Text style={styles.leagueName}>{match.league?.name}</Text>
-                </View>
+        {/* Match content - Fixed size grey container */}
+        <View style={styles.matchContentContainer}>
+          {/* Stadium Image - Fits inside grey container */}
+          <View style={styles.stadiumImageContainer}>
+            {venue?.image ? (
+              <Image 
+                source={{ uri: venue.image }} 
+                style={styles.stadiumImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.stadiumImagePlaceholder}>
+                <Text style={styles.stadiumImagePlaceholderText}>🏟️</Text>
               </View>
-            </Animated.View>
-          </TouchableWithoutFeedback>
+            )}
+          </View>
+
+          {/* Match Details - Compact layout */}
+          <View style={styles.matchDetailsContainer}>
+            {/* Teams */}
+            <View style={styles.teamsRow}>
+              <View style={styles.teamPlaceholder}>
+                <View style={styles.teamCircle}>
+                  {match.teams.home.logo && (
+                    <Image 
+                      source={{ uri: match.teams.home.logo }} 
+                      style={styles.teamLogo}
+                      resizeMode="contain"
+                    />
+                  )}
+                </View>
+                <Text style={styles.teamLabel}>{match.teams.home.name}</Text>
+              </View>
+              
+              <View style={styles.matchInfoCenter}>
+                <View style={styles.timeDateButtons}>
+                  <View style={styles.timeButton}>
+                    <Text style={styles.timeButtonText}>
+                      {matchDate.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </Text>
+                  </View>
+                  <View style={styles.dateButton}>
+                    <Text style={styles.dateButtonText}>
+                      {matchDate.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.placeholderText}>vs</Text>
+                <Text style={styles.stadiumText}>{venue?.name || 'Stadium'}</Text>
+              </View>
+              
+              <View style={styles.teamPlaceholder}>
+                <View style={styles.teamCircle}>
+                  {match.teams.away.logo && (
+                    <Image 
+                      source={{ uri: match.teams.away.logo }} 
+                      style={styles.teamLogo}
+                      resizeMode="contain"
+                    />
+                  )}
+                </View>
+                <Text style={styles.teamLabel}>{match.teams.away.name}</Text>
+              </View>
+            </View>
+
+            {/* Heart Button */}
+            <View style={styles.heartButtonContainer}>
+              <HeartButton 
+                matchId={match.id.toString()}
+                fixtureId={match.fixture.id.toString()}
+                matchData={{
+                  id: match.id.toString(),
+                  matchId: match.id.toString(),
+                  homeTeam: match.teams.home,
+                  awayTeam: match.teams.away,
+                  league: match.league?.name,
+                  venue: venue?.name,
+                  date: match.fixture.date
+                }}
+                size={24}
+                style={styles.modalHeartButton}
+              />
+            </View>
+          </View>
         </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+      </View>
+    </Overlay>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  overlayStyle: {
+    backgroundColor: 'transparent',
+    padding: 0,
+    margin: 0,
+    width: '100%',
+    height: '100%',
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
-    maxHeight: '80%',
-    minHeight: 350,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+    maxHeight: '85%',
+    minHeight: 400,
+    marginBottom: spacing.lg,
+    ...shadows.large,
   },
   handleBar: {
     width: 48,
     height: 5,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: colors.border,
     borderRadius: 3,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   closeButton: {
     position: 'absolute',
-    top: 15,
-    right: 20,
+    top: spacing.sm,
+    right: spacing.lg,
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
   },
   closeButtonText: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
     fontWeight: 'bold',
   },
-  content: {
-    flex: 1,
-  },
-  venueImageContainer: {
-    height: 120,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 20,
-    position: 'relative',
-  },
-  venueImage: {
-    width: '100%',
-    height: '100%',
-  },
-  venueImageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    padding: 12,
-  },
-  venueImageText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  dateTimeSection: {
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  dateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 5,
-  },
-  timeText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  teamsSection: {
+  navigationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.md,
   },
-  teamContainer: {
-    flex: 1,
+  navButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.xs,
+    backgroundColor: colors.cardGrey,
+  },
+  navButtonText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  matchCounter: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  matchContentContainer: {
+    backgroundColor: colors.cardGrey, // Grey container from wireframe
+    borderRadius: borderRadius.md,
+    margin: spacing.lg,
+    overflow: 'hidden',
+    height: 280, // Fixed height to match wireframe
+    ...shadows.small,
+  },
+  stadiumImageContainer: {
+    height: 180, // Stadium image takes up most of the container
+    width: '100%',
+    overflow: 'hidden',
+  },
+  stadiumImage: {
+    width: '100%',
+    height: '100%',
+  },
+  stadiumImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.border,
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  stadiumImagePlaceholderText: {
+    fontSize: 48,
+  },
+  matchDetailsContainer: {
+    padding: spacing.md,
+    flex: 1,
+  },
+  teamsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamPlaceholder: {
+    alignItems: 'center',
+  },
+  teamCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.border,
+    marginBottom: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
   teamLogo: {
-    marginBottom: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  teamName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-    paddingHorizontal: 10,
-  },
-  vsContainer: {
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  vsText: {
-    fontSize: 18,
+  teamLabel: {
+    ...typography.caption,
     fontWeight: 'bold',
-    color: '#1976d2',
-    marginBottom: 8,
+    color: colors.text.primary,
+  },
+  matchInfoCenter: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  timeDateButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  timeButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.pill,
+  },
+  timeButtonText: {
+    color: colors.card,
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  dateButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.pill,
+  },
+  dateButtonText: {
+    color: colors.card,
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  placeholderText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  stadiumText: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  heartButtonContainer: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
   },
   modalHeartButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 16,
-    padding: 6,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  venueSection: {
-    marginBottom: 20,
-  },
-  venueTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  venueName: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 4,
-  },
-  venueLocation: {
-    fontSize: 14,
-    color: '#666',
-  },
-  leagueSection: {
-    marginBottom: 20,
-  },
-  leagueTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  leagueName: {
-    fontSize: 16,
-    color: '#333',
+    backgroundColor: 'transparent',
   },
 });
 
 export default MatchModal; 
+ 

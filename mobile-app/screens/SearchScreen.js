@@ -11,7 +11,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { Button, Card } from 'react-native-elements';
+import { Button, Card, SearchBar } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import PopularMatches from '../components/PopularMatches';
@@ -301,13 +301,16 @@ const SearchScreen = ({ navigation }) => {
     <View>
       {/* Top Search Bar */}
       <View style={styles.searchBarContainer}>
-        <TouchableOpacity 
-          style={styles.searchBar}
-          onPress={() => setShowSearchModal(true)}
-        >
-          <Text style={styles.searchIcon}>🔍</Text>
-          <Text style={styles.searchPlaceholder}>Start your lap</Text>
-        </TouchableOpacity>
+        <SearchBar
+          placeholder="Start your lap"
+          platform="ios"
+          containerStyle={styles.searchBarContainer}
+          inputContainerStyle={styles.searchBarInputContainer}
+          onPressIn={() => setShowSearchModal(true)}
+          editable={false}
+          showLoading={false}
+          searchIcon={{ name: 'search', type: 'ionicon' }}
+        />
       </View>
 
       {/* Filter Buttons */}
@@ -517,28 +520,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 15,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
   },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchBarInputContainer: {
     backgroundColor: '#fff',
     borderRadius: 25,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  searchPlaceholder: {
-    fontSize: 16,
-    color: '#999',
-    flex: 1,
   },
   filterContainer: {
     flexDirection: 'row',

@@ -34,8 +34,6 @@ const MatchMapView = ({
     }
   }, [initialRegion]);
 
-
-
   // Auto-fit to markers when matches load
   useEffect(() => {
     if (matches && matches.length > 0 && mapReady && mapRef.current) {
@@ -47,7 +45,6 @@ const MatchMapView = ({
       return () => clearTimeout(timer);
     }
   }, [matches, mapReady]);
-
 
   // Request location permission and get user location
   useEffect(() => {
@@ -283,4 +280,5 @@ MatchMapView.fitToMatches = (ref) => {
   }
 };
 
-export default MatchMapView; 
+export default MatchMapView;
+ 

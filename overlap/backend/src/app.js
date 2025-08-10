@@ -14,6 +14,7 @@ const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
 const adminRouter = require('./routes/admin');
 
+
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
 
@@ -52,10 +53,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
-    mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
-    })
+    mongoose.connect(process.env.MONGODB_URI)
     .then(() => {})
     .catch((error) => {});
 } else {
@@ -73,6 +71,7 @@ app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
+
 
 // Set up unmapped team logging after routes are loaded
 const teamService = require('./services/teamService');

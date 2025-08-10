@@ -1,7 +1,7 @@
 // Auto-detect if running on web or mobile
 const API_BASE_URL = typeof window !== 'undefined' && window.location
   ? `http://localhost:3001/api`  // Web browser
-  : `http://192.168.1.94:3001/api`; // Mobile device
+  : `http://192.168.1.88:3001/api`; // Mobile device
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -24,6 +24,8 @@ const setAuthToken = (token) => {
 // All major leagues will be available - bounds filtering will be done on backend
 const AVAILABLE_LEAGUES = [
   { id: 39, name: 'Premier League', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 40, name: 'Championship', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 41, name: 'League One', country: 'England', coords: [52.3555, -1.1743] },
   { id: 140, name: 'La Liga', country: 'Spain', coords: [40.4637, -3.7492] },
   { id: 78, name: 'Bundesliga', country: 'Germany', coords: [51.1657, 10.4515] },
   { id: 135, name: 'Serie A', country: 'Italy', coords: [41.8719, 12.5674] },
@@ -265,56 +267,40 @@ class ApiService {
       };
 
       // Fetch matches from all target leagues in parallel
-       const responses = await Promise.all(
+      const responses = await Promise.all(
         targetLeagues.map(async (league) => {
-           const params = new URLSearchParams({
-             dateFrom: formattedDates.from,
-             dateTo: formattedDates.to,
+          const params = new URLSearchParams({
+            dateFrom: formattedDates.from,
+            dateTo: formattedDates.to,
             // Include bounds for backend filtering
             ...(bounds?.northeast && { neLat: bounds.northeast.lat, neLng: bounds.northeast.lng }),
             ...(bounds?.southwest && { swLat: bounds.southwest.lat, swLng: bounds.southwest.lng }),
             // Include team filter if specified
             ...(teams.length > 0 && { teams: teams.join(',') })
-           });
-           
-           const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
-           
-           try {
-             const headers = {
-               'Content-Type': 'application/json'
-             };
-             
-             const token = getAuthToken();
-             if (token) {
-               headers['Authorization'] = `Bearer ${token}`;
-             }
-             
-             const response = await fetch(url, {
-               method: 'GET',
-               headers
-             });
-             
-             if (!response.ok) {
-               if (response.status === 403) {
-                 // Access denied - subscription required
-                 return { success: false, data: { response: [] }, league, restricted: true };
-               }
-               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-             }
-             
-             const data = await response.json();
-             return { success: true, data: data, league };
-           } catch (error) {
-             return { success: false, data: { response: [] }, league };
-           }
-         })
-       );
+          });
+          const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
+          try {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = getAuthToken();
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const response = await fetch(url, { method: 'GET', headers });
+            if (!response.ok) {
+              if (response.status === 403) {
+                return { success: false, data: { response: [] }, league, restricted: true };
+              }
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return { success: true, data: data, league };
+          } catch (error) {
+            return { success: false, data: { response: [] }, league };
+          }
+        })
+      );
 
       // Process all matches
       const allMatches = responses.reduce((acc, { data, league }) => {
         const matches = data.response || [];
-        
-        // Add competition data if missing
         const processedMatches = matches.map(match => {
           if (!match.competition) {
             return {
@@ -329,98 +315,61 @@ class ApiService {
           }
           return match;
         });
-        
         return [...acc, ...processedMatches];
       }, []);
 
-      // Sort matches chronologically (perfect for travel planning)
+      // Sort matches chronologically
       const sortedMatches = [...allMatches].sort((a, b) => {
         const dateA = new Date(a.fixture.date);
         const dateB = new Date(b.fixture.date);
         return dateA.getTime() - dateB.getTime();
       });
 
-
-
       return {
         success: true,
         data: sortedMatches,
-        searchParams: {
-          bounds,
-          dateFrom,
-          dateTo,
-          competitions,
-          teams
-        }
+        searchParams: { bounds, dateFrom, dateTo, competitions, teams }
       };
 
     } catch (error) {
       console.error('Error in searchMatchesByBounds:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to search matches'
-      };
+      return { success: false, error: error.message || 'Failed to search matches' };
     }
   }
 
   // LEGACY: Keep for backward compatibility during transition
   async searchAllMatchesByLocation(params) {
     console.warn('⚠️ searchAllMatchesByLocation is deprecated - use searchMatchesByBounds instead');
-    
-    // Convert legacy location-based search to bounds-based search
-    // This provides a fallback during the transition period
     if (params.location && params.location.lat && params.location.lon) {
-      // Create approximate bounds around the location (roughly 50 mile radius)
       const lat = params.location.lat;
       const lng = params.location.lon;
-      const latDelta = 0.5; // Approximately 35 miles
-      const lngDelta = 0.5; // Approximately 35 miles
-      
+      const latDelta = 0.5;
+      const lngDelta = 0.5;
       const bounds = {
         northeast: { lat: lat + latDelta, lng: lng + lngDelta },
         southwest: { lat: lat - latDelta, lng: lng - lngDelta }
       };
-      
-      return this.searchMatchesByBounds({
-        bounds,
-        dateFrom: params.dateFrom,
-        dateTo: params.dateTo
-      });
+      return this.searchMatchesByBounds({ bounds, dateFrom: params.dateFrom, dateTo: params.dateTo });
     }
-    
-    // Fallback to no bounds (show all matches)
-    return this.searchMatchesByBounds({
-      bounds: null,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo
-    });
+    return this.searchMatchesByBounds({ bounds: null, dateFrom: params.dateFrom, dateTo: params.dateTo });
   }
 
   async getPopularMatches(leagueIds = null) {
     try {
       let url = `${this.baseURL}/matches/popular`;
-      
       if (leagueIds) {
         const params = new URLSearchParams();
         params.append('leagueIds', leagueIds.join(','));
         url += `?${params.toString()}`;
       }
-
-      // Add timeout to prevent hanging requests
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      const response = await fetch(url, {
-        signal: controller.signal
-      });
-      
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch popular matches');
       }
-
       return data;
     } catch (error) {
       console.error('Error fetching popular matches:', error);
@@ -431,7 +380,7 @@ class ApiService {
     }
   }
 
-  // Saved Matches API Methods (using existing preferences endpoints)
+  // Saved Matches API Methods
   async getSavedMatches() {
     try {
       const token = getAuthToken();
@@ -441,13 +390,10 @@ class ApiService {
           'Content-Type': 'application/json'
         }
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to fetch saved matches');
       }
-      
       return data;
     } catch (error) {
       console.error('Error fetching saved matches:', error);
@@ -458,28 +404,34 @@ class ApiService {
   async saveMatch(matchId, fixtureId, matchData) {
     try {
       const token = getAuthToken();
+      
+      const requestBody = {
+        matchId,
+        homeTeam: matchData.homeTeam,
+        awayTeam: matchData.awayTeam,
+        league: matchData.league,
+        venue: matchData.venue,
+        date: matchData.date
+      };
+      
+      console.log('API Service - Sending save match request:', requestBody);
+      
       const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          matchId,
-          homeTeam: matchData.homeTeam,
-          awayTeam: matchData.awayTeam,
-          league: matchData.league,
-          venue: matchData.venue,
-          date: matchData.date
-        })
+        body: JSON.stringify(requestBody)
       });
       
       const data = await response.json();
-      
       if (!response.ok) {
+        console.error('API Service - Save match failed:', data);
         throw new Error(data.error || 'Failed to save match');
       }
       
+      console.log('API Service - Save match successful:', data);
       return data;
     } catch (error) {
       console.error('Error saving match:', error);
@@ -497,13 +449,10 @@ class ApiService {
           'Content-Type': 'application/json'
         }
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to unsave match');
       }
-      
       return data;
     } catch (error) {
       console.error('Error unsaving match:', error);
@@ -520,13 +469,10 @@ class ApiService {
           'Content-Type': 'application/json'
         }
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to check saved matches');
       }
-      
       return data.savedMatches.some(match => match.matchId === matchId);
     } catch (error) {
       console.error('Error checking saved match:', error);
@@ -543,13 +489,10 @@ class ApiService {
           'Content-Type': 'application/json'
         }
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to get saved matches');
       }
-      
       return data.savedMatches.length;
     } catch (error) {
       console.error('Error getting saved match count:', error);

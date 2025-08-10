@@ -17,37 +17,72 @@ const PopularMatchModal = ({
   onClose, 
   onNavigate 
 }) => {
-  const currentMatch = matches[currentMatchIndex];
-  const totalMatches = matches.length;
+  // Debug logging to help troubleshoot data structure issues
+  console.log('PopularMatchModal received props:', {
+    visible,
+    matchesLength: matches?.length,
+    currentMatchIndex,
+    currentMatch: matches?.[currentMatchIndex]
+  });
+
+  const currentMatch = matches?.[currentMatchIndex];
+  const totalMatches = matches?.length || 0;
+
+  // Add defensive programming to prevent rendering errors
+  if (!visible) {
+    return null;
+  }
+
+  if (!currentMatch || !Array.isArray(matches) || matches.length === 0) {
+    console.log('PopularMatchModal: No valid data, returning null');
+    return null;
+  }
+
+  // Additional safety check for required props
+  if (typeof onClose !== 'function' || typeof onNavigate !== 'function') {
+    console.log('PopularMatchModal: Missing required props, returning null');
+    return null;
+  }
+
+  // Safely extract nested properties with fallbacks
+  const fixture = currentMatch?.fixture || {};
+  const teams = currentMatch?.teams || {};
+  const league = currentMatch?.league || {};
+  const venue = fixture?.venue || {};
 
   const formatMatchDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    if (!dateString) return 'Date TBD';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Date TBD';
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Date TBD';
+    }
   };
 
   const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    if (!dateString) return 'Time TBD';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Time TBD';
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    } catch (error) {
+      return 'Time TBD';
+    }
   };
 
   const canNavigateLeft = currentMatchIndex > 0;
   const canNavigateRight = currentMatchIndex < totalMatches - 1;
-
-  if (!currentMatch) {
-    return null;
-  }
 
   return (
     <Modal
@@ -69,9 +104,9 @@ const PopularMatchModal = ({
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Venue Image */}
           <View style={styles.venueImageContainer}>
-            {currentMatch.fixture.venue.image ? (
+            {venue.image ? (
               <Image 
-                source={{ uri: currentMatch.fixture.venue.image }} 
+                source={{ uri: venue.image }} 
                 style={styles.venueImage}
                 resizeMode="cover"
               />
@@ -87,12 +122,18 @@ const PopularMatchModal = ({
             {/* Teams */}
             <View style={styles.teamsContainer}>
               <View style={styles.teamSection}>
-                <Image 
-                  source={{ uri: currentMatch.teams.home.logo }} 
-                  style={styles.teamLogo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.teamName}>{currentMatch.teams.home.name}</Text>
+                {teams.home?.logo ? (
+                  <Image 
+                    source={{ uri: teams.home.logo }} 
+                    style={styles.teamLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.teamLogo, { backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 24 }}>⚽</Text>
+                  </View>
+                )}
+                <Text style={styles.teamName}>{teams.home?.name || 'TBD'}</Text>
               </View>
               
               <View style={styles.vsContainer}>
@@ -100,12 +141,18 @@ const PopularMatchModal = ({
               </View>
               
               <View style={styles.teamSection}>
-                <Image 
-                  source={{ uri: currentMatch.teams.away.logo }} 
-                  style={styles.teamLogo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.teamName}>{currentMatch.teams.away.name}</Text>
+                {teams.away?.logo ? (
+                  <Image 
+                    source={{ uri: teams.away.logo }} 
+                    style={styles.teamLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.teamLogo, { backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 24 }}>⚽</Text>
+                  </View>
+                )}
+                <Text style={styles.teamName}>{teams.away?.name || 'TBD'}</Text>
               </View>
             </View>
 
@@ -113,19 +160,19 @@ const PopularMatchModal = ({
             <View style={styles.dateTimeContainer}>
               <Text style={styles.dateTimeLabel}>Date & Time</Text>
               <Text style={styles.dateTimeText}>
-                {formatMatchDate(currentMatch.fixture.date)}
+                {formatMatchDate(fixture.date)}
               </Text>
               <Text style={styles.timeText}>
-                Kickoff: {formatTime(currentMatch.fixture.date)}
+                Kickoff: {formatTime(fixture.date)}
               </Text>
             </View>
 
             {/* Venue */}
             <View style={styles.venueContainer}>
               <Text style={styles.venueLabel}>Venue</Text>
-              <Text style={styles.venueName}>{currentMatch.fixture.venue.name}</Text>
+              <Text style={styles.venueName}>{venue.name || 'Venue TBD'}</Text>
               <Text style={styles.venueLocation}>
-                {currentMatch.fixture.venue.city}, {currentMatch.fixture.venue.country}
+                {venue.city || 'City TBD'}{venue.city && venue.country ? ', ' : ''}{venue.country || ''}
               </Text>
             </View>
 
@@ -133,19 +180,25 @@ const PopularMatchModal = ({
             <View style={styles.leagueContainer}>
               <Text style={styles.leagueLabel}>Competition</Text>
               <View style={styles.leagueInfo}>
-                <Image 
-                  source={{ uri: currentMatch.league.logo }} 
-                  style={styles.leagueLogo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.leagueName}>{currentMatch.league.name}</Text>
+                {league.logo ? (
+                  <Image 
+                    source={{ uri: league.logo }} 
+                    style={styles.leagueLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.leagueLogo, { backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 12 }}>🏆</Text>
+                  </View>
+                )}
+                <Text style={styles.leagueName}>{league.name || 'Unknown Competition'}</Text>
               </View>
             </View>
 
-            {/* Match Status */}
+            {/* Status */}
             <View style={styles.statusContainer}>
               <Text style={styles.statusLabel}>Status</Text>
-              <Text style={styles.statusText}>{currentMatch.fixture.status.long}</Text>
+              <Text style={styles.statusText}>{fixture.status?.long || 'Status TBD'}</Text>
             </View>
           </View>
         </ScrollView>
@@ -389,4 +442,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PopularMatchModal; 
+export default PopularMatchModal;
+ 

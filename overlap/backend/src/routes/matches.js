@@ -21,14 +21,42 @@ const httpsAgent = new https.Agent({
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 
-// Hardcoded constants removed - now using database services
+// Cache for venue data to avoid repeated API calls
+const venueCache = new Map();
+
+// Function to fetch venue data from API-Football
+async function getVenueFromApiFootball(venueId) {
+    if (!venueId) {
+        return null;
+    }
+    // Check cache first
+    if (venueCache.has(venueId)) {
+        return venueCache.get(venueId);
+    }
+    try {
+        const response = await axios.get(`${API_SPORTS_BASE_URL}/venues`, {
+            params: { id: venueId },
+            headers: { 'x-apisports-key': API_SPORTS_KEY },
+            httpsAgent,
+            timeout: 3000
+        });
+        if (response.data && response.data.response && response.data.response.length > 0) {
+            const venueData = response.data.response[0];
+            venueCache.set(venueId, venueData);
+            console.log(`✅ Fetched venue: ${venueData.name} (ID: ${venueId}) - Image: ${venueData.image ? 'Yes' : 'No'}`);
+            return venueData;
+        }
+        return null;
+    } catch (error) {
+        console.log(`❌ Failed to fetch venue ${venueId}: ${error.message}`);
+        return null;
+    }
+}
 
 // Function to transform API-Sports data to match frontend expectations
 async function transformApiSportsData(apiResponse, competitionId, bounds = null) {
     const fixtures = apiResponse.response || [];
     const leagueName = await leagueService.getLeagueNameById(competitionId);
-    
-
 
     return {
         filters: {},
@@ -47,23 +75,52 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
         },
         response: await (async () => {
             const transformedFixtures = [];
-            
-            // Process fixtures sequentially to avoid rate limiting
             for (let i = 0; i < fixtures.length; i++) {
                 const fixture = fixtures[i];
-
-                
                 const transformedFixture = await (async () => {
                     // Get venue data
                     const venue = await (async () => {
                         const apiVenue = fixture.fixture.venue;
-
-
-                        // ✅ METHOD 1: Check MongoDB by venue name (fast, no rate limits)
+                        const isPremierLeague = parseInt(competitionId) === 39;
+                        if (isPremierLeague && apiVenue?.id) {
+                            console.log(`🔍 transformApiSportsData: Looking up Premier League venue ID ${apiVenue.id}`);
+                            const localVenue = await venueService.getVenueByApiId(apiVenue.id);
+                            console.log(`🔍 transformApiSportsData: Local venue result:`, localVenue ? {
+                                name: localVenue.name,
+                                hasCoordinates: !!(localVenue.coordinates || localVenue.location?.coordinates),
+                                coordinates: localVenue.coordinates || localVenue.location?.coordinates
+                            } : 'Not found');
+                            if (localVenue) {
+                                return {
+                                    id: apiVenue.id,
+                                    name: localVenue.name,
+                                    city: localVenue.city,
+                                    country: localVenue.country,
+                                    coordinates: localVenue.coordinates || localVenue.location?.coordinates,
+                                    capacity: localVenue.capacity,
+                                    surface: localVenue.surface,
+                                    address: localVenue.address,
+                                    image: localVenue.image
+                                };
+                            }
+                            const apiFootballVenue = await getVenueFromApiFootball(apiVenue.id);
+                            if (apiFootballVenue) {
+                                return {
+                                    id: apiVenue.id,
+                                    name: apiFootballVenue.name,
+                                    city: apiFootballVenue.city,
+                                    country: apiFootballVenue.country,
+                                    coordinates: null,
+                                    capacity: apiFootballVenue.capacity,
+                                    surface: apiFootballVenue.surface,
+                                    address: apiFootballVenue.address,
+                                    image: apiFootballVenue.image
+                                };
+                            }
+                        }
                         if (apiVenue?.name) {
                             const venueByName = await venueService.getVenueByName(apiVenue.name, apiVenue.city);
                             if (venueByName?.coordinates) {
-                                
                                 return {
                                     id: apiVenue.id || `venue-${apiVenue.name.replace(/\s+/g, '-').toLowerCase()}`,
                                     name: venueByName.name,
@@ -73,11 +130,7 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                 };
                             }
                         }
-
-                        // ✅ METHOD 2: Try team mapping (fallback)
                         const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                        
-                        // Get team data first
                         const team = await Team.findOne({ 
                             $or: [
                                 { name: mappedTeamName },
@@ -86,10 +139,7 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                 { aliases: mappedTeamName }
                             ]
                         });
-                        
                         if (team?.venue?.coordinates) {
-                            
-                            
                             return {
                                 id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
                                 name: team.venue.name,
@@ -98,13 +148,9 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                 coordinates: team.venue.coordinates
                             };
                         }
-                        
-                        // If team found but no venue coordinates, try venue service
                         if (team) {
                             const venueData = await venueService.getVenueForTeam(mappedTeamName);
                             if (venueData?.coordinates) {
-    
-                                
                                 return {
                                     id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
                                     name: venueData.stadium || venueData.name,
@@ -114,9 +160,6 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                 };
                             }
                         }
-                        
-                        
-                        // Final fallback: Basic venue info without coordinates
                         return {
                             id: apiVenue?.id || null,
                             name: apiVenue?.name || null,
@@ -134,7 +177,6 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                             code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
                             flag: fixture.league.flag || null
                         },
-
                         competition: {
                             id: competitionId.toString(),
                             name: leagueName,
@@ -203,23 +245,17 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                         }
                     };
                 })();
-                
-                // Filter matches based on bounds or include all if no bounds specified
+
                 if (bounds && transformedFixture.fixture.venue.coordinates) {
-                    // Check if venue coordinates are within the specified bounds
                     if (isWithinBounds(transformedFixture.fixture.venue.coordinates, bounds)) {
                         transformedFixtures.push(transformedFixture);
                     }
                 } else if (!bounds) {
-                    // No bounds filtering - include all matches with coordinates
                     if (transformedFixture.fixture.venue.coordinates) {
                         transformedFixtures.push(transformedFixture);
                     }
                 }
             }
-            
-
-            
             return transformedFixtures;
         })()
     };
@@ -230,11 +266,8 @@ function isWithinBounds(coordinates, bounds) {
     if (!coordinates || !bounds || coordinates.length !== 2) {
         return false;
     }
-    
     const [lon, lat] = coordinates;
     const { northeast, southwest } = bounds;
-    
-    // Check if the point is within the rectangular bounds
     return lat >= southwest.lat && lat <= northeast.lat &&
            lon >= southwest.lng && lon <= northeast.lng;
 }
@@ -256,25 +289,15 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
     try {
         const { competitionId } = req.params;
         const { dateFrom, dateTo, neLat, neLng, swLat, swLng } = req.query;
-        
-        // Create bounds object if bounds parameters are provided
         const bounds = (neLat && neLng && swLat && swLng) ? {
             northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
             southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
         } : null;
-        
 
-
-        // Get user from token (optional - if no token, default to freemium)
         let user = null;
         if (req.user) {
-    
             user = await User.findById(req.user.id);
-            
             if (!user) {
-
-                // Create a temporary user object with pro subscription
-                // This is safe because the token was valid, user just needs to be recreated
                 user = {
                     _id: req.user.id,
                     subscription: {
@@ -284,18 +307,10 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                         endDate: null
                     }
                 };
-
-            } else {
-
             }
         }
-        
-        // Check if user has access to this league
         const hasAccess = subscriptionService.hasLeagueAccess(user, competitionId);
-
-        
         if (!hasAccess) {
-
             return res.status(403).json({
                 error: 'Subscription Required',
                 message: 'Access to this league requires a higher subscription tier',
@@ -303,42 +318,23 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
             });
         }
 
-        // Create cache key that includes bounds
         const boundsKey = bounds ? `${bounds.northeast.lat}-${bounds.northeast.lng}-${bounds.southwest.lat}-${bounds.southwest.lng}` : 'no-bounds';
         const cacheKey = `matches:${competitionId}:${dateFrom}:${dateTo}:${boundsKey}`;
         const cachedData = matchesCache.get(cacheKey);
         if (cachedData) {
-
             return res.json(cachedData);
         }
-        
-        // Get matches from API-Sports
+
         const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            params: {
-                league: competitionId,
-                season: '2025', // Fixed to 2025 season
-                from: dateFrom,
-                to: dateTo
-            },
-            headers: {
-                'x-apisports-key': API_SPORTS_KEY
-            },
+            params: { league: competitionId, season: '2025', from: dateFrom, to: dateTo },
+            headers: { 'x-apisports-key': API_SPORTS_KEY },
             httpsAgent
         });
 
-
-        
-        // Transform data with bounds filtering
         const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds);
-        
-
-
-        // Cache the transformed data
         matchesCache.set(cacheKey, transformedData);
-
         res.json(transformedData);
     } catch (error) {
-
         res.status(500).json({ error: 'Failed to fetch matches' });
     }
 });
@@ -347,85 +343,44 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
 router.get('/venues/stats', async (req, res) => {
     try {
         const stats = await venueService.getCacheStats();
-        res.json({
-            success: true,
-            databaseStats: stats,
-            timestamp: new Date().toISOString()
-        });
+        res.json({ success: true, databaseStats: stats, timestamp: new Date().toISOString() });
     } catch (error) {
         console.error('Error getting venue stats:', error);
-        res.status(500).json({ 
-            success: false,
-            error: 'Failed to get venue statistics',
-            message: error.message 
-        });
+        res.status(500).json({ success: false, error: 'Failed to get venue statistics', message: error.message });
     }
 });
 
-/**
- * GET /v4/matches/search
- * Search for matches between specific teams
- * Query params: homeTeam, awayTeam, dateFrom, dateTo, season
- */
+// Search for matches between specific teams
 router.get('/matches/search', async (req, res) => {
     try {
         const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025 } = req.query;
-
         if (!homeTeam && !awayTeam) {
-            return res.status(400).json({
-                success: false,
-                message: 'At least one team must be specified'
-            });
+            return res.status(400).json({ success: false, message: 'At least one team must be specified' });
         }
-
-        // Build search parameters
-        const params = {
-            season: season
-        };
-
-        // Add team filters if provided
+        const params = { season: season };
         if (homeTeam && awayTeam) {
-            // Search for matches between specific teams
             params.h2h = `${homeTeam}-${awayTeam}`;
         } else if (homeTeam) {
             params.team = homeTeam;
         } else if (awayTeam) {
             params.team = awayTeam;
         }
-
-        // Add date filters
-        if (dateFrom) {
-            params.from = dateFrom;
-        }
-        if (dateTo) {
-            params.to = dateTo;
-        }
-
-
+        if (dateFrom) params.from = dateFrom;
+        if (dateTo) params.to = dateTo;
 
         const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            headers: {
-                'x-apisports-key': API_SPORTS_KEY
-            },
+            headers: { 'x-apisports-key': API_SPORTS_KEY },
             params,
             httpsAgent
         });
 
         if (!response.data || !response.data.response) {
-            return res.json({
-                success: true,
-                data: {
-                    matches: [],
-                    count: 0
-                }
-            });
+            return res.json({ success: true, data: { matches: [], count: 0 } });
         }
 
-        // Transform matches to include venue data
         const matches = await Promise.all(response.data.response.map(async fixture => {
             const homeTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
             const venueData = await venueService.getVenueForTeam(homeTeamName);
-
             return {
                 fixture: {
                     id: fixture.fixture.id,
@@ -468,100 +423,202 @@ router.get('/matches/search', async (req, res) => {
                         })()
                     }
                 },
-                goals: {
-                    home: fixture.goals.home,
-                    away: fixture.goals.away
-                },
+                goals: { home: fixture.goals.home, away: fixture.goals.away },
                 score: fixture.score
             };
         }));
 
-        res.json({
-            success: true,
-            data: {
-                matches,
-                count: matches.length
-            }
-        });
-
+        res.json({ success: true, data: { matches, count: matches.length } });
     } catch (error) {
         console.error('Error searching matches:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to search matches',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Failed to search matches', error: error.message });
     }
 });
 
-/**
- * GET /api/matches/by-team
- * Get matches for a specific team
- */
+// Get matches for a specific team
 router.get('/by-team', async (req, res) => {
     try {
         const { teamId, teamName, dateFrom, dateTo } = req.query;
-        
-        // Validate required parameters
         if (!teamId && !teamName) {
-            return res.status(400).json({
-                success: false,
-                message: 'Either teamId or teamName is required'
-            });
+            return res.status(400).json({ success: false, message: 'Either teamId or teamName is required' });
         }
-
-        // Create cache key including date range
         const cacheKey = `matches_${teamId || teamName}_${dateFrom || 'all'}_${dateTo || 'all'}`;
-        
-        // Check cache first
         const cachedMatches = matchesCache.get(cacheKey);
         if (cachedMatches) {
-            return res.json({
-                success: true,
-                matches: cachedMatches,
-                fromCache: true
-            });
+            return res.json({ success: true, matches: cachedMatches, fromCache: true });
         }
-
-        // Build API request parameters
-        const params = {
-            team: teamId,
-            season: new Date().getFullYear(), // Current year
-        };
-
-        // Add optional date range if provided
+        const params = { team: teamId, season: new Date().getFullYear() };
         if (dateFrom) params.from = dateFrom;
         if (dateTo) params.to = dateTo;
 
-        // Call API-Sports fixtures endpoint
         const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
             params,
-            headers: {
-                'x-apisports-key': API_SPORTS_KEY
-            }
+            headers: { 'x-apisports-key': API_SPORTS_KEY }
         });
 
-        // Transform the response
         const matches = await transformApiSportsData(response.data, null);
-
-        // Cache the results
         matchesCache.set(cacheKey, matches.response);
-
-        res.json({
-            success: true,
-            matches: matches.response,
-            fromCache: false
-        });
-
+        res.json({ success: true, matches: matches.response, fromCache: false });
     } catch (error) {
         console.error('Error fetching team matches:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch team matches'
-        });
+        res.status(500).json({ success: false, message: 'Failed to fetch team matches' });
     }
 });
 
+// Cache stats
+router.get('/cache/stats', async (req, res) => {
+    const stats = matchesCache.getStats();
+    res.json({ success: true, stats });
+});
+
+// Clear cache
+router.post('/cache/clear', async (req, res) => {
+    matchesCache.clear();
+    res.json({ success: true, message: 'Matches cache cleared' });
+});
+
+// Popular matches
+router.get('/popular', async (req, res) => {
+    const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+            res.status(408).json({ success: false, message: 'Request timeout - popular matches endpoint took too long to respond' });
+        }
+    }, 25000);
+    
+    try {
+        const { leagueIds } = req.query;
+        let popularLeagueIds, popularLeagueNames;
+        if (leagueIds) {
+            const ids = leagueIds.split(',').map(id => parseInt(id.trim()));
+            popularLeagueIds = ids;
+            popularLeagueNames = ids.map(id => `League ${id}`);
+        } else {
+            const leagueMappings = { 39: 'Premier League', 140: 'La Liga', 135: 'Serie A', 78: 'Bundesliga', 61: 'Ligue 1' };
+            popularLeagueIds = [39, 140, 135, 78, 61];
+            popularLeagueNames = popularLeagueIds.map(id => leagueMappings[id] || `League ${id}`);
+        }
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        const dateFrom = today.toISOString().split('T')[0];
+        const dateTo = thirtyDaysFromNow.toISOString().split('T')[0];
+
+        const allMatches = [];
+        const apiPromises = popularLeagueIds.map(async (leagueId, index) => {
+            const leagueName = popularLeagueNames[index];
+            try {
+                const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                    params: { league: leagueId, season: '2025', from: dateFrom, to: dateTo },
+                    headers: { 'x-apisports-key': API_SPORTS_KEY },
+                    httpsAgent,
+                    timeout: 10000
+                });
+                if (apiResponse.data && apiResponse.data.response && apiResponse.data.response.length > 0) {
+                    console.log(`✅ ${leagueName}: Found ${apiResponse.data.response.length} matches`);
+                    return apiResponse.data.response;
+                } else {
+                    console.log(`⚠️ ${leagueName}: No matches found`);
+                    return [];
+                }
+            } catch (error) {
+                console.log(`❌ ${leagueName}: Error - ${error.message}`);
+                return [];
+            }
+        });
+
+        const results = await Promise.allSettled(apiPromises);
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value.length > 0) {
+                allMatches.push(...result.value);
+            }
+        });
+        if (allMatches.length === 0) {
+            console.log('⚠️ No matches found from any league, returning empty response');
+            clearTimeout(timeout);
+            return res.json({ success: true, matches: [], message: 'No popular matches found in the next 30 days' });
+        }
+        const shuffledMatches = allMatches.sort(() => Math.random() - 0.5);
+        const selectedMatches = shuffledMatches.slice(0, 10);
+        console.log(`🎯 Popular Matches - Selected ${selectedMatches.length} matches from ${allMatches.length} total:`);
+        selectedMatches.forEach((match, index) => {
+            console.log(`${index + 1}. ${match.teams.home.name} vs ${match.teams.away.name} - ${match.league.name} - ${new Date(match.fixture.date).toLocaleDateString()}`);
+        });
+
+        const transformedMatches = [];
+        for (const match of selectedMatches) {
+            const venue = match.fixture?.venue;
+            let venueData = null;
+            let apiFootballVenue = null;
+            if (venue?.id) {
+                console.log(`🔍 Looking up venue ID ${venue.id} in local database...`);
+                const localVenue = await venueService.getVenueByApiId(venue.id);
+                console.log(`🔍 Local venue lookup result:`, localVenue ? `Found: ${localVenue.name}` : 'Not found');
+                if (localVenue) {
+                    apiFootballVenue = {
+                        name: localVenue.name,
+                        city: localVenue.city,
+                        country: localVenue.country,
+                        capacity: localVenue.capacity,
+                        surface: localVenue.surface,
+                        address: localVenue.address,
+                        image: localVenue.image,
+                        coordinates: localVenue.coordinates || localVenue.location?.coordinates
+                    };
+                    console.log(`✅ Got local venue data for ${venue.id}: ${localVenue.name} - Image: ${localVenue.image ? 'Yes' : 'No'} (${localVenue.image}) - Coordinates: ${localVenue.coordinates || localVenue.location?.coordinates ? 'Yes' : 'No'}`);
+                } else {
+                    console.log(`⚠️ No local venue data for ${venue.id}, falling back to API`);
+                    apiFootballVenue = await getVenueFromApiFootball(venue.id);
+                }
+            }
+            if (!apiFootballVenue && venue?.name) {
+                venueData = await venueService.getVenueByName(venue.name, venue.city);
+            }
+            transformedMatches.push({
+                id: match.fixture.id,
+                fixture: {
+                    id: match.fixture.id,
+                    date: match.fixture.date,
+                    venue: {
+                        id: venue?.id || null,
+                        name: apiFootballVenue?.name || venueData?.name || venue?.name || 'Unknown Venue',
+                        city: apiFootballVenue?.city || venueData?.city || venue?.city || 'Unknown City',
+                        country: venueData?.country || match.league?.country || 'Unknown Country',
+                        coordinates: apiFootballVenue?.coordinates || venueData?.coordinates || null,
+                        image: apiFootballVenue?.image || venueData?.image || null,
+                        capacity: apiFootballVenue?.capacity || null,
+                        surface: apiFootballVenue?.surface || null,
+                        address: apiFootballVenue?.address || null
+                    },
+                    status: {
+                        long: match.fixture.status?.long || 'Not Started',
+                        short: match.fixture.status?.short || 'NS',
+                        elapsed: match.fixture.status?.elapsed || null
+                    }
+                },
+                teams: {
+                    home: { id: match.teams.home.id, name: match.teams.home.name, logo: match.teams.home.logo },
+                    away: { id: match.teams.away.id, name: match.teams.away.name, logo: match.teams.away.logo }
+                },
+                league: {
+                    id: match.league.id,
+                    name: match.league.name,
+                    country: match.league.country,
+                    logo: match.league.logo,
+                    season: match.league.season
+                },
+                goals: match.goals || { home: null, away: null },
+                score: match.score || {}
+            });
+        }
+        clearTimeout(timeout);
+        res.json({ success: true, matches: transformedMatches, totalFound: allMatches.length, dateRange: { from: dateFrom, to: dateTo }, leagues: popularLeagueNames });
+    } catch (error) {
+        clearTimeout(timeout);
+        res.status(500).json({ success: false, message: 'Failed to fetch popular matches', error: error.message });
+    }
+});
+
+module.exports = router; 
 /**
  * GET /api/matches/cache/stats
  * Get cache statistics (for monitoring)
@@ -605,7 +662,7 @@ router.get('/by-team/:id', async (req, res) => {
             });
         }
 
-
+        console.log(`Fetching matches for team ${teamId} for season 2025-2026`);
 
         // Fetch both upcoming and past matches from API-Sports
         const [upcomingResponse, pastResponse] = await Promise.all([
@@ -634,11 +691,20 @@ router.get('/by-team/:id', async (req, res) => {
             })
         ]);
 
-
+        console.log('API Responses:', {
+            upcoming: {
+                results: upcomingResponse.data.results,
+                matches: upcomingResponse.data.response?.length
+            },
+            past: {
+                results: pastResponse.data.results,
+                matches: pastResponse.data.response?.length
+            }
+        });
 
         // Check for valid responses
         if (!upcomingResponse.data.response && !pastResponse.data.response) {
-
+            console.log('No matches found in API response');
             return res.json({
                 success: true,
                 matches: [],
@@ -655,7 +721,7 @@ router.get('/by-team/:id', async (req, res) => {
         // Sort by date
         allMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
 
-
+        console.log(`Found ${allMatches.length} total matches`);
 
         // Transform the matches data
         const matches = await Promise.all(allMatches.map(async match => {
@@ -716,170 +782,10 @@ router.get('/by-team/:id', async (req, res) => {
         });
 
     } catch (error) {
+        console.error('Error fetching team matches:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch matches',
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/matches/popular
- * Get popular matches from top 5 leagues for next 30 days
- */
-router.get('/popular', async (req, res) => {
-    try {
-        // Get league IDs from query parameters or use defaults
-        const { leagueIds } = req.query;
-        let popularLeagueIds, popularLeagueNames;
-        
-        if (leagueIds) {
-            // Parse comma-separated league IDs
-            const ids = leagueIds.split(',').map(id => parseInt(id.trim()));
-            popularLeagueIds = ids;
-            popularLeagueNames = ids.map(id => `League ${id}`); // Generic names for custom IDs
-        } else {
-            // Default top 5 leagues: Premier League, La Liga, Serie A, Bundesliga, Ligue 1
-            // Use hardcoded mappings to bypass database restrictions
-            const leagueMappings = {
-                39: 'Premier League',
-                140: 'La Liga', 
-                135: 'Serie A',
-                78: 'Bundesliga',
-                61: 'Ligue 1'
-            };
-            popularLeagueIds = [39, 140, 135, 78, 61]; // API-Sports league IDs
-            popularLeagueNames = popularLeagueIds.map(id => leagueMappings[id] || `League ${id}`);
-        }
-        
-        // Calculate date range (next 30 days)
-        const today = new Date();
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(today.getDate() + 30);
-        
-        const dateFrom = today.toISOString().split('T')[0];
-        const dateTo = thirtyDaysFromNow.toISOString().split('T')[0];
-        
-        // Fetch matches from all popular leagues
-        const allMatches = [];
-        
-        for (let i = 0; i < popularLeagueIds.length; i++) {
-            const leagueId = popularLeagueIds[i];
-            const leagueName = popularLeagueNames[i];
-            
-            try {
-                // Use the same API call structure as the working endpoint
-                const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                    params: {
-                        league: leagueId,
-                        season: '2025', // Use 2025 season like the working endpoint
-                        from: dateFrom,
-                        to: dateTo
-                    },
-                    headers: {
-                        'x-apisports-key': API_SPORTS_KEY
-                    },
-                    httpsAgent
-                });
-                
-                if (apiResponse.data && apiResponse.data.response && apiResponse.data.response.length > 0) {
-                    allMatches.push(...apiResponse.data.response);
-                }
-                
-                // Rate limiting - small delay between requests
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-            } catch (error) {
-                // Continue with other leagues
-            }
-        }
-        
-        if (allMatches.length === 0) {
-            return res.json({
-                success: true,
-                matches: [],
-                message: 'No popular matches found'
-            });
-        }
-        
-        // Randomize and limit to 10 matches
-        const shuffledMatches = allMatches.sort(() => Math.random() - 0.5);
-        const selectedMatches = shuffledMatches.slice(0, 10);
-        
-        console.log(`🎯 Popular Matches - Selected ${selectedMatches.length} matches from ${allMatches.length} total:`);
-        selectedMatches.forEach((match, index) => {
-            console.log(`${index + 1}. ${match.teams.home.name} vs ${match.teams.away.name} - ${match.league.name} - ${new Date(match.fixture.date).toLocaleDateString()}`);
-        });
-        
-        // Transform matches to include venue data
-        const transformedMatches = await Promise.all(selectedMatches.map(async (match) => {
-            const venue = match.fixture?.venue;
-            
-            // Get venue data from our database if available
-            let venueData = null;
-            if (venue?.name) {
-                venueData = await venueService.getVenueByName(venue.name, venue.city);
-            }
-            
-            return {
-                id: match.fixture.id,
-                fixture: {
-                    id: match.fixture.id,
-                    date: match.fixture.date,
-                    venue: {
-                        id: venue?.id || null,
-                        name: venueData?.name || venue?.name || 'Unknown Venue',
-                        city: venueData?.city || venue?.city || 'Unknown City',
-                        country: venueData?.country || match.league?.country || 'Unknown Country',
-                        coordinates: venueData?.coordinates || null,
-                        image: venueData?.image || null // Venue image if available
-                    },
-                    status: {
-                        long: match.fixture.status?.long || 'Not Started',
-                        short: match.fixture.status?.short || 'NS',
-                        elapsed: match.fixture.status?.elapsed || null
-                    }
-                },
-                teams: {
-                    home: {
-                        id: match.teams.home.id,
-                        name: match.teams.home.name,
-                        logo: match.teams.home.logo
-                    },
-                    away: {
-                        id: match.teams.away.id,
-                        name: match.teams.away.name,
-                        logo: match.teams.away.logo
-                    }
-                },
-                league: {
-                    id: match.league.id,
-                    name: match.league.name,
-                    country: match.league.country,
-                    logo: match.league.logo,
-                    season: match.league.season
-                },
-                goals: match.goals || { home: null, away: null },
-                score: match.score || {}
-            };
-        }));
-        
-        res.json({
-            success: true,
-            matches: transformedMatches,
-            totalFound: allMatches.length,
-            dateRange: {
-                from: dateFrom,
-                to: dateTo
-            },
-            leagues: popularLeagueNames
-        });
-        
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch popular matches',
             error: error.message
         });
     }

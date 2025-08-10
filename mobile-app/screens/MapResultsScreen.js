@@ -11,17 +11,30 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, Avatar, Button } from 'react-native-elements';
+import { Avatar, Button } from 'react-native-elements';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import MatchMapView from '../components/MapView';
+import { MAP_PROVIDER } from '../utils/mapConfig';
 import MatchModal from '../components/MatchModal';
 import HeartButton from '../components/HeartButton';
+import SearchModal from '../components/SearchModal';
+import MatchCard from '../components/MatchCard';
+import FilterModal from '../components/FilterModal';
+import FilterIcon from '../components/FilterIcon';
 import ApiService from '../services/api';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
   const { searchParams, matches: initialMatches, initialRegion } = route.params || {};
+  
+  // Conditional import for map component
+  const MatchMapView = React.useMemo(() => {
+    if (MAP_PROVIDER === 'mapbox') {
+      return require('../components/MapboxMapView').default;
+    } else {
+      return require('../components/MapView').default;
+    }
+  }, []);
   
   // Search state
   const [location] = useState(searchParams?.location || null);
@@ -43,6 +56,12 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMatchForModal, setSelectedMatchForModal] = useState(null);
+  
+  // Search modal state
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [activeFilters, setActiveFilters] = useState({});
   
   // Manual search state
   const [hasMovedFromOriginal, setHasMovedFromOriginal] = useState(false);
@@ -317,100 +336,111 @@ const MapResultsScreen = ({ navigation, route }) => {
     });
   };
 
+  // Handle search modal
+  const handleSearchModalOpen = () => {
+    setSearchModalVisible(true);
+  };
+
+  const handleSearchModalClose = () => {
+    setSearchModalVisible(false);
+  };
+
+  const handleSearchUpdate = async (newSearchParams) => {
+    setSearchLoading(true);
+    setSearchModalVisible(false);
+    
+    try {
+      const bounds = {
+        northeast: {
+          lat: newSearchParams.location.lat + 0.25,
+          lng: newSearchParams.location.lon + 0.25,
+        },
+        southwest: {
+          lat: newSearchParams.location.lat - 0.25,
+          lng: newSearchParams.location.lon - 0.25,
+        }
+      };
+      
+      const response = await ApiService.searchMatchesByBounds({
+        bounds,
+        dateFrom: newSearchParams.dateFrom,
+        dateTo: newSearchParams.dateTo
+      });
+      
+      const newMatches = response.data || [];
+      
+      // Update state with new search results
+      setMatches(newMatches);
+      
+      // Update map region to new location
+      const newRegion = {
+        latitude: newSearchParams.location.lat,
+        longitude: newSearchParams.location.lon,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
+      };
+      setMapRegion(newRegion);
+      
+      // Update search parameters
+      route.params.searchParams = newSearchParams;
+      
+    } catch (error) {
+      console.error('MapResultsScreen: Search update error:', error);
+      Alert.alert('Error', error.message || 'Failed to update search');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleFilterOpen = () => {
+    setFilterModalVisible(true);
+  };
+
+  const handleFilterClose = () => {
+    setFilterModalVisible(false);
+  };
+
+  const handleApplyFilters = (filters) => {
+    setActiveFilters(filters);
+    // Here you would apply the filters to your matches
+    // For now, we'll just store them
+    console.log('Applied filters:', filters);
+  };
+
+  const getActiveFilterCount = () => {
+    return (activeFilters.countries?.length || 0) + 
+           (activeFilters.leagues?.length || 0) + 
+           (activeFilters.teams?.length || 0);
+  };
+
   // Render search summary
   const renderSearchSummary = () => (
-    <View style={styles.searchSummary}>
-      <Text style={styles.searchLocation}>
-        📍 {location?.city}, {location?.country}
-      </Text>
-      <Text style={styles.searchDates}>
-        📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
-      </Text>
-    </View>
+    <TouchableOpacity 
+      style={styles.searchSummary}
+      onPress={handleSearchModalOpen}
+      activeOpacity={0.7}
+    >
+      <View style={styles.searchSummaryContent}>
+        <Text style={styles.searchLocation}>
+          📍 {location?.city}, {location?.country}
+        </Text>
+        <Text style={styles.searchDates}>
+          📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
+        </Text>
+      </View>
+      <Text style={styles.editIcon}>✏️</Text>
+    </TouchableOpacity>
   );
 
   // Render match item
   const renderMatchItem = ({ item }) => {
-    const venue = item.fixture?.venue;
-    
     return (
-      <TouchableOpacity
-        style={styles.matchCard}
+      <MatchCard
+        match={item}
         onPress={() => handleMatchPress(item)}
-      >
-        <View style={styles.matchHeader}>
-          <View style={styles.dateTimeContainer}>
-            <Text style={styles.matchDate}>
-              {new Date(item.fixture.date).toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric'
-              })}
-            </Text>
-            <Text style={styles.matchTime}>
-              {new Date(item.fixture.date).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </Text>
-          </View>
-          
-          <HeartButton 
-            matchId={item.id.toString()}
-            fixtureId={item.fixture.id.toString()}
-            matchData={{
-              id: item.id.toString(),
-              matchId: item.id.toString(),
-              homeTeam: item.teams.home,
-              awayTeam: item.teams.away,
-              league: item.league?.name || item.competition?.name,
-              venue: item.fixture.venue?.name,
-              date: item.fixture.date
-            }}
-            size={20}
-          />
-        </View>
-
-        <View style={styles.teamsRow}>
-          <View style={styles.teamContainer}>
-            <Avatar
-              source={{ uri: item.teams.home.logo }}
-              size={30}
-              rounded
-            />
-            <Text style={styles.teamName}>{item.teams.home.name}</Text>
-          </View>
-          
-          <Text style={styles.vsText}>vs</Text>
-          
-          <View style={styles.teamContainer}>
-            <Avatar
-              source={{ uri: item.teams.away.logo }}
-              size={30}
-              rounded
-            />
-            <Text style={styles.teamName}>{item.teams.away.name}</Text>
-          </View>
-        </View>
-
-        <View style={styles.venueRow}>
-          <Text style={styles.venueName}>{venue?.name}</Text>
-          <Text style={styles.venueLocation}>
-            {venue?.city}, {venue?.country}
-          </Text>
-        </View>
-
-        <View style={styles.leagueRow}>
-          <Avatar
-            source={{ uri: item.league?.logo || item.competition?.logo }}
-            size={16}
-            rounded
-          />
-          <Text style={styles.leagueName}>
-            {item.league?.name || item.competition?.name}
-          </Text>
-        </View>
-      </TouchableOpacity>
+        variant="default"
+        showHeart={true}
+      />
     );
   };
 
@@ -519,7 +549,9 @@ const MapResultsScreen = ({ navigation, route }) => {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         
-        <View style={styles.headerCenter}>
+        <View 
+          style={styles.headerCenter}
+        >
           <Text style={styles.headerTitle}>
             Matches in {location?.city}
           </Text>
@@ -529,7 +561,11 @@ const MapResultsScreen = ({ navigation, route }) => {
         </View>
         
         <View style={styles.headerRight}>
-        
+          <FilterIcon
+            onPress={handleFilterOpen}
+            activeFilterCount={getActiveFilterCount()}
+            size={24}
+          />
         </View>
       </View>
 
@@ -586,10 +622,33 @@ const MapResultsScreen = ({ navigation, route }) => {
       <MatchModal
         visible={modalVisible}
         match={selectedMatchForModal}
+        allMatches={matches}
         onClose={() => {
           setModalVisible(false);
           setSelectedMatchForModal(null);
         }}
+        onMatchChange={(newMatch) => {
+          setSelectedMatchForModal(newMatch);
+        }}
+      />
+
+      {/* Search Modal */}
+      <SearchModal
+        visible={searchModalVisible}
+        onClose={handleSearchModalClose}
+        onSearch={handleSearchUpdate}
+        initialLocation={location}
+        initialDateFrom={dateFrom}
+        initialDateTo={dateTo}
+        loading={searchLoading}
+      />
+
+      {/* Filter Modal */}
+      <FilterModal
+        visible={filterModalVisible}
+        onClose={handleFilterClose}
+        onApplyFilters={handleApplyFilters}
+        currentFilters={activeFilters}
       />
     </View>
   );
@@ -627,6 +686,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 16,
+    maxWidth: '60%', // Limit the width to prevent overlap
+    marginRight: 8, // Add margin to create separation from filter icon
   },
   headerTitle: {
     fontSize: 16,
@@ -640,6 +701,9 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     padding: 8,
+    minWidth: 50, // Ensure minimum width for filter icon
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterIcon: {
     fontSize: 18,
@@ -679,8 +743,17 @@ const styles = StyleSheet.create({
   searchSummary: {
     backgroundColor: '#f8f9fa',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  searchSummaryContent: {
+    flex: 1,
+  },
+  editIcon: {
+    fontSize: 16,
+    color: '#007AFF',
+    marginLeft: 8,
   },
   searchLocation: {
     fontSize: 16,
@@ -753,85 +826,11 @@ const styles = StyleSheet.create({
   matchListContent: {
     paddingBottom: 60, // Reduced padding to eliminate excessive space at bottom
   },
-  matchCard: {
-    backgroundColor: 'white',
-    marginVertical: 6,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
+
   selectedMatchCard: {
     backgroundColor: '#e3f2fd',
     borderColor: '#1976d2',
     borderWidth: 2,
-  },
-  matchHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  dateTimeContainer: {
-    flex: 1,
-  },
-  matchDate: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  matchTime: {
-    fontSize: 14,
-    color: '#666',
-  },
-  teamsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  teamContainer: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  teamName: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 4,
-    color: '#333',
-  },
-  vsText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '600',
-    marginHorizontal: 16,
-  },
-  venueRow: {
-    marginBottom: 8,
-  },
-  venueName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  venueLocation: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  leagueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  leagueName: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 6,
-    fontStyle: 'italic',
   },
   
   // Detail view styles

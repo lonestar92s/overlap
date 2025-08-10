@@ -10,10 +10,12 @@ import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
 import SavedScreen from './screens/SavedScreen';
+import TripsListScreen from './screens/TripsListScreen';
+import TripOverviewScreen from './screens/TripOverviewScreen';
+import TripMapView from './screens/TripMapView';
 import { SavedMatchesProvider } from './contexts/SavedMatchesContext';
 
 // Placeholder screens for other tabs
-const TripsScreen = () => <></>;
 const MessagesScreen = () => <></>;
 const AccountScreen = () => <></>;
 
@@ -60,6 +62,30 @@ function SearchStack() {
   );
 }
 
+function TripsStack() {
+  return (
+    <Stack.Navigator
+      initialRouteName="TripsList"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen
+        name="TripsList"
+        component={TripsListScreen}
+      />
+      <Stack.Screen
+        name="TripOverview"
+        component={TripOverviewScreen}
+      />
+      <Stack.Screen
+        name="TripMapView"
+        component={TripMapView}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   return (
     <SavedMatchesProvider>
@@ -100,7 +126,7 @@ export default function App() {
       >
         <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
         <Tab.Screen name="SavedTab" component={SavedScreen} options={{ tabBarLabel: 'Saved' }} />
-        <Tab.Screen name="TripsTab" component={TripsScreen} options={{ tabBarLabel: 'Trips' }} />
+        <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
         <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
         <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
       </Tab.Navigator>

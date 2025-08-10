@@ -339,6 +339,28 @@ class VenueService {
 
         return warmed;
     }
+
+    /**
+     * Get venue by API-Football venue ID
+     */
+    async getVenueByApiId(venueId) {
+        try {
+            console.log(`🔍 getVenueByApiId: Looking for venueId ${venueId}`);
+            const venue = await Venue.findOne({ venueId: venueId, isActive: true });
+            console.log(`🔍 getVenueByApiId: Found venue:`, venue ? {
+                venueId: venue.venueId,
+                name: venue.name,
+                image: venue.image,
+                hasImage: !!venue.image,
+                coordinates: venue.coordinates,
+                hasCoordinates: !!(venue.coordinates || venue.location?.coordinates)
+            } : 'Not found');
+            return venue;
+        } catch (error) {
+            console.error('Error getting venue by API ID:', error);
+            return null;
+        }
+    }
 }
 
 module.exports = new VenueService();
