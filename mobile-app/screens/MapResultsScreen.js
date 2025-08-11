@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar, Button } from 'react-native-elements';
+import { Avatar } from 'react-native-elements';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { MAP_PROVIDER } from '../utils/mapConfig';
@@ -22,6 +22,7 @@ import MatchCard from '../components/MatchCard';
 import FilterModal from '../components/FilterModal';
 import FilterIcon from '../components/FilterIcon';
 import ApiService from '../services/api';
+import { useFilter } from '../contexts/FilterContext';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
@@ -60,8 +61,6 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [activeFilters, setActiveFilters] = useState({});
   
   // Manual search state
   const [hasMovedFromOriginal, setHasMovedFromOriginal] = useState(false);
@@ -79,6 +78,267 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Get safe area insets
   const insets = useSafeAreaInsets();
   
+    // Filter context
+  const {
+    updateFilterData,
+    filterData,
+    selectedFilters,
+    updateSelectedFilters,
+    filterModalVisible,
+    openFilterModal,
+    closeFilterModal
+  } = useFilter();
+  
+  // Process real match data for filters
+  useEffect(() => {
+    console.log('Filter useEffect triggered. Matches:', matches);
+    console.log('Matches length:', matches?.length);
+    
+    // Only process filter data if we have meaningful matches and they're different from current filter data
+    if (matches && matches.length > 0) {
+      // Check if the matches are significantly different from what we already have
+      const currentMatchIds = matches.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
+      const previousMatchIds = filterData?.matchIds || [];
+      
+      // Only update if match IDs are different (avoid unnecessary updates on map movement)
+      if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
+        console.log('Processing matches for filters:', matches.length, 'matches');
+        console.log('Sample match structure:', matches[0]);
+        
+        // Extract unique countries, leagues, and teams from matches
+        const countriesMap = new Map();
+        const leaguesMap = new Map();
+        const teamsMap = new Map();
+
+        matches.forEach((match, index) => {
+          console.log(`Processing match ${index}:`, {
+            area: match.area,
+            competition: match.competition,
+            teams: match.teams,
+            venue: match.venue,
+            league: match.league
+          });
+          console.log(`Match ${index} full structure:`, JSON.stringify(match, null, 2));
+
+          // Process country from area.name
+          let countryId = null;
+          let countryName = null;
+          
+          if (match.area?.name) {
+            countryId = match.area.code || match.area.id?.toString();
+            countryName = match.area.name;
+          }
+          
+          // Fallback: try to extract from venue or other fields
+          if (!countryId && match.venue && match.venue.country) {
+            if (typeof match.venue.country === 'string') {
+              countryId = match.venue.country;
+              countryName = match.venue.country;
+            } else if (match.venue.country.id) {
+              countryId = match.venue.country.id;
+              countryName = match.venue.country.name;
+            }
+          }
+
+          if (countryId) {
+            if (!countriesMap.has(countryId)) {
+              countriesMap.set(countryId, {
+                id: countryId,
+                name: countryName,
+                count: 1
+              });
+            } else {
+              countriesMap.get(countryId).count++;
+            }
+          }
+
+          // Process league from competition.name
+          let leagueId = null;
+          let leagueName = null;
+          
+          if (match.competition?.name) {
+            leagueId = match.competition.id || match.competition.code;
+            leagueName = match.competition.name;
+          }
+          
+          // Fallback: try match.league if competition doesn't exist
+          if (!leagueId && match.league) {
+            if (typeof match.league === 'string') {
+              leagueId = match.league;
+              leagueName = match.league;
+            } else if (match.league.id) {
+              leagueId = match.league.id;
+              leagueName = match.league.name;
+            } else if (match.league.name) {
+              leagueId = match.league.name;
+              leagueName = match.league.name;
+            }
+          }
+
+          if (leagueId) {
+            if (!leaguesMap.has(leagueId)) {
+              leaguesMap.set(leagueId, {
+                id: leagueId,
+                name: leagueName,
+                countryId: countryId || 'unknown',
+                count: 1
+              });
+            } else {
+              leaguesMap.get(leagueId).count++;
+            }
+          }
+
+        // Process teams from teams.home and teams.away
+        const processTeam = (team, teamType) => {
+          let teamId = null;
+          let teamName = null;
+          
+          if (team) {
+            if (typeof team === 'string') {
+              teamId = team;
+              teamName = team;
+            } else if (team.id) {
+              teamId = team.id;
+              teamName = team.name;
+            } else if (team.name) {
+              teamId = team.name;
+              teamName = team.name;
+            }
+          }
+
+          if (teamId) {
+                      if (!teamsMap.has(teamId)) {
+            teamsMap.set(teamId, {
+              id: teamId,
+              name: teamName,
+              countryId: countryId || 'unknown',
+              leagueId: leagueId || 'unknown',
+              count: 1
+            });
+          } else {
+            teamsMap.get(teamId).count++;
+          }
+          }
+        };
+
+        // Process home team from teams.home
+        if (match.teams?.home) {
+          processTeam(match.teams.home, 'home');
+        }
+        
+        // Process away team from teams.away
+        if (match.teams?.away) {
+          processTeam(match.teams.away, 'away');
+        }
+      });
+
+      const filterData = {
+        countries: Array.from(countriesMap.values()),
+        leagues: Array.from(leaguesMap.values()),
+        teams: Array.from(teamsMap.values()),
+        matchIds: currentMatchIds // Add match IDs to track changes
+      };
+
+      console.log('Final filter data:', filterData);
+      console.log('Countries found:', filterData.countries.length);
+      console.log('Leagues found:', filterData.leagues.length);
+      console.log('Teams found:', filterData.teams.length);
+      
+      // If we still don't have any data, create some basic fallback data
+      if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
+        console.log('No structured data found, creating fallback data');
+        
+        // Try to create some basic data from the first match
+        const firstMatch = matches[0];
+        let fallbackData = {
+          countries: [],
+          leagues: [],
+          teams: [],
+          matchIds: currentMatchIds
+        };
+        
+        // Try to extract basic info from the first match
+        if (firstMatch) {
+          if (firstMatch.area?.name) {
+            fallbackData.countries.push({
+              id: firstMatch.area.code || firstMatch.area.id?.toString() || 'unknown',
+              name: firstMatch.area.name,
+              count: matches.length
+            });
+          }
+          
+          if (firstMatch.competition?.name) {
+            fallbackData.leagues.push({
+              id: firstMatch.competition.id || firstMatch.competition.code || 'unknown',
+              name: firstMatch.competition.name,
+              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+              count: matches.length
+            });
+          }
+          
+          if (firstMatch.teams?.home?.name) {
+            fallbackData.teams.push({
+              id: firstMatch.teams.home.id || firstMatch.teams.home.name,
+              name: firstMatch.teams.home.name,
+              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+              leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
+              count: 1
+            });
+          }
+          
+          if (firstMatch.teams?.away?.name) {
+            fallbackData.teams.push({
+              id: firstMatch.teams.away.id || firstMatch.teams.away.name,
+              name: firstMatch.teams.away.name,
+              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+              leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
+              count: 1
+            });
+          }
+        }
+        
+        // If we still don't have data, use generic fallback
+        if (fallbackData.countries.length === 0) {
+          fallbackData.countries.push({
+            id: 'unknown', 
+            name: 'Unknown Country', 
+            count: matches.length
+          });
+        }
+        
+        if (fallbackData.leagues.length === 0) {
+          fallbackData.leagues.push({
+            id: 'unknown', 
+            name: 'Unknown League', 
+            countryId: fallbackData.countries[0].id, 
+            count: matches.length
+          });
+        }
+        
+        if (fallbackData.teams.length === 0) {
+          fallbackData.teams.push({
+            id: 'unknown', 
+            name: 'Unknown Team', 
+            countryId: fallbackData.countries[0].id, 
+            leagueId: fallbackData.leagues[0].id, 
+            count: matches.length
+          });
+        }
+        
+        console.log('Setting enhanced fallback filter data:', fallbackData);
+        updateFilterData(fallbackData);
+      } else {
+        console.log('Setting real filter data:', filterData);
+        updateFilterData(filterData);
+      }
+    } else {
+      console.log('Matches are the same, skipping filter update');
+    }
+  } else {
+    console.log('No matches available for filter processing');
+  }
+  }, [matches, updateFilterData]);
+
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {
     const screenHeight = Dimensions.get('window').height;
@@ -393,24 +653,68 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   const handleFilterOpen = () => {
-    setFilterModalVisible(true);
+    openFilterModal();
   };
 
   const handleFilterClose = () => {
-    setFilterModalVisible(false);
+    closeFilterModal();
   };
 
   const handleApplyFilters = (filters) => {
-    setActiveFilters(filters);
-    // Here you would apply the filters to your matches
-    // For now, we'll just store them
-    console.log('Applied filters:', filters);
+    console.log('Applying filters:', filters);
+    updateSelectedFilters(filters);
+    closeFilterModal();
   };
 
+  // Filter matches based on selected filters
+  const getFilteredMatches = () => {
+    if (!matches || !selectedFilters) return matches;
+    
+    const { countries, leagues, teams } = selectedFilters;
+    
+    // If no filters are selected, return all matches
+    if (countries.length === 0 && leagues.length === 0 && teams.length === 0) {
+      return matches;
+    }
+    
+    return matches.filter(match => {
+      // Check country filter
+      if (countries.length > 0) {
+        const matchCountry = match.area?.id?.toString();
+        if (!countries.includes(matchCountry)) {
+          return false;
+        }
+      }
+      
+      // Check league filter
+      if (leagues.length > 0) {
+        const matchLeague = match.competition?.id?.toString();
+        if (!leagues.includes(matchLeague)) {
+          return false;
+        }
+      }
+      
+      // Check team filter
+      if (teams.length > 0) {
+        const homeTeamId = match.teams?.home?.id?.toString();
+        const awayTeamId = match.teams?.away?.id?.toString();
+        
+        if (!teams.includes(homeTeamId) && !teams.includes(awayTeamId)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  };
+
+  // Get the filtered matches for display
+  const filteredMatches = getFilteredMatches();
+
   const getActiveFilterCount = () => {
-    return (activeFilters.countries?.length || 0) + 
-           (activeFilters.leagues?.length || 0) + 
-           (activeFilters.teams?.length || 0);
+    return (selectedFilters.countries?.length || 0) + 
+           (selectedFilters.leagues?.length || 0) + 
+           (selectedFilters.teams?.length || 0);
   };
 
   // Render search summary
@@ -452,7 +756,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         {sheetState === 'collapsed' && (
           <View style={styles.collapsedIndicator}>
             <Text style={styles.collapsedMatchCount}>
-              {matches?.length || 0} results
+              {filteredMatches?.length || 0} results
             </Text>
           </View>
         )}
@@ -471,12 +775,12 @@ const MapResultsScreen = ({ navigation, route }) => {
             )}
 
             <Text style={styles.resultsHeader}>
-              {matches?.length || 0} matches found
+              {filteredMatches?.length || 0} matches found
             </Text>
           </View>
 
           <FlatList
-            data={matches || []}
+            data={filteredMatches || []}
             renderItem={renderMatchItem}
             keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
             showsVerticalScrollIndicator={false}
@@ -489,9 +793,9 @@ const MapResultsScreen = ({ navigation, route }) => {
               autoscrollToTopThreshold: 10,
             }}
             removeClippedSubviews={false}
-            initialNumToRender={matches?.length || 0}
-            maxToRenderPerBatch={matches?.length || 0}
-            windowSize={matches?.length || 0}
+            initialNumToRender={Math.max(filteredMatches?.length || 0, 1)}
+            maxToRenderPerBatch={Math.max(filteredMatches?.length || 0, 1)}
+            windowSize={Math.max(filteredMatches?.length || 0, 5)}
           />
         </View>
       </BottomSheetView>
@@ -563,16 +867,16 @@ const MapResultsScreen = ({ navigation, route }) => {
         <View style={styles.headerRight}>
           <FilterIcon
             onPress={handleFilterOpen}
-            activeFilterCount={getActiveFilterCount()}
-            size={24}
+            filterCount={getActiveFilterCount()}
           />
+
         </View>
       </View>
 
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
-        matches={matches}
+        matches={filteredMatches}
         initialRegion={getInitialRegion()}
         onRegionChange={handleMapRegionChange}
         onMarkerPress={handleMarkerPress}
@@ -622,7 +926,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       <MatchModal
         visible={modalVisible}
         match={selectedMatchForModal}
-        allMatches={matches}
+        allMatches={filteredMatches}
         onClose={() => {
           setModalVisible(false);
           setSelectedMatchForModal(null);
@@ -647,8 +951,9 @@ const MapResultsScreen = ({ navigation, route }) => {
       <FilterModal
         visible={filterModalVisible}
         onClose={handleFilterClose}
-        onApplyFilters={handleApplyFilters}
-        currentFilters={activeFilters}
+        filterData={filterData}
+        selectedFilters={selectedFilters}
+        onFiltersChange={handleApplyFilters}
       />
     </View>
   );
@@ -713,7 +1018,7 @@ const styles = StyleSheet.create({
   },
   floatingSearchButton: {
     position: 'absolute',
-    top: 130, // Adjusted to account for increased header height
+    top: 160, // Increased padding from header (was 130, now 160 for better spacing)
     left: '50%',
     transform: [{ translateX: -100 }],
     width: 200,
