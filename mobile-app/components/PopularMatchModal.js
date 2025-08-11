@@ -18,12 +18,12 @@ const PopularMatchModal = ({
   onNavigate 
 }) => {
   // Debug logging to help troubleshoot data structure issues
-  console.log('PopularMatchModal received props:', {
-    visible,
-    matchesLength: matches?.length,
-    currentMatchIndex,
-    currentMatch: matches?.[currentMatchIndex]
-  });
+  // console.log('PopularMatchModal received props:', {
+  //   visible,
+  //   matchesLength: matches?.length,
+  //   currentMatchIndex,
+  //   currentMatch: matches?.[currentMatchIndex]
+  // });
 
   const currentMatch = matches?.[currentMatchIndex];
   const totalMatches = matches?.length || 0;

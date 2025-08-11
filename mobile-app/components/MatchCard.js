@@ -16,26 +16,26 @@ const MatchCard = ({
   showHeart = false,
   style = {},
 }) => {
-  // Debug logging to help troubleshoot data structure issues
-  console.log('MatchCard received match data:', {
-    matchId: match?.id,
-    fixtureId: match?.fixture?.id,
-    teams: match?.teams,
-    league: match?.league || match?.competition,
-    venue: match?.fixture?.venue,
-    rawMatch: match
-  });
+  // // Debug logging to help troubleshoot data structure issues
+  // console.log('MatchCard received match data:', {
+  //   matchId: match?.id,
+  //   fixtureId: match?.fixture?.id,
+  //   teams: match?.teams,
+  //   league: match?.league || match?.competition,
+  //   venue: match?.fixture?.venue,
+  //   rawMatch: match
+  // });
   
-  // Additional logging to identify object rendering issues
-  if (match?.league && typeof match.league === 'object') {
-    console.log('⚠️ League is an object:', match.league);
-  }
-  if (match?.teams?.home && typeof match.teams.home === 'object') {
-    console.log('⚠️ Home team is an object:', match.teams.home);
-  }
-  if (match?.teams?.away && typeof match.teams.away === 'object') {
-    console.log('⚠️ Away team is an object:', match.teams.away);
-  }
+  // // Additional logging to identify object rendering issues
+  // if (match?.league && typeof match.league === 'object') {
+  //   console.log('⚠️ League is an object:', match.league);
+  // }
+  // if (match?.teams?.home && typeof match.teams.home === 'object') {
+  //   console.log('⚠️ Home team is an object:', match.teams.home);
+  // }
+  // if (match?.teams?.away && typeof match.teams.away === 'object') {
+  //   console.log('⚠️ Away team is an object:', match.teams.away);
+  // }
 
   // Extract data from the API response format with defensive programming
   const fixture = match?.fixture || {};

@@ -25,7 +25,7 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       setLoading(true);
       const response = await ApiService.getPopularMatches();
       
-      console.log('Popular matches API response:', response);
+      // console.log('Popular matches API response:', response);
       
       // Handle different response structures
       let matchesData = [];
