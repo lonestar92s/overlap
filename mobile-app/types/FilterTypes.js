@@ -101,3 +101,4 @@ export const ContinentalLeagueExample = {
   // Additional properties for continental leagues
   participatingCountries: ['GB', 'DE', 'FR', 'ES', 'IT'], // Countries with teams in this league
 };
+

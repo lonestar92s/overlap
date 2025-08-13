@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,6 +21,9 @@ const FilterModal = ({
   selectedFilters,
   onFiltersChange 
 }) => {
+  const insets = useSafeAreaInsets();
+  const [expandedCountryId, setExpandedCountryId] = useState(null);
+  const [expandedLeagueId, setExpandedLeagueId] = useState(null);
   console.log('FilterModal received filterData:', filterData);
   console.log('FilterModal received selectedFilters:', selectedFilters);
   const [localFilters, setLocalFilters] = useState({
@@ -29,82 +33,11 @@ const FilterModal = ({
   });
 
   // Initialize local filters when modal opens
-    useEffect(() => {
-    console.log('useEffect triggered - visible:', visible, 'selectedFilters:', selectedFilters, 'filterData:', filterData);
-
+  useEffect(() => {
     if (visible && selectedFilters) {
-      console.log('Setting localFilters from selectedFilters:', selectedFilters);
       setLocalFilters(selectedFilters);
     }
-
-    // Auto-select countries based on available matches - ONLY when modal first opens AND no filters are applied
-    if (visible && filterData && filterData.countries && filterData.countries.length > 0) {
-      const hasExistingFilters = selectedFilters && (
-        selectedFilters.countries.length > 0 || 
-        selectedFilters.leagues.length > 0 || 
-        selectedFilters.teams.length > 0
-      );
-      
-      // Only auto-select if there are no existing filters
-      if (!hasExistingFilters) {
-        // If only one country, auto-select it and its leagues/teams
-        if (filterData.countries.length === 1) {
-          const singleCountry = filterData.countries[0];
-          
-          // Get leagues for this country
-          const countryLeagues = filterData.leagues.filter(league => 
-            league.countryId === singleCountry.id
-          );
-          
-          // Auto-select single league if only one exists
-          let leaguesToSelect = [];
-          if (countryLeagues.length === 1) {
-            const singleLeague = countryLeagues[0];
-            leaguesToSelect = [singleLeague.id];
-          }
-          
-          // Get teams for selected leagues
-          let teamsToSelect = [];
-          if (leaguesToSelect.length > 0) {
-            const leagueTeams = filterData.teams.filter(team => 
-              leaguesToSelect.includes(team.leagueId)
-            );
-            
-            // Auto-select single team if only one exists in a league
-            leaguesToSelect.forEach(leagueId => {
-              const leagueTeamCount = leagueTeams.filter(team => team.leagueId === leagueId).length;
-              if (leagueTeamCount === 1) {
-                const singleTeam = leagueTeams.find(team => team.leagueId === leagueId);
-                if (singleTeam) {
-                  teamsToSelect.push(singleTeam.id);
-                }
-              }
-            });
-          }
-          
-          setLocalFilters(prev => ({
-            ...prev,
-            countries: [singleCountry.id],
-            leagues: leaguesToSelect,
-            teams: teamsToSelect
-          }));
-        } 
-        // If multiple countries, auto-select ALL of them and their leagues/teams
-        else if (filterData.countries.length > 1) {
-          const allCountryIds = filterData.countries.map(country => country.id);
-          const allLeagueIds = filterData.leagues.map(league => league.id);
-          const allTeamIds = filterData.teams.map(team => team.id);
-          
-          setLocalFilters(prev => ({
-            ...prev,
-            countries: allCountryIds,
-            leagues: allLeagueIds,
-            teams: allTeamIds
-          }));
-        }
-      }
-    }
-  }, [visible, selectedFilters]); // Removed filterData from dependencies
+  }, [visible, selectedFilters]);
 
   const handleCountryChange = (countryId) => {
     setLocalFilters(prev => {
@@ -259,11 +192,12 @@ const FilterModal = ({
   };
 
   const handleClearAll = () => {
-    setLocalFilters({
-      countries: [],
-      leagues: [],
-      teams: []
-    });
+    const cleared = { countries: [], leagues: [], teams: [] };
+    setLocalFilters(cleared);
+    // Immediately apply cleared filters so results update without pressing Apply
+    if (typeof onFiltersChange === 'function') {
+      onFiltersChange(cleared);
+    }
   };
 
   const handleReset = () => {
@@ -273,17 +207,6 @@ const FilterModal = ({
   };
 
   const handleApply = () => {
-    const totalFilters = localFilters.countries.length + localFilters.leagues.length + localFilters.teams.length;
-    
-    if (totalFilters > 10) {
-      Alert.alert(
-        'Too Many Filters',
-        'Please select a maximum of 10 filters.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-    
     onFiltersChange(localFilters);
     onClose();
   };
@@ -334,25 +257,36 @@ const FilterModal = ({
         
         {filterData.countries.map(country => {
           const isSelected = localFilters.countries.includes(country.id);
+          const isExpanded = expandedCountryId === country.id;
           
           return (
             <View key={country.id} style={styles.filterItem}>
-              <TouchableOpacity
-                style={styles.filterItemContent}
-                onPress={() => handleCountryChange(country.id)}
-              >
-                {renderCheckbox(
-                  isSelected,
-                  () => handleCountryChange(country.id)
-                )}
-                <Text style={styles.filterItemText}>{country.name}</Text>
-                <View style={styles.countChip}>
-                  <Text style={styles.countText}>{country.count || 0}</Text>
+              <View style={styles.filterRow}>
+                <TouchableOpacity
+                  style={styles.filterItemContentLeft}
+                  onPress={() => handleCountryChange(country.id)}
+                >
+                  {renderCheckbox(
+                    isSelected,
+                    () => handleCountryChange(country.id)
+                  )}
+                  <Text style={styles.filterItemText}>{country.name}</Text>
+                </TouchableOpacity>
+                <View style={styles.filterItemRight}>
+                  <View style={styles.countChip}>
+                    <Text style={styles.countText}>{country.count || 0}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => {
+                    setExpandedCountryId(prev => prev === country.id ? null : country.id);
+                    setExpandedLeagueId(null);
+                  }} style={styles.expandIconBtn}>
+                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
               
-              {/* Show leagues for this country */}
-              {isSelected && (
+              {/* Leagues accordion for this country */}
+              {isExpanded && (
                 <View style={styles.nestedSection}>
                   <View style={styles.nestedHeader}>
                     <Text style={styles.nestedTitle}>Leagues</Text>
@@ -365,27 +299,33 @@ const FilterModal = ({
                     .filter(league => league.countryId === country.id)
                     .map(league => {
                       const isLeagueSelected = localFilters.leagues.includes(league.id);
-                      const leagueSelectionState = getLeagueSelectionState(league.id);
-                      const isLeagueIndeterminate = leagueSelectionState === 'some';
+                      const isLeagueExpanded = expandedLeagueId === league.id;
                       
                       return (
                         <View key={league.id} style={styles.nestedItem}>
-                          <TouchableOpacity
-                            style={styles.filterItemContent}
-                            onPress={() => handleLeagueChange(league.id)}
-                          >
-                            {renderCheckbox(
-                              isLeagueSelected,
-                              () => handleLeagueChange(league.id)
-                            )}
-                            <Text style={styles.filterItemText}>{league.name}</Text>
-                            <View style={styles.countChip}>
-                              <Text style={styles.countText}>{league.count || 0}</Text>
+                          <View style={styles.filterRow}>
+                            <TouchableOpacity
+                              style={styles.filterItemContentLeft}
+                              onPress={() => handleLeagueChange(league.id)}
+                            >
+                              {renderCheckbox(
+                                isLeagueSelected,
+                                () => handleLeagueChange(league.id)
+                              )}
+                              <Text style={styles.filterItemText}>{league.name}</Text>
+                            </TouchableOpacity>
+                            <View style={styles.filterItemRight}>
+                              <View style={styles.countChip}>
+                                <Text style={styles.countText}>{league.count || 0}</Text>
+                              </View>
+                              <TouchableOpacity onPress={() => setExpandedLeagueId(prev => prev === league.id ? null : league.id)} style={styles.expandIconBtn}>
+                                <Ionicons name={isLeagueExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                              </TouchableOpacity>
                             </View>
-                          </TouchableOpacity>
+                          </View>
                           
-                          {/* Show teams for this league */}
-                          {isLeagueSelected && (
+                          {/* Teams accordion for this league */}
+                          {isLeagueExpanded && (
                             <View style={styles.nestedSection}>
                               <View style={styles.nestedHeader}>
                                 <Text style={styles.nestedTitle}>Teams</Text>
@@ -444,8 +384,15 @@ const FilterModal = ({
             </TouchableOpacity>
           </View>
 
+          {/* Available Filters Summary (always visible) */}
+          <View style={styles.availableFiltersContainer}>
+            <Text style={styles.availableFiltersText}>
+              Available: {(filterData?.countries?.length || 0)} countries · {(filterData?.leagues?.length || 0)} leagues · {(filterData?.teams?.length || 0)} teams
+            </Text>
+          </View>
+
           {/* Active Filters Summary */}
-          {getTotalFilters() > 0 && (
+          {getTotalFilters() > 0 ? (
             <View style={styles.activeFiltersContainer}>
               <Text style={styles.activeFiltersText}>
                 {getTotalFilters()} filter{getTotalFilters() !== 1 ? 's' : ''} selected
@@ -453,6 +400,10 @@ const FilterModal = ({
               <TouchableOpacity onPress={handleClearAll}>
                 <Text style={styles.clearAllText}>Clear All</Text>
               </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.activeFiltersContainer}>
+              <Text style={styles.activeFiltersText}>No filters selected yet</Text>
             </View>
           )}
 
@@ -484,7 +435,10 @@ const FilterModal = ({
               style={styles.scrollView}
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: 20 + 72 + (insets?.bottom || 0) }
+              ]}
             >
 
               
@@ -493,7 +447,7 @@ const FilterModal = ({
           </View>
 
           {/* Footer Actions */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: 16 + (insets?.bottom || 0) }]}>
             <TouchableOpacity
               style={styles.resetButton}
               onPress={handleReset}
@@ -502,12 +456,9 @@ const FilterModal = ({
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[
-                styles.applyButton,
-                getTotalFilters() === 0 && styles.applyButtonDisabled
-              ]}
+              style={styles.applyButton}
               onPress={handleApply}
-              disabled={getTotalFilters() === 0}
+              disabled={false}
             >
               <Text style={styles.applyButtonText}>
                 Apply Filters ({getTotalFilters()})
@@ -531,7 +482,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     width: '90%',
-    maxHeight: '85%',
+    maxHeight: '80%',
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -565,6 +516,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  availableFiltersContainer: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  availableFiltersText: {
+    fontSize: 14,
+    color: '#666',
   },
   activeFiltersText: {
     fontSize: 14,
@@ -625,6 +586,27 @@ const styles = StyleSheet.create({
   },
   filterItem: {
     marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterItemContentLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingVertical: 8,
+  },
+  filterItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  expandIconBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginLeft: 4,
   },
   filterItemContent: {
     flexDirection: 'row',

@@ -12,10 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from 'react-native-elements';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 
 import { MAP_PROVIDER } from '../utils/mapConfig';
-import MatchModal from '../components/MatchModal';
 import HeartButton from '../components/HeartButton';
 import SearchModal from '../components/SearchModal';
 import MatchCard from '../components/MatchCard';
@@ -52,11 +51,10 @@ const MapResultsScreen = ({ navigation, route }) => {
   const bottomSheetRef = useRef(null);
   
   // Snap points for bottom sheet
-  const snapPoints = useMemo(() => ['8%', '55%', '85%'], []);
+  const snapPoints = useMemo(() => [48, '55%', '85%'], []);
   
-  // Modal state
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedMatchForModal, setSelectedMatchForModal] = useState(null);
+  // Overlay card state (Airbnb-like) - selection is by venue group
+  const [selectedVenueIndex, setSelectedVenueIndex] = useState(null);
   
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
@@ -74,6 +72,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Refs
   const mapRef = useRef();
+  const suppressNextMapPressRef = useRef(false);
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
@@ -88,6 +87,9 @@ const MapResultsScreen = ({ navigation, route }) => {
     openFilterModal,
     closeFilterModal
   } = useFilter();
+
+  // Trigger for map auto-fit when filters are applied/cleared
+  const [autoFitKey, setAutoFitKey] = useState(0);
   
   // Process real match data for filters
   useEffect(() => {
@@ -554,21 +556,84 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
-  // Handle marker press
+  // Handle marker press: show overlay, hide bottom sheet, and center map
+  const getVenueGroupKey = (match) => {
+    const venue = match?.fixture?.venue;
+    if (!venue) return null;
+    if (venue.id != null) return `id:${venue.id}`;
+    if (venue.coordinates && venue.coordinates.length === 2) {
+      return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+    }
+    return null;
+  };
+
   const handleMarkerPress = (match) => {
-    setSelectedMatchForModal(match);
-    setModalVisible(true);
-    
-    // Center map on venue
+    // Prevent immediate map-press from closing the overlay
+    suppressNextMapPressRef.current = true;
+    setTimeout(() => { suppressNextMapPressRef.current = false; }, 250);
+
+    // Map marker selects the venue group containing this match
+    const key = getVenueGroupKey(match);
+    if (!venueGroups || venueGroups.length === 0 || !key) return;
+    const index = venueGroups.findIndex(g => g.key === key);
+    const nextIndex = index >= 0 ? index : 0;
+    setSelectedVenueIndex(nextIndex);
+    if (bottomSheetRef.current && typeof bottomSheetRef.current.close === 'function') {
+      bottomSheetRef.current.close();
+    }
     const venue = match.fixture?.venue;
     if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
       mapRef.current.animateToRegion({
-        latitude: venue.coordinates[1],  // GeoJSON: [lon, lat] - so lat is index 1
-        longitude: venue.coordinates[0], // GeoJSON: [lon, lat] - so lon is index 0
+        latitude: venue.coordinates[1],
+        longitude: venue.coordinates[0],
         latitudeDelta: mapRegion?.latitudeDelta || 0.1,
         longitudeDelta: mapRegion?.longitudeDelta || 0.1,
       }, 1000);
     }
+  };
+
+  const handleMapPress = () => {
+    if (suppressNextMapPressRef.current) {
+      suppressNextMapPressRef.current = false;
+      return;
+    }
+    handleOverlayClose();
+  };
+
+  const centerMapOnVenueByIndex = (index) => {
+    const group = venueGroups?.[index];
+    const venue = group?.venue;
+    if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: venue.coordinates[1],
+        longitude: venue.coordinates[0],
+        latitudeDelta: mapRegion?.latitudeDelta || 0.1,
+        longitudeDelta: mapRegion?.longitudeDelta || 0.1,
+      }, 600);
+    }
+  };
+
+  const handleOverlayClose = () => {
+    setSelectedVenueIndex(null);
+    if (bottomSheetRef.current && typeof bottomSheetRef.current.snapToIndex === 'function') {
+      bottomSheetRef.current.snapToIndex(0);
+    }
+  };
+
+  const handleOverlayPrev = () => {
+    if (selectedVenueIndex === null || selectedVenueIndex <= 0) return;
+    const newIndex = selectedVenueIndex - 1;
+    setSelectedVenueIndex(newIndex);
+    centerMapOnVenueByIndex(newIndex);
+  };
+
+  const handleOverlayNext = () => {
+    if (selectedVenueIndex === null) return;
+    const lastIndex = (venueGroups?.length || 0) - 1;
+    if (selectedVenueIndex >= lastIndex) return;
+    const newIndex = selectedVenueIndex + 1;
+    setSelectedVenueIndex(newIndex);
+    centerMapOnVenueByIndex(newIndex);
   };
 
   // Handle match item press in list
@@ -664,6 +729,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     console.log('Applying filters:', filters);
     updateSelectedFilters(filters);
     closeFilterModal();
+    setAutoFitKey(prev => prev + 1);
   };
 
   // Filter matches based on selected filters
@@ -671,45 +737,110 @@ const MapResultsScreen = ({ navigation, route }) => {
     if (!matches || !selectedFilters) return matches;
     
     const { countries, leagues, teams } = selectedFilters;
+    // Normalize selected IDs to strings for consistent comparisons
+    const selectedCountryIds = (countries || []).map((id) => id?.toString());
+    const selectedLeagueIds = (leagues || []).map((id) => id?.toString());
+    const selectedTeamIds = (teams || []).map((id) => id?.toString());
     
     // If no filters are selected, return all matches
-    if (countries.length === 0 && leagues.length === 0 && teams.length === 0) {
+    if (selectedCountryIds.length === 0 && selectedLeagueIds.length === 0 && selectedTeamIds.length === 0) {
       return matches;
     }
     
-    return matches.filter(match => {
-      // Check country filter
-      if (countries.length > 0) {
-        const matchCountry = match.area?.id?.toString();
-        if (!countries.includes(matchCountry)) {
-          return false;
+    console.log('Filtering matches with (normalized):', { countries: selectedCountryIds, leagues: selectedLeagueIds, teams: selectedTeamIds });
+    console.log('Total matches to filter:', matches.length);
+    
+    const filtered = matches.filter(match => {
+      let matched = false;
+      
+      // Country OR
+      if (selectedCountryIds.length > 0) {
+        const matchCountry =
+          match.area?.code ||
+          match.area?.id?.toString() ||
+          (typeof match.venue?.country === 'string'
+            ? match.venue.country
+            : match.venue?.country?.id?.toString());
+        if (selectedCountryIds.includes(matchCountry)) {
+          matched = true;
         }
       }
       
-      // Check league filter
-      if (leagues.length > 0) {
-        const matchLeague = match.competition?.id?.toString();
-        if (!leagues.includes(matchLeague)) {
-          return false;
+      // League OR
+      if (selectedLeagueIds.length > 0) {
+        const matchLeague =
+          match.competition?.id?.toString() ||
+          match.competition?.code?.toString() ||
+          (typeof match.league === 'string'
+            ? match.league
+            : match.league?.id?.toString() || match.league?.name);
+        if (selectedLeagueIds.includes(matchLeague)) {
+          matched = true;
         }
       }
       
-      // Check team filter
-      if (teams.length > 0) {
-        const homeTeamId = match.teams?.home?.id?.toString();
-        const awayTeamId = match.teams?.away?.id?.toString();
-        
-        if (!teams.includes(homeTeamId) && !teams.includes(awayTeamId)) {
-          return false;
+      // Team OR
+      if (selectedTeamIds.length > 0) {
+        const homeTeamId = match.teams?.home?.id;
+        const awayTeamId = match.teams?.away?.id;
+        const homeTeamIdStr = homeTeamId?.toString();
+        const awayTeamIdStr = awayTeamId?.toString();
+        const homeMatch = selectedTeamIds.includes(homeTeamIdStr) || selectedTeamIds.includes(homeTeamId);
+        const awayMatch = selectedTeamIds.includes(awayTeamIdStr) || selectedTeamIds.includes(awayTeamId);
+        if (homeMatch || awayMatch) {
+          matched = true;
         }
       }
       
-      return true;
+      return matched;
     });
+    
+    console.log('Filtered matches result:', filtered.length);
+    return filtered;
   };
 
-  // Get the filtered matches for display
-  const filteredMatches = getFilteredMatches();
+  // Get the filtered matches for display (memoized)
+  const filteredMatches = useMemo(() => getFilteredMatches(), [matches, selectedFilters]);
+
+  // Group upcoming matches by venue (id preferred, fall back to coordinates)
+  const venueGroups = useMemo(() => {
+    if (!filteredMatches || filteredMatches.length === 0) return [];
+    const groupsMap = new Map();
+    filteredMatches.forEach((m) => {
+      const venue = m?.fixture?.venue || {};
+      let key = null;
+      if (venue.id != null) key = `id:${venue.id}`;
+      else if (venue.coordinates && venue.coordinates.length === 2) key = `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+      if (!key) return;
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, { key, venue, matches: [] });
+      }
+      groupsMap.get(key).matches.push(m);
+    });
+    const groups = Array.from(groupsMap.values());
+    // Sort matches within each group chronologically
+    groups.forEach(g => g.matches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)));
+    // Sort groups by earliest match date
+    groups.sort((a, b) => new Date(a.matches[0].fixture.date) - new Date(b.matches[0].fixture.date));
+    return groups;
+  }, [filteredMatches]);
+
+  // Clamp or reset selected index if filtered results change
+  useEffect(() => {
+    if (selectedVenueIndex === null) return;
+    const count = venueGroups?.length || 0;
+    if (count === 0) {
+      setSelectedVenueIndex(null);
+      if (bottomSheetRef.current && typeof bottomSheetRef.current.snapToIndex === 'function') {
+        bottomSheetRef.current.snapToIndex(0);
+      }
+      return;
+    }
+    if (selectedVenueIndex >= count) {
+      const newIndex = Math.max(0, count - 1);
+      setSelectedVenueIndex(newIndex);
+    }
+  }, [venueGroups, selectedVenueIndex]);
 
   const getActiveFilterCount = () => {
     return (selectedFilters.countries?.length || 0) + 
@@ -748,57 +879,27 @@ const MapResultsScreen = ({ navigation, route }) => {
     );
   };
 
-  // Render bottom sheet content
+  // Render bottom sheet content (FlatList as direct child of sheet)
   const renderBottomSheetContent = () => {
     return (
-      <BottomSheetView style={styles.bottomSheetContent}>
-        {/* Show results count when collapsed */}
-        {sheetState === 'collapsed' && (
-          <View style={styles.collapsedIndicator}>
-            <Text style={styles.collapsedMatchCount}>
-              {filteredMatches?.length || 0} results
-            </Text>
-          </View>
+      <BottomSheetFlatList
+        data={filteredMatches || []}
+        renderItem={renderMatchItem}
+        keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
+        showsVerticalScrollIndicator={true}
+        ListHeaderComponent={() => (
+          <View style={styles.subtleHeaderSpacer} />
         )}
-
-        {/* Always render the full content, but control visibility */}
-        <View style={[
-          styles.fullContentContainer,
-          sheetState === 'collapsed' && styles.hiddenContent
-        ]}>
-          <View style={styles.bottomSheetHeader}>
-            {isSearching && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#1976d2" />
-                <Text style={styles.loadingText}>Searching matches...</Text>
-              </View>
-            )}
-
-            <Text style={styles.resultsHeader}>
-              {filteredMatches?.length || 0} matches found
-            </Text>
-          </View>
-
-          <FlatList
-            data={filteredMatches || []}
-            renderItem={renderMatchItem}
-            keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.matchListContent}
-            style={[styles.bottomSheetScrollView, { height: calculateFlatListHeight() }]}
-            nestedScrollEnabled={true}
-            keyboardShouldPersistTaps="handled"
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0,
-              autoscrollToTopThreshold: 10,
-            }}
-            removeClippedSubviews={false}
-            initialNumToRender={Math.max(filteredMatches?.length || 0, 1)}
-            maxToRenderPerBatch={Math.max(filteredMatches?.length || 0, 1)}
-            windowSize={Math.max(filteredMatches?.length || 0, 5)}
-          />
-        </View>
-      </BottomSheetView>
+        contentContainerStyle={[
+          styles.matchListContent,
+          { paddingHorizontal: 16, paddingBottom: (insets.bottom || 0) + 60 }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+      />
     );
   };
 
@@ -878,9 +979,15 @@ const MapResultsScreen = ({ navigation, route }) => {
         ref={mapRef}
         matches={filteredMatches}
         initialRegion={getInitialRegion()}
+        autoFitKey={autoFitKey}
         onRegionChange={handleMapRegionChange}
         onMarkerPress={handleMarkerPress}
-        selectedMatchId={selectedMatchForModal?.fixture.id}
+        onMapPress={handleMapPress}
+        selectedMatchId={
+          selectedVenueIndex !== null
+            ? venueGroups?.[selectedVenueIndex]?.matches?.[0]?.fixture?.id
+            : null
+        }
         style={styles.map}
       />
 
@@ -904,37 +1011,76 @@ const MapResultsScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet (hidden while overlay is open) */}
       <BottomSheet
         ref={bottomSheetRef}
-        index={0}
         snapPoints={snapPoints}
         onChange={(index) => {
           const states = ['collapsed', 'half', 'full'];
-          setSheetState(states[index]);
+          if (index === -1) {
+            setSheetState('closed');
+          } else {
+            setSheetState(states[index]);
+          }
         }}
         enablePanDownToClose={false}
-        enableContentPanningGesture={false}
+        enableContentPanningGesture={true}
         keyboardBehavior="interactive"
+  bottomInset={0}
         backgroundStyle={styles.bottomSheetBackground}
-        handleIndicatorStyle={styles.bottomSheetIndicator}
+        handleComponent={() => (
+          <View style={styles.customHandle}>
+            <View style={styles.customHandleBar} />
+            <Text style={styles.customHandleText}>{filteredMatches?.length || 0} results</Text>
+          </View>
+        )}
       >
         {renderBottomSheetContent()}
       </BottomSheet>
 
-      {/* Match Modal */}
-      <MatchModal
-        visible={modalVisible}
-        match={selectedMatchForModal}
-        allMatches={filteredMatches}
-        onClose={() => {
-          setModalVisible(false);
-          setSelectedMatchForModal(null);
-        }}
-        onMatchChange={(newMatch) => {
-          setSelectedMatchForModal(newMatch);
-        }}
-      />
+      {/* Overlay Match Card (compact) with navigation */}
+      {selectedVenueIndex !== null && venueGroups?.[selectedVenueIndex] && (
+        <View style={styles.overlayCardContainer}>
+          {/* Venue header */}
+          <View style={styles.venueHeader}>
+            <Text style={styles.venueHeaderTitle}>{venueGroups[selectedVenueIndex]?.venue?.name || 'Venue'}</Text>
+            {venueGroups[selectedVenueIndex]?.venue?.city && (
+              <Text style={styles.venueHeaderSubtitle}>{venueGroups[selectedVenueIndex]?.venue?.city}</Text>
+            )}
+          </View>
+          {/* Stacked upcoming matches at this venue */}
+          <ScrollView style={styles.venueMatchesList} showsVerticalScrollIndicator={false}>
+            {venueGroups[selectedVenueIndex].matches.map((m, idx) => (
+              <MatchCard key={`venue-match-${m.fixture?.id || idx}`}
+                match={m}
+                onPress={() => {}}
+                variant="overlay"
+                showHeart={true}
+                style={{ marginBottom: 8 }}
+              />
+            ))}
+          </ScrollView>
+          <View style={styles.overlayControls}>
+            <TouchableOpacity
+              onPress={handleOverlayPrev}
+              disabled={selectedVenueIndex <= 0}
+              style={[styles.navButton, selectedVenueIndex <= 0 && styles.navButtonDisabled]}
+            >
+              <Text style={[styles.navButtonText, selectedVenueIndex <= 0 && styles.navButtonTextDisabled]}>Previous</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleOverlayClose} style={styles.closeOverlayButton}>
+              <Text style={styles.closeOverlayText}>Close</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleOverlayNext}
+              disabled={selectedVenueIndex >= (venueGroups.length - 1)}
+              style={[styles.navButton, selectedVenueIndex >= (venueGroups.length - 1) && styles.navButtonDisabled]}
+            >
+              <Text style={[styles.navButtonText, selectedVenueIndex >= (venueGroups.length - 1) && styles.navButtonTextDisabled]}>Next</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Search Modal */}
       <SearchModal
@@ -1016,6 +1162,85 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  overlayCardContainer: {
+    position: 'absolute',
+    bottom: 90,
+    left: 16,
+    right: 16,
+  },
+  venueHeader: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: '#e0e0e0',
+  },
+  venueHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  venueHeaderSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#666',
+  },
+  venueMatchesList: {
+    maxHeight: 260,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  overlayControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  navButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1976d2',
+  },
+  navButtonDisabled: {
+    backgroundColor: '#f0f0f0',
+  },
+  navButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  navButtonTextDisabled: {
+    color: '#999',
+  },
+  closeOverlayButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  closeOverlayText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
   floatingSearchButton: {
     position: 'absolute',
     top: 160, // Increased padding from header (was 130, now 160 for better spacing)
@@ -1073,7 +1298,6 @@ const styles = StyleSheet.create({
   bottomSheetContent: {
     flex: 1,
     padding: 16,
-    paddingBottom: 60, // Extra padding to account for bottom tab navigation
   },
   fullContentContainer: {
     flex: 1,
@@ -1086,15 +1310,31 @@ const styles = StyleSheet.create({
     // Fixed header section
   },
   bottomSheetScrollView: {
-    // Height will be set dynamically via calculateFlatListHeight()
+    flex: 1,
   },
   bottomSheetBackground: {
     backgroundColor: '#fff',
   },
-  bottomSheetIndicator: {
-    backgroundColor: '#D1D5DB',
+  customHandle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 14,
+    paddingBottom: 4,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  customHandleBar: {
     width: 40,
     height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    marginBottom: 6,
+  },
+  customHandleText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
   },
   collapsedIndicator: {
     alignItems: 'center',
@@ -1128,8 +1368,20 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
+  subtleHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    minHeight: 28,
+  },
+  subtleHeaderHidden: {
+    opacity: 0,
+  },
+  subtleHeaderSpacer: {
+    height: 12,
+  },
   matchListContent: {
-    paddingBottom: 60, // Reduced padding to eliminate excessive space at bottom
+    paddingBottom: 12,
   },
 
   selectedMatchCard: {
