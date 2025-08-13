@@ -4,12 +4,18 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSavedMatches } from '../contexts/SavedMatchesContext';
 
 const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
-  const { isMatchSaved, toggleSaveMatch, loading } = useSavedMatches();
+  const { isMatchSaved, toggleSaveMatch, loading, currentlySaving } = useSavedMatches();
   
   const isSaved = isMatchSaved(matchId);
+  const isCurrentlyProcessing = currentlySaving.has(matchId);
   
   const handlePress = async () => {
-    if (loading) return; // Prevent multiple taps while loading
+    if (loading || isCurrentlyProcessing) {
+      console.log('🔄 Match is currently being processed, ignoring tap');
+      return;
+    }
+    
+    console.log('💖 Heart button pressed for match:', matchId);
     
     try {
       await toggleSaveMatch(matchId, fixtureId, matchData);
@@ -27,13 +33,13 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
         style
       ]}
       onPress={handlePress}
-      disabled={loading}
+      disabled={loading || isCurrentlyProcessing}
       activeOpacity={0.7}
     >
       <Icon
         name={isSaved ? 'favorite' : 'favorite-border'}
         size={size * 0.8}
-        color={isSaved ? '#FF385C' : '#999'}
+        color={isCurrentlyProcessing ? '#FFA500' : (isSaved ? '#FF385C' : '#999')}
         style={styles.heartIcon}
       />
     </TouchableOpacity>

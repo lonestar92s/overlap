@@ -395,3 +395,4 @@ export function validateFilterCombination(selectedFilters) {
     message: null,
   };
 }
+

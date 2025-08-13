@@ -12,7 +12,9 @@ const MatchMapView = ({
   onMarkerPress = () => {},
   selectedMatchId = null,
   style = {},
-  showLocationButton = true
+  showLocationButton = true,
+  autoFitKey = 0,
+  onMapPress = () => {},
 }) => {
   const mapRef = useRef();
   
@@ -34,17 +36,15 @@ const MatchMapView = ({
     }
   }, [initialRegion]);
 
-  // Auto-fit to markers when matches load
-  useEffect(() => {
-    if (matches && matches.length > 0 && mapReady && mapRef.current) {
-      // Small delay to ensure map is fully ready
-      const timer = setTimeout(() => {
-        fitToMatches();
-      }, 500);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [matches, mapReady]);
+// Auto-fit to markers only when explicitly triggered
+useEffect(() => {
+  if (matches && matches.length > 0 && mapReady && mapRef.current) {
+    const timer = setTimeout(() => {
+      fitToMatches();
+    }, 300);
+    return () => clearTimeout(timer);
+  }
+}, [autoFitKey, mapReady]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -99,6 +99,14 @@ const MatchMapView = ({
   // Handle marker press
   const handleMarkerPress = (match) => {
     onMarkerPress(match);
+  };
+
+  // Handle map press (close overlays, etc.)
+  const handleMapPress = (event) => {
+    // Ignore marker presses
+    const action = event?.nativeEvent?.action;
+    if (action === 'marker-press') return;
+    onMapPress();
   };
 
   // Center map on specific location
@@ -162,11 +170,11 @@ const MatchMapView = ({
       
       return (
         <Marker
-          key={`match-${match.fixture.id}`} // Stable key based only on match ID
+          key={`match-${String(match.fixture.id)}`}
           coordinate={coordinate}
           onPress={() => handleMarkerPress(match)}
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
-          tracksViewChanges={false} // Improve performance
+          tracksViewChanges={false}
         />
       );
     });
@@ -181,6 +189,7 @@ const MatchMapView = ({
         initialRegion={region}
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={handleMapReady}
+        onPress={handleMapPress}
         showsUserLocation={!!userLocation}
         showsMyLocationButton={false} // Disable built-in button to use custom one
         showsCompass={false}

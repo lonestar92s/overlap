@@ -16,6 +16,7 @@ export const SavedMatchesProvider = ({ children }) => {
   const [savedMatches, setSavedMatches] = useState(new Set());
   const [savedMatchesData, setSavedMatchesData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [currentlySaving, setCurrentlySaving] = useState(new Set()); // Track matches currently being saved
 
   // Load saved matches from local storage on app start
   useEffect(() => {
@@ -92,7 +93,14 @@ export const SavedMatchesProvider = ({ children }) => {
   };
 
   const saveMatch = async (matchId, fixtureId, matchData) => {
+    // Prevent duplicate saves for the same match
+    if (currentlySaving.has(matchId)) {
+      console.log('🔄 Match already being saved, skipping duplicate request:', matchId);
+      return;
+    }
+    
     try {
+      setCurrentlySaving(prev => new Set(prev).add(matchId));
       setLoading(true);
       
       console.log('🔍 Raw matchData received:', matchData);
@@ -182,12 +190,24 @@ export const SavedMatchesProvider = ({ children }) => {
       throw error;
     } finally {
       setLoading(false);
+      setCurrentlySaving(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(matchId);
+        return newSet;
+      });
     }
   };
 
   // Unsave a match (unheart it)
   const unsaveMatch = async (matchId) => {
+    // Prevent duplicate unsaves for the same match
+    if (currentlySaving.has(matchId)) {
+      console.log('🔄 Match already being unsaved, skipping duplicate request:', matchId);
+      return;
+    }
+    
     try {
+      setCurrentlySaving(prev => new Set(prev).add(matchId));
       setLoading(true);
       
       // Optimistic update - update UI immediately
@@ -215,6 +235,11 @@ export const SavedMatchesProvider = ({ children }) => {
       throw error;
     } finally {
       setLoading(false);
+      setCurrentlySaving(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(matchId);
+        return newSet;
+      });
     }
   };
 
@@ -256,6 +281,7 @@ export const SavedMatchesProvider = ({ children }) => {
     savedMatches,
     savedMatchesData,
     loading,
+    currentlySaving,
     isMatchSaved,
     saveMatch,
     unsaveMatch,

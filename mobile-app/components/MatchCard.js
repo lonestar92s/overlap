@@ -8,12 +8,14 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
+import { getMatchStatus, getMatchResult, formatMatchDate } from '../utils/matchStatus';
 
 const MatchCard = ({ 
   match, 
   onPress, 
   variant = 'default',
   showHeart = false,
+  showResults = false, // Only show detailed results for saved matches
   style = {},
 }) => {
   // // Debug logging to help troubleshoot data structure issues
@@ -84,15 +86,22 @@ const MatchCard = ({
 
   const { date, time } = formatMatchDateTime(fixture.date);
 
+  // Get match status and result
+  const matchStatus = getMatchStatus(match);
+  const matchResult = getMatchResult(match);
+  const formattedDate = formatMatchDate(fixture.date, matchStatus.isPast);
+
   const handlePress = () => {
     if (onPress && match) {
       onPress(match);
     }
   };
 
+  const isOverlay = variant === 'overlay' || variant === 'compact';
+
   return (
     <TouchableOpacity 
-      style={[styles.card, style]} 
+      style={[styles.card, isOverlay && styles.overlayCard, style]} 
       onPress={handlePress}
       activeOpacity={0.7}
     >
@@ -100,14 +109,34 @@ const MatchCard = ({
         <View style={styles.dateTimeContainer}>
           <Icon name="access-time" size={16} color="#666" />
           <View style={styles.dateTimeText}>
-            <Text style={styles.dateText}>{date || 'TBD'}</Text>
-            <Text style={styles.timeText}>{time || 'TBD'}</Text>
+            <Text style={[styles.dateText, isOverlay && styles.overlayDateText]}>{date || 'TBD'}</Text>
+            <Text style={[styles.timeText, isOverlay && styles.overlayTimeText]}>{time || 'TBD'}</Text>
           </View>
         </View>
         
         <View style={styles.headerRight}>
+          {/* Match Status Badge - Only show for non-upcoming matches */}
+          {(matchStatus.type !== 'upcoming') && (
+            <View style={[
+              styles.statusBadge,
+              matchStatus.type === 'completed' && styles.statusCompleted,
+              matchStatus.type === 'live' && styles.statusLive
+            ]}>
+              <Text style={[
+                styles.statusText,
+                matchStatus.type === 'completed' && styles.statusTextCompleted,
+                matchStatus.type === 'live' && styles.statusTextLive
+              ]}>
+                {matchStatus.text}
+              </Text>
+            </View>
+          )}
+
           {(league?.name || (typeof league === 'string' && league)) && (
             <View style={styles.leagueBadge}>
+              {typeof league !== 'string' && league?.logo ? (
+                <Image source={{ uri: league.logo }} style={styles.leagueLogoSmall} resizeMode="contain" />
+              ) : null}
               <Text style={styles.leagueText}>
                 {typeof league === 'string' ? league : league.name}
               </Text>
@@ -129,7 +158,7 @@ const MatchCard = ({
       <View style={styles.teamsContainer}>
         <View style={styles.teamContainer}>
           <View style={styles.teamInfo}>
-            <Text style={styles.teamName} numberOfLines={1}>
+            <Text style={[styles.teamName, isOverlay && styles.overlayTeamName]} numberOfLines={1}>
               {(() => {
                 const homeTeam = teams.home;
                 if (typeof homeTeam === 'string') {
@@ -157,7 +186,18 @@ const MatchCard = ({
         </View>
 
         <View style={styles.vsContainer}>
-          <Text style={styles.vsText}>vs</Text>
+          {showResults && matchResult ? (
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultScore}>
+                {matchResult.homeScore} - {matchResult.awayScore}
+              </Text>
+              <Text style={styles.resultText}>
+                {matchResult.result}
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.vsText, isOverlay && styles.overlayVsText]}>vs</Text>
+          )}
         </View>
 
         <View style={styles.teamContainer}>
@@ -225,6 +265,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  overlayCard: {
+    padding: 12,
+    marginBottom: 0,
+    shadowOpacity: 0.15,
+    elevation: 5,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -244,26 +290,63 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  overlayDateText: {
+    fontSize: 13,
+  },
   timeText: {
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  overlayTimeText: {
+    fontSize: 11,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  statusCompleted: {
+    backgroundColor: '#e8f5e8',
+  },
+  statusLive: {
+    backgroundColor: '#fff3cd',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  statusTextCompleted: {
+    color: '#2e7d32',
+  },
+  statusTextLive: {
+    color: '#f57c00',
+  },
   leagueBadge: {
     backgroundColor: '#f5f5f5',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   leagueText: {
     fontSize: 11,
     color: '#666',
     fontWeight: '500',
+  },
+  leagueLogoSmall: {
+    width: 14,
+    height: 14,
+    marginRight: 6,
   },
   heartButton: {
     marginLeft: 4,
@@ -288,6 +371,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     maxWidth: '100%',
   },
+  overlayTeamName: {
+    fontSize: 15,
+  },
   teamLogo: {
     width: 32,
     height: 32,
@@ -299,6 +385,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontWeight: '500',
+  },
+  overlayVsText: {
+    fontSize: 13,
+  },
+  resultContainer: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  resultScore: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  resultText: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '500',
+    textAlign: 'center',
   },
   venueContainer: {
     flexDirection: 'row',

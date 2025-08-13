@@ -15,7 +15,9 @@ const MapboxMapView = ({
   onMarkerPress = () => {},
   selectedMatchId = null,
   style = {},
-  showLocationButton = true
+  showLocationButton = true,
+  autoFitKey = 0,
+  onMapPress = () => {},
 }) => {
   const mapRef = useRef();
   
@@ -37,17 +39,15 @@ const MapboxMapView = ({
     }
   }, [initialRegion]);
 
-  // Auto-fit to markers when matches load
-  useEffect(() => {
-    if (matches && matches.length > 0 && mapReady && mapRef.current) {
-      // Small delay to ensure map is fully ready
-      const timer = setTimeout(() => {
-        fitToMatches();
-      }, 500);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [matches, mapReady]);
+// Auto-fit to markers only when explicitly triggered
+useEffect(() => {
+  if (matches && matches.length > 0 && mapReady && mapRef.current) {
+    const timer = setTimeout(() => {
+      fitToMatches();
+    }, 300);
+    return () => clearTimeout(timer);
+  }
+}, [autoFitKey, mapReady]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -154,6 +154,7 @@ const MapboxMapView = ({
         onRegionChangeComplete={handleRegionChangeComplete}
         centerCoordinate={[region.longitude, region.latitude]}
         zoomLevel={Math.log2(360 / region.longitudeDelta)}
+        onPress={() => onMapPress()}
       >
         {/* User location */}
         {userLocation && (
@@ -168,12 +169,12 @@ const MapboxMapView = ({
           if (!match.fixture?.venue?.coordinates) return null;
 
           const [latitude, longitude] = match.fixture.venue.coordinates;
-          const isSelected = selectedMatchId === match.id;
+          const isSelected = String(selectedMatchId) === String(match.fixture?.id);
 
           return (
             <Mapbox.PointAnnotation
-              key={match.id}
-              id={`match-${match.id}`}
+              key={`match-${String(match.fixture?.id)}`}
+              id={`match-${String(match.fixture?.id)}`}
               coordinate={[longitude, latitude]}
               onSelected={() => handleMarkerPress(match)}
             >
