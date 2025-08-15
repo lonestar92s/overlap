@@ -12,13 +12,13 @@ import {
 import ApiService from '../services/api';
 import HeartButton from './HeartButton';
 import MatchCard from './MatchCard';
-import { useSavedMatches } from '../contexts/SavedMatchesContext';
+import { useItineraries } from '../contexts/ItineraryContext';
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { isMatchSaved, toggleSaveMatch } = useSavedMatches();
+  const { isMatchInItinerary } = useItineraries();
 
   const fetchPopularMatches = async (retryCount = 0) => {
     try {

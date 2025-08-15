@@ -133,7 +133,7 @@ const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
           <FlatList
             data={leaguesToShow}
             renderItem={renderLeagueItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => (item.id || `league-${index}`).toString()}
             style={styles.leaguesList}
             showsVerticalScrollIndicator={false}
           />

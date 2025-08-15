@@ -141,12 +141,52 @@ useEffect(() => {
         longitude: match.fixture.venue.coordinates[0], // So lat is index 1, lon is index 0
       }));
 
-    if (coordinates.length > 0) {
-      mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 100, right: 50, bottom: 300, left: 50 }, // Increased top padding for header
-        animated: true,
-      });
+    if (coordinates.length === 0) return;
+
+    // Minimum span to avoid over-zooming when there are very few points
+    const MIN_LAT_DELTA = 0.2;
+    const MIN_LNG_DELTA = 0.2;
+
+    if (coordinates.length === 1) {
+      // For a single marker, center with a sane default zoom level
+      const only = coordinates[0];
+      mapRef.current.animateToRegion({
+        latitude: only.latitude,
+        longitude: only.longitude,
+        latitudeDelta: MIN_LAT_DELTA,
+        longitudeDelta: MIN_LNG_DELTA,
+      }, 600);
+      return;
     }
+
+    // For multiple points, clamp zoom if the cluster is extremely tight
+    const lats = coordinates.map(c => c.latitude);
+    const lngs = coordinates.map(c => c.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const spanLat = Math.abs(maxLat - minLat);
+    const spanLng = Math.abs(maxLng - minLng);
+
+    if (spanLat < MIN_LAT_DELTA && spanLng < MIN_LNG_DELTA) {
+      // Points are very close together; show a minimum area around their centroid
+      const centerLat = (minLat + maxLat) / 2;
+      const centerLng = (minLng + maxLng) / 2;
+      mapRef.current.animateToRegion({
+        latitude: centerLat,
+        longitude: centerLng,
+        latitudeDelta: Math.max(spanLat, MIN_LAT_DELTA),
+        longitudeDelta: Math.max(spanLng, MIN_LNG_DELTA),
+      }, 600);
+      return;
+    }
+
+    // Normal fit with padding for typical multi-point results
+    mapRef.current.fitToCoordinates(coordinates, {
+      edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+      animated: true,
+    });
   };
 
   // Render match markers with memoization
@@ -235,7 +275,7 @@ useEffect(() => {
           }}
         >
           <Icon 
-            name="my-location" 
+            name="navigation" 
             size={24} 
             color={userLocation ? '#1976d2' : '#999'} 
           />
@@ -255,7 +295,7 @@ const styles = StyleSheet.create({
   locationButton: {
     position: 'absolute',
     bottom: 120, // Moved up to be above the bottom sheet
-    right: 20,
+    right: 12, // Moved closer to the right edge (was 20)
     width: 44,
     height: 44,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',

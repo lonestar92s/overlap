@@ -49,6 +49,34 @@ class ApiService {
     this.baseURL = API_BASE_URL;
   }
 
+  // Aggregated global search by leagues/teams with optional bounds
+  async searchAggregatedMatches({ dateFrom, dateTo, competitions = [], teams = [], bounds = null, season = 2025 }) {
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.append('dateFrom', dateFrom);
+      if (dateTo) params.append('dateTo', dateTo);
+      if (season) params.append('season', season);
+      if (competitions && competitions.length > 0) params.append('competitions', competitions.join(','));
+      if (teams && teams.length > 0) params.append('teams', teams.join(','));
+      if (bounds?.northeast && bounds?.southwest) {
+        params.append('neLat', bounds.northeast.lat);
+        params.append('neLng', bounds.northeast.lng);
+        params.append('swLat', bounds.southwest.lat);
+        params.append('swLng', bounds.southwest.lng);
+      }
+      const url = `${this.baseURL}/matches/search?${params.toString()}`;
+      const response = await fetch(url, { method: 'GET' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to search matches');
+      }
+      return data; // { success, data: [matches], count }
+    } catch (error) {
+      console.error('Error in searchAggregatedMatches:', error);
+      throw error;
+    }
+  }
+
   async searchMatches({ homeTeam, awayTeam, dateFrom, dateTo, season = 2025 }) {
     try {
       const params = new URLSearchParams();
@@ -69,6 +97,182 @@ class ApiService {
       return data;
     } catch (error) {
       console.error('Error searching matches:', error);
+      throw error;
+    }
+  }
+
+  // Search teams using the backend team search endpoint
+  async searchTeams(query, limit = 10) {
+    try {
+      if (!query || query.trim().length < 2) {
+        return { success: false, results: [] };
+      }
+
+      const params = new URLSearchParams();
+      params.append('query', query.trim());
+      if (limit) params.append('limit', limit);
+
+      const response = await fetch(`${this.baseURL}/teams/search?${params}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to search teams');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error searching teams:', error);
+      throw error;
+    }
+  }
+
+  // Trip/Itinerary API methods
+  async getTrips() {
+    try {
+      const response = await fetch(`${this.baseURL}/trips`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch trips');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching trips:', error);
+      throw error;
+    }
+  }
+
+  async getTripById(tripId) {
+    try {
+      const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch trip');
+      }
+      
+      return { success: true, data: data.trip || data };
+    } catch (error) {
+      console.error('Error fetching trip:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createTrip(name, description = '') {
+    try {
+      const response = await fetch(`${this.baseURL}/trips`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, description })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create trip');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error creating trip:', error);
+      throw error;
+    }
+  }
+
+  async addMatchToTrip(tripId, matchData) {
+    try {
+      const response = await fetch(`${this.baseURL}/trips/${tripId}/matches`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          matchId: matchData.matchId,
+          homeTeam: matchData.homeTeam,
+          awayTeam: matchData.awayTeam,
+          league: matchData.league,
+          venue: matchData.venue,
+          venueData: matchData.venueData,  // ← ADD THE VENUE DATA!
+          date: matchData.date
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to add match to trip');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error adding match to trip:', error);
+      throw error;
+    }
+  }
+
+  async deleteTrip(tripId) {
+    try {
+      console.log('🗑️ API Service - Deleting trip:', tripId);
+      
+      const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      console.log('🗑️ API Service - Delete trip response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete trip');
+      }
+      
+      // Return a consistent format that the context expects
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error deleting trip:', error);
+      throw error;
+    }
+  }
+
+  async removeMatchFromTrip(tripId, matchId) {
+    try {
+      console.log('🗑️ API Service - Removing match from trip:', { tripId, matchId });
+      
+      const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      console.log('🗑️ API Service - Remove match response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to remove match from trip');
+      }
+      
+      // Return a consistent format that the context expects
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error removing match from trip:', error);
       throw error;
     }
   }

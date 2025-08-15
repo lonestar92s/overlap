@@ -206,6 +206,10 @@ const userSchema = new mongoose.Schema({
             },
             league: String,
             venue: String,
+            venueData: {
+                type: mongoose.Schema.Types.Mixed,
+                default: null
+            },
             date: Date,
             addedAt: {
                 type: Date,

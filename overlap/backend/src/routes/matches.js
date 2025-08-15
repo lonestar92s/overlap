@@ -351,9 +351,147 @@ router.get('/venues/stats', async (req, res) => {
 });
 
 // Search for matches between specific teams
-router.get('/matches/search', async (req, res) => {
+router.get('/search', async (req, res) => {
     try {
-        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025 } = req.query;
+        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025, competitions, teams, neLat, neLng, swLat, swLng } = req.query;
+
+        // Aggregated search path when competitions/teams are provided
+        if ((competitions && competitions.trim() !== '') || (teams && teams.trim() !== '')) {
+            if (!dateFrom || !dateTo) {
+                return res.status(400).json({ success: false, message: 'dateFrom and dateTo are required when searching by competitions/teams' });
+            }
+            const leagueIds = (competitions ? competitions.split(',') : []).map(v => v.trim()).filter(Boolean);
+            const teamIds = (teams ? teams.split(',') : []).map(v => v.trim()).filter(Boolean);
+            const bounds = (neLat && neLng && swLat && swLng) ? {
+                northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
+                southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
+            } : null;
+
+            const requests = [];
+            // League requests
+            for (const leagueId of leagueIds) {
+                requests.push(
+                    axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                        params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
+                        headers: { 'x-apisports-key': API_SPORTS_KEY },
+                        httpsAgent,
+                        timeout: 10000
+                    }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
+                      .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
+                );
+            }
+            // Team requests
+            for (const teamId of teamIds) {
+                requests.push(
+                    axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                        params: { team: teamId, season: season, from: dateFrom, to: dateTo },
+                        headers: { 'x-apisports-key': API_SPORTS_KEY },
+                        httpsAgent,
+                        timeout: 10000
+                    }).then(r => ({ type: 'team', id: teamId, data: r.data }))
+                      .catch(() => ({ type: 'team', id: teamId, data: { response: [] } }))
+                );
+            }
+
+            const settled = await Promise.allSettled(requests);
+            const fixtures = [];
+            for (const s of settled) {
+                if (s.status === 'fulfilled') {
+                    const payload = s.value;
+                    if (payload?.data?.response?.length) {
+                        fixtures.push(...payload.data.response);
+                    }
+                }
+            }
+
+            // Dedupe by fixture id
+            const seen = new Set();
+            const uniqueFixtures = fixtures.filter(fx => {
+                const id = fx.fixture?.id;
+                if (!id || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
+            // Transform similar to popular route (include coordinates when available)
+            const transformedMatches = [];
+            for (const match of uniqueFixtures) {
+                const venue = match.fixture?.venue;
+                let venueInfo = null;
+                if (venue?.id) {
+                    const localVenue = await venueService.getVenueByApiId(venue.id);
+                    if (localVenue) {
+                        venueInfo = {
+                            id: venue.id,
+                            name: localVenue.name,
+                            city: localVenue.city,
+                            country: localVenue.country,
+                            coordinates: localVenue.coordinates || localVenue.location?.coordinates,
+                            image: localVenue.image || null
+                        };
+                    } else {
+                        const v = await getVenueFromApiFootball(venue.id);
+                        if (v) {
+                            venueInfo = {
+                                id: venue.id,
+                                name: v.name,
+                                city: v.city,
+                                country: v.country,
+                                coordinates: null,
+                                image: v.image || null
+                            };
+                        }
+                    }
+                }
+                if (!venueInfo) {
+                    venueInfo = {
+                        id: venue?.id || null,
+                        name: venue?.name || 'Unknown Venue',
+                        city: venue?.city || 'Unknown City',
+                        country: match.league?.country || 'Unknown Country',
+                        coordinates: null
+                    };
+                }
+
+                const transformed = {
+                    id: match.fixture.id,
+                    fixture: {
+                        id: match.fixture.id,
+                        date: match.fixture.date,
+                        venue: venueInfo,
+                        status: match.fixture.status
+                    },
+                    league: {
+                        id: match.league.id,
+                        name: match.league.name,
+                        country: match.league.country,
+                        logo: match.league.logo
+                    },
+                    teams: {
+                        home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
+                        away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
+                    }
+                };
+
+                // Bounds filtering if provided and we have coordinates
+                if (bounds) {
+                    if (transformed.fixture.venue.coordinates && isWithinBounds(transformed.fixture.venue.coordinates, bounds)) {
+                        transformedMatches.push(transformed);
+                    }
+                } else {
+                    // For global, include only those with coordinates
+                    if (transformed.fixture.venue.coordinates) {
+                        transformedMatches.push(transformed);
+                    }
+                }
+            }
+
+            // Sort by date
+            transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+            return res.json({ success: true, data: transformedMatches, count: transformedMatches.length });
+        }
+
+        // Fallback: original team-vs-team search
         if (!homeTeam && !awayTeam) {
             return res.status(400).json({ success: false, message: 'At least one team must be specified' });
         }

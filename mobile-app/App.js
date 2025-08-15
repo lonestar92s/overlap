@@ -10,11 +10,12 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
-import SavedScreen from './screens/SavedScreen';
+import MemoriesScreen from './screens/MemoriesScreen';
 import TripsListScreen from './screens/TripsListScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
+import ItineraryMapScreen from './screens/ItineraryMapScreen';
 import TripMapView from './screens/TripMapView';
-import { SavedMatchesProvider } from './contexts/SavedMatchesContext';
+import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 
 // Placeholder screens for other tabs
@@ -81,6 +82,10 @@ function TripsStack() {
         component={TripOverviewScreen}
       />
       <Stack.Screen
+        name="ItineraryMap"
+        component={ItineraryMapScreen}
+      />
+      <Stack.Screen
         name="TripMapView"
         component={TripMapView}
       />
@@ -91,7 +96,7 @@ function TripsStack() {
 export default function App() {
   return (
     <FilterProvider>
-      <SavedMatchesProvider>
+      <ItineraryProvider>
         <NavigationContainer>
           <StatusBar style="light" backgroundColor="#1976d2" />
           <Tab.Navigator
@@ -108,8 +113,8 @@ export default function App() {
                 case 'SearchTab':
                   iconName = 'search';
                   break;
-                case 'SavedTab':
-                  iconName = 'favorite-border';
+                case 'MemoriesTab':
+                  iconName = 'memory';
                   break;
                 case 'TripsTab':
                   iconName = 'work-outline';
@@ -128,13 +133,13 @@ export default function App() {
           })}
         >
           <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
-          <Tab.Screen name="SavedTab" component={SavedScreen} options={{ tabBarLabel: 'Saved' }} />
+          <Tab.Screen name="MemoriesTab" component={MemoriesScreen} options={{ tabBarLabel: 'Memories' }} />
           <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
           <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
           <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
         </Tab.Navigator>
         </NavigationContainer>
-        </SavedMatchesProvider>
+        </ItineraryProvider>
       </FilterProvider>
   );
 }

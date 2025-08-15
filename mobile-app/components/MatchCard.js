@@ -43,7 +43,7 @@ const MatchCard = ({
   const fixture = match?.fixture || {};
   const teams = match?.teams || { home: {}, away: {} };
   const league = match?.league || match?.competition || {};
-  const venue = fixture?.venue || { name: 'Unknown Venue', city: 'Unknown City' };
+  const venue = fixture?.venue || { name: 'Unknown Venue', city: null };
   
   // Ensure we have a valid match ID for the heart functionality
   const matchId = match?.id || match?.fixture?.id || 'unknown';

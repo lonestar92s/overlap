@@ -161,7 +161,12 @@ router.delete('/:id', auth, async (req, res) => {
 // Add a match to a trip
 router.post('/:id/matches', auth, async (req, res) => {
     try {
-        const { matchId, homeTeam, awayTeam, league, venue, date } = req.body;
+        const { matchId, homeTeam, awayTeam, league, venue, venueData, date } = req.body;
+        
+        console.log('🏟️ BACKEND - Adding match to trip');
+        console.log('🏟️ BACKEND - Complete request body:', JSON.stringify(req.body, null, 2));
+        console.log('🏟️ BACKEND - Received venueData:', JSON.stringify(venueData, null, 2));
+        console.log('🏟️ BACKEND - Received venue string:', venue);
         
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
@@ -182,18 +187,28 @@ router.post('/:id/matches', auth, async (req, res) => {
             });
         }
 
-        trip.matches.push({
+        const matchToSave = {
             matchId,
             homeTeam,
             awayTeam,
             league,
             venue,
+            venueData: venueData || null,  // Save the complete venue object
             date: new Date(date),
             addedAt: new Date()
-        });
+        };
+        
+        console.log('🏟️ BACKEND - About to save match:', JSON.stringify(matchToSave, null, 2));
+        
+        trip.matches.push(matchToSave);
 
         trip.updatedAt = new Date();
         await user.save();
+        
+        // Check what was actually saved
+        const savedMatch = trip.matches[trip.matches.length - 1];
+        console.log('🏟️ BACKEND - Successfully saved match:', JSON.stringify(savedMatch, null, 2));
+        console.log('🏟️ BACKEND - Saved venueData specifically:', JSON.stringify(savedMatch.venueData, null, 2));
 
         res.json({
             success: true,
