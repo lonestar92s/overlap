@@ -24,8 +24,7 @@ const FilterModal = ({
   const insets = useSafeAreaInsets();
   const [expandedCountryId, setExpandedCountryId] = useState(null);
   const [expandedLeagueId, setExpandedLeagueId] = useState(null);
-  console.log('FilterModal received filterData:', filterData);
-  console.log('FilterModal received selectedFilters:', selectedFilters);
+
   const [localFilters, setLocalFilters] = useState({
     countries: [],
     leagues: [],

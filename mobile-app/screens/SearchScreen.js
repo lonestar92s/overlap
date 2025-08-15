@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,19 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { Button, Card, SearchBar } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
 import ApiService from '../services/api';
+import { getPopularLeagues, getAllLeagues } from '../data/leagues';
 
 const SearchScreen = ({ navigation }) => {
   const [location, setLocation] = useState(null);
@@ -27,10 +33,23 @@ const SearchScreen = ({ navigation }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState(null);
+  // Who selections (cap total to 5)
+  const MAX_WHO = 5;
+  const [selectedLeagues, setSelectedLeagues] = useState([]); // array of {id, name}
+  const [selectedTeams, setSelectedTeams] = useState([]); // array of {id, name}
+  const [teamIdInput, setTeamIdInput] = useState('');
+  const [teamNameInput, setTeamNameInput] = useState('');
   const [popularMatches, setPopularMatches] = useState([]);
   const [showPopularMatchModal, setShowPopularMatchModal] = useState(false);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [showLeaguePicker, setShowLeaguePicker] = useState(false);
+  const [showTeamPicker, setShowTeamPicker] = useState(false);
+  const [leagueSearchQuery, setLeagueSearchQuery] = useState('');
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
+  const [leagueSearchResults, setLeagueSearchResults] = useState([]);
+  const [teamSearchResults, setTeamSearchResults] = useState([]);
+  const [isSearchingLeagues, setIsSearchingLeagues] = useState(false);
+  const [isSearchingTeams, setIsSearchingTeams] = useState(false);
 
   // Combined data for the main FlatList
   const sections = [
@@ -73,12 +92,8 @@ const SearchScreen = ({ navigation }) => {
     }
   ];
 
-  // Recent searches data
-  const recentSearches = [
-    { id: '1', location: 'London', dates: 'Sep 24 - 28', guests: '2 guests' },
-    { id: '2', location: 'Barcelona', dates: 'Oct 13 - Nov 15', guests: '4 guests' },
-    { id: '3', location: 'Munich', dates: 'Oct 2 - 6', guests: '2 guests' },
-  ];
+  // Recent searches data - will be populated from actual search history
+  const [recentSearches, setRecentSearches] = useState([]);
 
   // Suggested destinations
   const suggestedDestinations = [
@@ -181,17 +196,116 @@ const SearchScreen = ({ navigation }) => {
     setDateFrom(null);
     setDateTo(null);
     setSelectedDates({});
-    setSelectedTeam(null);
+    setSelectedLeagues([]);
+    setSelectedTeams([]);
+  };
+
+  // Who helpers
+  const totalWhoCount = () => selectedLeagues.length + selectedTeams.length;
+  const guardCap = () => {
+    if (totalWhoCount() >= MAX_WHO) {
+      Alert.alert('Limit reached', `You can select up to ${MAX_WHO} items in Who.`);
+      return true;
+    }
+    return false;
+  };
+  const addLeagueById = (league) => {
+    if (!league || !league.id) return;
+    if (selectedLeagues.find(l => String(l.id) === String(league.id))) return;
+    if (guardCap()) return;
+    setSelectedLeagues(prev => [...prev, { id: String(league.id), name: league.name || `League ${league.id}` }]);
+    setShowLeaguePicker(false);
+    setLeagueSearchQuery('');
+    setLeagueSearchResults([]);
+  };
+  const removeLeague = (leagueId) => {
+    setSelectedLeagues(prev => prev.filter(l => String(l.id) !== String(leagueId)));
+  };
+  const addTeamById = () => {
+    if (guardCap()) return;
+    const id = String(teamIdInput).trim();
+    if (!id) { Alert.alert('Team ID required', 'Enter a numeric team ID.'); return; }
+    if (selectedTeams.find(t => String(t.id) === id)) { setShowTeamModal(false); setTeamIdInput(''); setTeamNameInput(''); return; }
+    setSelectedTeams(prev => [...prev, { id, name: teamNameInput?.trim() || `Team ${id}` }]);
+    setShowTeamModal(false);
+    setTeamIdInput('');
+    setTeamNameInput('');
+  };
+
+  const addTeamFromModal = (team) => {
+    if (!team || !team.id) return;
+    if (selectedTeams.find(t => String(t.id) === String(team.id))) return;
+    if (guardCap()) return;
+    setSelectedTeams(prev => [...prev, { id: String(team.id), name: team.name || `Team ${team.id}` }]);
+    setShowTeamPicker(false);
+    setTeamSearchQuery('');
+    setTeamSearchResults([]);
+  };
+  const removeTeam = (teamId) => {
+    setSelectedTeams(prev => prev.filter(t => String(t.id) !== String(teamId)));
+  };
+
+  const clearAllSelections = () => {
+    setSelectedLeagues([]);
+    setSelectedTeams([]);
+  };
+
+  // Helper functions for search button
+  const canSearch = () => {
+    const hasLocation = !!location;
+    const hasDates = !!(dateFrom && dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+
+    // If no Who is selected, we need both location and dates
+    if (!hasWho) {
+      return hasLocation && hasDates;
+    }
+
+    // If Who is selected, we need at least one of: location, dates, or both
+    return hasLocation || hasDates;
+  };
+
+  const getSearchButtonText = () => {
+    const hasLocation = !!location;
+    const hasDates = !!(dateFrom && dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+
+    if (hasWho) {
+      if (hasLocation && hasDates) {
+        return 'Search';
+      } else if (hasLocation) {
+        return 'Search';
+      } else if (hasDates) {
+        return 'Search';
+      } else {
+        return 'Search';
+      }
+          } else {
+        return 'Search';
+      }
   };
 
   const handleSearch = async () => {
-    if (!location) {
-      Alert.alert('Error', 'Please select a location');
-      return;
+    // Check if we have any search criteria
+    const hasLocation = !!location;
+    const hasDates = !!(dateFrom && dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+
+    // If no Who is selected, we need both location and dates
+    if (!hasWho) {
+      if (!hasLocation) {
+        Alert.alert('Error', 'Please select a location');
+        return;
+      }
+      if (!hasDates) {
+        Alert.alert('Error', 'Please select your travel dates');
+        return;
+      }
     }
 
-    if (!dateFrom || !dateTo) {
-      Alert.alert('Error', 'Please select your travel dates');
+    // If Who is selected, we need at least one of: location, dates, or both
+    if (hasWho && !hasLocation && !hasDates) {
+      Alert.alert('Error', 'Please select at least a location or travel dates when searching by teams/leagues');
       return;
     }
 
@@ -203,42 +317,86 @@ const SearchScreen = ({ navigation }) => {
         dateTo: formatDate(dateTo)
       };
       
+      console.log('SearchScreen: hasWho =', hasWho);
+      console.log('SearchScreen: selectedLeagues =', selectedLeagues);
+      console.log('SearchScreen: selectedTeams =', selectedTeams);
+      console.log('SearchScreen: hasLocation =', hasLocation);
+      console.log('SearchScreen: hasDates =', hasDates);
       
-      
-      const bounds = {
-        northeast: {
-          lat: location.lat + 0.25,
-          lng: location.lon + 0.25,
-        },
-        southwest: {
-          lat: location.lat - 0.25,
-          lng: location.lon - 0.25,
+      let matches = [];
+      let initialRegion = null;
+      let autoFitKey = 0;
+
+      if (hasWho) {
+        // Global search by leagues/teams
+        const apiParams = {
+          competitions: selectedLeagues.map(l => String(l.id)),
+          teams: selectedTeams.map(t => String(t.id)),
+        };
+
+        // Add optional date range if provided
+        if (hasDates) {
+          apiParams.dateFrom = searchParams.dateFrom;
+          apiParams.dateTo = searchParams.dateTo;
         }
-      };
+
+        // Add optional bounds if location is provided
+        if (hasLocation) {
+          apiParams.bounds = {
+            northeast: { lat: location.lat + 0.25, lng: location.lon + 0.25 },
+            southwest: { lat: location.lat - 0.25, lng: location.lon - 0.25 }
+          };
+          // Set initial region for map centering
+          initialRegion = {
+            latitude: location.lat,
+            longitude: location.lon,
+            latitudeDelta: 0.5,
+            longitudeDelta: 0.5,
+          };
+        }
+
+        console.log('SearchScreen: Calling searchAggregatedMatches with params:', apiParams);
+        
+        const agg = await ApiService.searchAggregatedMatches(apiParams);
+        console.log('SearchScreen: searchAggregatedMatches response:', agg);
+        matches = agg?.data || [];
+        console.log('SearchScreen: Final matches from aggregated search:', matches);
+        autoFitKey = Date.now(); // trigger map to auto-fit
+      } else {
+        // Traditional bounds-based search (requires both location and dates)
+        const bounds = {
+          northeast: { lat: location.lat + 0.25, lng: location.lon + 0.25 },
+          southwest: { lat: location.lat - 0.25, lng: location.lon - 0.25 }
+        };
+        const response = await ApiService.searchMatchesByBounds({
+          bounds,
+          dateFrom: searchParams.dateFrom,
+          dateTo: searchParams.dateTo
+        });
+        matches = response.data || [];
+        
+        // Set initial region for bounds-based search
+        initialRegion = {
+          latitude: location.lat,
+          longitude: location.lon,
+          latitudeDelta: 0.5,
+          longitudeDelta: 0.5,
+        };
+      }
       
-      const response = await ApiService.searchMatchesByBounds({
-        bounds,
-        dateFrom: searchParams.dateFrom,
-        dateTo: searchParams.dateTo
-      });
-      
-      const matches = response.data || [];
-      
-      
-      
-      const initialRegion = {
-        latitude: location.lat,
-        longitude: location.lon,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-      };
+      // Save to recent searches
+      saveToRecentSearches(searchParams, matches, initialRegion);
       
       // Close modal and navigate
       setShowSearchModal(false);
       navigation.navigate('MapResults', { 
         searchParams,
         matches,
-        initialRegion
+        initialRegion,
+        autoFitKey,
+        hasLocation,
+        hasDates,
+        hasWho
       });
     } catch (error) {
       console.error('SearchScreen: Search error:', error);
@@ -263,14 +421,16 @@ const SearchScreen = ({ navigation }) => {
   );
 
   const renderRecentSearch = ({ item }) => (
-    <TouchableOpacity style={styles.recentSearchItem}>
+    <TouchableOpacity 
+      style={styles.recentSearchItem}
+      onPress={() => handleRecentSearchSelect(item)}
+    >
       <View style={styles.recentSearchIcon}>
-        <Text style={styles.recentSearchIconText}>🏟️</Text>
+        <Icon name="location-on" size={20} color="#1976d2" />
       </View>
       <View style={styles.recentSearchContent}>
         <Text style={styles.recentSearchLocation}>{item.location}</Text>
         <Text style={styles.recentSearchDates}>{item.dates}</Text>
-        <Text style={styles.recentSearchGuests}>{item.guests}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -288,7 +448,7 @@ const SearchScreen = ({ navigation }) => {
       <FlatList
         data={item.data}
         renderItem={renderDestinationCard}
-        keyExtractor={(cardItem) => cardItem.id}
+        keyExtractor={(cardItem, index) => (cardItem.id || `card-${index}`).toString()}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
@@ -347,12 +507,247 @@ const SearchScreen = ({ navigation }) => {
     setShowPopularMatchModal(false);
   };
 
+  // Handle recent search selection
+  const handleRecentSearchSelect = (recentSearch) => {
+    // Parse the stored search data and navigate to map view
+    if (recentSearch.searchParams) {
+      navigation.navigate('MapResults', {
+        searchParams: recentSearch.searchParams,
+        matches: recentSearch.matches || [],
+        initialRegion: recentSearch.initialRegion,
+        autoFitKey: Date.now()
+      });
+      setShowSearchModal(false);
+    }
+  };
+
+  // Save search to recent searches
+  const saveToRecentSearches = async (searchParams, matches, initialRegion) => {
+    const newSearch = {
+      id: Date.now().toString(),
+      location: searchParams.location?.city || 'Unknown Location',
+      dates: formatDateRange(),
+      searchParams,
+      matches,
+      initialRegion,
+      timestamp: new Date().toISOString()
+    };
+
+    setRecentSearches(prev => {
+      // Remove duplicates and keep only last 3 searches
+      const filtered = prev.filter(s => 
+        s.location !== newSearch.location || 
+        s.dates !== newSearch.dates
+      );
+      return [newSearch, ...filtered].slice(0, 3);
+    });
+
+    // Save to AsyncStorage
+    try {
+      const updatedSearches = [newSearch, ...recentSearches.filter(s => 
+        s.location !== newSearch.location || 
+        s.dates !== newSearch.dates
+      )].slice(0, 3);
+      await AsyncStorage.setItem('recentSearches', JSON.stringify(updatedSearches));
+    } catch (error) {
+      console.error('Failed to save recent searches:', error);
+    }
+  };
+
+  // Load recent searches from AsyncStorage
+  const loadRecentSearches = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('recentSearches');
+      if (stored) {
+        setRecentSearches(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Failed to load recent searches:', error);
+    }
+  };
+
+  // Load recent searches on component mount
+  useEffect(() => {
+    loadRecentSearches();
+  }, []);
+
+  // Handle matches near me with time period
+  const handleMatchesNearMe = async (timePeriod) => {
+    try {
+      // Get user's current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required to find matches near you.');
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      const userLocation = {
+        lat: currentLocation.coords.latitude,
+        lon: currentLocation.coords.longitude
+      };
+
+      // Calculate date range based on time period
+      const today = new Date();
+      let dateFrom, dateTo;
+      
+      switch (timePeriod) {
+        case 'today':
+          dateFrom = today.toISOString().split('T')[0];
+          dateTo = today.toISOString().split('T')[0];
+          break;
+        case 'thisWeek':
+          dateFrom = today.toISOString().split('T')[0];
+          const thisWeekEnd = new Date(today);
+          thisWeekEnd.setDate(today.getDate() + 7);
+          dateTo = thisWeekEnd.toISOString().split('T')[0];
+          break;
+        case 'thisMonth':
+          dateFrom = today.toISOString().split('T')[0];
+          const thisMonthEnd = new Date(today);
+          thisMonthEnd.setDate(today.getDate() + 30);
+          dateTo = thisMonthEnd.toISOString().split('T')[0];
+          break;
+        default:
+          dateFrom = today.toISOString().split('T')[0];
+          dateTo = today.toISOString().split('T')[0];
+      }
+
+      // Create search params for current location
+      const searchParams = {
+        location: {
+          city: 'Current Location',
+          region: 'Near You',
+          country: 'GPS',
+          lat: userLocation.lat,
+          lon: userLocation.lon
+        },
+        dateFrom,
+        dateTo
+      };
+
+      // Search for matches near current location
+      const bounds = {
+        northeast: { lat: userLocation.lat + 0.25, lng: userLocation.lon + 0.25 },
+        southwest: { lat: userLocation.lat - 0.25, lng: userLocation.lon - 0.25 }
+      };
+
+      const response = await ApiService.searchMatchesByBounds({
+        bounds,
+        dateFrom,
+        dateTo
+      });
+
+      const matches = response.data || [];
+      
+      // Set initial region for map centering
+      const initialRegion = {
+        latitude: userLocation.lat,
+        longitude: userLocation.lon,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
+      };
+
+      // Save to recent searches
+      saveToRecentSearches(searchParams, matches, initialRegion);
+      
+      // Close modal and navigate
+      setShowSearchModal(false);
+      navigation.navigate('MapResults', { 
+        searchParams,
+        matches,
+        initialRegion,
+        autoFitKey: Date.now(),
+        hasLocation: true,
+        hasDates: true,
+        hasWho: false
+      });
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      Alert.alert('Error', 'Failed to get your current location. Please try again.');
+    }
+  };
+
+  const searchLeagues = async (query) => {
+    console.log('searchLeagues called with query:', query);
+    if (!query.trim()) {
+      setLeagueSearchResults([]);
+      return;
+    }
+
+    setIsSearchingLeagues(true);
+    try {
+      // Search through the local leagues data
+      const results = getAllLeagues().filter(league => 
+        league.name.toLowerCase().includes(query.toLowerCase()) ||
+        league.country.toLowerCase().includes(query.toLowerCase())
+      );
+      console.log('League search results:', results);
+      setLeagueSearchResults(results);
+    } catch (error) {
+      console.error('Error searching leagues:', error);
+      setLeagueSearchResults([]);
+    } finally {
+      setIsSearchingLeagues(false);
+    }
+  };
+
+  const searchTeams = async (query) => {
+    if (!query.trim()) {
+      setTeamSearchResults([]);
+      return;
+    }
+
+    setIsSearchingTeams(true);
+    try {
+      // Call the real Football API through our backend
+      const response = await ApiService.searchTeams(query, 10);
+      
+      if (response.success && response.results) {
+        // Transform the API response to match our expected format
+        const transformedResults = response.results.map(team => ({
+          id: team.id,
+          name: team.name,
+          league: team.league || 'Unknown League',
+          country: team.country || 'Unknown Country',
+          logo: team.logo,
+          city: team.city
+        }));
+        setTeamSearchResults(transformedResults);
+      } else {
+        setTeamSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching teams:', error);
+      setTeamSearchResults([]);
+    } finally {
+      setIsSearchingTeams(false);
+    }
+  };
+
+  // Debounced search functions
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      searchLeagues(leagueSearchQuery);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [leagueSearchQuery]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      searchTeams(teamSearchQuery);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [teamSearchQuery]);
+
+
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
         data={sections}
         renderItem={renderSection}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => (item.id || `section-${index}`).toString()}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
@@ -397,7 +792,12 @@ const SearchScreen = ({ navigation }) => {
             data={[{ id: 'modal-content' }]}
             renderItem={() => (
               <View style={styles.modalSearchCard}>
-                <Text style={styles.modalSearchTitle}>Where?</Text>
+                <View style={styles.fieldHeaderRow}>
+                  <Text style={styles.modalSearchTitle}>Where?</Text>
+                  {(selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                    <Text style={styles.optionalText}>(Optional when teams/leagues selected)</Text>
+                  )}
+                </View>
                 
         <LocationAutocomplete
           value={location}
@@ -407,13 +807,51 @@ const SearchScreen = ({ navigation }) => {
         />
 
                 {/* Recent Searches */}
-                <Text style={styles.modalSectionTitle}>Recent searches</Text>
-                <FlatList
-                  data={recentSearches}
-                  renderItem={renderRecentSearch}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                />
+                {recentSearches.length > 0 && (
+                  <>
+                    <Text style={styles.modalSectionTitle}>Recent searches</Text>
+                    <FlatList
+                      data={recentSearches}
+                      renderItem={renderRecentSearch}
+                      keyExtractor={(item, index) => (item.id || `recent-${index}`).toString()}
+                      scrollEnabled={false}
+                    />
+                  </>
+                )}
+
+                {/* Matches Near Me - Time Options */}
+                <Text style={styles.modalSectionTitle}>Quick Search</Text>
+                <View style={styles.quickAccessColumn}>
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('today')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby Today</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('thisWeek')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby This Week</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('thisMonth')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby This Month</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Suggested Destinations - Hidden for now */}
                 {/* <Text style={styles.modalSectionTitle}>Suggested destinations</Text>
@@ -427,7 +865,12 @@ const SearchScreen = ({ navigation }) => {
                 </View> */}
 
                 {/* When Input */}
-                <Text style={styles.modalSearchTitle}>When?</Text>
+                <View style={styles.fieldHeaderRow}>
+                  <Text style={styles.modalSearchTitle}>When?</Text>
+                  {(selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                    <Text style={styles.optionalText}>(Optional when teams/leagues selected)</Text>
+                  )}
+                </View>
         <TouchableOpacity
                   style={styles.modalSearchInput}
           onPress={() => setShowCalendar(!showCalendar)}
@@ -462,10 +905,146 @@ const SearchScreen = ({ navigation }) => {
 
                 {/* Who Input */}
                 <Text style={styles.modalSearchTitle}>Who?</Text>
-                <TouchableOpacity style={styles.modalSearchInput}>
-                  <Text style={styles.modalSearchIcon}>👥</Text>
-                  <Text style={styles.modalSearchPlaceholder}>Add team</Text>
-                </TouchableOpacity>
+                {/* Selected chips */}
+                <View style={styles.whoChipsRow}>
+                  {selectedLeagues.map((l) => (
+                    <View key={`league-${l.id}`} style={styles.chip}>
+                      <Text style={styles.chipText}>{l.name}</Text>
+                      <TouchableOpacity onPress={() => removeLeague(l.id)} style={styles.chipClose}>
+                        <Text style={styles.chipCloseText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {selectedTeams.map((t) => (
+                    <View key={`team-${t.id}`} style={styles.chip}>
+                      <Text style={styles.chipText}>{t.name}</Text>
+                      <TouchableOpacity onPress={() => removeTeam(t.id)} style={styles.chipClose}>
+                        <Text style={styles.chipCloseText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+                <View style={styles.whoActionsRow}>
+                  <TouchableOpacity 
+                    style={styles.addButton} 
+                    onPress={() => {
+                      setShowLeaguePicker(!showLeaguePicker);
+                      setShowTeamPicker(false); // Close team picker if open
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>
+                      {showLeaguePicker ? '− Hide Leagues' : '+ Add League'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.addButton} 
+                    onPress={() => {
+                      setShowTeamPicker(!showTeamPicker);
+                      setShowLeaguePicker(false); // Close league picker if open
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>
+                      {showTeamPicker ? '− Hide Teams' : '+ Add Team'}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.whoCountText}>{totalWhoCount()}/{MAX_WHO}</Text>
+                </View>
+
+                {/* League Picker Section */}
+                {showLeaguePicker && (
+                  <View style={styles.pickerSection}>
+                    <View style={styles.pickerHeader}>
+                      <Text style={styles.pickerTitle}>Select Leagues</Text>
+                      <Text style={styles.pickerSubtitle}>Search and select leagues to include in your search</Text>
+                    </View>
+                    
+                    <View style={styles.searchInputContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search leagues..."
+                        value={leagueSearchQuery}
+                        onChangeText={setLeagueSearchQuery}
+                      />
+                    </View>
+
+                    <FlatList
+                      data={leagueSearchResults}
+                      keyExtractor={(item, index) => (item.id || `league-${index}`).toString()}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={styles.pickerListItem}
+                          onPress={() => addLeagueById(item)}
+                        >
+                          <View style={styles.pickerListItemContent}>
+                            <Text style={styles.pickerListItemTitle}>{item.name}</Text>
+                            <Text style={styles.pickerListItemSubtitle}>{item.country}</Text>
+                          </View>
+                          <Icon name="add" size={24} color="#1976d2" />
+                        </TouchableOpacity>
+                      )}
+                      ListEmptyComponent={
+                        <View style={styles.pickerEmptyState}>
+                          {isSearchingLeagues ? (
+                            <ActivityIndicator size="large" color="#1976d2" />
+                          ) : (
+                            <Text style={styles.pickerEmptyText}>
+                              {leagueSearchQuery ? 'No leagues found' : 'Search for leagues to add'}
+                            </Text>
+                          )}
+                        </View>
+                      }
+                      style={styles.pickerList}
+                    />
+                  </View>
+                )}
+
+                {/* Team Picker Section */}
+                {showTeamPicker && (
+                  <View style={styles.pickerSection}>
+                    <View style={styles.pickerHeader}>
+                      <Text style={styles.pickerTitle}>Select Teams</Text>
+                      <Text style={styles.pickerSubtitle}>Search and select teams to include in your search</Text>
+                    </View>
+                    
+                    <View style={styles.searchInputContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search teams..."
+                        value={teamSearchQuery}
+                        onChangeText={setTeamSearchQuery}
+                      />
+                    </View>
+
+                    <FlatList
+                      data={teamSearchResults}
+                      keyExtractor={(item, index) => (item.id || `team-${index}`).toString()}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={styles.pickerListItem}
+                          onPress={() => addTeamFromModal(item)}
+                        >
+                          <View style={styles.pickerListItemContent}>
+                            <Text style={styles.pickerListItemTitle}>{item.name}</Text>
+                            <Text style={styles.pickerListItemSubtitle}>{item.league}</Text>
+                          </View>
+                          <Icon name="add" size={24} color="#1976d2" />
+                        </TouchableOpacity>
+                      )}
+                      ListEmptyComponent={
+                        <View style={styles.pickerEmptyState}>
+                          {isSearchingTeams ? (
+                            <ActivityIndicator size="large" color="#1976d2" />
+                          ) : (
+                            <Text style={styles.pickerEmptyText}>
+                              {teamSearchQuery ? 'No teams found' : 'Search for teams to add'}
+                            </Text>
+                          )}
+                        </View>
+                      }
+                      style={styles.pickerList}
+                    />
+                  </View>
+                )}
               </View>
             )}
             keyExtractor={(item) => item.id}
@@ -481,20 +1060,24 @@ const SearchScreen = ({ navigation }) => {
             <TouchableOpacity 
               style={[
                 styles.modalSearchButton,
-                (!location || !dateFrom || !dateTo) && styles.modalSearchButtonDisabled
+                (!canSearch()) && styles.modalSearchButtonDisabled
               ]}
               onPress={handleSearch}
-              disabled={loading || !location || !dateFrom || !dateTo}
+              disabled={loading || !canSearch()}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.modalSearchButtonText}>Search</Text>
+                <Text style={styles.modalSearchButtonText}>{getSearchButtonText()}</Text>
               )}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
+
+
+
+
 
       {/* Popular Match Modal */}
       <PopularMatchModal
@@ -504,6 +1087,8 @@ const SearchScreen = ({ navigation }) => {
         onClose={handlePopularMatchModalClose}
         onNavigate={handlePopularMatchNavigate}
       />
+
+
     </SafeAreaView>
   );
 };
@@ -684,6 +1269,122 @@ const styles = StyleSheet.create({
     color: '#666',
     flex: 1,
   },
+  whoChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipText: {
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  chipClose: {
+    marginLeft: 8,
+  },
+  chipCloseText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  whoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  addButton: {
+    backgroundColor: '#1976d2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  whoCountText: {
+    marginLeft: 'auto',
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  leagueModalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  leagueModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  leagueModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  leagueListContent: {
+    padding: 20,
+  },
+  leagueRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  leagueName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  leagueCountry: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  browseAllBtn: {
+    paddingVertical: 12,
+  },
+  browseAllText: {
+    color: '#1976d2',
+    fontWeight: '600',
+  },
+  teamOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  teamInputCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    backgroundColor: '#f8f8f8',
+  },
+  teamButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
   modalLocationInput: {
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
@@ -712,9 +1413,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  recentSearchIconText: {
-    fontSize: 16,
-  },
   recentSearchContent: {
     flex: 1,
   },
@@ -724,11 +1422,6 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   recentSearchDates: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  recentSearchGuests: {
     fontSize: 14,
     color: '#666',
     marginTop: 2,
@@ -790,6 +1483,165 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  modalSearchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalSearchInput: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  modalListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalListItemContent: {
+    flex: 1,
+  },
+  modalListItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalListItemSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  modalEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  modalEmptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  pickerSection: {
+    backgroundColor: '#fff',
+    margin: 20,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pickerHeader: {
+    marginBottom: 20,
+  },
+  pickerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 5,
+  },
+  pickerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  searchInputContainer: {
+    marginBottom: 20,
+  },
+  searchInput: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  pickerList: {
+    maxHeight: 300,
+  },
+  pickerListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  pickerListItemContent: {
+    flex: 1,
+  },
+  pickerListItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  pickerListItemSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  pickerEmptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  pickerEmptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  fieldHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  optionalText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  // Quick access styles
+  quickAccessColumn: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    gap: 12,
+  },
+  quickAccessButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  quickAccessIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#e8f5e8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  quickAccessText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
   },
 });
 

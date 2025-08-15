@@ -25,7 +25,7 @@ import { useFilter } from '../contexts/FilterContext';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
-  const { searchParams, matches: initialMatches, initialRegion } = route.params || {};
+  const { searchParams, matches: initialMatches, initialRegion, hasWho } = route.params || {};
   
   // Conditional import for map component
   const MatchMapView = React.useMemo(() => {
@@ -88,8 +88,8 @@ const MapResultsScreen = ({ navigation, route }) => {
     closeFilterModal
   } = useFilter();
 
-  // Trigger for map auto-fit when filters are applied/cleared
-  const [autoFitKey, setAutoFitKey] = useState(0);
+  // Trigger for map auto-fit when filters are applied/cleared or on initial navigation
+  const [autoFitKey, setAutoFitKey] = useState(route.params?.autoFitKey || 0);
   
   // Process real match data for filters
   useEffect(() => {
@@ -241,10 +241,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         matchIds: currentMatchIds // Add match IDs to track changes
       };
 
-      console.log('Final filter data:', filterData);
-      console.log('Countries found:', filterData.countries.length);
-      console.log('Leagues found:', filterData.leagues.length);
-      console.log('Teams found:', filterData.teams.length);
+
       
       // If we still don't have any data, create some basic fallback data
       if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
@@ -867,25 +864,109 @@ const MapResultsScreen = ({ navigation, route }) => {
     </TouchableOpacity>
   );
 
-  // Render match item
-  const renderMatchItem = ({ item }) => {
-    return (
-      <MatchCard
-        match={item}
-        onPress={() => handleMatchPress(item)}
-        variant="default"
-        showHeart={true}
-      />
-    );
+  // Group matches by date for better organization
+  const groupMatchesByDate = (matches) => {
+    if (!matches || matches.length === 0) return [];
+    
+    const grouped = matches.reduce((acc, match) => {
+      const date = match.fixture?.date;
+      if (!date) return acc;
+      
+      const matchDate = new Date(date);
+      const dateKey = matchDate.toDateString(); // "Mon Jan 01 2024"
+      
+      if (!acc[dateKey]) {
+        acc[dateKey] = {
+          date: matchDate,
+          matches: []
+        };
+      }
+      
+      acc[dateKey].matches.push(match);
+      return acc;
+    }, {});
+    
+    // Convert to array and sort by date
+    return Object.values(grouped).sort((a, b) => a.date - b.date);
+  };
+
+  // Create flat list data with headers
+  const createFlatListData = (matches) => {
+    const groupedMatches = groupMatchesByDate(matches);
+    const flatData = [];
+    
+    groupedMatches.forEach(group => {
+      // Add date header
+      flatData.push({
+        type: 'header',
+        date: group.date,
+        id: `header-${group.date.toDateString()}`
+      });
+      
+      // Add matches for this date
+      group.matches.forEach(match => {
+        flatData.push({
+          type: 'match',
+          ...match
+        });
+      });
+    });
+    
+    return flatData;
+  };
+
+  // Format date for display
+  const formatDateHeader = (date) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const matchDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (matchDate.getTime() === today.getTime()) {
+      return 'Today';
+    } else if (matchDate.getTime() === tomorrow.getTime()) {
+      return 'Tomorrow';
+    } else {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  };
+
+  // Render items (headers and matches)
+  const renderItem = ({ item }) => {
+    if (item.type === 'header') {
+      return (
+        <View style={styles.dateHeader}>
+          <Text style={styles.dateHeaderText}>
+            {formatDateHeader(item.date)}
+          </Text>
+        </View>
+      );
+    } else {
+      return (
+        <MatchCard
+          match={item}
+          onPress={() => handleMatchPress(item)}
+          variant="default"
+          showHeart={true}
+        />
+      );
+    }
   };
 
   // Render bottom sheet content (FlatList as direct child of sheet)
   const renderBottomSheetContent = () => {
+    const flatListData = createFlatListData(filteredMatches || []);
+    
     return (
       <BottomSheetFlatList
-        data={filteredMatches || []}
-        renderItem={renderMatchItem}
-        keyExtractor={(item, index) => item.fixture?.id?.toString() || `match-${index}`}
+        data={flatListData}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => item.id || item.fixture?.id?.toString() || `item-${index}`}
         showsVerticalScrollIndicator={true}
         ListHeaderComponent={() => (
           <View style={styles.subtleHeaderSpacer} />
@@ -992,7 +1073,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       />
 
       {/* Floating Search Button */}
-      {hasMovedFromOriginal && (
+      {(hasMovedFromOriginal || hasWho) && (
         <TouchableOpacity
           style={styles.floatingSearchButton}
           onPress={handleSearchThisArea}
@@ -1501,6 +1582,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1976d2',
     fontWeight: '500',
+  },
+  dateHeader: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  dateHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textTransform: 'capitalize',
   },
 });
 

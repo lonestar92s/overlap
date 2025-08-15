@@ -9,8 +9,10 @@ import {
   FlatList
 } from 'react-native';
 import Autocomplete from 'react-native-autocomplete-input';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import axios from 'axios';
 import { debounce } from 'lodash';
+import * as Location from 'expo-location';
 
 // LocationIQ API configuration
 const LOCATIONIQ_API_KEY = 'pk.6e3ab00541755300772780a4b02cdfe6';
@@ -36,6 +38,34 @@ const LocationAutocomplete = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastRequestTime, setLastRequestTime] = useState(0);
+  const [userLocation, setUserLocation] = useState(null);
+
+  // Get user's current location
+  const getUserLocation = async () => {
+    try {
+      // Request location permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        return null;
+      }
+
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 15000,
+        maximumAge: 10000
+      });
+
+      const { latitude, longitude } = location.coords;
+      const userLoc = { lat: latitude, lon: longitude };
+      setUserLocation(userLoc);
+      return userLoc;
+    } catch (error) {
+      console.log('Error getting location:', error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (value) {
@@ -46,13 +76,18 @@ const LocationAutocomplete = ({
     }
   }, [value]);
 
+  // Get user location when component mounts
+  useEffect(() => {
+    getUserLocation();
+  }, []);
+
   const formatLocationDisplay = (option) => {
     if (!option) return '';
     return `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}`;
   };
 
   const fetchSuggestions = async (query) => {
-    if (!query || query.length < 2) {
+    if (!query || query.length < 3) {
       setOptions([]);
       return;
     }
@@ -90,6 +125,7 @@ const LocationAutocomplete = ({
           s.lat === suggestion.lat && s.lon === suggestion.lon && s.city === suggestion.city && s.region === suggestion.region && s.country === suggestion.country
         ))
       );
+      
       setOptions(uniqueSuggestions);
     } catch (error) {
       console.error('Error fetching location suggestions:', error);
@@ -122,11 +158,30 @@ const LocationAutocomplete = ({
   const handleInputChange = (text) => {
     setInputValue(text);
     if (text.length === 0) {
-      setOptions([]);
+      // Show "Matches near you" when input is empty but focused
+      if (userLocation) {
+        const nearYouOption = {
+          place_id: 'near-you',
+          description: 'Matches near you',
+          lat: userLocation.lat,
+          lon: userLocation.lon,
+          city: 'Current Location',
+          region: 'Near You',
+          country: 'GPS',
+          isNearYou: true
+        };
+        setOptions([nearYouOption]);
+      } else {
+        setOptions([]);
+      }
       onSelect(null);
     } else {
       debouncedFetchSuggestions(text);
     }
+  };
+
+  const handleInputFocus = () => {
+    // Focus behavior - could be used for other purposes in the future
   };
 
   const handleSelectLocation = (location) => {
@@ -138,10 +193,16 @@ const LocationAutocomplete = ({
 
   const renderItem = ({ item }) => (
     <TouchableOpacity style={styles.locationItem} onPress={() => handleSelectLocation(item)} activeOpacity={0.7}>
-      <View style={styles.locationIcon}><Text style={styles.locationIconText}>📍</Text></View>
+      <View style={styles.locationIcon}>
+        <Icon name="location-on" size={20} color="#1976d2" />
+      </View>
       <View style={styles.locationTextContainer}>
-        <Text style={styles.locationMainText}>{item.city}</Text>
-        <Text style={styles.locationSecondaryText}>{item.region ? `${item.region}, ` : ''}{item.country}</Text>
+        <Text style={styles.locationMainText}>
+          {item.city}
+        </Text>
+        <Text style={styles.locationSecondaryText}>
+          {`${item.region ? `${item.region}, ` : ''}${item.country}`}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -153,6 +214,7 @@ const LocationAutocomplete = ({
           data={options}
           value={inputValue}
           onChangeText={handleInputChange}
+          onFocus={handleInputFocus}
           placeholder={placeholder}
           flatListProps={{ keyExtractor: (item) => item.place_id, renderItem: renderItem, keyboardShouldPersistTaps: 'handled', showsVerticalScrollIndicator: false }}
           inputContainerStyle={styles.inputContainer}
@@ -188,11 +250,17 @@ const styles = StyleSheet.create({
   listStyle: { maxHeight: 200 },
   dropdownList: { maxHeight: 200 },
   locationItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', backgroundColor: '#fff' },
-  locationIcon: { marginRight: 12 },
-  locationIconText: { fontSize: 16 },
+  locationIcon: { 
+    marginRight: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    width: 24,
+    height: 24
+  },
   locationTextContainer: { flex: 1 },
   locationMainText: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 2 },
   locationSecondaryText: { fontSize: 14, color: '#666', lineHeight: 18 },
+
   errorText: { color: '#ff4444', fontSize: 12, marginTop: 4, marginLeft: 12 },
   infoText: { color: '#666', fontSize: 12, marginTop: 4, marginLeft: 12, fontStyle: 'italic' },
 });
