@@ -29,6 +29,13 @@ const MatchMapView = ({
   const [userLocation, setUserLocation] = useState(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // Create a unique key for the map that changes when matches change significantly
+  const mapKey = useMemo(() => {
+    if (!matches || matches.length === 0) return 'no-matches';
+    const matchIds = matches.map(m => m.fixture?.id).filter(Boolean).sort();
+    return matchIds.join('-');
+  }, [matches]);
+
   // Update region when initialRegion prop changes
   useEffect(() => {
     if (initialRegion) {
@@ -36,7 +43,7 @@ const MatchMapView = ({
     }
   }, [initialRegion]);
 
-// Auto-fit to markers only when explicitly triggered
+  // Auto-fit to markers only when explicitly triggered
 useEffect(() => {
   if (matches && matches.length > 0 && mapReady && mapRef.current) {
     const timer = setTimeout(() => {
@@ -192,13 +199,34 @@ useEffect(() => {
   // Render match markers with memoization
   const markers = useMemo(() => {
     if (!matches || matches.length === 0) {
+      console.log('MapView: No matches, clearing all markers');
       return null;
     }
     
     const validMatches = matches.filter(match => {
       const venue = match.fixture?.venue;
-      return venue?.coordinates && venue.coordinates.length === 2;
+      if (!venue || !venue.coordinates || !Array.isArray(venue.coordinates)) {
+        return false;
+      }
+      
+      // Ensure coordinates are valid numbers and within reasonable bounds
+      const [lon, lat] = venue.coordinates;
+      if (typeof lon !== 'number' || typeof lat !== 'number') {
+        return false;
+      }
+      
+      // Check if coordinates are within reasonable world bounds
+      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return false;
+      }
+      
+      return true;
     });
+    
+    console.log(`MapView: Rendering ${validMatches.length} markers from ${matches.length} total matches`);
+    
+    // Create a unique key that changes when the matches array changes
+    const matchesKey = validMatches.map(m => m.fixture?.id).join('-');
     
     return validMatches.map(match => {
       const venue = match.fixture.venue;
@@ -210,11 +238,12 @@ useEffect(() => {
       
       return (
         <Marker
-          key={`match-${String(match.fixture.id)}`}
+          key={`${matchesKey}-match-${String(match.fixture.id)}`}
           coordinate={coordinate}
           onPress={() => handleMarkerPress(match)}
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
           tracksViewChanges={false}
+          identifier={`match-${String(match.fixture.id)}`}
         />
       );
     });
@@ -223,6 +252,7 @@ useEffect(() => {
   return (
     <View style={[styles.container, style]}>
       <MapView
+        key={mapKey}
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}

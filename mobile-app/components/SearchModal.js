@@ -39,7 +39,11 @@ const SearchModal = ({
       const end = new Date(initialDateTo);
       
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+        // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
         dates[dateStr] = {
           selected: true,
           startingDay: d.getTime() === start.getTime(),
@@ -89,7 +93,11 @@ const SearchModal = ({
         setDateTo(dateFrom);
         const dates = {};
         for (let d = new Date(end); d <= start; d.setDate(d.getDate() + 1)) {
-          const dateStr = d.toISOString().split('T')[0];
+          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${year}-${month}-${day}`;
           dates[dateStr] = {
             selected: true,
             startingDay: d.getTime() === end.getTime(),
@@ -101,7 +109,11 @@ const SearchModal = ({
         setDateTo(selectedDate);
         const dates = { ...selectedDates };
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const dateStr = d.toISOString().split('T')[0];
+          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${year}-${month}-${day}`;
           dates[dateStr] = {
             selected: true,
             startingDay: d.getTime() === start.getTime(),

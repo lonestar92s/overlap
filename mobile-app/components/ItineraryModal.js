@@ -83,8 +83,7 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   };
 
   const formatMatchInfo = () => {
-    // DEBUG: Log the complete matchData to see what we're working with
-    console.log('🔍 ItineraryModal - Complete matchData structure:', JSON.stringify(matchData, null, 2));
+
     
     // Extract the fields that the backend API expects
     const matchId = matchData.id || matchData.fixture?.id;
@@ -99,9 +98,7 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
     // IMPORTANT: Save the complete venue object for map functionality
     const venueData = matchData.fixture?.venue || matchData.venue || {};
     
-    console.log('🔍 ItineraryModal - Extracted venueData:', venueData);
-    console.log('🔍 ItineraryModal - matchData.fixture?.venue:', matchData.fixture?.venue);
-    console.log('🔍 ItineraryModal - matchData.venue:', matchData.venue);
+
     
     // Return the format expected by the backend API
     // IMPORTANT: Match the exact Mongoose schema structure but enhance with venue data
@@ -125,18 +122,6 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   // Get match info for display
   const matchInfo = formatMatchInfo();
   
-  // Debug logging to see what matchInfo contains
-  console.log('🔍 ItineraryModal matchInfo:', {
-    homeTeam: matchInfo.homeTeam,
-    awayTeam: matchInfo.awayTeam,
-    league: matchInfo.league,
-    venue: matchInfo.venue,
-    date: matchInfo.date,
-    teams: matchInfo.teams,
-    fixture: matchInfo.fixture,
-    competition: matchInfo.competition
-  });
-
   return (
     <Modal
       visible={visible}

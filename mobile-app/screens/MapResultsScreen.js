@@ -1,50 +1,48 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  Alert,
-  ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  FlatList,
+  StyleSheet,
   Dimensions,
+  Alert,
+  TouchableWithoutFeedback,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar } from 'react-native-elements';
-import BottomSheet, { BottomSheetView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { FlatList } from 'react-native';
+import FilterModal from '../components/FilterModal';
+import { useFilter } from '../contexts/FilterContext';
+import { useItineraries } from '../contexts/ItineraryContext';
+import ApiService from '../services/api';
+import { formatDateHeader } from '../utils/dateUtils';
+import * as Haptics from 'expo-haptics';
 
-import { MAP_PROVIDER } from '../utils/mapConfig';
 import HeartButton from '../components/HeartButton';
 import SearchModal from '../components/SearchModal';
-import MatchCard from '../components/MatchCard';
-import FilterModal from '../components/FilterModal';
 import FilterIcon from '../components/FilterIcon';
-import ApiService from '../services/api';
-import { useFilter } from '../contexts/FilterContext';
+import MatchCard from '../components/MatchCard';
+import MatchMapView from '../components/MapView';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
   const { searchParams, matches: initialMatches, initialRegion, hasWho } = route.params || {};
   
-  // Conditional import for map component
-  const MatchMapView = React.useMemo(() => {
-    if (MAP_PROVIDER === 'mapbox') {
-      return require('../components/MapboxMapView').default;
-    } else {
-      return require('../components/MapView').default;
-    }
-  }, []);
-  
   // Search state
-  const [location] = useState(searchParams?.location || null);
-  const [dateFrom] = useState(searchParams?.dateFrom || null);
-  const [dateTo] = useState(searchParams?.dateTo || null);
+  const [location, setLocation] = useState(searchParams?.location || null);
+  const [dateFrom, setDateFrom] = useState(searchParams?.dateFrom || null);
+  const [dateTo, setDateTo] = useState(searchParams?.dateTo || null);
   
   // Map and matches state
   const [matches, setMatches] = useState(initialMatches || []);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [mapRegion, setMapRegion] = useState(initialRegion || null);
+  
+  // Date header selection state
+  const [selectedDateHeader, setSelectedDateHeader] = useState(null);
   
   // Bottom sheet state
   const [sheetState, setSheetState] = useState('collapsed');
@@ -741,6 +739,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // If no filters are selected, return all matches
     if (selectedCountryIds.length === 0 && selectedLeagueIds.length === 0 && selectedTeamIds.length === 0) {
+      console.log('MapResultsScreen: No filters selected, returning all matches:', matches?.length || 0);
       return matches;
     }
     
@@ -799,11 +798,30 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Get the filtered matches for display (memoized)
   const filteredMatches = useMemo(() => getFilteredMatches(), [matches, selectedFilters]);
 
+  // Get the final filtered matches combining both filters and date selection
+  const finalFilteredMatches = useMemo(() => {
+    if (!selectedDateHeader) {
+      console.log('MapResultsScreen: No date filter, showing filter-filtered matches:', filteredMatches?.length || 0);
+      return filteredMatches; // Show filter-filtered matches when no date header is selected
+    }
+    
+    // Apply date filtering to the already filter-filtered matches
+    const dateFiltered = filteredMatches.filter(match => {
+      const matchDate = new Date(match.fixture?.date);
+      const selectedDate = new Date(selectedDateHeader);
+      
+      return matchDate.toDateString() === selectedDate.toDateString();
+    });
+    
+    console.log('MapResultsScreen: Date filter applied, showing date-filtered matches:', dateFiltered?.length || 0);
+    return dateFiltered;
+  }, [filteredMatches, selectedDateHeader]);
+
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
-    if (!filteredMatches || filteredMatches.length === 0) return [];
+    if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
     const groupsMap = new Map();
-    filteredMatches.forEach((m) => {
+    finalFilteredMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
       if (venue.id != null) key = `id:${venue.id}`;
@@ -820,7 +838,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     // Sort groups by earliest match date
     groups.sort((a, b) => new Date(a.matches[0].fixture.date) - new Date(b.matches[0].fixture.date));
     return groups;
-  }, [filteredMatches]);
+  }, [finalFilteredMatches]);
 
   // Clamp or reset selected index if filtered results change
   useEffect(() => {
@@ -890,8 +908,21 @@ const MapResultsScreen = ({ navigation, route }) => {
     return Object.values(grouped).sort((a, b) => a.date - b.date);
   };
 
-  // Create flat list data with headers
-  const createFlatListData = (matches) => {
+  // Handle date header selection
+  const handleDateHeaderPress = useCallback((date) => {
+    if (selectedDateHeader && selectedDateHeader.toDateString() === date.toDateString()) {
+      // Deselect if clicking the same header
+      setSelectedDateHeader(null);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      // Select new header (deselects previous one)
+      setSelectedDateHeader(date);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [selectedDateHeader]);
+
+  // Create flat list data with headers - memoized for performance
+  const createFlatListData = useCallback((matches) => {
     const groupedMatches = groupMatchesByDate(matches);
     const flatData = [];
     
@@ -913,7 +944,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     });
     
     return flatData;
-  };
+  }, []);
 
   // Format date for display
   const formatDateHeader = (date) => {
@@ -936,15 +967,34 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
-  // Render items (headers and matches)
-  const renderItem = ({ item }) => {
+  // Render items (headers and matches) - memoized for performance
+  const renderItem = useCallback(({ item }) => {
     if (item.type === 'header') {
+      const isSelected = selectedDateHeader && selectedDateHeader.toDateString() === item.date.toDateString();
+      
       return (
-        <View style={styles.dateHeader}>
-          <Text style={styles.dateHeaderText}>
-            {formatDateHeader(item.date)}
-          </Text>
-        </View>
+        <TouchableWithoutFeedback 
+          onPress={() => handleDateHeaderPress(item.date)}
+          delayPressIn={0}
+          delayLongPress={0}
+        >
+          <View 
+            style={[
+              styles.dateHeader,
+              isSelected && styles.dateHeaderSelected
+            ]}
+          >
+            <Text style={[
+              styles.dateHeaderText,
+              isSelected && styles.dateHeaderTextSelected
+            ]}>
+              {formatDateHeader(item.date)}
+            </Text>
+            {isSelected && (
+              <Text style={styles.dateHeaderCheckmark}>✓</Text>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
       );
     } else {
       return (
@@ -956,30 +1006,44 @@ const MapResultsScreen = ({ navigation, route }) => {
         />
       );
     }
-  };
+  }, [selectedDateHeader, handleDateHeaderPress, handleMatchPress]);
 
   // Render bottom sheet content (FlatList as direct child of sheet)
   const renderBottomSheetContent = () => {
-    const flatListData = createFlatListData(filteredMatches || []);
+    const flatListData = createFlatListData(finalFilteredMatches || []);
+    
+    // Calculate responsive bottom padding based on content length
+    const bottomPadding = Math.max(20, Math.min(100, 120 - (finalFilteredMatches?.length || 0) * 3));
     
     return (
       <BottomSheetFlatList
         data={flatListData}
         renderItem={renderItem}
-        keyExtractor={(item, index) => item.id || item.fixture?.id?.toString() || `item-${index}`}
-        showsVerticalScrollIndicator={true}
-        ListHeaderComponent={() => (
-          <View style={styles.subtleHeaderSpacer} />
-        )}
+        keyExtractor={(item, index) => (item.id || `item-${index}`).toString()}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[
-          styles.matchListContent,
-          { paddingHorizontal: 16, paddingBottom: (insets.bottom || 0) + 60 }
+          styles.bottomSheetContent,
+          { paddingBottom: bottomPadding }
         ]}
+        removeClippedSubviews={true}
+        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        scrollEnabled={true}
         keyboardShouldPersistTaps="handled"
-        removeClippedSubviews={false}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={10}
+        nestedScrollEnabled={true}
+        overScrollMode="never"
+        bounces={false}
+        alwaysBounceVertical={false}
+        scrollEventThrottle={16}
+        directionalLockEnabled={true}
+        showsHorizontalScrollIndicator={false}
+        updateCellsBatchingPeriod={50}
+        disableVirtualization={false}
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+          autoscrollToTopThreshold: 10,
+        }}
       />
     );
   };
@@ -1044,6 +1108,22 @@ const MapResultsScreen = ({ navigation, route }) => {
           <Text style={styles.headerSubtitle}>
             {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
           </Text>
+          {selectedDateHeader && (
+            <View style={styles.dateFilterIndicator}>
+              <Text style={styles.dateFilterText}>
+                📅 Filtered to {formatDateHeader(selectedDateHeader)}
+              </Text>
+              <TouchableOpacity 
+                style={styles.clearDateFilterButton}
+                onPress={() => {
+                  setSelectedDateHeader(null);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Text style={styles.clearDateFilterText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
         
         <View style={styles.headerRight}>
@@ -1058,7 +1138,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
-        matches={filteredMatches}
+        matches={finalFilteredMatches}
         initialRegion={getInitialRegion()}
         autoFitKey={autoFitKey}
         onRegionChange={handleMapRegionChange}
@@ -1106,13 +1186,14 @@ const MapResultsScreen = ({ navigation, route }) => {
         }}
         enablePanDownToClose={false}
         enableContentPanningGesture={true}
+        enableHandlePanningGesture={true}
         keyboardBehavior="interactive"
-  bottomInset={0}
+        bottomInset={0}
         backgroundStyle={styles.bottomSheetBackground}
         handleComponent={() => (
           <View style={styles.customHandle}>
             <View style={styles.customHandleBar} />
-            <Text style={styles.customHandleText}>{filteredMatches?.length || 0} results</Text>
+            <Text style={styles.customHandleText}>{finalFilteredMatches?.length || 0} results</Text>
           </View>
         )}
       >
@@ -1132,12 +1213,12 @@ const MapResultsScreen = ({ navigation, route }) => {
           {/* Stacked upcoming matches at this venue */}
           <ScrollView style={styles.venueMatchesList} showsVerticalScrollIndicator={false}>
             {venueGroups[selectedVenueIndex].matches.map((m, idx) => (
-              <MatchCard key={`venue-match-${m.fixture?.id || idx}`}
+              <MatchCard
+                key={`venue-match-${m.fixture?.id || idx}`}
                 match={m}
-                onPress={() => {}}
+                onPress={() => handleMatchPress(m)}
                 variant="overlay"
                 showHeart={true}
-                style={{ marginBottom: 8 }}
               />
             ))}
           </ScrollView>
@@ -1588,12 +1669,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 8,
     marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: 44, // Ensure minimum touch target size
   },
   dateHeaderText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
     textTransform: 'capitalize',
+  },
+  dateHeaderSelected: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#1976d2',
+    borderWidth: 2,
+  },
+  dateHeaderTextSelected: {
+    color: '#1976d2',
+  },
+  dateHeaderCheckmark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    fontSize: 16,
+    color: '#1976d2',
+    fontWeight: 'bold',
+  },
+  dateFilterIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e3f2fd',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#1976d2',
+    shadowColor: '#1976d2',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  dateFilterText: {
+    fontSize: 13,
+    color: '#1976d2',
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  clearDateFilterButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#1976d2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearDateFilterText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 

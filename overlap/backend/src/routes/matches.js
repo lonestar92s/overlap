@@ -6,6 +6,7 @@ const leagueService = require('../services/leagueService');
 const teamService = require('../services/teamService');
 const coordinateService = require('../services/coordinateService');
 const subscriptionService = require('../services/subscriptionService');
+const geocodingService = require('../services/geocodingService');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
@@ -83,13 +84,9 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                         const apiVenue = fixture.fixture.venue;
                         const isPremierLeague = parseInt(competitionId) === 39;
                         if (isPremierLeague && apiVenue?.id) {
-                            console.log(`🔍 transformApiSportsData: Looking up Premier League venue ID ${apiVenue.id}`);
+
                             const localVenue = await venueService.getVenueByApiId(apiVenue.id);
-                            console.log(`🔍 transformApiSportsData: Local venue result:`, localVenue ? {
-                                name: localVenue.name,
-                                hasCoordinates: !!(localVenue.coordinates || localVenue.location?.coordinates),
-                                coordinates: localVenue.coordinates || localVenue.location?.coordinates
-                            } : 'Not found');
+
                             if (localVenue) {
                                 return {
                                     id: apiVenue.id,
@@ -687,10 +684,11 @@ router.get('/popular', async (req, res) => {
             const venue = match.fixture?.venue;
             let venueData = null;
             let apiFootballVenue = null;
+            let finalVenueData = null;
+            
             if (venue?.id) {
-                console.log(`🔍 Looking up venue ID ${venue.id} in local database...`);
+                
                 const localVenue = await venueService.getVenueByApiId(venue.id);
-                console.log(`🔍 Local venue lookup result:`, localVenue ? `Found: ${localVenue.name}` : 'Not found');
                 if (localVenue) {
                     apiFootballVenue = {
                         name: localVenue.name,
@@ -711,21 +709,73 @@ router.get('/popular', async (req, res) => {
             if (!apiFootballVenue && venue?.name) {
                 venueData = await venueService.getVenueByName(venue.name, venue.city);
             }
+            
+            // Determine the final venue data to use
+            finalVenueData = apiFootballVenue || venueData || {
+                name: venue?.name || 'Unknown Venue',
+                city: venue?.city || 'Unknown City',
+                country: match.league?.country || 'Unknown Country'
+            };
+            
+            // Check if we need to geocode this venue
+            if (!finalVenueData.coordinates && finalVenueData.name && finalVenueData.city && finalVenueData.country) {
+                console.log(`🗺️ Attempting to geocode venue: ${finalVenueData.name} in ${finalVenueData.city}, ${finalVenueData.country}`);
+                
+                try {
+                    const coordinates = await geocodingService.geocodeVenueCoordinates(
+                        finalVenueData.name,
+                        finalVenueData.city,
+                        finalVenueData.country
+                    );
+                    
+                    if (coordinates) {
+                        console.log(`✅ Successfully geocoded ${finalVenueData.name}: [${coordinates[0]}, ${coordinates[1]}]`);
+                        
+                        // Save the venue with coordinates to the database
+                        const savedVenue = await venueService.saveVenueWithCoordinates({
+                            venueId: venue?.id || null,
+                            name: finalVenueData.name,
+                            city: finalVenueData.city,
+                            country: finalVenueData.country,
+                            coordinates: coordinates,
+                            capacity: finalVenueData.capacity || null,
+                            surface: finalVenueData.surface || null,
+                            image: finalVenueData.image || null,
+                            address: finalVenueData.address || null
+                        });
+                        
+                        if (savedVenue) {
+                            // Update the final venue data with the saved venue info
+                            finalVenueData = {
+                                ...finalVenueData,
+                                coordinates: coordinates,
+                                id: savedVenue._id
+                            };
+                            console.log(`💾 Saved venue with coordinates to database: ${finalVenueData.name}`);
+                        }
+                    } else {
+                        console.log(`⚠️ Could not geocode venue: ${finalVenueData.name}`);
+                    }
+                } catch (geocodeError) {
+                    console.error(`❌ Geocoding error for ${finalVenueData.name}:`, geocodeError.message);
+                }
+            }
+            
             transformedMatches.push({
                 id: match.fixture.id,
                 fixture: {
                     id: match.fixture.id,
                     date: match.fixture.date,
                     venue: {
-                        id: venue?.id || null,
-                        name: apiFootballVenue?.name || venueData?.name || venue?.name || 'Unknown Venue',
-                        city: apiFootballVenue?.city || venueData?.city || venue?.city || 'Unknown City',
-                        country: venueData?.country || match.league?.country || 'Unknown Country',
-                        coordinates: apiFootballVenue?.coordinates || venueData?.coordinates || null,
-                        image: apiFootballVenue?.image || venueData?.image || null,
-                        capacity: apiFootballVenue?.capacity || null,
-                        surface: apiFootballVenue?.surface || null,
-                        address: apiFootballVenue?.address || null
+                        id: venue?.id || finalVenueData.id || null,
+                        name: finalVenueData.name || 'Unknown Venue',
+                        city: finalVenueData.city || 'Unknown City',
+                        country: finalVenueData.country || 'Unknown Country',
+                        coordinates: finalVenueData.coordinates || null,
+                        image: finalVenueData.image || null,
+                        capacity: finalVenueData.capacity || null,
+                        surface: finalVenueData.surface || null,
+                        address: finalVenueData.address || null
                     },
                     status: {
                         long: match.fixture.status?.long || 'Not Started',

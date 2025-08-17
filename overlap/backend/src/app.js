@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const preferencesRoutes = require('./routes/preferences');
 const teamsRoutes = require('./routes/teams');
 const attendedMatchesRoutes = require('./routes/attendedMatches');
+const memoriesRoutes = require('./routes/memories');
 const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
 const adminRouter = require('./routes/admin');
@@ -35,6 +36,12 @@ app.use(cors({
             origin.match(/^http:\/\/192\.168\.\d+\.\d+:\d+$/) ||
             origin.match(/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/) ||
             origin.match(/^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:\d+$/)) {
+            return callback(null, true);
+        }
+        
+        // Allow Expo tunnel domains
+        if (origin.match(/^https:\/\/.*\.exp\.direct$/) ||
+            origin.match(/^https:\/\/.*\.exp\.dev$/)) {
             return callback(null, true);
         }
         
@@ -68,6 +75,7 @@ app.use('/api/leagues', leaguesRoutes);
 app.use('/api/trips', tripsRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/matches/attended', attendedMatchesRoutes);
+app.use('/api/memories', memoriesRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);

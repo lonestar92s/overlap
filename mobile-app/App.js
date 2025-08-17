@@ -11,6 +11,8 @@ import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
 import MemoriesScreen from './screens/MemoriesScreen';
+import AddMemoryScreen from './screens/AddMemoryScreen';
+import MemoriesMapScreen from './screens/MemoriesMapScreen';
 import TripsListScreen from './screens/TripsListScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
 import ItineraryMapScreen from './screens/ItineraryMapScreen';
@@ -93,6 +95,30 @@ function TripsStack() {
   );
 }
 
+function MemoriesStack() {
+  return (
+    <Stack.Navigator
+      initialRouteName="Memories"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen
+        name="Memories"
+        component={MemoriesScreen}
+      />
+      <Stack.Screen
+        name="AddMemory"
+        component={AddMemoryScreen}
+      />
+      <Stack.Screen
+        name="MemoriesMap"
+        component={MemoriesMapScreen}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   return (
     <FilterProvider>
@@ -133,7 +159,7 @@ export default function App() {
           })}
         >
           <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
-          <Tab.Screen name="MemoriesTab" component={MemoriesScreen} options={{ tabBarLabel: 'Memories' }} />
+          <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
           <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
           <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
           <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />

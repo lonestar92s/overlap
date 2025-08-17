@@ -1,207 +1,360 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
-  Image,
-  Alert
+  Alert,
+  RefreshControl,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useItineraries } from '../contexts/ItineraryContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Card, Button } from 'react-native-elements';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
-const MemoriesScreen = ({ navigation }) => {
-  const { itineraries } = useItineraries();
-  const [activeTab, setActiveTab] = useState('matches'); // 'matches' or 'stadiums'
-  
-  // Extract only PAST/ATTENDED matches from all itineraries
-  // This ensures Memories page only shows matches that have already happened
-  const allMatches = itineraries.flatMap(itinerary => 
-    itinerary.matches
-      .filter(match => {
-        // Only show matches that are in the past (attended)
-        // We consider a match "past" if it's more than 2 hours before now
-        // This accounts for match duration and travel time
-        const matchDate = new Date(match.date);
-        const now = new Date();
-        const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
-        return matchDate < twoHoursAgo;
-      })
-      .map(match => ({
-        ...match,
-        itineraryName: itinerary.name,
-        itineraryDestination: itinerary.destination
-      }))
-  );
+import ApiService from '../services/api';
 
-  // Group matches by venue to create stadium entries
-  const stadiums = Array.from(
-    new Map(
-      allMatches.map(match => [
-        match.venue,
-        {
-          name: match.venue,
-          city: match.venueCoordinates ? 'Location tracked' : 'Unknown city',
-          matches: [],
-          firstVisit: null,
-          lastVisit: null
-        }
-      ])
-    ).values()
-  );
+const MemoriesScreen = () => {
+  const navigation = useNavigation();
+  const [memories, setMemories] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedMemory, setSelectedMemory] = useState(null);
 
-  // Populate stadium data
-  stadiums.forEach(stadium => {
-    const venueMatches = allMatches.filter(match => match.venue === stadium.name);
-    stadium.matches = venueMatches;
-    
-    if (venueMatches.length > 0) {
-      const dates = venueMatches
-        .map(match => new Date(match.date))
-        .filter(date => !isNaN(date.getTime()))
-        .sort((a, b) => a - b);
-      
-      if (dates.length > 0) {
-        stadium.firstVisit = dates[0];
-        stadium.lastVisit = dates[dates.length - 1];
+  // Fetch memories and stats
+  const fetchMemories = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [memoriesResponse, statsResponse] = await Promise.all([
+        ApiService.getMemories(),
+        ApiService.getMemoryStats()
+      ]);
+
+      if (memoriesResponse.success) {
+        setMemories(memoriesResponse.data || []);
       }
+
+      if (statsResponse.success) {
+        setStats(statsResponse.data);
+      }
+    } catch (error) {
+      console.error('Error fetching memories:', error);
+      Alert.alert('Error', 'Failed to load memories');
+    } finally {
+      setLoading(false);
     }
-  });
+  }, []);
 
-  const renderMatchItem = ({ item }) => (
-    <View style={styles.matchItem}>
-      <View style={styles.matchHeader}>
-        <Text style={styles.matchTeams}>
-          {item.homeTeam} vs {item.awayTeam}
-        </Text>
-        <View style={styles.matchMeta}>
-          <Text style={styles.matchDate}>
-            {new Date(item.date).toLocaleDateString()}
-          </Text>
-          <Text style={styles.matchLeague}>{item.league}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.matchDetails}>
-        <View style={styles.venueInfo}>
-          <Icon name="location-on" size={16} color="#666" />
-          <Text style={styles.venueName}>{item.venue}</Text>
-        </View>
-        <Text style={styles.itineraryName}>
-          From: {item.itineraryName}
-        </Text>
-      </View>
-    </View>
-  );
+  // Refresh memories
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchMemories();
+    setRefreshing(false);
+  }, [fetchMemories]);
 
-  const renderStadiumItem = ({ item }) => (
-    <TouchableOpacity style={styles.stadiumItem}>
-      <View style={styles.stadiumHeader}>
-        <View style={styles.stadiumIcon}>
-          <Icon name="sports-soccer" size={24} color="#1976d2" />
-        </View>
-        <View style={styles.stadiumInfo}>
-          <Text style={styles.stadiumName}>{item.name}</Text>
-          <Text style={styles.stadiumCity}>{item.city}</Text>
-        </View>
-        <View style={styles.stadiumStats}>
-          <Text style={styles.matchCount}>{item.matches.length}</Text>
-          <Text style={styles.matchCountLabel}>matches</Text>
-        </View>
-      </View>
-      
-      {item.firstVisit && (
-        <View style={styles.visitInfo}>
-          <Text style={styles.visitText}>
-            First visit: {item.firstVisit.toLocaleDateString()}
-          </Text>
-          {item.lastVisit && item.lastVisit !== item.firstVisit && (
-            <Text style={styles.visitText}>
-              Last visit: {item.lastVisit.toLocaleDateString()}
-            </Text>
-          )}
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+  // Load memories on mount
+  useEffect(() => {
+    fetchMemories();
+  }, [fetchMemories]);
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Icon name="sports-soccer" size={64} color="#ccc" />
-      <Text style={styles.emptyStateTitle}>
-        {activeTab === 'matches' ? 'No matches attended yet' : 'No stadiums visited yet'}
-      </Text>
-      <Text style={styles.emptyStateSubtitle}>
-        {activeTab === 'matches' 
-          ? 'Start planning your football trips and mark matches as attended to build your memories!'
-          : 'Visit stadiums and attend matches to start building your stadium passport!'
+  // Handle memory selection
+  const handleMemoryPress = useCallback((memory) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedMemory(memory);
+    // TODO: Navigate to memory detail or open modal
+  }, []);
+
+  // Delete memory
+  const handleDeleteMemory = useCallback(async (memory) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    Alert.alert(
+      'Delete Memory',
+      'Are you sure you want to delete this memory? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const response = await ApiService.deleteMemory(memory._id || memory.matchId);
+              
+              if (response.success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                // Remove from local state
+                setMemories(prev => prev.filter(m => (m._id || m.matchId) !== (memory._id || memory.matchId)));
+                // Refresh stats
+                const statsResponse = await ApiService.getMemoryStats();
+                if (statsResponse.success) {
+                  setStats(statsResponse.data);
+                }
+              }
+            } catch (error) {
+              console.error('Error deleting memory:', error);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Error', 'Failed to delete memory. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          }
         }
-      </Text>
-    </View>
-  );
+      ]
+    );
+  }, []);
+
+  // Navigate to add memory
+  const handleAddMemory = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('AddMemory');
+  }, [navigation]);
+
+  // Navigate to memories map
+  const handleMemoriesMap = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('MemoriesMap');
+  }, [navigation]);
+
+  // Render memory card
+  const renderMemoryCard = useCallback((memory) => {
+    const hasPhotos = memory.photos && memory.photos.length > 0;
+    const firstPhoto = hasPhotos ? memory.photos[0] : null;
+    
+    // Debug photo data
+    if (hasPhotos) {
+      console.log('🔍 Photo data for memory:', {
+        memoryId: memory._id || memory.matchId,
+        photoCount: memory.photos.length,
+        firstPhoto: firstPhoto,
+        thumbnailUrl: firstPhoto?.thumbnailUrl,
+        url: firstPhoto?.url,
+        publicId: firstPhoto?.publicId
+      });
+    }
+    
+    // Get the best available image URL
+    const getImageUrl = (photo) => {
+      if (!photo) return null;
+      
+      // Try different URL fields in order of preference
+      if (photo.thumbnailUrl) return photo.thumbnailUrl;
+      if (photo.url) return photo.url;
+      
+      // If we have a publicId but no URLs, try to construct them
+      if (photo.publicId) {
+        // Construct thumbnail URL from publicId
+        return `https://res.cloudinary.com/dtujkmf8d/image/upload/w_400,h_400,c_fill,q_auto/${photo.publicId}`;
+      }
+      
+      // If we have an _id but no other data, this might be a corrupted photo object
+      if (photo._id && !photo.publicId && !photo.url && !photo.thumbnailUrl) {
+        console.warn('⚠️ Photo object missing essential fields:', photo);
+        return null;
+      }
+      
+      return null;
+    };
+    
+    const imageUrl = getImageUrl(firstPhoto);
+    console.log('🖼️ Final image URL:', imageUrl);
+    
+    // Debug: Show what fields are available
+    if (hasPhotos) {
+      console.log('🔍 Photo object fields:', {
+        hasId: !!firstPhoto._id,
+        hasPublicId: !!firstPhoto.publicId,
+        hasUrl: !!firstPhoto.url,
+        hasThumbnailUrl: !!firstPhoto.thumbnailUrl,
+        hasCaption: !!firstPhoto.caption,
+        hasUploadDate: !!firstPhoto.uploadDate,
+        allKeys: Object.keys(firstPhoto)
+      });
+    }
+    
+    return (
+      <TouchableOpacity
+        key={memory._id || memory.matchId}
+        style={styles.memoryCard}
+        onPress={() => handleMemoryPress(memory)}
+        activeOpacity={0.8}
+      >
+        <Card containerStyle={styles.cardContainer}>
+          {/* Photo Section */}
+          <View style={styles.photoSection}>
+            {hasPhotos && imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.photoContainer}
+                resizeMode="cover"
+                onError={(e) => console.error('❌ Error loading image:', e.nativeEvent.error)}
+                onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
+              />
+            ) : (
+              <View style={styles.noPhotoContainer}>
+                <MaterialIcons name="photo" size={40} color="#ccc" />
+                <Text style={styles.noPhotoText}>
+                  {hasPhotos ? 'Image Unavailable' : 'No Photos'}
+                </Text>
+                {hasPhotos && (
+                  <Text style={styles.photoErrorText}>
+                    Photo data incomplete
+                  </Text>
+                )}
+              </View>
+            )}
+            
+            {/* Photo count badge */}
+            {hasPhotos && memory.photos.length > 1 && (
+              <View style={styles.photoCountBadge}>
+                <Text style={styles.photoCountText}>+{memory.photos.length - 1}</Text>
+              </View>
+            )}
+
+            {/* Delete button */}
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteMemory(memory)}
+            >
+              <MaterialIcons name="delete" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Memory Info */}
+          <View style={styles.memoryInfo}>
+            <Text style={styles.teamsText}>
+              {memory.homeTeam?.name || 'Unknown'} vs {memory.awayTeam?.name || 'Unknown'}
+            </Text>
+            
+            <Text style={styles.venueText}>
+              {memory.venue?.name || 'Unknown Venue'}
+            </Text>
+            
+            <Text style={styles.dateText}>
+              {new Date(memory.date).toLocaleDateString()}
+            </Text>
+            
+            {memory.userScore && (
+              <Text style={styles.scoreText}>{memory.userScore}</Text>
+            )}
+            
+            {memory.competition && (
+              <Text style={styles.competitionText}>{memory.competition}</Text>
+            )}
+          </View>
+        </Card>
+      </TouchableOpacity>
+    );
+  }, [handleMemoryPress, handleDeleteMemory]);
+
+  // Render stats section
+  const renderStats = useCallback(() => {
+    if (!stats) return null;
+
+    return (
+      <View style={styles.statsContainer}>
+        <Text style={styles.statsTitle}>Your Football Journey</Text>
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stats.totalMemories}</Text>
+            <Text style={styles.statLabel}>Matches</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stats.totalPhotos}</Text>
+            <Text style={styles.statLabel}>Photos</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stats.uniqueStadiumsCount}</Text>
+            <Text style={styles.statLabel}>Stadiums</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stats.uniqueCountriesCount}</Text>
+            <Text style={styles.statLabel}>Countries</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }, [stats]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Loading your memories...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Memories</Text>
-        <Text style={styles.headerSubtitle}>Track your attended matches and visited stadiums</Text>
-        <Text style={styles.headerNote}>Only shows past matches from your itineraries</Text>
-      </View>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Memories</Text>
+          <Text style={styles.subtitle}>Your football adventures</Text>
+        </View>
 
-      {/* Tab Navigation */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
-          onPress={() => setActiveTab('matches')}
-        >
-          <Icon 
-            name="event" 
-            size={20} 
-            color={activeTab === 'matches' ? '#1976d2' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'matches' && styles.activeTabText]}>
-            Matches ({allMatches.length})
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'stadiums' && styles.activeTab]}
-          onPress={() => setActiveTab('stadiums')}
-        >
-          <Icon 
-            name="sports-soccer" 
-            size={20} 
-            color={activeTab === 'stadiums' ? '#1976d2' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'stadiums' && styles.activeTabText]}>
-            Stadiums ({stadiums.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {/* Stats Section */}
+        {renderStats()}
 
-      {/* Content */}
-      {activeTab === 'matches' ? (
-        <FlatList
-          data={allMatches}
-          renderItem={renderMatchItem}
-          keyExtractor={(item, index) => `${item.matchId}-${index}`}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <FlatList
-          data={stadiums}
-          renderItem={renderStadiumItem}
-          keyExtractor={(item, index) => `${item.name}-${index}`}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <Button
+            title="Add Memory"
+            icon={
+              <MaterialIcons name="add-a-photo" size={20} color="white" style={{ marginRight: 8 }} />
+            }
+            onPress={handleAddMemory}
+            buttonStyle={styles.addButton}
+            titleStyle={styles.buttonTitle}
+          />
+          
+          <Button
+            title="Map View"
+            icon={
+              <MaterialIcons name="map" size={20} color="white" style={{ marginRight: 8 }} />
+            }
+            onPress={handleMemoriesMap}
+            buttonStyle={styles.mapButton}
+            titleStyle={styles.buttonTitle}
+          />
+        </View>
+
+        {/* Memories Grid */}
+        {memories.length > 0 ? (
+          <View style={styles.memoriesGrid}>
+            <Text style={styles.sectionTitle}>Recent Memories</Text>
+            {memories.map(renderMemoryCard)}
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="photo-library" size={80} color="#ccc" />
+            <Text style={styles.emptyTitle}>No Memories Yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Start building your football journey by adding your first memory
+            </Text>
+            <Button
+              title="Add Your First Memory"
+              onPress={handleAddMemory}
+              buttonStyle={styles.emptyStateButton}
+              titleStyle={styles.emptyStateButtonTitle}
+            />
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -209,185 +362,235 @@ const MemoriesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingTop: 10,
   },
-  headerTitle: {
-    fontSize: 28,
+  title: {
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
+    color: '#1a1a1a',
     marginBottom: 4,
   },
-  headerNote: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginHorizontal: 5,
-  },
-  activeTab: {
-    backgroundColor: '#e3f2fd',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
+  subtitle: {
+    fontSize: 16,
     color: '#666',
-    marginLeft: 8,
   },
-  activeTabText: {
-    color: '#1976d2',
+  statsContainer: {
+    margin: 20,
+    marginTop: 0,
   },
-  listContainer: {
-    padding: 20,
-    flexGrow: 1,
+  statsTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
   },
-  matchItem: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  matchHeader: {
-    marginBottom: 12,
-  },
-  matchTeams: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  matchMeta: {
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  matchDate: {
-    fontSize: 14,
-    color: '#666',
-  },
-  matchLeague: {
-    fontSize: 14,
-    color: '#1976d2',
-    fontWeight: '500',
-  },
-  matchDetails: {
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    paddingTop: 12,
-  },
-  venueInfo: {
-    flexDirection: 'row',
+  statItem: {
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  venueName: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 8,
-  },
-  itineraryName: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  stadiumItem: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  stadiumHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  stadiumIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e3f2fd',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  stadiumInfo: {
     flex: 1,
   },
-  stadiumName: {
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingTop: 0,
+    gap: 12,
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    flex: 1,
+  },
+  mapButton: {
+    backgroundColor: '#34C759',
+    borderRadius: 12,
+    paddingVertical: 12,
+    flex: 1,
+  },
+  buttonTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 3,
   },
-  stadiumCity: {
-    fontSize: 14,
-    color: '#666',
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
+    paddingHorizontal: 20,
   },
-  stadiumStats: {
+  memoriesGrid: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  memoryCard: {
+    marginBottom: 16,
+  },
+  cardContainer: {
+    borderRadius: 16,
+    padding: 0,
+    margin: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  photoSection: {
+    position: 'relative',
+  },
+  photoContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  noPhotoContainer: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  matchCount: {
-    fontSize: 20,
+  noPhotoText: {
+    color: '#999',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  photoErrorText: {
+    color: '#ff6b6b',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  photoCountText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  memoryInfo: {
+    padding: 16,
+  },
+  teamsText: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#1976d2',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  matchCountLabel: {
-    fontSize: 12,
+  venueText: {
+    fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+    textAlign: 'center',
   },
-  visitInfo: {
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    paddingTop: 12,
-  },
-  visitText: {
-    fontSize: 12,
+  dateText: {
+    fontSize: 14,
     color: '#666',
-    marginBottom: 3,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  competitionText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   emptyState: {
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 40,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  emptyStateButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  emptyStateButtonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
   },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
     color: '#666',
-    marginTop: 20,
-    marginBottom: 10,
-    textAlign: 'center',
   },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 40,
+  deleteButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255, 59, 48, 0.9)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
 

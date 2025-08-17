@@ -24,12 +24,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
     if (itineraryId) {
       const foundItinerary = getItineraryById(itineraryId);
       if (foundItinerary) {
-        console.log('📱 TripOverviewScreen received itinerary:', {
-          id: foundItinerary.id || foundItinerary._id,
-          name: foundItinerary.name,
-          matchesCount: foundItinerary.matches?.length,
-          firstMatch: foundItinerary.matches?.[0] ? JSON.stringify(foundItinerary.matches[0], null, 2) : 'No matches'
-        });
+
         setItinerary(foundItinerary);
       }
       setLoading(false);

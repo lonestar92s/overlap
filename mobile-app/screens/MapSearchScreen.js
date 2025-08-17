@@ -1,16 +1,17 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  Alert,
-  FlatList,
   TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
-import { Card, Avatar, Button } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
-import { debounce } from 'lodash';
+import { MaterialIcons } from '@expo/vector-icons';
+import { formatDateToLocalString, getTodayLocalString } from '../utils/dateUtils';
 
 import BottomSheet from '../components/BottomSheet';
 import MatchMapView from '../components/MapView';
@@ -173,7 +174,11 @@ const MapSearchScreen = ({ navigation }) => {
         const end = new Date(dateString);
         
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const currentDate = d.toISOString().split('T')[0];
+          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const currentDate = `${year}-${month}-${day}`;
           
           if (currentDate === dateFrom) {
             range[currentDate] = {
@@ -268,7 +273,7 @@ const MapSearchScreen = ({ navigation }) => {
               onDayPress={onDayPress}
               markingType={'period'}
               markedDates={selectedDates}
-              minDate={new Date().toISOString().split('T')[0]}
+              minDate={getTodayLocalString()}
               theme={{
                 selectedDayBackgroundColor: '#1976d2',
                 selectedDayTextColor: 'white',

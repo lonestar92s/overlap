@@ -14,14 +14,6 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
   
   const isSaved = isMatchInItinerary(reliableMatchId);
   
-  // Debug logging for heart state
-  console.log('💖 HeartButton render:', { 
-    matchId, 
-    fixtureId, 
-    reliableMatchId,
-    isSaved, 
-    timestamp: Date.now() 
-  });
   
   const handlePress = async () => {
     console.log('💖 Heart button pressed for match:', { matchId, reliableMatchId, isSaved });

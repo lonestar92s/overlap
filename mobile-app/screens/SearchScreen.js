@@ -1,28 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Alert,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  Modal,
-  Image,
-  ActivityIndicator,
-  TextInput,
   ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  FlatList,
+  Dimensions,
+  SafeAreaView,
+  Image,
+  TextInput,
+  Modal,
 } from 'react-native';
-import { Button, Card, SearchBar } from 'react-native-elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SearchBar } from 'react-native-elements';
+import { Icon } from 'react-native-elements';
+import { formatDateToLocalString, getTodayLocalString, createDateRange } from '../utils/dateUtils';
+
 import LocationAutocomplete from '../components/LocationAutocomplete';
+import FilterModal from '../components/FilterModal';
+import FilterIcon from '../components/FilterIcon';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
 import ApiService from '../services/api';
-import { getPopularLeagues, getAllLeagues } from '../data/leagues';
+import { useFilter } from '../contexts/FilterContext';
 
 const SearchScreen = ({ navigation }) => {
   const [location, setLocation] = useState(null);
@@ -50,6 +57,21 @@ const SearchScreen = ({ navigation }) => {
   const [teamSearchResults, setTeamSearchResults] = useState([]);
   const [isSearchingLeagues, setIsSearchingLeagues] = useState(false);
   const [isSearchingTeams, setIsSearchingTeams] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+
+  // Local leagues data for search
+  const getAllLeagues = () => [
+    { id: 39, name: 'Premier League', country: 'England' },
+    { id: 140, name: 'La Liga', country: 'Spain' },
+    { id: 135, name: 'Serie A', country: 'Italy' },
+    { id: 78, name: 'Bundesliga', country: 'Germany' },
+    { id: 61, name: 'Ligue 1', country: 'France' },
+    { id: 88, name: 'Eredivisie', country: 'Netherlands' },
+    { id: 94, name: 'Primeira Liga', country: 'Portugal' },
+    { id: 119, name: 'Super Lig', country: 'Turkey' },
+    { id: 179, name: 'UEFA Champions League', country: 'Europe' },
+    { id: 180, name: 'UEFA Europa League', country: 'Europe' },
+  ];
 
   // Combined data for the main FlatList
   const sections = [
@@ -106,7 +128,8 @@ const SearchScreen = ({ navigation }) => {
 
   const formatDate = (date) => {
     if (!date) return null;
-    return date.split('T')[0];
+    // Use the dateUtils function to avoid timezone issues
+    return date; // Just return the date string directly since it's already in the correct format
   };
 
   const formatDisplayDate = (dateString) => {
@@ -156,34 +179,36 @@ const SearchScreen = ({ navigation }) => {
         setDateTo(dateString);
         
         const range = {};
-        const start = new Date(dateFrom);
-        const end = new Date(dateString);
         
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const currentDate = d.toISOString().split('T')[0];
-          
-          if (currentDate === dateFrom) {
-            range[currentDate] = {
+        // Create date range using dateUtils without timezone conversion
+        const dateRange = createDateRange(dateFrom, dateString);
+        
+        dateRange.forEach((dateStr, index) => {
+          if (index === 0) {
+            // First date (starting day)
+            range[dateStr] = {
               selected: true,
               startingDay: true,
               color: '#1976d2',
               textColor: 'white'
             };
-          } else if (currentDate === dateString) {
-            range[currentDate] = {
+          } else if (index === dateRange.length - 1) {
+            // Last date (ending day)
+            range[dateStr] = {
               selected: true,
               endingDay: true,
               color: '#1976d2',
               textColor: 'white'
             };
           } else {
-            range[currentDate] = {
+            // Middle dates
+            range[dateStr] = {
               selected: true,
               color: '#e3f2fd',
               textColor: '#1976d2'
             };
           }
-        }
+        });
         
         setSelectedDates(range);
         setTimeout(() => setShowCalendar(false), 500);
@@ -488,8 +513,6 @@ const SearchScreen = ({ navigation }) => {
     </View>
   );
 
-  const today = new Date().toISOString().split('T')[0];
-
   const handlePopularMatchPress = (match) => {
     // Find the index of the pressed match in the popular matches array
     const matchIndex = popularMatches.findIndex(m => m.id === match.id);
@@ -593,24 +616,24 @@ const SearchScreen = ({ navigation }) => {
       
       switch (timePeriod) {
         case 'today':
-          dateFrom = today.toISOString().split('T')[0];
-          dateTo = today.toISOString().split('T')[0];
+          dateFrom = getTodayLocalString();
+          dateTo = getTodayLocalString();
           break;
         case 'thisWeek':
-          dateFrom = today.toISOString().split('T')[0];
+          dateFrom = getTodayLocalString();
           const thisWeekEnd = new Date(today);
           thisWeekEnd.setDate(today.getDate() + 7);
-          dateTo = thisWeekEnd.toISOString().split('T')[0];
+          dateTo = formatDateToLocalString(thisWeekEnd);
           break;
         case 'thisMonth':
-          dateFrom = today.toISOString().split('T')[0];
+          dateFrom = getTodayLocalString();
           const thisMonthEnd = new Date(today);
           thisMonthEnd.setDate(today.getDate() + 30);
-          dateTo = thisMonthEnd.toISOString().split('T')[0];
+          dateTo = formatDateToLocalString(thisMonthEnd);
           break;
         default:
-          dateFrom = today.toISOString().split('T')[0];
-          dateTo = today.toISOString().split('T')[0];
+          dateFrom = getTodayLocalString();
+          dateTo = getTodayLocalString();
       }
 
       // Create search params for current location
@@ -669,7 +692,6 @@ const SearchScreen = ({ navigation }) => {
   };
 
   const searchLeagues = async (query) => {
-    console.log('searchLeagues called with query:', query);
     if (!query.trim()) {
       setLeagueSearchResults([]);
       return;
@@ -740,6 +762,161 @@ const SearchScreen = ({ navigation }) => {
     return () => clearTimeout(timeoutId);
   }, [teamSearchQuery]);
 
+  // Quick search functions
+  const quickSearchToday = () => {
+    const today = getTodayLocalString();
+    setDateFrom(today);
+    setDateTo(today);
+    setSelectedDates({
+      [today]: {
+        selected: true,
+        startingDay: true,
+        endingDay: true,
+        color: '#1976d2',
+        textColor: 'white'
+      }
+    });
+  };
+
+  const quickSearchThisWeek = () => {
+    const today = getTodayLocalString();
+    
+    // Create end date by adding 6 days to today
+    const todayDate = new Date();
+    todayDate.setDate(todayDate.getDate() + 6);
+    const thisWeekEndStr = formatDateToLocalString(todayDate);
+    
+    setDateFrom(today);
+    setDateTo(thisWeekEndStr);
+    
+    // Use dateUtils to create the range without timezone issues
+    const dateRange = createDateRange(today, thisWeekEndStr);
+    
+    // Create range marking
+    const range = {};
+    dateRange.forEach((dateStr, index) => {
+      if (index === 0) {
+        // First date (starting day)
+        range[dateStr] = {
+          selected: true,
+          startingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else if (index === dateRange.length - 1) {
+        // Last date (ending day)
+        range[dateStr] = {
+          selected: true,
+          endingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else {
+        // Middle dates
+        range[dateStr] = {
+          selected: true,
+          color: '#e3f2fd',
+          textColor: '#1976d2'
+        };
+      }
+    });
+    
+    setSelectedDates(range);
+  };
+
+  const quickSearchThisMonth = () => {
+    const today = getTodayLocalString();
+    
+    // Create end date (last day of current month)
+    const todayDate = new Date();
+    todayDate.setMonth(todayDate.getMonth() + 1);
+    todayDate.setDate(0); // Last day of current month
+    const thisMonthEndStr = formatDateToLocalString(todayDate);
+    
+    setDateFrom(today);
+    setDateTo(thisMonthEndStr);
+    
+    // Use dateUtils to create the range without timezone issues
+    const dateRange = createDateRange(today, thisMonthEndStr);
+    
+    // Create range marking
+    const range = {};
+    dateRange.forEach((dateStr, index) => {
+      if (index === 0) {
+        // First date (starting day)
+        range[dateStr] = {
+          selected: true,
+          startingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else if (index === dateRange.length - 1) {
+        // Last date (ending day)
+        range[dateStr] = {
+          selected: true,
+          endingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else {
+        // Middle dates
+        range[dateStr] = {
+          selected: true,
+          color: '#e3f2fd',
+          textColor: '#1976d2'
+        };
+      }
+    });
+    
+    setSelectedDates(range);
+  };
+
+  const quickSearchNextMonth = () => {
+    const today = getTodayLocalString();
+    
+    // Create end date (last day of next month)
+    const todayDate = new Date();
+    todayDate.setMonth(todayDate.getMonth() + 2);
+    todayDate.setDate(0); // Last day of next month
+    const nextMonthEndStr = formatDateToLocalString(todayDate);
+    
+    setDateFrom(today);
+    setDateTo(nextMonthEndStr);
+    
+    // Use dateUtils to create the range without timezone issues
+    const dateRange = createDateRange(today, nextMonthEndStr);
+    
+    // Create range marking
+    const range = {};
+    dateRange.forEach((dateStr, index) => {
+      if (index === 0) {
+        // First date (starting day)
+        range[dateStr] = {
+          selected: true,
+          startingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else if (index === dateRange.length - 1) {
+        // Last date (ending day)
+        range[dateStr] = {
+          selected: true,
+          endingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        };
+      } else {
+        // Middle dates
+        range[dateStr] = {
+          selected: true,
+          color: '#e3f2fd',
+          textColor: '#1976d2'
+        };
+      }
+    });
+    
+    setSelectedDates(range);
+  };
 
 
   return (
@@ -886,7 +1063,7 @@ const SearchScreen = ({ navigation }) => {
               onDayPress={onDayPress}
               markingType={'period'}
               markedDates={selectedDates}
-              minDate={today}
+              minDate={getTodayLocalString()}
               theme={{
                 selectedDayBackgroundColor: '#1976d2',
                 selectedDayTextColor: 'white',
