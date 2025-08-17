@@ -9,6 +9,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
 import { getMatchStatus, getMatchResult, formatMatchDate } from '../utils/matchStatus';
+import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 
 const MatchCard = ({ 
   match, 
@@ -16,6 +17,7 @@ const MatchCard = ({
   variant = 'default',
   showHeart = false,
   showResults = false, // Only show detailed results for saved matches
+  showRelativeTime = false, // Only show relative time on itinerary pages
   style = {},
 }) => {
   // // Debug logging to help troubleshoot data structure issues
@@ -48,43 +50,36 @@ const MatchCard = ({
   // Ensure we have a valid match ID for the heart functionality
   const matchId = match?.id || match?.fixture?.id || 'unknown';
   
-  const formatMatchDateTime = (dateString) => {
+  const formatMatchDateTime = (dateString, fixture) => {
     if (!dateString) return { date: 'TBD', time: 'TBD' };
     
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return { date: 'TBD', time: 'TBD' };
-      
-      const now = new Date();
-      const isToday = date.toDateString() === now.toDateString();
-      const isTomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toDateString() === date.toDateString();
-      
-      let dateText = '';
-      if (isToday) {
-        dateText = 'Today';
-      } else if (isTomorrow) {
-        dateText = 'Tomorrow';
-      } else {
-        dateText = date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
-        });
-      }
-      
-      const timeText = date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
+      // Use venue timezone for date/time display
+      const formattedTime = formatMatchTimeInVenueTimezone(dateString, fixture, {
+        showTimezone: true,
+        showDate: true,
+        showYear: false,
+        timeFormat: '12hour'
       });
       
-      return { date: dateText, time: timeText };
+      // Extract date and time parts
+      const parts = formattedTime.split(' at ');
+      if (parts.length === 2) {
+        return { date: parts[0], time: parts[1] };
+      } else {
+        // Fallback if format doesn't match expected pattern
+        return { date: 'TBD', time: formattedTime };
+      }
     } catch (error) {
-      console.warn('Error formatting date:', dateString, error);
+      console.warn('Error formatting date with timezone:', dateString, error);
       return { date: 'TBD', time: 'TBD' };
     }
   };
 
-  const { date, time } = formatMatchDateTime(fixture.date);
+  const { date, time } = formatMatchDateTime(fixture.date, fixture);
+
+  // Get relative time for better UX
+  const relativeTime = getRelativeMatchTime(fixture.date, fixture);
 
   // Get match status and result
   const matchStatus = getMatchStatus(match);
@@ -111,6 +106,11 @@ const MatchCard = ({
           <View style={styles.dateTimeText}>
             <Text style={[styles.dateText, isOverlay && styles.overlayDateText]}>{date || 'TBD'}</Text>
             <Text style={[styles.timeText, isOverlay && styles.overlayTimeText]}>{time || 'TBD'}</Text>
+            {showRelativeTime && relativeTime && (
+              <Text style={[styles.relativeTimeText, isOverlay && styles.overlayRelativeTimeText]}>
+                {relativeTime}
+              </Text>
+            )}
           </View>
         </View>
         
@@ -300,6 +300,16 @@ const styles = StyleSheet.create({
   },
   overlayTimeText: {
     fontSize: 11,
+  },
+  relativeTimeText: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  overlayRelativeTimeText: {
+    fontSize: 9,
+    fontStyle: 'italic',
   },
   headerRight: {
     flexDirection: 'row',

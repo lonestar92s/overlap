@@ -204,11 +204,7 @@ export const ItineraryProvider = ({ children }) => {
   const isMatchInItinerary = (matchId) => {
     // Normalize matchId to string for consistent comparison
     const normalizedMatchId = String(matchId);
-    console.log('🔍 Checking if match is in itinerary:', { 
-      originalMatchId: matchId, 
-      normalizedMatchId, 
-      itinerariesCount: itineraries.length 
-    });
+
     
     const result = itineraries.some(itinerary => {
       const hasMatch = itinerary.matches.some(match => {
@@ -234,11 +230,6 @@ export const ItineraryProvider = ({ children }) => {
       return hasMatch;
     });
     
-    console.log('🔍 isMatchInItinerary result:', { 
-      originalMatchId: matchId, 
-      normalizedMatchId, 
-      result 
-    });
     return result;
   };
 

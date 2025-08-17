@@ -49,6 +49,27 @@ class ApiService {
     this.baseURL = API_BASE_URL;
   }
 
+  // Helper method to create fetch requests with timeout
+  async fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await fetch(url, { 
+        ...options, 
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - please try again');
+      }
+      throw error;
+    }
+  }
+
   // Aggregated global search by leagues/teams with optional bounds
   async searchAggregatedMatches({ dateFrom, dateTo, competitions = [], teams = [], bounds = null, season = 2025 }) {
     try {
@@ -65,7 +86,7 @@ class ApiService {
         params.append('swLng', bounds.southwest.lng);
       }
       const url = `${this.baseURL}/matches/search?${params.toString()}`;
-      const response = await fetch(url, { method: 'GET' });
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data?.message || 'Failed to search matches');
@@ -700,6 +721,162 @@ class ApiService {
       return data.savedMatches.length;
     } catch (error) {
       console.error('Error getting saved match count:', error);
+      throw error;
+    }
+  }
+
+  // Memories API methods
+  async getMemories() {
+    try {
+      const token = getAuthToken();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/memories`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch memories');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching memories:', error);
+      throw error;
+    }
+  }
+
+  async getMemoryStats() {
+    try {
+      const token = getAuthToken();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/memories/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch memory stats');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching memory stats:', error);
+      throw error;
+    }
+  }
+
+  async createMemory(memoryData, photos = []) {
+    try {
+      const token = getAuthToken();
+      
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      
+      // Add memory data
+      formData.append('homeTeam', JSON.stringify(memoryData.homeTeam));
+      formData.append('awayTeam', JSON.stringify(memoryData.awayTeam));
+      formData.append('venue', JSON.stringify(memoryData.venue));
+      formData.append('competition', memoryData.competition || '');
+      formData.append('date', memoryData.date);
+      formData.append('userScore', memoryData.userScore || '');
+      formData.append('userNotes', memoryData.userNotes || '');
+      
+      // Add photos
+      photos.forEach((photo, index) => {
+        formData.append('photos', {
+          uri: photo.uri,
+          type: photo.type || 'image/jpeg',
+          name: `photo_${index}.jpg`
+        });
+      });
+      
+      const response = await this.fetchWithTimeout(`${this.baseURL}/memories`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create memory');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error creating memory:', error);
+      throw error;
+    }
+  }
+
+  async updateMemory(memoryId, updates, newPhotos = []) {
+    try {
+      const token = getAuthToken();
+      
+      const formData = new FormData();
+      
+      // Add update data
+      Object.keys(updates).forEach(key => {
+        if (updates[key] !== undefined) {
+          if (typeof updates[key] === 'object') {
+            formData.append(key, JSON.stringify(updates[key]));
+          } else {
+            formData.append(key, updates[key]);
+          }
+        }
+      });
+      
+      // Add new photos
+      newPhotos.forEach((photo, index) => {
+        formData.append('photos', {
+          uri: photo.uri,
+          type: photo.type || 'image/jpeg',
+          name: `photo_${index}.jpg`
+        });
+      });
+      
+      const response = await this.fetchWithTimeout(`${this.baseURL}/memories/${memoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update memory');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating memory:', error);
+      throw error;
+    }
+  }
+
+  async deleteMemory(memoryId) {
+    try {
+      const token = getAuthToken();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/memories/${memoryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete memory');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error deleting memory:', error);
       throw error;
     }
   }

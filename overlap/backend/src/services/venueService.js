@@ -345,21 +345,119 @@ class VenueService {
      */
     async getVenueByApiId(venueId) {
         try {
-            console.log(`🔍 getVenueByApiId: Looking for venueId ${venueId}`);
+
             const venue = await Venue.findOne({ venueId: venueId, isActive: true });
-            console.log(`🔍 getVenueByApiId: Found venue:`, venue ? {
-                venueId: venue.venueId,
-                name: venue.name,
-                image: venue.image,
-                hasImage: !!venue.image,
-                coordinates: venue.coordinates,
-                hasCoordinates: !!(venue.coordinates || venue.location?.coordinates)
-            } : 'Not found');
+
             return venue;
         } catch (error) {
             console.error('Error getting venue by API ID:', error);
             return null;
         }
+    }
+
+    /**
+     * Save or update venue with coordinates
+     * @param {Object} venueData - Venue data including coordinates
+     * @returns {Object|null} - Saved venue object or null if failed
+     */
+    async saveVenueWithCoordinates(venueData) {
+        try {
+            const { venueId, name, city, country, coordinates, capacity, surface, image, address } = venueData;
+            
+            if (!name || !city || !country) {
+                console.warn(`⚠️ Missing required venue data: name=${name}, city=${city}, country=${country}`);
+                return null;
+            }
+
+            // Check if venue already exists
+            let existingVenue = null;
+            if (venueId) {
+                existingVenue = await Venue.findOne({ venueId: venueId });
+            }
+            
+            if (!existingVenue) {
+                // Try to find by name and city
+                existingVenue = await Venue.findOne({ 
+                    name: name,
+                    city: city 
+                });
+            }
+
+            let venue;
+            if (existingVenue) {
+                // Update existing venue with new coordinates if they don't exist
+                if (!existingVenue.coordinates && coordinates) {
+                    existingVenue.coordinates = coordinates;
+                    existingVenue.location = {
+                        type: 'Point',
+                        coordinates: coordinates
+                    };
+                    existingVenue.lastUpdated = new Date();
+                    
+                    if (capacity) existingVenue.capacity = capacity;
+                    if (surface) existingVenue.surface = surface;
+                    if (image) existingVenue.image = image;
+                    if (address) existingVenue.address = address;
+                    
+                    await existingVenue.save();
+                    console.log(`✅ Updated existing venue with coordinates: ${name} → [${coordinates[0]}, ${coordinates[1]}]`);
+                }
+                venue = existingVenue;
+            } else {
+                // Create new venue
+                const newVenue = new Venue({
+                    venueId: venueId || null,
+                    name,
+                    city,
+                    country,
+                    countryCode: this.getCountryCode(country),
+                    coordinates: coordinates || null,
+                    location: coordinates ? {
+                        type: 'Point',
+                        coordinates: coordinates
+                    } : null,
+                    capacity: capacity || null,
+                    surface: surface || null,
+                    image: image || null,
+                    address: address || null,
+                    isActive: true
+                });
+                
+                venue = await newVenue.save();
+                console.log(`✅ Created new venue with coordinates: ${name} → [${coordinates ? coordinates.join(', ') : 'none'}]`);
+            }
+
+            return venue;
+        } catch (error) {
+            console.error(`❌ Error saving venue ${venueData.name}:`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Get country code from country name (simple mapping)
+     * @param {string} countryName - Full country name
+     * @returns {string} - 2-letter country code
+     */
+    getCountryCode(countryName) {
+        const countryMap = {
+            'England': 'GB',
+            'Spain': 'ES',
+            'Italy': 'IT',
+            'Germany': 'DE',
+            'France': 'FR',
+            'Portugal': 'PT',
+            'Netherlands': 'NL',
+            'Belgium': 'BE',
+            'Turkey': 'TR',
+            'Saudi Arabia': 'SA',
+            'USA': 'US',
+            'Brazil': 'BR',
+            'Mexico': 'MX',
+            'Scotland': 'GB'
+        };
+        
+        return countryMap[countryName] || 'XX';
     }
 }
 
