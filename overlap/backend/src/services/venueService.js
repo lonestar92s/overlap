@@ -429,7 +429,7 @@ class VenueService {
 
             return venue;
         } catch (error) {
-            console.error(`❌ Error saving venue ${venueData.name}:`, error.message);
+
             return null;
         }
     }

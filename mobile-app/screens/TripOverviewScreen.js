@@ -54,7 +54,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         home: { name: item.homeTeam?.name || 'Unknown', logo: item.homeTeam?.logo || '' },
         away: { name: item.awayTeam?.name || 'Unknown', logo: item.awayTeam?.logo || '' }
       },
-      league: { name: item.league },
+      league: typeof item.league === 'string' ? item.league : { name: item.league?.name || item.league || 'Unknown League' },
       venue: venueInfo
     };
 

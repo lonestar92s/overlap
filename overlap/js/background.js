@@ -113,7 +113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
             })
             .catch(error => {
-                console.error('[Overlap - Background] Error processing matches:', error);
+
                 sendResponse({ status: 'error', error: error.message });
             });
             

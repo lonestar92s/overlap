@@ -82,12 +82,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     // Extract coordinates from matches - try multiple possible sources
     const coordinates = itinerary.matches
       .map(match => {
-        console.log('🗺️ ItineraryMapScreen - Processing match for coordinates:', {
-          matchId: match.matchId,
-          venue: match.venue,
-          venueData: match.venueData,
-          fixtureVenue: match.fixture?.venue
-        });
+
         
         // Try to get coordinates from different possible locations
         // First check the new venueData field we're saving

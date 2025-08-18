@@ -397,12 +397,15 @@ class ApiService {
   // Filter leagues based on search location for efficiency
   getRelevantLeagues(searchBounds) {
     if (!searchBounds || !searchBounds.northeast || !searchBounds.southwest) {
+      console.log('🔍 getRelevantLeagues: No bounds provided, returning all leagues');
       return AVAILABLE_LEAGUES; // Fallback to all leagues if no bounds
     }
 
     // Calculate center point of search bounds
     const centerLat = (searchBounds.northeast.lat + searchBounds.southwest.lat) / 2;
     const centerLng = (searchBounds.northeast.lng + searchBounds.southwest.lng) / 2;
+    
+    console.log('🔍 getRelevantLeagues: Search center:', { centerLat, centerLng });
 
     const relevantLeagues = [];
     
@@ -454,10 +457,19 @@ class ApiService {
           'Italy': isInEurope && centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19,
           'France': isInEurope && centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8,
           'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
+          'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
         };
+
+        console.log(`🔍 League ${league.name} (${league.country}):`, {
+          isInternational: league.isInternational,
+          hasCoords: !!league.coords,
+          countryMatch: countryMatches[league.country],
+          shouldInclude
+        });
 
         if (countryMatches[league.country]) {
           shouldInclude = true;
+          console.log(`✅ Including ${league.name} due to country match`);
         }
       }
 
@@ -468,12 +480,15 @@ class ApiService {
 
     // If no relevant leagues found (edge case), include at least top European leagues
     if (relevantLeagues.length === 0) {
+      console.log('⚠️ No relevant leagues found, using fallback');
       const fallbackLeagues = AVAILABLE_LEAGUES.filter(l => 
         ['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Champions League'].includes(l.name)
       );
+      console.log('🔍 Fallback leagues:', fallbackLeagues.map(l => l.name));
       return fallbackLeagues.length > 0 ? fallbackLeagues : AVAILABLE_LEAGUES;
     }
 
+    console.log('🔍 Final relevant leagues:', relevantLeagues.map(l => l.name));
     return relevantLeagues;
   }
 
@@ -484,6 +499,8 @@ class ApiService {
       const targetLeagues = competitions.length > 0 
         ? AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id))
         : this.getRelevantLeagues(bounds);
+
+      console.log('🔍 searchMatchesByBounds: Target leagues:', targetLeagues.map(l => `${l.name} (${l.id})`));
 
       // Format dates for API
       const formattedDates = {

@@ -15,6 +15,7 @@ const MatchMapView = ({
   showLocationButton = true,
   autoFitKey = 0,
   onMapPress = () => {},
+  preventAutoFit = false, // New prop to prevent auto-fitting
 }) => {
   const mapRef = useRef();
   
@@ -45,13 +46,13 @@ const MatchMapView = ({
 
   // Auto-fit to markers only when explicitly triggered
 useEffect(() => {
-  if (matches && matches.length > 0 && mapReady && mapRef.current) {
+  if (matches && matches.length > 0 && mapReady && mapRef.current && !preventAutoFit) {
     const timer = setTimeout(() => {
       fitToMatches();
     }, 300);
     return () => clearTimeout(timer);
   }
-}, [autoFitKey, mapReady]);
+}, [autoFitKey, mapReady, preventAutoFit]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -150,6 +151,37 @@ useEffect(() => {
 
     if (coordinates.length === 0) return;
 
+    // For search results, use a more conservative zoom level to avoid excessive zooming out
+    const isSearchResults = coordinates.length > 10; // Assume >10 matches means search results
+    
+    if (isSearchResults) {
+      // For search results, center on the middle of the results but use a reasonable zoom level
+      const lats = coordinates.map(c => c.latitude);
+      const lngs = coordinates.map(c => c.longitude);
+      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+      
+      // Calculate the span of the results
+      const spanLat = Math.abs(Math.max(...lats) - Math.min(...lats));
+      const spanLng = Math.abs(Math.max(...lngs) - Math.min(...lngs));
+      
+      // Add some padding but cap the zoom level to prevent excessive zooming out
+      const MAX_ZOOM_OUT = 3.0; // Maximum zoom out level for search results
+      const padding = 1.5; // Add 50% padding around results
+      
+      const targetLatDelta = Math.min(spanLat * padding, MAX_ZOOM_OUT);
+      const targetLngDelta = Math.min(spanLng * padding, MAX_ZOOM_OUT);
+      
+      mapRef.current.animateToRegion({
+        latitude: centerLat,
+        longitude: centerLng,
+        latitudeDelta: targetLatDelta,
+        longitudeDelta: targetLngDelta,
+      }, 600);
+      return;
+    }
+
+    // Original logic for smaller result sets (like itinerary matches)
     // Minimum span to avoid over-zooming when there are very few points
     const MIN_LAT_DELTA = 0.2;
     const MIN_LNG_DELTA = 0.2;
@@ -223,7 +255,7 @@ useEffect(() => {
       return true;
     });
     
-    console.log(`MapView: Rendering ${validMatches.length} markers from ${matches.length} total matches`);
+
     
     // Create a unique key that changes when the matches array changes
     const matchesKey = validMatches.map(m => m.fixture?.id).join('-');
