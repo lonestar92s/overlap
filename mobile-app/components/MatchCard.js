@@ -20,27 +20,7 @@ const MatchCard = ({
   showRelativeTime = false, // Only show relative time on itinerary pages
   style = {},
 }) => {
-  // // Debug logging to help troubleshoot data structure issues
-  // console.log('MatchCard received match data:', {
-  //   matchId: match?.id,
-  //   fixtureId: match?.fixture?.id,
-  //   teams: match?.teams,
-  //   league: match?.league || match?.competition,
-  //   venue: match?.fixture?.venue,
-  //   rawMatch: match
-  // });
   
-  // // Additional logging to identify object rendering issues
-  // if (match?.league && typeof match.league === 'object') {
-  //   console.log('⚠️ League is an object:', match.league);
-  // }
-  // if (match?.teams?.home && typeof match.teams.home === 'object') {
-  //   console.log('⚠️ Home team is an object:', match.teams.home);
-  // }
-  // if (match?.teams?.away && typeof match.teams.away === 'object') {
-  //   console.log('⚠️ Away team is an object:', match.teams.away);
-  // }
-
   // Extract data from the API response format with defensive programming
   const fixture = match?.fixture || {};
   const teams = match?.teams || { home: {}, away: {} };
@@ -132,16 +112,28 @@ const MatchCard = ({
             </View>
           )}
 
-          {(league?.name || (typeof league === 'string' && league)) && (
-            <View style={styles.leagueBadge}>
-              {typeof league !== 'string' && league?.logo ? (
-                <Image source={{ uri: league.logo }} style={styles.leagueLogoSmall} resizeMode="contain" />
-              ) : null}
-              <Text style={styles.leagueText}>
-                {typeof league === 'string' ? league : league.name}
-              </Text>
-            </View>
-          )}
+          {/* League Badge */}
+          {(() => {
+            const shouldShowBadge = !!(league?.name || (typeof league === 'string' && league));
+            
+            if (shouldShowBadge) {
+              return (
+                <View style={styles.leagueBadge}>
+                  {typeof league !== 'string' && (league?.logo || league?.emblem) ? (
+                    <Image 
+                      source={{ uri: league.logo || league.emblem }} 
+                      style={styles.leagueLogoSmall} 
+                      resizeMode="contain" 
+                    />
+                  ) : null}
+                  <Text style={styles.leagueText}>
+                    {typeof league === 'string' ? league : league.name}
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          })()}
           
           {showHeart && matchId !== 'unknown' && (
             <HeartButton

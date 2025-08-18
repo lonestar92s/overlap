@@ -18,7 +18,6 @@ import FilterModal from '../components/FilterModal';
 import { useFilter } from '../contexts/FilterContext';
 import { useItineraries } from '../contexts/ItineraryContext';
 import ApiService from '../services/api';
-import { formatDateHeader } from '../utils/dateUtils';
 import * as Haptics from 'expo-haptics';
 
 import HeartButton from '../components/HeartButton';
@@ -68,6 +67,13 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [lastSuccessfulRequestId, setLastSuccessfulRequestId] = useState(0);
   
+  // Track when we're performing a bounds search to prevent auto-fitting
+  const [isPerformingBoundsSearch, setIsPerformingBoundsSearch] = useState(false);
+  
+  // State for smooth transitions between search results
+  const [currentDisplayMatches, setCurrentDisplayMatches] = useState(initialMatches || []);
+  const [isTransitioningResults, setIsTransitioningResults] = useState(false);
+  
   // Refs
   const mapRef = useRef();
   const suppressNextMapPressRef = useRef(false);
@@ -91,8 +97,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Process real match data for filters
   useEffect(() => {
-    console.log('Filter useEffect triggered. Matches:', matches);
-    console.log('Matches length:', matches?.length);
+
     
     // Only process filter data if we have meaningful matches and they're different from current filter data
     if (matches && matches.length > 0) {
@@ -102,8 +107,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       // Only update if match IDs are different (avoid unnecessary updates on map movement)
       if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
-        console.log('Processing matches for filters:', matches.length, 'matches');
-        console.log('Sample match structure:', matches[0]);
+ 
         
         // Extract unique countries, leagues, and teams from matches
         const countriesMap = new Map();
@@ -111,14 +115,8 @@ const MapResultsScreen = ({ navigation, route }) => {
         const teamsMap = new Map();
 
         matches.forEach((match, index) => {
-          console.log(`Processing match ${index}:`, {
-            area: match.area,
-            competition: match.competition,
-            teams: match.teams,
-            venue: match.venue,
-            league: match.league
-          });
-          console.log(`Match ${index} full structure:`, JSON.stringify(match, null, 2));
+
+
 
           // Process country from area.name
           let countryId = null;
@@ -322,17 +320,17 @@ const MapResultsScreen = ({ navigation, route }) => {
           });
         }
         
-        console.log('Setting enhanced fallback filter data:', fallbackData);
+
         updateFilterData(fallbackData);
       } else {
-        console.log('Setting real filter data:', filterData);
+  
         updateFilterData(filterData);
       }
     } else {
-      console.log('Matches are the same, skipping filter update');
+
     }
   } else {
-    console.log('No matches available for filter processing');
+
   }
   }, [matches, updateFilterData]);
 
@@ -383,27 +381,58 @@ const MapResultsScreen = ({ navigation, route }) => {
   const performBoundsSearch = async (region, requestId) => {
     if (!dateFrom || !dateTo || !region) return;
     
-    
-    
     setIsSearching(true);
+    setIsPerformingBoundsSearch(true); // Prevent auto-fitting during search
+    
     try {
       // Calculate bounds from region with safety checks
       if (!region.latitude || !region.longitude || !region.latitudeDelta || !region.longitudeDelta) {
         console.error('Invalid region data:', region);
         setIsSearching(false);
+        setIsPerformingBoundsSearch(false);
         return;
       }
       
+      // Smart search radius calculation based on user's current zoom level
+      // Only allow 1-2 zoom levels out from current view to respect user intent
+      const currentZoom = Math.max(region.latitudeDelta, region.longitudeDelta);
+      
+      // Calculate the maximum allowed search radius based on current zoom
+      // This ensures we never zoom out more than 1-2 levels from where the user is
+      let maxAllowedRadius;
+      if (currentZoom <= 0.3) {
+        // User is very zoomed in (city level) - allow 2 levels out
+        maxAllowedRadius = currentZoom * 4; // 2 levels out = 4x current zoom
+      } else if (currentZoom <= 1.0) {
+        // User is moderately zoomed in - allow 1.5 levels out
+        maxAllowedRadius = currentZoom * 3; // 1.5 levels out = 3x current zoom
+      } else {
+        // User is already zoomed out - allow only 1 level out
+        maxAllowedRadius = currentZoom * 2; // 1 level out = 2x current zoom
+      }
+      
+      // Use the more restrictive of: calculated radius or current zoom
+      const searchRadius = Math.min(maxAllowedRadius, currentZoom);
+      
       const bounds = {
         northeast: {
-          lat: region.latitude + region.latitudeDelta / 2,
-          lng: region.longitude + region.longitudeDelta / 2,
+          lat: region.latitude + searchRadius,
+          lng: region.longitude + searchRadius,
         },
         southwest: {
-          lat: region.latitude - region.latitudeDelta / 2,
-          lng: region.longitude - region.longitudeDelta / 2,
+          lat: region.latitude - searchRadius,
+          lng: region.longitude - searchRadius,
         },
       };
+      
+      console.log('🔍 Zoom-constrained search:', {
+        center: { lat: region.latitude, lng: region.longitude },
+        currentZoom,
+        maxAllowedRadius,
+        searchRadius,
+        zoomLevelsOut: Math.log2(searchRadius / currentZoom),
+        bounds
+      });
 
       // Check if bounds have changed significantly (avoid unnecessary requests)
       if (lastSearchBounds && 
@@ -413,10 +442,9 @@ const MapResultsScreen = ({ navigation, route }) => {
           Math.abs(bounds.southwest.lng - lastSearchBounds.southwest.lng) < 0.01) {
 
         setIsSearching(false);
+        setIsPerformingBoundsSearch(false);
         return;
       }
-
-      
       
       const response = await ApiService.searchMatchesByBounds({
         bounds,
@@ -429,15 +457,11 @@ const MapResultsScreen = ({ navigation, route }) => {
       const isSignificantlyStale = requestId < (currentRequestId - 1);
       
       if (isSignificantlyStale) {
-
+        setIsPerformingBoundsSearch(false);
         return;
       }
 
-      
-
       if (response.success) {
-
-        
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
         
@@ -445,8 +469,20 @@ const MapResultsScreen = ({ navigation, route }) => {
         updateMatchesEfficiently(response.data);
         setLastSearchBounds(bounds);
         
+        // Update the original search region to the new area so future "Search this area" 
+        // calls use the current location instead of reverting to London
+        setOriginalSearchRegion(region);
+        
+        // Update the map region to stay in the current search area
+        setMapRegion(region);
+        
         // Don't recenter the map - let the user keep their current view
         // The search results will appear as markers on the current map view
+        
+        // Re-enable auto-fit after a short delay to allow results to load
+        setTimeout(() => {
+          setIsPerformingBoundsSearch(false);
+        }, 1000);
       } else {
         console.error('❌ API returned error:', response.error);
         Alert.alert('Search Error', response.error || 'Failed to search matches');
@@ -461,71 +497,43 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Only clear searching if this is still a recent request
       if (requestId >= (currentRequestId - 1)) {
         setIsSearching(false);
+        setIsPerformingBoundsSearch(false);
       }
     }
   };
 
   // Phase 1: Efficient marker updates (diff-based)
   const updateMatchesEfficiently = (newMatches) => {
+    console.log('🔄 Updating matches efficiently:', {
+      currentCount: matches.length,
+      newCount: newMatches.length,
+      isTransitioning: isTransitioningResults
+    });
     
+    // Start transition state
+    setIsTransitioningResults(true);
     
+    // Update the base matches state
     setMatches(prevMatches => {
-      
-      
       // Create sets for efficient comparison
       const prevIds = new Set(prevMatches.map(m => m.fixture?.id));
       const newIds = new Set(newMatches.map(m => m.fixture?.id));
       
-      
-      
-      // Find matches to add (new IDs not in previous)
+      // Find matches to remove and add
+      const toRemove = prevMatches.filter(m => !newIds.has(m.fixture?.id));
       const toAdd = newMatches.filter(m => !prevIds.has(m.fixture?.id));
       
-      // Find matches to remove (previous IDs not in new)
-      const toRemove = prevMatches.filter(m => !newIds.has(m.fixture?.id));
+      console.log('🔄 Match diff:', { toRemove: toRemove.length, toAdd: toAdd.length });
       
-      // Find matches to update (same ID but different data)
-      const toUpdate = newMatches.filter(newMatch => {
-        const prevMatch = prevMatches.find(p => p.fixture?.id === newMatch.fixture?.id);
-        return prevMatch && JSON.stringify(prevMatch) !== JSON.stringify(newMatch);
-      });
-      
-      
-      
-      if (toAdd.length === 0 && toRemove.length === 0 && toUpdate.length === 0) {
-                    return prevMatches;
-      }
-      
-      // Apply changes efficiently
-      let updatedMatches = [...prevMatches];
-      
-      // Remove old matches
-      toRemove.forEach(match => {
-        updatedMatches = updatedMatches.filter(m => m.fixture?.id !== match.fixture?.id);
-      });
-      
-      // Add new matches
-      updatedMatches = [...updatedMatches, ...toAdd];
-      
-      // Update existing matches
-      toUpdate.forEach(newMatch => {
-        const index = updatedMatches.findIndex(m => m.fixture?.id === newMatch.fixture?.id);
-        if (index !== -1) {
-          updatedMatches[index] = newMatch;
-        }
-      });
-      
-      // Sort matches chronologically (perfect for travel planning)
-      updatedMatches.sort((a, b) => {
-        const dateA = new Date(a.fixture?.date);
-        const dateB = new Date(b.fixture?.date);
-        return dateA.getTime() - dateB.getTime();
-      });
-      
-
-      
-      return updatedMatches;
+      // Return new matches
+      return newMatches;
     });
+    
+    // Smoothly transition the display matches after a short delay
+    setTimeout(() => {
+      setCurrentDisplayMatches(newMatches);
+      setIsTransitioningResults(false);
+    }, 300); // 300ms transition delay
   };
 
 
@@ -739,7 +747,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // If no filters are selected, return all matches
     if (selectedCountryIds.length === 0 && selectedLeagueIds.length === 0 && selectedTeamIds.length === 0) {
-      console.log('MapResultsScreen: No filters selected, returning all matches:', matches?.length || 0);
+
       return matches;
     }
     
@@ -801,7 +809,6 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Get the final filtered matches combining both filters and date selection
   const finalFilteredMatches = useMemo(() => {
     if (!selectedDateHeader) {
-      console.log('MapResultsScreen: No date filter, showing filter-filtered matches:', filteredMatches?.length || 0);
       return filteredMatches; // Show filter-filtered matches when no date header is selected
     }
     
@@ -816,6 +823,23 @@ const MapResultsScreen = ({ navigation, route }) => {
     console.log('MapResultsScreen: Date filter applied, showing date-filtered matches:', dateFiltered?.length || 0);
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
+  
+  // Get the display matches for smooth transitions
+  const displayFilteredMatches = useMemo(() => {
+    if (!selectedDateHeader) {
+      return getFilteredMatches(currentDisplayMatches, selectedFilters);
+    }
+    
+    // Apply date filtering to the display matches
+    const dateFiltered = getFilteredMatches(currentDisplayMatches, selectedFilters).filter(match => {
+      const matchDate = new Date(match.fixture?.date);
+      const selectedDate = new Date(selectedDateHeader);
+      
+      return matchDate.toDateString() === selectedDate.toDateString();
+    });
+    
+    return dateFiltered;
+  }, [currentDisplayMatches, selectedFilters, selectedDateHeader]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
@@ -884,82 +908,67 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Group matches by date for better organization
   const groupMatchesByDate = (matches) => {
-    if (!matches || matches.length === 0) return [];
+    if (!matches || matches.length === 0) return {};
     
     const grouped = matches.reduce((acc, match) => {
-      const date = match.fixture?.date;
-      if (!date) return acc;
-      
-      const matchDate = new Date(date);
-      const dateKey = matchDate.toDateString(); // "Mon Jan 01 2024"
+      const matchDate = new Date(match.fixture?.date);
+      const dateKey = matchDate.toDateString();
       
       if (!acc[dateKey]) {
-        acc[dateKey] = {
-          date: matchDate,
-          matches: []
-        };
+        acc[dateKey] = [];
       }
-      
-      acc[dateKey].matches.push(match);
+      acc[dateKey].push(match);
       return acc;
     }, {});
     
-    // Convert to array and sort by date
-    return Object.values(grouped).sort((a, b) => a.date - b.date);
+    // Sort dates and sort matches within each date
+    const sortedGrouped = {};
+    Object.keys(grouped)
+      .sort((a, b) => {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+      })
+      .forEach(dateKey => {
+        sortedGrouped[dateKey] = grouped[dateKey].sort((a, b) => 
+          new Date(a.fixture?.date) - new Date(b.fixture?.date)
+        );
+      });
+    
+    return sortedGrouped;
   };
 
   // Handle date header selection
-  const handleDateHeaderPress = useCallback((date) => {
-    if (selectedDateHeader && selectedDateHeader.toDateString() === date.toDateString()) {
-      // Deselect if clicking the same header
+  const handleDateHeaderPress = useCallback((dateHeader) => {
+    if (selectedDateHeader && selectedDateHeader.toDateString() === dateHeader.toDateString()) {
+      // Deselect if same header is pressed
       setSelectedDateHeader(null);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } else {
-      // Select new header (deselects previous one)
-      setSelectedDateHeader(date);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Select new header
+      setSelectedDateHeader(dateHeader);
     }
+    
+    // Provide haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [selectedDateHeader]);
-
-  // Create flat list data with headers - memoized for performance
-  const createFlatListData = useCallback((matches) => {
-    const groupedMatches = groupMatchesByDate(matches);
-    const flatData = [];
-    
-    groupedMatches.forEach(group => {
-      // Add date header
-      flatData.push({
-        type: 'header',
-        date: group.date,
-        id: `header-${group.date.toDateString()}`
-      });
-      
-      // Add matches for this date
-      group.matches.forEach(match => {
-        flatData.push({
-          type: 'match',
-          ...match
-        });
-      });
-    });
-    
-    return flatData;
-  }, []);
 
   // Format date for display
   const formatDateHeader = (date) => {
+    if (!date) return 'Unknown Date';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const matchDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const matchDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     
     if (matchDate.getTime() === today.getTime()) {
       return 'Today';
     } else if (matchDate.getTime() === tomorrow.getTime()) {
       return 'Tomorrow';
     } else {
-      return date.toLocaleDateString('en-US', {
+      return d.toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'long',
         day: 'numeric'
@@ -967,14 +976,34 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
+  // Create flat list data with date headers and matches
+  const createFlatListData = useCallback(() => {
+    if (!displayFilteredMatches || displayFilteredMatches.length === 0) {
+      return [];
+    }
+
+    const grouped = groupMatchesByDate(displayFilteredMatches);
+    const data = [];
+
+    Object.entries(grouped).forEach(([dateKey, matches]) => {
+      const headerDate = new Date(dateKey);
+      data.push({ type: 'header', dateHeader: headerDate, matches });
+      matches.forEach(match => {
+        data.push({ type: 'match', ...match });
+      });
+    });
+
+    return data;
+  }, [displayFilteredMatches]);
+
   // Render items (headers and matches) - memoized for performance
   const renderItem = useCallback(({ item }) => {
     if (item.type === 'header') {
-      const isSelected = selectedDateHeader && selectedDateHeader.toDateString() === item.date.toDateString();
+      const isSelected = selectedDateHeader && selectedDateHeader.toDateString() === item.dateHeader.toDateString();
       
       return (
         <TouchableWithoutFeedback 
-          onPress={() => handleDateHeaderPress(item.date)}
+          onPress={() => handleDateHeaderPress(item.dateHeader)}
           delayPressIn={0}
           delayLongPress={0}
         >
@@ -988,7 +1017,7 @@ const MapResultsScreen = ({ navigation, route }) => {
               styles.dateHeaderText,
               isSelected && styles.dateHeaderTextSelected
             ]}>
-              {formatDateHeader(item.date)}
+              {formatDateHeader(item.dateHeader)}
             </Text>
             {isSelected && (
               <Text style={styles.dateHeaderCheckmark}>✓</Text>
@@ -997,9 +1026,36 @@ const MapResultsScreen = ({ navigation, route }) => {
         </TouchableWithoutFeedback>
       );
     } else {
+      // Debug: Check if this match has league data like popular matches do
+      const matchWithLeague = {
+        ...item,
+        league: item.league || item.competition || { name: 'Unknown League' }
+      };
+
+      // If we have competition data with emblem, merge it into league
+      if (item.competition?.emblem && matchWithLeague.league) {
+        matchWithLeague.league = {
+          ...matchWithLeague.league,
+          emblem: item.competition.emblem
+        };
+      }
+
+      // Debug: Show league data info
+      if (!item.league && !item.competition) {
+        console.log('⚠️ Match missing league data:', {
+          id: item.id,
+          hasLeague: !!item.league,
+          hasCompetition: !!item.competition,
+          competitionName: item.competition?.name,
+          leagueName: item.league?.name
+        });
+      }
+
+
+      
       return (
         <MatchCard
-          match={item}
+          match={matchWithLeague}
           onPress={() => handleMatchPress(item)}
           variant="default"
           showHeart={true}
@@ -1010,10 +1066,10 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Render bottom sheet content (FlatList as direct child of sheet)
   const renderBottomSheetContent = () => {
-    const flatListData = createFlatListData(finalFilteredMatches || []);
+    const flatListData = createFlatListData();
     
     // Calculate responsive bottom padding based on content length
-    const bottomPadding = Math.max(20, Math.min(100, 120 - (finalFilteredMatches?.length || 0) * 3));
+    const bottomPadding = Math.max(20, Math.min(100, 120 - (displayFilteredMatches?.length || 0) * 3));
     
     return (
       <BottomSheetFlatList
@@ -1138,8 +1194,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
-        matches={finalFilteredMatches}
-        initialRegion={getInitialRegion()}
+        matches={displayFilteredMatches}
+        initialRegion={mapRegion || getInitialRegion()}
         autoFitKey={autoFitKey}
         onRegionChange={handleMapRegionChange}
         onMarkerPress={handleMarkerPress}
@@ -1150,7 +1206,18 @@ const MapResultsScreen = ({ navigation, route }) => {
             : null
         }
         style={styles.map}
+        preventAutoFit={isPerformingBoundsSearch}
       />
+      
+      {/* Loading overlay for smooth transitions */}
+      {isTransitioningResults && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingIndicator}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>Updating results...</Text>
+          </View>
+        </View>
+      )}
 
       {/* Floating Search Button */}
       {(hasMovedFromOriginal || hasWho) && (
@@ -1193,7 +1260,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         handleComponent={() => (
           <View style={styles.customHandle}>
             <View style={styles.customHandleBar} />
-            <Text style={styles.customHandleText}>{finalFilteredMatches?.length || 0} results</Text>
+            <Text style={styles.customHandleText}>{displayFilteredMatches?.length || 0} results</Text>
           </View>
         )}
       >
@@ -1215,7 +1282,20 @@ const MapResultsScreen = ({ navigation, route }) => {
             {venueGroups[selectedVenueIndex].matches.map((m, idx) => (
               <MatchCard
                 key={`venue-match-${m.fixture?.id || idx}`}
-                match={m}
+                match={{
+                  ...m,
+                  league: (() => {
+                    const baseLeague = m.league || m.competition || { name: 'Unknown League' };
+                    // If we have competition data with emblem, merge it into league
+                    if (m.competition?.emblem && baseLeague) {
+                      return {
+                        ...baseLeague,
+                        emblem: m.competition.emblem
+                      };
+                    }
+                    return baseLeague;
+                  })()
+                }}
                 onPress={() => handleMatchPress(m)}
                 variant="overlay"
                 showHeart={true}
@@ -1730,6 +1810,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  loadingText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
   },
 });
 

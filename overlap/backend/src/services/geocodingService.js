@@ -44,7 +44,7 @@ class GeocodingService {
             if (city) query += `, ${city}`;
             if (country) query += `, ${country}`;
 
-            console.log(`🗺️ Geocoding venue: ${query}`);
+       
 
             const response = await axios.get(`${this.baseURL}/search.php`, {
                 params: {
@@ -66,7 +66,7 @@ class GeocodingService {
                     confidence: result.importance || 0
                 };
 
-                console.log(`✅ Geocoded successfully: ${venueName} → [${coordinates.lng}, ${coordinates.lat}]`);
+
                 
                 // Cache the result
                 this.cache.set(cacheKey, coordinates);

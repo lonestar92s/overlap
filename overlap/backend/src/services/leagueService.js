@@ -20,6 +20,14 @@ class LeagueService {
             '78': { name: 'Bundesliga', country: 'Germany' },
             '135': { name: 'Serie A', country: 'Italy' },
             '61': { name: 'Ligue 1', country: 'France' },
+            '2': { name: 'Champions League', country: 'Europe' },
+            '3': { name: 'Europa League', country: 'Europe' },
+            '848': { name: 'Europa Conference League', country: 'Europe' },
+            '94': { name: 'Primeira Liga', country: 'Portugal' },
+            '88': { name: 'Eredivisie', country: 'Netherlands' },
+            '203': { name: 'Süper Lig', country: 'Turkey' },
+            '218': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
+            '188': { name: 'Scottish Premiership', country: 'Scotland' },
             '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' }
         };
     }
