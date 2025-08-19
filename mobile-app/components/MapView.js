@@ -13,9 +13,7 @@ const MatchMapView = ({
   selectedMatchId = null,
   style = {},
   showLocationButton = true,
-  autoFitKey = 0,
   onMapPress = () => {},
-  preventAutoFit = false, // New prop to prevent auto-fitting
 }) => {
   const mapRef = useRef();
   
@@ -30,29 +28,12 @@ const MatchMapView = ({
   const [userLocation, setUserLocation] = useState(null);
   const [mapReady, setMapReady] = useState(false);
 
-  // Create a unique key for the map that changes when matches change significantly
-  const mapKey = useMemo(() => {
-    if (!matches || matches.length === 0) return 'no-matches';
-    const matchIds = matches.map(m => m.fixture?.id).filter(Boolean).sort();
-    return matchIds.join('-');
-  }, [matches]);
-
   // Update region when initialRegion prop changes
   useEffect(() => {
     if (initialRegion) {
       setRegion(initialRegion);
     }
   }, [initialRegion]);
-
-  // Auto-fit to markers only when explicitly triggered
-useEffect(() => {
-  if (matches && matches.length > 0 && mapReady && mapRef.current && !preventAutoFit) {
-    const timer = setTimeout(() => {
-      fitToMatches();
-    }, 300);
-    return () => clearTimeout(timer);
-  }
-}, [autoFitKey, mapReady, preventAutoFit]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -89,13 +70,28 @@ useEffect(() => {
       };
 
       onRegionChange(newRegion, bounds);
-    }, 500),
+    }, 100), // Reduced from 500ms to 100ms for more responsive updates
     [onRegionChange]
   );
 
   // Handle region change (map movement)
   const handleRegionChangeComplete = (newRegion) => {
     setRegion(newRegion);
+    
+    // Also update immediately for critical operations (like search this area)
+    // This ensures the region is always current
+    onRegionChange(newRegion, {
+      northeast: {
+        lat: newRegion.latitude + (newRegion.latitudeDelta / 2),
+        lng: newRegion.longitude + (newRegion.longitudeDelta / 2),
+      },
+      southwest: {
+        lat: newRegion.latitude - (newRegion.latitudeDelta / 2),
+        lng: newRegion.longitude - (newRegion.longitudeDelta / 2),
+      }
+    });
+    
+    // Keep the debounced version for performance optimization
     debouncedRegionChange(newRegion);
   };
 
@@ -284,7 +280,6 @@ useEffect(() => {
   return (
     <View style={[styles.container, style]}>
       <MapView
-        key={mapKey}
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
