@@ -57,22 +57,23 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   
-  // Manual search state
-  const [hasMovedFromOriginal, setHasMovedFromOriginal] = useState(false);
-  const [originalSearchRegion, setOriginalSearchRegion] = useState(null);
-  
-  // Phase 1: Request cancellation and tracking
+  // Request cancellation and tracking
   const [currentRequestId, setCurrentRequestId] = useState(0);
-  const [lastSearchBounds, setLastSearchBounds] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [lastSuccessfulRequestId, setLastSuccessfulRequestId] = useState(0);
+  
+  // Track if user has moved from initial search area
+  const [hasMovedFromInitial, setHasMovedFromInitial] = useState(false);
+  const [initialSearchRegion, setInitialSearchRegion] = useState(null);
   
   // Track when we're performing a bounds search to prevent auto-fitting
   const [isPerformingBoundsSearch, setIsPerformingBoundsSearch] = useState(false);
   
   // State for smooth transitions between search results
-  const [currentDisplayMatches, setCurrentDisplayMatches] = useState(initialMatches || []);
   const [isTransitioningResults, setIsTransitioningResults] = useState(false);
+
+  
+
   
   // Refs
   const mapRef = useRef();
@@ -92,13 +93,8 @@ const MapResultsScreen = ({ navigation, route }) => {
     closeFilterModal
   } = useFilter();
 
-  // Trigger for map auto-fit when filters are applied/cleared or on initial navigation
-  const [autoFitKey, setAutoFitKey] = useState(route.params?.autoFitKey || 0);
-  
   // Process real match data for filters
   useEffect(() => {
-
-    
     // Only process filter data if we have meaningful matches and they're different from current filter data
     if (matches && matches.length > 0) {
       // Check if the matches are significantly different from what we already have
@@ -107,17 +103,12 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       // Only update if match IDs are different (avoid unnecessary updates on map movement)
       if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
- 
-        
         // Extract unique countries, leagues, and teams from matches
         const countriesMap = new Map();
         const leaguesMap = new Map();
         const teamsMap = new Map();
 
-        matches.forEach((match, index) => {
-
-
-
+        matches.forEach((match) => {
           // Process country from area.name
           let countryId = null;
           let countryName = null;
@@ -186,153 +177,152 @@ const MapResultsScreen = ({ navigation, route }) => {
             }
           }
 
-        // Process teams from teams.home and teams.away
-        const processTeam = (team, teamType) => {
-          let teamId = null;
-          let teamName = null;
+          // Process teams from teams.home and teams.away
+          const processTeam = (team, teamType) => {
+            let teamId = null;
+            let teamName = null;
+            
+            if (team) {
+              if (typeof team === 'string') {
+                teamId = team;
+                teamName = team;
+              } else if (team.id) {
+                teamId = team.id;
+                teamName = team.name;
+              } else if (team.name) {
+                teamId = team.name;
+                teamName = team.name;
+              }
+            }
+
+            if (teamId) {
+              if (!teamsMap.has(teamId)) {
+                teamsMap.set(teamId, {
+                  id: teamId,
+                  name: teamName,
+                  countryId: countryId || 'unknown',
+                  leagueId: leagueId || 'unknown',
+                  count: 1
+                });
+              } else {
+                teamsMap.get(teamId).count++;
+              }
+            }
+          };
+
+          // Process home team from teams.home
+          if (match.teams?.home) {
+            processTeam(match.teams.home, 'home');
+          }
           
-          if (team) {
-            if (typeof team === 'string') {
-              teamId = team;
-              teamName = team;
-            } else if (team.id) {
-              teamId = team.id;
-              teamName = team.name;
-            } else if (team.name) {
-              teamId = team.name;
-              teamName = team.name;
+          // Process away team from teams.away
+          if (match.teams?.away) {
+            processTeam(match.teams.away, 'away');
+          }
+        });
+
+        const filterData = {
+          countries: Array.from(countriesMap.values()),
+          leagues: Array.from(leaguesMap.values()),
+          teams: Array.from(teamsMap.values()),
+          matchIds: currentMatchIds // Add match IDs to track changes
+        };
+
+        // If we still don't have any data, create some basic fallback data
+        if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
+          console.log('No structured data found, creating fallback data');
+          
+          // Try to create some basic data from the first match
+          const firstMatch = matches[0];
+          let fallbackData = {
+            countries: [],
+            leagues: [],
+            teams: [],
+            matchIds: currentMatchIds
+          };
+          
+          // Try to extract basic info from the first match
+          if (firstMatch) {
+            if (firstMatch.area?.name) {
+              fallbackData.countries.push({
+                id: firstMatch.area.code || firstMatch.area.id?.toString() || 'unknown',
+                name: firstMatch.area.name,
+                count: matches.length
+              });
+            }
+            
+            if (firstMatch.competition?.name) {
+              fallbackData.leagues.push({
+                id: firstMatch.competition.id || firstMatch.competition.code || 'unknown',
+                name: firstMatch.competition.name,
+                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+                count: matches.length
+              });
+            }
+            
+            if (firstMatch.teams?.home?.name) {
+              fallbackData.teams.push({
+                id: firstMatch.teams.home.id || firstMatch.teams.home.name,
+                name: firstMatch.teams.home.name,
+                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+                leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
+                count: 1
+              });
+            }
+            
+            if (firstMatch.teams?.away?.name) {
+              fallbackData.teams.push({
+                id: firstMatch.teams.away.id || firstMatch.teams.away.name,
+                name: firstMatch.teams.away.name,
+                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+                leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
+                count: 1
+              });
             }
           }
-
-          if (teamId) {
-                      if (!teamsMap.has(teamId)) {
-            teamsMap.set(teamId, {
-              id: teamId,
-              name: teamName,
-              countryId: countryId || 'unknown',
-              leagueId: leagueId || 'unknown',
-              count: 1
-            });
-          } else {
-            teamsMap.get(teamId).count++;
-          }
-          }
-        };
-
-        // Process home team from teams.home
-        if (match.teams?.home) {
-          processTeam(match.teams.home, 'home');
-        }
-        
-        // Process away team from teams.away
-        if (match.teams?.away) {
-          processTeam(match.teams.away, 'away');
-        }
-      });
-
-      const filterData = {
-        countries: Array.from(countriesMap.values()),
-        leagues: Array.from(leaguesMap.values()),
-        teams: Array.from(teamsMap.values()),
-        matchIds: currentMatchIds // Add match IDs to track changes
-      };
-
-
-      
-      // If we still don't have any data, create some basic fallback data
-      if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
-        console.log('No structured data found, creating fallback data');
-        
-        // Try to create some basic data from the first match
-        const firstMatch = matches[0];
-        let fallbackData = {
-          countries: [],
-          leagues: [],
-          teams: [],
-          matchIds: currentMatchIds
-        };
-        
-        // Try to extract basic info from the first match
-        if (firstMatch) {
-          if (firstMatch.area?.name) {
+          
+          // If we still don't have data, use generic fallback
+          if (fallbackData.countries.length === 0) {
             fallbackData.countries.push({
-              id: firstMatch.area.code || firstMatch.area.id?.toString() || 'unknown',
-              name: firstMatch.area.name,
+              id: 'unknown', 
+              name: 'Unknown Country', 
               count: matches.length
             });
           }
           
-          if (firstMatch.competition?.name) {
+          if (fallbackData.leagues.length === 0) {
             fallbackData.leagues.push({
-              id: firstMatch.competition.id || firstMatch.competition.code || 'unknown',
-              name: firstMatch.competition.name,
-              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
+              id: 'unknown', 
+              name: 'Unknown League', 
+              countryId: fallbackData.countries[0].id, 
               count: matches.length
             });
           }
           
-          if (firstMatch.teams?.home?.name) {
+          if (fallbackData.teams.length === 0) {
             fallbackData.teams.push({
-              id: firstMatch.teams.home.id || firstMatch.teams.home.name,
-              name: firstMatch.teams.home.name,
-              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
-              leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
-              count: 1
+              id: 'unknown', 
+              name: 'Unknown Team', 
+              countryId: fallbackData.countries[0].id, 
+              leagueId: fallbackData.leagues[0].id, 
+              count: matches.length
             });
           }
           
-          if (firstMatch.teams?.away?.name) {
-            fallbackData.teams.push({
-              id: firstMatch.teams.away.id || firstMatch.teams.away.name,
-              name: firstMatch.teams.away.name,
-              countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
-              leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
-              count: 1
-            });
-          }
+          updateFilterData(fallbackData);
+        } else {
+          updateFilterData(filterData);
         }
-        
-        // If we still don't have data, use generic fallback
-        if (fallbackData.countries.length === 0) {
-          fallbackData.countries.push({
-            id: 'unknown', 
-            name: 'Unknown Country', 
-            count: matches.length
-          });
-        }
-        
-        if (fallbackData.leagues.length === 0) {
-          fallbackData.leagues.push({
-            id: 'unknown', 
-            name: 'Unknown League', 
-            countryId: fallbackData.countries[0].id, 
-            count: matches.length
-          });
-        }
-        
-        if (fallbackData.teams.length === 0) {
-          fallbackData.teams.push({
-            id: 'unknown', 
-            name: 'Unknown Team', 
-            countryId: fallbackData.countries[0].id, 
-            leagueId: fallbackData.leagues[0].id, 
-            count: matches.length
-          });
-        }
-        
-
-        updateFilterData(fallbackData);
-      } else {
-  
-        updateFilterData(filterData);
       }
-    } else {
-
     }
-  } else {
-
-  }
   }, [matches, updateFilterData]);
+
+  // Set initial search region when component mounts
+  useEffect(() => {
+    if (initialRegion && !initialSearchRegion) {
+      setInitialSearchRegion(initialRegion);
+    }
+  }, [initialRegion, initialSearchRegion]);
 
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {
@@ -352,100 +342,63 @@ const MapResultsScreen = ({ navigation, route }) => {
     // Calculate available height for FlatList
     const availableHeight = bottomSheetHeight - headerHeight - bottomTabHeight - safeAreaBottom - 50; // Increased padding to reduce white space
     
-    
     return Math.max(availableHeight, 200); // Minimum height of 200px
   }, [sheetState, insets.bottom]);
 
-  // Track when matches state changes
-
-
-  // Calculate smart zoom level based on result count
-  const calculateSmartZoom = (matchCount) => {
-    if (matchCount === 0) return 0.2;
-    if (matchCount <= 2) return 0.2;
-    if (matchCount <= 5) return 0.3;
-    if (matchCount <= 10) return 0.4;
-    return 0.5; // Cap at wide view
-  };
-
-  // Initialize original search region
-  useEffect(() => {
-    if (initialRegion && !originalSearchRegion) {
-      setOriginalSearchRegion(initialRegion);
-    }
-  }, [initialRegion, originalSearchRegion]);
-
-  // No initial search needed - matches are passed via navigation params
-
-  // Phase 1: Improved search with request cancellation
+  // Simplified search function - viewport only
   const performBoundsSearch = async (region, requestId) => {
     if (!dateFrom || !dateTo || !region) return;
     
     setIsSearching(true);
-    setIsPerformingBoundsSearch(true); // Prevent auto-fitting during search
     
     try {
-      // Calculate bounds from region with safety checks
-      if (!region.latitude || !region.longitude || !region.latitudeDelta || !region.longitudeDelta) {
-        console.error('Invalid region data:', region);
-        setIsSearching(false);
-        setIsPerformingBoundsSearch(false);
-        return;
-      }
+      // FIXED: Use actual viewport dimensions instead of fixed size increments
+      // The previous approach used fixed sizes (0.1°, 0.2°, etc.) which didn't match the actual zoom
+      // Now we use the actual map viewport dimensions that the user sees
       
-      // Smart search radius calculation based on user's current zoom level
-      // Only allow 1-2 zoom levels out from current view to respect user intent
-      const currentZoom = Math.max(region.latitudeDelta, region.longitudeDelta);
+      // Calculate bounds from the ACTUAL visible viewport
+      // latitudeDelta and longitudeDelta represent the actual span of what's visible on screen
+      const viewportLatSpan = region.latitudeDelta;
+      const viewportLngSpan = region.longitudeDelta;
       
-      // Calculate the maximum allowed search radius based on current zoom
-      // This ensures we never zoom out more than 1-2 levels from where the user is
-      let maxAllowedRadius;
-      if (currentZoom <= 0.3) {
-        // User is very zoomed in (city level) - allow 2 levels out
-        maxAllowedRadius = currentZoom * 4; // 2 levels out = 4x current zoom
-      } else if (currentZoom <= 1.0) {
-        // User is moderately zoomed in - allow 1.5 levels out
-        maxAllowedRadius = currentZoom * 3; // 1.5 levels out = 3x current zoom
-      } else {
-        // User is already zoomed out - allow only 1 level out
-        maxAllowedRadius = currentZoom * 2; // 1 level out = 2x current zoom
-      }
-      
-      // Use the more restrictive of: calculated radius or current zoom
-      const searchRadius = Math.min(maxAllowedRadius, currentZoom);
+      // Apply reasonable limits to prevent extremely large searches
+      // Max bounds: 5° × 5° (covers most of a country)
+      const maxSpan = 5.0;
+      const finalLatSpan = Math.min(viewportLatSpan, maxSpan);
+      const finalLngSpan = Math.min(viewportLngSpan, maxSpan);
       
       const bounds = {
         northeast: {
-          lat: region.latitude + searchRadius,
-          lng: region.longitude + searchRadius,
+          lat: region.latitude + (finalLatSpan / 2),
+          lng: region.longitude + (finalLngSpan / 2),
         },
         southwest: {
-          lat: region.latitude - searchRadius,
-          lng: region.longitude - searchRadius,
+          lat: region.latitude - (finalLatSpan / 2),
+          lng: region.longitude - (finalLngSpan / 2),
         },
       };
       
-      console.log('🔍 Zoom-constrained search:', {
+      console.log('🔍 Viewport-only search (RESPONSIVE):', {
         center: { lat: region.latitude, lng: region.longitude },
-        currentZoom,
-        maxAllowedRadius,
-        searchRadius,
-        zoomLevelsOut: Math.log2(searchRadius / currentZoom),
-        bounds
+        viewport: {
+          actualLatDelta: region.latitudeDelta,
+          actualLngDelta: region.longitudeDelta,
+          finalLatSpan,
+          finalLngSpan,
+          radiusKm: `${(finalLatSpan * 111 / 2).toFixed(1)}km × ${(finalLngSpan * 111 / 2).toFixed(1)}km`
+        },
+        bounds,
+        // Show the zoom level and what it means
+        zoomInfo: {
+          latDelta: region.latitudeDelta,
+          lngDelta: region.longitudeDelta,
+          zoomCategory: region.latitudeDelta < 0.05 ? 'city block' : 
+                       region.latitudeDelta < 0.2 ? 'neighborhood' :
+                       region.latitudeDelta < 1.0 ? 'city' : 
+                       region.latitudeDelta < 3.0 ? 'region' : 'country'
+        }
       });
 
-      // Check if bounds have changed significantly (avoid unnecessary requests)
-      if (lastSearchBounds && 
-          Math.abs(bounds.northeast.lat - lastSearchBounds.northeast.lat) < 0.01 &&
-          Math.abs(bounds.northeast.lng - lastSearchBounds.northeast.lng) < 0.01 &&
-          Math.abs(bounds.southwest.lat - lastSearchBounds.southwest.lat) < 0.01 &&
-          Math.abs(bounds.southwest.lng - lastSearchBounds.southwest.lng) < 0.01) {
-
-        setIsSearching(false);
-        setIsPerformingBoundsSearch(false);
-        return;
-      }
-      
       const response = await ApiService.searchMatchesByBounds({
         bounds,
         dateFrom,
@@ -457,7 +410,6 @@ const MapResultsScreen = ({ navigation, route }) => {
       const isSignificantlyStale = requestId < (currentRequestId - 1);
       
       if (isSignificantlyStale) {
-        setIsPerformingBoundsSearch(false);
         return;
       }
 
@@ -465,24 +417,15 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
         
-        // Phase 1: Diff-based updates
+        // Update matches efficiently (render markers first)
         updateMatchesEfficiently(response.data);
-        setLastSearchBounds(bounds);
         
-        // Update the original search region to the new area so future "Search this area" 
-        // calls use the current location instead of reverting to London
-        setOriginalSearchRegion(region);
-        
-        // Update the map region to stay in the current search area
-        setMapRegion(region);
-        
-        // Don't recenter the map - let the user keep their current view
-        // The search results will appear as markers on the current map view
-        
-        // Re-enable auto-fit after a short delay to allow results to load
+        // Then smoothly center map on new markers (after a small delay to ensure rendering)
         setTimeout(() => {
-          setIsPerformingBoundsSearch(false);
-        }, 1000);
+          centerMapOnMarkers(response.data);
+        }, 200); // Small delay to ensure markers are rendered
+        
+        // No need for complex position preservation - user keeps their view
       } else {
         console.error('❌ API returned error:', response.error);
         Alert.alert('Search Error', response.error || 'Failed to search matches');
@@ -497,65 +440,88 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Only clear searching if this is still a recent request
       if (requestId >= (currentRequestId - 1)) {
         setIsSearching(false);
-        setIsPerformingBoundsSearch(false);
       }
     }
   };
 
-  // Phase 1: Efficient marker updates (diff-based)
+  // Simplified marker updates
   const updateMatchesEfficiently = (newMatches) => {
-    console.log('🔄 Updating matches efficiently:', {
+    console.log('🔄 Updating matches:', {
       currentCount: matches.length,
-      newCount: newMatches.length,
-      isTransitioning: isTransitioningResults
+      newCount: newMatches.length
     });
     
-    // Start transition state
-    setIsTransitioningResults(true);
-    
-    // Update the base matches state
-    setMatches(prevMatches => {
-      // Create sets for efficient comparison
-      const prevIds = new Set(prevMatches.map(m => m.fixture?.id));
-      const newIds = new Set(newMatches.map(m => m.fixture?.id));
-      
-      // Find matches to remove and add
-      const toRemove = prevMatches.filter(m => !newIds.has(m.fixture?.id));
-      const toAdd = newMatches.filter(m => !prevIds.has(m.fixture?.id));
-      
-      console.log('🔄 Match diff:', { toRemove: toRemove.length, toAdd: toAdd.length });
-      
-      // Return new matches
-      return newMatches;
-    });
-    
-    // Smoothly transition the display matches after a short delay
-    setTimeout(() => {
-      setCurrentDisplayMatches(newMatches);
-      setIsTransitioningResults(false);
-    }, 300); // 300ms transition delay
+    // Simply update the matches state
+    setMatches(newMatches);
   };
 
+  // Center map on markers without changing zoom level
+  const centerMapOnMarkers = (markers) => {
+    if (!markers || markers.length === 0) {
+      console.log('No markers to center on');
+      return; // Don't move map if no results
+    }
+    
+    if (!mapRef.current) {
+      console.log('Map ref not available');
+      return;
+    }
+    
+    // Filter valid markers with coordinates
+    const validMarkers = markers.filter(match => {
+      const venue = match.fixture?.venue;
+      return venue?.coordinates && venue.coordinates.length === 2;
+    });
+    
+    if (validMarkers.length === 0) {
+      console.log('No valid markers with coordinates');
+      return;
+    }
+    
+    // Calculate center point of all markers
+    const coordinates = validMarkers.map(match => ({
+      latitude: match.fixture.venue.coordinates[1],  // GeoJSON: [lon, lat]
+      longitude: match.fixture.venue.coordinates[0], // So lat is index 1, lon is index 0
+    }));
+    
+    const lats = coordinates.map(c => c.latitude);
+    const lngs = coordinates.map(c => c.longitude);
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+    
+    console.log('🎯 Centering map on markers:', {
+      markerCount: validMarkers.length,
+      center: { lat: centerLat, lng: centerLng },
+      currentZoom: mapRegion?.latitudeDelta || 0.5
+    });
+    
+    // Move map center to markers, but keep current zoom level
+    const currentZoom = mapRegion?.latitudeDelta || 0.5;
+    mapRef.current.animateToRegion({
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: currentZoom,    // Keep current zoom
+      longitudeDelta: currentZoom    // Keep current zoom
+    }, 1000); // 1 second smooth animation
+  };
 
 
   // Handle map region change (when user pans/zooms)
   const handleMapRegionChange = (region, bounds) => {
-
-    
     setMapRegion(region);
     
-    // Check if user has moved or zoomed significantly from original search area
-    if (originalSearchRegion) {
-      const latDiff = Math.abs(region.latitude - originalSearchRegion.latitude);
-      const lngDiff = Math.abs(region.longitude - originalSearchRegion.longitude);
+    // Check if user has moved significantly from initial search area
+    if (initialSearchRegion) {
+      const latDiff = Math.abs(region.latitude - initialSearchRegion.latitude);
+      const lngDiff = Math.abs(region.longitude - initialSearchRegion.longitude);
       const hasMoved = latDiff > 0.1 || lngDiff > 0.1; // 0.1 degree threshold
       
       // Check if user has zoomed out significantly (larger delta = more zoomed out)
-      const originalLatDelta = originalSearchRegion.latitudeDelta || 0.5;
-      const originalLngDelta = originalSearchRegion.longitudeDelta || 0.5;
-      const hasZoomedOut = region.latitudeDelta > originalLatDelta * 1.5 || region.longitudeDelta > originalLngDelta * 1.5;
+      const initialLatDelta = initialSearchRegion.latitudeDelta || 0.5;
+      const initialLngDelta = initialSearchRegion.longitudeDelta || 0.5;
+      const hasZoomedOut = region.latitudeDelta > initialLatDelta * 1.5 || region.longitudeDelta > initialLngDelta * 1.5;
       
-      setHasMovedFromOriginal(hasMoved || hasZoomedOut);
+      setHasMovedFromInitial(hasMoved || hasZoomedOut);
     }
   };
 
@@ -732,7 +698,6 @@ const MapResultsScreen = ({ navigation, route }) => {
     console.log('Applying filters:', filters);
     updateSelectedFilters(filters);
     closeFilterModal();
-    setAutoFitKey(prev => prev + 1);
   };
 
   // Filter matches based on selected filters
@@ -824,22 +789,13 @@ const MapResultsScreen = ({ navigation, route }) => {
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
   
-  // Get the display matches for smooth transitions
+  // Get filtered matches for display
   const displayFilteredMatches = useMemo(() => {
-    if (!selectedDateHeader) {
-      return getFilteredMatches(currentDisplayMatches, selectedFilters);
+    if (selectedDateHeader) {
+      return getFilteredMatches(matches, selectedFilters);
     }
-    
-    // Apply date filtering to the display matches
-    const dateFiltered = getFilteredMatches(currentDisplayMatches, selectedFilters).filter(match => {
-      const matchDate = new Date(match.fixture?.date);
-      const selectedDate = new Date(selectedDateHeader);
-      
-      return matchDate.toDateString() === selectedDate.toDateString();
-    });
-    
-    return dateFiltered;
-  }, [currentDisplayMatches, selectedFilters, selectedDateHeader]);
+    return getFilteredMatches(matches, selectedFilters);
+  }, [matches, selectedFilters, selectedDateHeader]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
@@ -1105,43 +1061,53 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Manual search function
+  // FIXED: Now uses truly responsive bounds calculation based on actual map viewport
+  // - Uses region.latitudeDelta/longitudeDelta directly (actual visible area)
+  // - No more fixed size increments that don't match what user sees
+  // - Bounds automatically adapt to zoom level: zoomed out = larger bounds, zoomed in = smaller bounds
+  // - Maximum bounds capped at 5° × 5° to prevent extremely large searches
   const handleSearchThisArea = async () => {
-    if (!mapRegion || !dateFrom || !dateTo) return;
+    if (!dateFrom || !dateTo) return;
+    
+    // Use the current map region from state (which should be updated via onRegionChange)
+    const currentRegion = mapRegion;
+    
+    console.log('🔍 Search this area clicked:', {
+      currentRegion,
+      hasCurrentRegion: !!currentRegion,
+      coordinates: currentRegion ? `${currentRegion.latitude}, ${currentRegion.longitude}` : 'none',
+      deltas: currentRegion ? `${currentRegion.latitudeDelta}, ${currentRegion.longitudeDelta}` : 'none'
+    });
+    
+    if (!currentRegion) {
+      console.error('❌ No current region available for search');
+      return;
+    }
     
     const requestId = currentRequestId + 1;
     setCurrentRequestId(requestId);
-    await performBoundsSearch(mapRegion, requestId);
+    await performBoundsSearch(currentRegion, requestId);
   };
 
-  // Calculate initial region based on searched location with smart zoom
+  // Calculate initial region based on searched location
   const getInitialRegion = () => {
-    let baseRegion;
-    
     if (initialRegion) {
-      baseRegion = initialRegion;
+      return initialRegion;
     } else if (location && location.lat && location.lon) {
-      baseRegion = {
+      return {
         latitude: location.lat,
         longitude: location.lon,
         latitudeDelta: 0.5,
         longitudeDelta: 0.5,
       };
     } else {
-      baseRegion = {
+      return {
         latitude: 51.5074, // London default
         longitude: -0.1278,
         latitudeDelta: 0.5,
         longitudeDelta: 0.5,
       };
     }
-    
-    // Apply smart zoom based on initial match count
-    const smartZoom = calculateSmartZoom(initialMatches?.length || 0);
-    return {
-      ...baseRegion,
-      latitudeDelta: smartZoom,
-      longitudeDelta: smartZoom,
-    };
   };
 
   return (
@@ -1196,7 +1162,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         ref={mapRef}
         matches={displayFilteredMatches}
         initialRegion={mapRegion || getInitialRegion()}
-        autoFitKey={autoFitKey}
+
         onRegionChange={handleMapRegionChange}
         onMarkerPress={handleMarkerPress}
         onMapPress={handleMapPress}
@@ -1206,21 +1172,10 @@ const MapResultsScreen = ({ navigation, route }) => {
             : null
         }
         style={styles.map}
-        preventAutoFit={isPerformingBoundsSearch}
       />
       
-      {/* Loading overlay for smooth transitions */}
-      {isTransitioningResults && (
-        <View style={styles.loadingOverlay}>
-          <View style={styles.loadingIndicator}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Updating results...</Text>
-          </View>
-        </View>
-      )}
-
       {/* Floating Search Button */}
-      {(hasMovedFromOriginal || hasWho) && (
+      {hasMovedFromInitial && (
         <TouchableOpacity
           style={styles.floatingSearchButton}
           onPress={handleSearchThisArea}

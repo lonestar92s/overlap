@@ -10,6 +10,12 @@ class GeocodingService {
             misses: 0,
             totalRequests: 0
         };
+        
+        console.log(`🔑 GeocodingService initialized with API key: ${this.apiKey ? 'SET' : 'MISSING'}`);
+        if (!this.apiKey) {
+            console.error('❌ LOCATIONIQ_API_KEY environment variable is not loaded');
+            console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('LOCATION')));
+        }
     }
 
     /**
@@ -21,7 +27,7 @@ class GeocodingService {
      */
     async geocodeVenue(venueName, city = null, country = null) {
         if (!this.apiKey) {
-            console.warn('⚠️ LocationIQ API key not configured');
+            console.error('❌ LocationIQ API key not configured - set LOCATIONIQ_API_KEY environment variable');
             return null;
         }
 
@@ -130,3 +136,4 @@ class GeocodingService {
 }
 
 module.exports = new GeocodingService();
+

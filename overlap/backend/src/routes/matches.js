@@ -55,10 +55,10 @@ async function getVenueFromApiFootball(venueId) {
 }
 
 // Function to transform API-Sports data to match frontend expectations
-async function transformApiSportsData(apiResponse, competitionId, bounds = null) {
+async function transformApiSportsData(apiResponse, competitionId, bounds = null, searchSessionId = 'unknown') {
     const fixtures = apiResponse.response || [];
     const leagueName = await leagueService.getLeagueNameById(competitionId);
-    
+
     console.log(`🔍 transformApiSportsData: Processing ${fixtures.length} fixtures for league ${competitionId} (${leagueName})`);
     if (fixtures.length > 0) {
         console.log(`🔍 Sample fixture structure:`, {
@@ -86,20 +86,18 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
         },
         response: await (async () => {
             const transformedFixtures = [];
+
             for (let i = 0; i < fixtures.length; i++) {
-                const fixture = fixtures[i];
+                const fx = fixtures[i];
                 try {
-                    const transformedFixture = await (async () => {
-                        // Get venue data
+                    // Resolve venue
                     const venue = await (async () => {
-                        const apiVenue = fixture.fixture.venue;
-                        console.log(`🔍 Processing venue for fixture ${fixture.fixture.id}:`, apiVenue);
-                        
-                        const isPremierLeague = parseInt(competitionId) === 39;
-                        if (isPremierLeague && apiVenue?.id) {
+                        const apiVenue = fx.fixture?.venue || {};
+                        let apiFootballVenue = null; // Declare outside the if block
 
+                        // Prefer local DB for PL (39)
+                        if (parseInt(competitionId) === 39 && apiVenue?.id) {
                             const localVenue = await venueService.getVenueByApiId(apiVenue.id);
-
                             if (localVenue) {
                                 return {
                                     id: apiVenue.id,
@@ -113,45 +111,44 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                     image: localVenue.image
                                 };
                             }
-                            const apiFootballVenue = await getVenueFromApiFootball(apiVenue.id);
+                        }
+
+                        // API venue by ID
+                        if (apiVenue?.id) {
+                            apiFootballVenue = await getVenueFromApiFootball(apiVenue.id);
                             if (apiFootballVenue) {
-                                return {
-                                    id: apiVenue.id,
-                                    name: apiFootballVenue.name,
-                                    city: apiFootballVenue.city,
-                                    country: apiFootballVenue.country,
-                                    coordinates: null,
-                                    capacity: apiFootballVenue.capacity,
-                                    surface: apiFootballVenue.surface,
-                                    address: apiFootballVenue.address,
-                                    image: apiFootballVenue.image
-                                };
+                                // Don't return early - let geocoding handle coordinates
+                                // Just store the venue data for later processing
                             }
                         }
+
+                        // Look up by name in our DB
                         if (apiVenue?.name) {
-                            const venueByName = await venueService.getVenueByName(apiVenue.name, apiVenue.city);
-                            if (venueByName?.coordinates) {
+                            const byName = await venueService.getVenueByName(apiVenue.name, apiVenue.city);
+                            if (byName?.coordinates) {
                                 return {
                                     id: apiVenue.id || `venue-${apiVenue.name.replace(/\s+/g, '-').toLowerCase()}`,
-                                    name: venueByName.name,
-                                    city: venueByName.city,
-                                    country: venueByName.country,
-                                    coordinates: venueByName.coordinates
+                                    name: byName.name,
+                                    city: byName.city,
+                                    country: byName.country,
+                                    coordinates: byName.coordinates
                                 };
                             }
                         }
-                        const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                        const team = await Team.findOne({ 
+
+                        // Team venue fallback
+                        const mappedHome = await teamService.mapApiNameToTeam(fx.teams.home.name);
+                        const team = await Team.findOne({
                             $or: [
-                                { name: mappedTeamName },
-                                { name: { $regex: new RegExp(`^${mappedTeamName}$`, 'i') } },
-                                { apiName: mappedTeamName },
-                                { aliases: mappedTeamName }
+                                { name: mappedHome },
+                                { name: { $regex: new RegExp(`^${mappedHome}$`, 'i') } },
+                                { apiName: mappedHome },
+                                { aliases: mappedHome }
                             ]
                         });
                         if (team?.venue?.coordinates) {
                             return {
-                                id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
+                                id: `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
                                 name: team.venue.name,
                                 city: team.city || team.venue.city,
                                 country: team.country,
@@ -159,10 +156,10 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                             };
                         }
                         if (team) {
-                            const venueData = await venueService.getVenueForTeam(mappedTeamName);
+                            const venueData = await venueService.getVenueForTeam(mappedHome);
                             if (venueData?.coordinates) {
                                 return {
-                                    id: `venue-${mappedTeamName.replace(/\s+/g, '-').toLowerCase()}`,
+                                    id: `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
                                     name: venueData.stadium || venueData.name,
                                     city: venueData.city,
                                     country: venueData.country,
@@ -170,97 +167,83 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                                 };
                             }
                         }
-                        let finalVenue = {
+
+                        // Build minimal venue and geocode as last resort
+                        const minimal = {
                             id: apiVenue?.id || null,
                             name: apiVenue?.name || null,
                             city: apiVenue?.city || null,
-                            country: fixture.league.country || null,
-                            distance: null,
-                            coordinates: null
+                            country: fx.league?.country || null,
+                            coordinates: null,
+                            capacity: apiFootballVenue?.capacity || null,
+                            surface: apiFootballVenue?.surface || null,
+                            address: apiFootballVenue?.address || null,
+                            image: apiFootballVenue?.image || null
                         };
 
-                        // Try to geocode venue if coordinates are missing
-                        if (!finalVenue.coordinates && finalVenue.name && finalVenue.city && finalVenue.country) {
+                        if (!minimal.coordinates && minimal.name && minimal.city && minimal.country) {
                             try {
-                                console.log(`🗺️ Attempting to geocode venue: ${finalVenue.name} in ${finalVenue.city}, ${finalVenue.country}`);
-                                
-                                const coordinates = await geocodingService.geocodeVenueCoordinates(
-                                    finalVenue.name,
-                                    finalVenue.city,
-                                    finalVenue.country
+                                console.log(`🔍 Attempting geocoding for: ${minimal.name}, ${minimal.city}, ${minimal.country}`);
+                                const coords = await geocodingService.geocodeVenueCoordinates(
+                                    minimal.name,
+                                    minimal.city,
+                                    minimal.country
                                 );
-                                
-                                if (coordinates) {
-                                    console.log(`✅ Successfully geocoded ${finalVenue.name}: [${coordinates[0]}, ${coordinates[1]}]`);
-                                    
-                                    // Save the venue with coordinates to the database
+                                console.log(`🎯 Geocoding result for ${minimal.name}:`, coords);
+                                if (coords) {
+                                    // Persist for future
                                     const savedVenue = await venueService.saveVenueWithCoordinates({
                                         venueId: apiVenue?.id || null,
-                                        name: finalVenue.name,
-                                        city: finalVenue.city,
-                                        country: finalVenue.country,
-                                        coordinates: coordinates,
-                                        capacity: null,
-                                        surface: null,
-                                        image: null,
-                                        address: null
+                                        name: minimal.name,
+                                        city: minimal.city,
+                                        country: minimal.country,
+                                        coordinates: coords
                                     });
-                                    
-                                    if (savedVenue) {
-                                        finalVenue = {
-                                            ...finalVenue,
-                                            coordinates: coordinates,
-                                            id: savedVenue._id
-                                        };
-                                    } else {
-                                        finalVenue.coordinates = coordinates;
-                                    }
-                                } else {
-                                    console.log(`⚠️ Could not geocode venue: ${finalVenue.name}`);
+                                    console.log(`💾 Venue saved to DB:`, savedVenue ? 'success' : 'failed');
+                                    minimal.coordinates = coords;
                                 }
-                            } catch (geocodeError) {
-                                console.error(`❌ Geocoding error for ${finalVenue.name}:`, geocodeError.message);
+                            } catch (e) {
+                                console.error(`❌ Geocoding error for ${minimal.name}:`, e.message);
                             }
                         }
-
-                        console.log(`🔍 Final venue object for fixture ${fixture.fixture.id}:`, finalVenue);
-                        return finalVenue;
+                        return minimal;
                     })();
 
-                    return {
+                    // Build transformed fixture
+                    const transformed = {
                         area: {
                             id: 2072,
-                            name: fixture.league.country || 'Unknown',
-                            code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
-                            flag: fixture.league.flag || null
+                            name: fx.league.country || 'Unknown',
+                            code: fx.league.country?.substring(0, 3).toUpperCase() || 'UNK',
+                            flag: fx.league.flag || null
                         },
                         competition: {
                             id: competitionId.toString(),
                             name: leagueName,
                             code: leagueName.replace(/\s+/g, '').substring(0, 3).toUpperCase(),
                             type: 'LEAGUE',
-                            emblem: fixture.league.logo
+                            emblem: fx.league.logo
                         },
                         season: {
-                            id: fixture.league.season || new Date().getFullYear(),
-                            startDate: `${fixture.league.season || new Date().getFullYear()}-08-01`,
-                            endDate: `${(fixture.league.season || new Date().getFullYear()) + 1}-05-31`,
-                            currentMatchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
+                            id: fx.league.season || new Date().getFullYear(),
+                            startDate: `${fx.league.season || new Date().getFullYear()}-08-01`,
+                            endDate: `${(fx.league.season || new Date().getFullYear()) + 1}-05-31`,
+                            currentMatchday: fx.league.round?.match(/\d+/)?.[0] || 1,
                             winner: null
                         },
-                        id: fixture.fixture.id,
-                        utcDate: fixture.fixture.date,
-                        status: fixture.fixture.status.long === 'Match Finished' ? 'FINISHED' : 
-                               fixture.fixture.status.long === 'Not Started' ? 'SCHEDULED' : 'LIVE',
-                        matchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
+                        id: fx.fixture.id,
+                        utcDate: fx.fixture.date,
+                        status: fx.fixture.status.long === 'Match Finished' ? 'FINISHED' :
+                               fx.fixture.status.long === 'Not Started' ? 'SCHEDULED' : 'LIVE',
+                        matchday: fx.league.round?.match(/\d+/)?.[0] || 1,
                         stage: 'REGULAR_SEASON',
                         group: null,
                         lastUpdated: new Date().toISOString(),
                         fixture: {
-                            id: fixture.fixture.id,
-                            date: fixture.fixture.date,
+                            id: fx.fixture.id,
+                            date: fx.fixture.date,
                             venue: venue,
-                            status: fixture.fixture.status
+                            status: fx.fixture.status
                         },
                         league: {
                             id: competitionId.toString(),
@@ -268,150 +251,68 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null)
                         },
                         teams: {
                             home: {
-                                id: fixture.teams.home.id,
-                                name: await teamService.mapApiNameToTeam(fixture.teams.home.name),
-                                logo: await (async () => {
-                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                                    const team = await Team.findOne({ name: mappedTeamName });
-                                    return team?.logo || fixture.teams.home.logo;
-                                })()
+                                id: fx.teams.home.id,
+                                name: await teamService.mapApiNameToTeam(fx.teams.home.name),
+                                logo: fx.teams.home.logo
                             },
                             away: {
-                                id: fixture.teams.away.id,
-                                name: await teamService.mapApiNameToTeam(fixture.teams.away.name),
-                                logo: await (async () => {
-                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.away.name);
-                                    const team = await Team.findOne({ name: mappedTeamName });
-                                    return team?.logo || fixture.teams.away.logo;
-                                })()
+                                id: fx.teams.away.id,
+                                name: await teamService.mapApiNameToTeam(fx.teams.away.name),
+                                logo: fx.teams.away.logo
                             }
                         },
                         score: {
-                            winner: fixture.goals.home > fixture.goals.away ? 'HOME' : 
-                                   fixture.goals.away > fixture.goals.home ? 'AWAY' : 
-                                   fixture.goals.home === fixture.goals.away && fixture.goals.home !== null ? 'DRAW' : null,
+                            winner: fx.goals.home > fx.goals.away ? 'HOME' :
+                                    fx.goals.away > fx.goals.home ? 'AWAY' :
+                                    fx.goals.home === fx.goals.away && fx.goals.home !== null ? 'DRAW' : null,
                             duration: 'REGULAR',
-                            fullTime: {
-                                home: fixture.goals.home,
-                                away: fixture.goals.away
-                            },
+                            fullTime: { home: fx.goals.home, away: fx.goals.away },
                             halfTime: {
-                                home: fixture.score?.halftime?.home || null,
-                                away: fixture.score?.halftime?.away || null
+                                home: fx.score?.halftime?.home || null,
+                                away: fx.score?.halftime?.away || null
                             }
                         }
                     };
-                } catch (error) {
-                    console.error(`❌ Error processing fixture ${fixture.fixture.id}:`, error);
-                    // Continue with next fixture instead of failing completely
+
+                    // Bounds filtering/push logic
+                    const hasCoords = Array.isArray(transformed.fixture.venue.coordinates);
+                    if (bounds) {
+                        console.log(`📍 [${searchSessionId}] Venue: ${transformed.fixture.venue.name} - coords: ${JSON.stringify(transformed.fixture.venue.coordinates)}`);
+                        if (hasCoords && isWithinBounds(transformed.fixture.venue.coordinates, bounds, searchSessionId)) {
+                            transformedFixtures.push(transformed);
+                            console.log(`✅ [${searchSessionId}] Venue INCLUDED: ${transformed.fixture.venue.name}`);
+                        } else {
+                            console.log(`🚫 [${searchSessionId}] Venue filtered out: ${transformed.fixture.venue.name} - hasCoords: ${hasCoords}, coords: ${JSON.stringify(transformed.fixture.venue.coordinates)}`);
+                        }
+                    } else {
+                        // No bounds: include even without coordinates so lists still show
+                        transformedFixtures.push(transformed);
+                    }
+                } catch (err) {
+                    console.error(`❌ Error processing fixture ${fx.fixture?.id}:`, err);
                 }
             }
 
-                    return {
-                        area: {
-                            id: 2072,
-                            name: fixture.league.country || 'Unknown',
-                            code: fixture.league.country?.substring(0, 3).toUpperCase() || 'UNK',
-                            flag: fixture.league.flag || null
-                        },
-                        competition: {
-                            id: competitionId.toString(),
-                            name: leagueName,
-                            code: leagueName.replace(/\s+/g, '').substring(0, 3).toUpperCase(),
-                            type: 'LEAGUE',
-                            emblem: fixture.league.logo
-                        },
-                        season: {
-                            id: fixture.league.season || new Date().getFullYear(),
-                            startDate: `${fixture.league.season || new Date().getFullYear()}-08-01`,
-                            endDate: `${(fixture.league.season || new Date().getFullYear()) + 1}-05-31`,
-                            currentMatchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
-                            winner: null
-                        },
-                        id: fixture.fixture.id,
-                        utcDate: fixture.fixture.date,
-                        status: fixture.fixture.status.long === 'Match Finished' ? 'FINISHED' : 
-                               fixture.fixture.status.long === 'Not Started' ? 'SCHEDULED' : 'LIVE',
-                        matchday: fixture.league.round?.match(/\d+/)?.[0] || 1,
-                        stage: 'REGULAR_SEASON',
-                        group: null,
-                        lastUpdated: new Date().toISOString(),
-                        fixture: {
-                            id: fixture.fixture.id,
-                            date: fixture.fixture.date,
-                            venue: venue,
-                            status: fixture.fixture.status
-                        },
-                        league: {
-                            id: competitionId.toString(),
-                            name: leagueName
-                        },
-                        teams: {
-                            home: {
-                                id: fixture.teams.home.id,
-                                name: await teamService.mapApiNameToTeam(fixture.teams.home.name),
-                                logo: await (async () => {
-                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
-                                    const team = await Team.findOne({ name: mappedTeamName });
-                                    return team?.logo || fixture.teams.home.logo;
-                                })()
-                            },
-                            away: {
-                                id: fixture.teams.away.id,
-                                name: await teamService.mapApiNameToTeam(fixture.teams.away.name),
-                                logo: await (async () => {
-                                    const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.away.name);
-                                    const team = await Team.findOne({ name: mappedTeamName });
-                                    return team?.logo || fixture.teams.away.logo;
-                                })()
-                            }
-                        },
-                        score: {
-                            winner: fixture.goals.home > fixture.goals.away ? 'HOME' : 
-                                   fixture.goals.away > fixture.goals.home ? 'AWAY' : 
-                                   fixture.goals.home === fixture.goals.away && fixture.goals.home !== null ? 'DRAW' : null,
-                            duration: 'REGULAR',
-                            fullTime: {
-                                home: fixture.goals.home,
-                                away: fixture.goals.away
-                            },
-                            halfTime: {
-                                home: fixture.score?.halftime?.home || null,
-                                away: fixture.score?.halftime?.away || null
-                            }
-                        }
-                    };
-                })();
-
-                console.log(`🔍 Fixture ${transformedFixture.id}: Venue has coordinates:`, !!transformedFixture.fixture.venue.coordinates);
-                
-                if (bounds && transformedFixture.fixture.venue.coordinates) {
-                    if (isWithinBounds(transformedFixture.fixture.venue.coordinates, bounds)) {
-                        transformedFixtures.push(transformedFixture);
-                        console.log(`✅ Added fixture ${transformedFixture.id} (within bounds)`);
-                    } else {
-                        console.log(`❌ Fixture ${transformedFixture.id} outside bounds`);
-                    }
-                } else if (!bounds) {
-                    // Include all matches when no bounds filter, even without coordinates
-                    transformedFixtures.push(transformedFixture);
-                    console.log(`✅ Added fixture ${transformedFixture.id} (no bounds filter)`);
-                }
-            console.log(`🔍 transformApiSportsData: Final result - ${transformedFixtures.length} transformed fixtures`);
+            console.log(`📊 [${searchSessionId}] Final result: ${transformedFixtures.length} fixtures after bounds filtering`);
             return transformedFixtures;
         })()
     };
 }
 
 // Function to check if coordinates are within bounds
-function isWithinBounds(coordinates, bounds) {
+function isWithinBounds(coordinates, bounds, searchSessionId = 'unknown') {
     if (!coordinates || !bounds || coordinates.length !== 2) {
+        console.log(`🚫 [${searchSessionId}] isWithinBounds failed validation: coords=${JSON.stringify(coordinates)}, bounds=${JSON.stringify(bounds)}`);
         return false;
     }
     const [lon, lat] = coordinates;
     const { northeast, southwest } = bounds;
-    return lat >= southwest.lat && lat <= northeast.lat &&
+    const result = lat >= southwest.lat && lat <= northeast.lat &&
            lon >= southwest.lng && lon <= northeast.lng;
+    
+    console.log(`🔍 [${searchSessionId}] Bounds check: venue coords [${lon}, ${lat}] vs bounds NE[${northeast.lat}, ${northeast.lng}] SW[${southwest.lat}, ${southwest.lng}] = ${result}`);
+    
+    return result;
 }
 
 // Function to calculate distance between two points in miles
@@ -435,6 +336,20 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
             northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
             southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
         } : null;
+        
+        if (bounds) {
+            console.log(`🗺️ Received bounds: NE[${bounds.northeast.lat}, ${bounds.northeast.lng}] SW[${bounds.southwest.lat}, ${bounds.southwest.lng}]`);
+            
+            // Calculate bounds dimensions to check if they're reasonable
+            const latSpan = bounds.northeast.lat - bounds.southwest.lat;
+            const lngSpan = bounds.northeast.lng - bounds.southwest.lng;
+            console.log(`📏 Bounds dimensions: Lat span: ${latSpan.toFixed(6)}°, Lng span: ${lngSpan.toFixed(6)}°`);
+            
+            // Check if bounds seem too large (might indicate a buffer zone or zoom issue)
+            if (latSpan > 10 || lngSpan > 10) {
+                console.log(`⚠️ WARNING: Bounds seem very large - possible zoom out or buffer zone issue`);
+            }
+        }
 
         let user = null;
         if (req.user) {
@@ -462,8 +377,14 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
 
         const boundsKey = bounds ? `${bounds.northeast.lat}-${bounds.northeast.lng}-${bounds.southwest.lat}-${bounds.southwest.lng}` : 'no-bounds';
         const cacheKey = `matches:${competitionId}:${dateFrom}:${dateTo}:${boundsKey}`;
+        
+        // Generate unique search session ID for tracking
+        const searchSessionId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`🔍 [${searchSessionId}] Starting search with bounds: ${bounds ? 'YES' : 'NO'}`);
+        
         const cachedData = matchesCache.get(cacheKey);
         if (cachedData) {
+            console.log(`🔍 [${searchSessionId}] Returning cached data`);
             return res.json(cachedData);
         }
 
@@ -473,7 +394,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
             httpsAgent
         });
 
-        const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds);
+        const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds, searchSessionId);
         matchesCache.set(cacheKey, transformedData);
         res.json(transformedData);
     } catch (error) {
@@ -736,7 +657,7 @@ router.get('/by-team', async (req, res) => {
             headers: { 'x-apisports-key': API_SPORTS_KEY }
         });
 
-        const matches = await transformApiSportsData(response.data, null);
+        const matches = await transformApiSportsData(response.data, null, null, 'team-matches');
         matchesCache.set(cacheKey, matches.response);
         res.json({ success: true, matches: matches.response, fromCache: false });
     } catch (error) {

@@ -80,6 +80,16 @@ app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
 
+// Test endpoint to check environment variables
+app.get('/api/debug/env', (req, res) => {
+    res.json({
+        LOCATIONIQ_API_KEY: process.env.LOCATIONIQ_API_KEY ? 'SET' : 'MISSING',
+        MONGODB_URI: process.env.MONGODB_URI ? 'SET' : 'MISSING',
+        API_SPORTS_KEY: process.env.API_SPORTS_KEY ? 'SET' : 'MISSING',
+        NODE_ENV: process.env.NODE_ENV,
+        allEnvVars: Object.keys(process.env).filter(key => key.includes('LOCATION'))
+    });
+});
 
 // Set up unmapped team logging after routes are loaded
 const teamService = require('./services/teamService');
