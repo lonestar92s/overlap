@@ -11,7 +11,7 @@ const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const Team = require('../models/Team');
-const { matchesCache } = require('../utils/cache');
+const { matchesCache, popularMatchesCache } = require('../utils/cache');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
 const httpsAgent = new https.Agent({
@@ -181,9 +181,31 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             image: apiFootballVenue?.image || null
                         };
 
-                        if (!minimal.coordinates && minimal.name && minimal.city && minimal.country) {
+                        // Handle Champions League/Europa League fixtures where venue data is in fixture.venue
+                        // For European competitions, always check fixture.venue as it's the primary source
+                        if (fx.fixture?.venue?.name && (
+                            parseInt(competitionId) === 2 || // Champions League
+                            parseInt(competitionId) === 3 || // Europa League  
+                            parseInt(competitionId) === 848 || // Europa Conference League
+                            fx.league?.country === 'World' // Other European competitions
+                        )) {
+                            minimal.name = fx.fixture.venue.name;
+                            minimal.city = fx.fixture.venue.city;
+                            // For European competitions, try to infer country from league or use a fallback
+                            if (!minimal.country) {
+                                minimal.country = fx.league?.country || 'Europe';
+                            }
+                            console.log(`🏟️ Extracted venue data from fixture.venue for European competition: ${minimal.name}, ${minimal.city}, ${minimal.country}`);
+                        }
+
+                        if (!minimal.coordinates && minimal.name && minimal.city) {
                             try {
-                                console.log(`🔍 Attempting geocoding for: ${minimal.name}, ${minimal.city}, ${minimal.country}`);
+                                // Try geocoding with venue name + city + country
+                                const geocodeQuery = minimal.country ? 
+                                    `${minimal.name}, ${minimal.city}, ${minimal.country}` :
+                                    `${minimal.name}, ${minimal.city}`;
+                                
+                                console.log(`🔍 Attempting geocoding for: ${geocodeQuery}`);
                                 const coords = await geocodingService.geocodeVenueCoordinates(
                                     minimal.name,
                                     minimal.city,
@@ -704,6 +726,23 @@ router.get('/popular', async (req, res) => {
         const dateFrom = today.toISOString().split('T')[0];
         const dateTo = thirtyDaysFromNow.toISOString().split('T')[0];
 
+        // Check cache first for popular matches
+        const cacheKey = `popular_matches_${dateFrom}_${dateTo}_${popularLeagueIds.join('_')}`;
+        const cachedData = popularMatchesCache.get(cacheKey);
+        
+        if (cachedData) {
+            console.log('🔍 Popular matches cache hit - returning cached data');
+            clearTimeout(timeout);
+            return res.json({ 
+                success: true, 
+                matches: cachedData, 
+                fromCache: true,
+                cachedAt: new Date().toISOString()
+            });
+        }
+
+        console.log('🔄 Popular matches cache miss - fetching from API for leagues:', popularLeagueNames.join(', '));
+
         const allMatches = [];
         const apiPromises = popularLeagueIds.map(async (leagueId, index) => {
             const leagueName = popularLeagueNames[index];
@@ -740,10 +779,6 @@ router.get('/popular', async (req, res) => {
         }
         const shuffledMatches = allMatches.sort(() => Math.random() - 0.5);
         const selectedMatches = shuffledMatches.slice(0, 10);
-
-        selectedMatches.forEach((match, index) => {
-;
-        });
 
         const transformedMatches = [];
         for (const match of selectedMatches) {
@@ -864,8 +899,21 @@ router.get('/popular', async (req, res) => {
                 score: match.score || {}
             });
         }
+        
+        // Cache the popular matches for future requests
+        popularMatchesCache.set(cacheKey, transformedMatches);
+        console.log('💾 Popular matches cached for future requests');
+        
         clearTimeout(timeout);
-        res.json({ success: true, matches: transformedMatches, totalFound: allMatches.length, dateRange: { from: dateFrom, to: dateTo }, leagues: popularLeagueNames });
+        res.json({ 
+            success: true, 
+            matches: transformedMatches, 
+            totalFound: allMatches.length, 
+            dateRange: { from: dateFrom, to: dateTo }, 
+            leagues: popularLeagueNames,
+            fromCache: false,
+            cachedAt: new Date().toISOString()
+        });
     } catch (error) {
         clearTimeout(timeout);
         res.status(500).json({ success: false, message: 'Failed to fetch popular matches', error: error.message });
@@ -879,9 +927,11 @@ module.exports = router;
  */
 router.get('/cache/stats', async (req, res) => {
     const stats = matchesCache.getStats();
+    const popularStats = popularMatchesCache.getStats();
     res.json({
         success: true,
-        stats
+        matchesCache: stats,
+        popularMatchesCache: popularStats
     });
 });
 
@@ -891,9 +941,22 @@ router.get('/cache/stats', async (req, res) => {
  */
 router.post('/cache/clear', async (req, res) => {
     matchesCache.clear();
+    popularMatchesCache.clear();
     res.json({
         success: true,
-        message: 'Matches cache cleared'
+        message: 'All matches caches cleared'
+    });
+});
+
+/**
+ * POST /api/matches/cache/clear/popular
+ * Clear only the popular matches cache
+ */
+router.post('/cache/clear/popular', async (req, res) => {
+    popularMatchesCache.clear();
+    res.json({
+        success: true,
+        message: 'Popular matches cache cleared'
     });
 });
 

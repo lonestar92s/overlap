@@ -362,8 +362,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       const viewportLngSpan = region.longitudeDelta;
       
       // Apply reasonable limits to prevent extremely large searches
-      // Max bounds: 5° × 5° (covers most of a country)
-      const maxSpan = 5.0;
+      // Max bounds: 10° × 10° (covers most of a continent/region)
+      const maxSpan = 10.0;
       const finalLatSpan = Math.min(viewportLatSpan, maxSpan);
       const finalLngSpan = Math.min(viewportLngSpan, maxSpan);
       
@@ -396,6 +396,12 @@ const MapResultsScreen = ({ navigation, route }) => {
                        region.latitudeDelta < 0.2 ? 'neighborhood' :
                        region.latitudeDelta < 1.0 ? 'city' : 
                        region.latitudeDelta < 3.0 ? 'region' : 'country'
+        },
+        // Add geographic coverage info
+        geographicCoverage: {
+          latCoverageKm: (finalLatSpan * 111).toFixed(0),
+          lngCoverageKm: (finalLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180)).toFixed(0),
+          estimatedArea: `${((finalLatSpan * 111) * (finalLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180))).toFixed(0)} km²`
         }
       });
 
@@ -772,6 +778,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   const filteredMatches = useMemo(() => getFilteredMatches(), [matches, selectedFilters]);
 
   // Get the final filtered matches combining both filters and date selection
+  // This is now the SINGLE SOURCE OF TRUTH for all filtered data
   const finalFilteredMatches = useMemo(() => {
     if (!selectedDateHeader) {
       return filteredMatches; // Show filter-filtered matches when no date header is selected
@@ -791,11 +798,20 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Get filtered matches for display
   const displayFilteredMatches = useMemo(() => {
-    if (selectedDateHeader) {
-      return getFilteredMatches(matches, selectedFilters);
-    }
-    return getFilteredMatches(matches, selectedFilters);
-  }, [matches, selectedFilters, selectedDateHeader]);
+    // FIXED: Now uses the date-filtered results from finalFilteredMatches
+    // This ensures both map markers and bottom sheet use the same filtered data
+    
+    // Debug: Log the filtering results
+    console.log('MapResultsScreen: displayFilteredMatches updated:', {
+      totalMatches: matches?.length || 0,
+      filterFiltered: filteredMatches?.length || 0,
+      dateFiltered: finalFilteredMatches?.length || 0,
+      hasDateHeader: !!selectedDateHeader,
+      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none'
+    });
+    
+    return finalFilteredMatches;
+  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {

@@ -41,7 +41,9 @@ const AVAILABLE_LEAGUES = [
   { id: 253, name: 'Major League Soccer', country: 'USA', coords: [39.8283, -98.5795] },
   { id: 71, name: 'Série A', country: 'Brazil', coords: [-14.2350, -51.9253] },
   { id: 262, name: 'Liga MX', country: 'Mexico', coords: [23.6345, -102.5528] },
-  { id: 188, name: 'Scottish Premiership', country: 'Scotland', coords: [56.4907, -4.2026] }
+  { id: 188, name: 'Scottish Premiership', country: 'Scotland', coords: [56.4907, -4.2026] },
+  { id: 207, name: 'Swiss Super League', country: 'Switzerland', coords: [46.8182, 8.2275] },
+  { id: 244, name: 'Veikkausliiga', country: 'Finland', coords: [64.0, 26.0] }
 ];
 
 class ApiService {
