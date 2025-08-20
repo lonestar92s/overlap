@@ -50,8 +50,10 @@ class Cache {
 // Create cache instances with different TTLs
 const teamSearchCache = new Cache(30 * 60 * 1000);  // 30 minutes for team searches
 const matchesCache = new Cache(60 * 60 * 1000);     // 1 hour for matches
+const popularMatchesCache = new Cache(4 * 60 * 60 * 1000); // 4 hours for popular matches
 
 module.exports = {
     teamSearchCache,
-    matchesCache
+    matchesCache,
+    popularMatchesCache
 }; 

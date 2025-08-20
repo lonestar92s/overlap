@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,26 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 
+/**
+ * TripOverviewScreen - Shows detailed view of a saved itinerary
+ * 
+ * NEW: Now organizes matches chronologically with date headers
+ * - Matches are grouped by date
+ * - Date headers show "Today", "Tomorrow", or formatted dates
+ * - Matches within each date are sorted chronologically
+ * - Provides better organization and easier trip planning
+ * 
+ * UI CONSISTENCY: Uses exact same back button and date header styles as MapResultsScreen
+ * - Back button: Same padding, text size, and color
+ * - Date headers: Same padding, margins, typography, and touch target size
+ * - Header structure: Same shadow, border, and layout patterns
+ */
 const TripOverviewScreen = ({ navigation, route }) => {
   const { getItineraryById } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     if (itineraryId) {
@@ -31,7 +46,95 @@ const TripOverviewScreen = ({ navigation, route }) => {
     }
   }, [itineraryId, getItineraryById]);
 
+  // Group matches by date for chronological organization
+  // This creates a hierarchical structure: Date Headers -> Matches for that date
+  // Matches are sorted chronologically within each date group
+  const groupedMatches = useMemo(() => {
+    if (!itinerary?.matches || itinerary.matches.length === 0) {
+      return [];
+    }
 
+    // Sort matches by date first
+    const sortedMatches = [...itinerary.matches].sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateA - dateB;
+    });
+
+    // Group by date
+    const grouped = sortedMatches.reduce((acc, match) => {
+      const matchDate = new Date(match.date);
+      const dateKey = matchDate.toDateString();
+      
+      if (!acc[dateKey]) {
+        acc[dateKey] = {
+          date: matchDate,
+          matches: []
+        };
+      }
+      
+      acc[dateKey].matches.push(match);
+      return acc;
+    }, {});
+
+    // Convert to array and sort by date
+    const result = Object.values(grouped).sort((a, b) => a.date - b.date);
+    
+    // Debug: Log the grouping results
+    console.log('TripOverviewScreen: Date grouping results:', {
+      totalMatches: itinerary.matches.length,
+      groupedDates: result.length,
+      groups: result.map(group => ({
+        date: group.date.toDateString(),
+        matchCount: group.matches.length
+      }))
+    });
+    
+    return result;
+  }, [itinerary?.matches]);
+
+  // Create flat list data with date headers and matches
+  // This converts the grouped structure into a flat array that FlatList can render
+  // Each item has a 'type' field: 'header' for date headers, 'match' for matches
+  const flatListData = useMemo(() => {
+    const data = [];
+    
+    groupedMatches.forEach((group) => {
+      // Add date header
+      data.push({ type: 'header', date: group.date });
+      
+      // Add matches for this date
+      group.matches.forEach((match) => {
+        data.push({ type: 'match', ...match });
+      });
+    });
+    
+    return data;
+  }, [groupedMatches]);
+
+  // Format date for display with smart labels
+  // Shows "Today", "Tomorrow", or formatted date (e.g., "Monday, January 3")
+  const formatDateHeader = (date) => {
+    if (!date) return 'Unknown Date';
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const matchDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (matchDate.getTime() === today.getTime()) {
+      return 'Today';
+    } else if (matchDate.getTime() === tomorrow.getTime()) {
+      return 'Tomorrow';
+    } else {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  };
 
   const renderMatchItem = ({ item }) => {
     // Transform the saved match data to the format MatchCard expects
@@ -126,24 +229,44 @@ const TripOverviewScreen = ({ navigation, route }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color="#333" />
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{itinerary.name}</Text>
           <Text style={styles.headerSubtitle}>
             {itinerary.matches?.length || 0} matches
+            {groupedMatches.length > 0 && ` • ${groupedMatches.length} date${groupedMatches.length === 1 ? '' : 's'}`}
             {itinerary.destination && ` • ${itinerary.destination}`}
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.moreButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <Icon name="more-vert" size={24} color="#666" />
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
       {itinerary.matches && itinerary.matches.length > 0 ? (
         <FlatList
-          data={itinerary.matches}
-          renderItem={renderMatchItem}
-          keyExtractor={(item, index) => (item.matchId || `match-${index}`).toString()}
+          data={flatListData}
+          renderItem={({ item }) => {
+            if (item.type === 'header') {
+              return (
+                <View style={styles.dateHeader}>
+                  <Text style={styles.dateHeaderText}>
+                    {formatDateHeader(item.date)}
+                  </Text>
+                </View>
+              );
+            } else {
+              return renderMatchItem({ item });
+            }
+          }}
+          keyExtractor={(item, index) => (item.type === 'header' ? `header-${index}` : item.matchId || `match-${index}`).toString()}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
@@ -160,6 +283,61 @@ const TripOverviewScreen = ({ navigation, route }) => {
         <Icon name="map" size={20} color="#fff" style={styles.mapButtonIcon} />
         <Text style={styles.mapButtonText}>Map</Text>
       </TouchableOpacity>
+
+      {/* Options Modal - Slides up from bottom */}
+      {modalVisible && (
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Settings</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalContent}>
+              <TouchableOpacity style={styles.modalOption}>
+                <View style={styles.modalOptionLeft}>
+                  <Icon name="share" size={20} color="#666" />
+                  <Text style={styles.modalOptionText}>Share Itinerary</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.modalOption}>
+                <View style={styles.modalOptionLeft}>
+                  <Icon name="edit" size={20} color="#666" />
+                  <Text style={styles.modalOptionText}>Rename</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.modalOption}>
+                <View style={styles.modalOptionLeft}>
+                  <Icon name="home" size={20} color="#666" />
+                  <Text style={styles.modalOptionText}>Homebase</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.modalOption}>
+                <View style={styles.modalOptionLeft}>
+                  <Icon name="delete" size={20} color="#666" />
+                  <Text style={styles.modalOptionText}>Delete</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -176,23 +354,38 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderBottomColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
   },
   backButton: {
     padding: 8,
-    marginRight: 16,
+    backgroundColor: 'transparent', // Explicitly set to transparent
+    borderRadius: 0, // No rounded corners
+    borderWidth: 0, // No border
+    // No background color - matches MapResultsScreen style
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: '#000',
+    fontWeight: '600',
   },
   headerInfo: {
     flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
   },
   listContainer: {
@@ -286,28 +479,118 @@ const styles = StyleSheet.create({
   mapButton: {
     position: 'absolute',
     bottom: 30,
-    left: 20,
-    right: 20,
+    left: '50%',
+    transform: [{ translateX: -50 }],
     backgroundColor: '#000',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+    // Make button even smaller and perfectly centered like Airbnb
+    width: 'auto',
+    minWidth: 80,
+    maxWidth: 140,
   },
   mapButtonIcon: {
-    marginRight: 8,
+    marginRight: 4,
+    fontSize: 14,
   },
   mapButtonText: {
     color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dateHeader: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: 44, // Ensure minimum touch target size
+  },
+  dateHeaderText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#333',
+    textTransform: 'capitalize',
+  },
+  moreButton: {
+    padding: 8,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 1000, // High z-index to be above map button
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%', // Adjust as needed
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  modalContent: {
+    marginTop: 10,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#555',
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalOptionText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#333',
   },
 });
 
