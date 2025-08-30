@@ -65,3 +65,8 @@ build/
 # Temporary files
 *.tmp
 *.temp
+
+# Backup environment files
+.env.backup
+*.env.backup
+overlap/backend/.env.backup
