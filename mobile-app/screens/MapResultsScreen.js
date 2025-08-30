@@ -81,6 +81,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
+  const bottomInsetValue = 0; // let the sheet sit flush with the bottom
   
     // Filter context
   const {
@@ -1047,16 +1048,24 @@ const MapResultsScreen = ({ navigation, route }) => {
       <BottomSheetFlatList
         data={flatListData}
         renderItem={renderItem}
-        keyExtractor={(item, index) => (item.id || `item-${index}`).toString()}
+        keyExtractor={(item, index) => {
+          if (item.type === 'header') {
+            const key = item.dateHeader instanceof Date ? item.dateHeader.toISOString() : `${item.dateHeader}`;
+            return `header-${key}`;
+          }
+          const matchId = item?.fixture?.id || item?.id;
+          return `match-${matchId ?? index}`.toString();
+        }}
+        extraData={displayFilteredMatches}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.bottomSheetContent,
-          { paddingBottom: bottomPadding }
+          { paddingBottom: bottomPadding + (insets?.bottom || 0) + 8 }
         ]}
-        removeClippedSubviews={true}
-        initialNumToRender={8}
-        maxToRenderPerBatch={5}
-        windowSize={5}
+        removeClippedSubviews={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={10}
         scrollEnabled={true}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
@@ -1068,10 +1077,6 @@ const MapResultsScreen = ({ navigation, route }) => {
         showsHorizontalScrollIndicator={false}
         updateCellsBatchingPeriod={50}
         disableVirtualization={false}
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-          autoscrollToTopThreshold: 10,
-        }}
       />
     );
   };
@@ -1226,7 +1231,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         enableContentPanningGesture={true}
         enableHandlePanningGesture={true}
         keyboardBehavior="interactive"
-        bottomInset={0}
+        bottomInset={bottomInsetValue}
         backgroundStyle={styles.bottomSheetBackground}
         handleComponent={() => (
           <View style={styles.customHandle}>
@@ -1509,7 +1514,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   bottomSheetContent: {
-    flex: 1,
+    // Do not force flex here; let content grow naturally
     padding: 16,
   },
   fullContentContainer: {

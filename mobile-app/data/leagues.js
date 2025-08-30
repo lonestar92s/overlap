@@ -5,6 +5,10 @@ export const LEAGUES = [
   { id: '40', name: 'Championship', country: 'England', countryCode: 'GB', tier: 2 },
   { id: '41', name: 'League One', country: 'England', countryCode: 'GB', tier: 3 },
   
+  // Women's Football
+  { id: '44', name: 'Women\'s Super League', country: 'England', countryCode: 'GB', tier: 1 },
+  { id: '699', name: 'Women\'s Championship', country: 'England', countryCode: 'GB', tier: 2 },
+  
   // La Liga
   { id: '140', name: 'La Liga', country: 'Spain', countryCode: 'ES', tier: 1 },
   
@@ -39,6 +43,7 @@ export const LEAGUES = [
 // Popular leagues for quick selection
 export const POPULAR_LEAGUES = [
   { id: '39', name: 'Premier League', country: 'England' },
+  { id: '44', name: 'Women\'s Super League', country: 'England' },
   { id: '140', name: 'La Liga', country: 'Spain' },
   { id: '78', name: 'Bundesliga', country: 'Germany' },
   { id: '135', name: 'Serie A', country: 'Italy' },
