@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.mobile-app"
+      "bundleIdentifier": "com.lonestar92s.overlap"
     },
     "android": {
       "adaptiveIcon": {

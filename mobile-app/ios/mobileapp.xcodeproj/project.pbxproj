@@ -416,7 +416,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.anonymous.mobile-app";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lonestar92s.overlap";
 				PRODUCT_NAME = mobileapp;
 				SWIFT_OBJC_BRIDGING_HEADER = "mobileapp/mobileapp-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -447,7 +447,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.anonymous.mobile-app";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lonestar92s.overlap";
 				PRODUCT_NAME = mobileapp;
 				SWIFT_OBJC_BRIDGING_HEADER = "mobileapp/mobileapp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
