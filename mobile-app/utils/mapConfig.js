@@ -10,7 +10,7 @@ export const MAPBOX_CONFIG = {
 
 // Google Maps configuration
 export const GOOGLE_MAPS_CONFIG = {
-  apiKey: 'YOUR_GOOGLE_MAPS_API_KEY', // If you have one
+  apiKey: process.env.GOOGLE_API_KEY || 'YOUR_GOOGLE_MAPS_API_KEY', // From environment variable
 };
 
 // Feature flags for map functionality

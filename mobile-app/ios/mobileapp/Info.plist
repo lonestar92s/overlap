@@ -84,5 +84,7 @@
     <string>Light</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+    <key>GMSApiKey</key>
+    <string>your_google_api_key</string>
   </dict>
 </plist>
