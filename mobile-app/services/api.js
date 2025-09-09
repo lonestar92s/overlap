@@ -1,7 +1,5 @@
-// Auto-detect if running on web or mobile
-const API_BASE_URL = typeof window !== 'undefined' && window.location
-  ? `http://localhost:3001/api`  // Web browser
-  : `http://192.168.1.88:3001/api`; // Mobile device
+// Backend API base URL (Railway)
+const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -12,8 +10,8 @@ const getAuthToken = () => {
     return authToken;
   }
   
-  // Test token for heart functionality
-  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ODhhNmFjMzFlNWVlNTcxNzNjZmY4ZDQiLCJpYXQiOjE3NTM5MDE3NjQsImV4cCI6MTc1NjQ5Mzc2NH0.fif_QqjXTHfDVz8vHJFZddYRrPVE9g1FFPQ08PlYirw';
+  // Test token for heart functionality - updated with fresh token
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGJmOWQ1NjEwOGVmNWZjNmM1NzY0YTAiLCJpYXQiOjE3NTczODgxMTksImV4cCI6MTc1Nzk5MjkxOX0.sDbW5aFgqW1aOLrICPXm9rcMQUrNNvNTVnzcmHXsLuM';
 };
 
 const setAuthToken = (token) => {
@@ -26,8 +24,14 @@ const AVAILABLE_LEAGUES = [
   { id: 39, name: 'Premier League', country: 'England', coords: [52.3555, -1.1743] },
   { id: 40, name: 'Championship', country: 'England', coords: [52.3555, -1.1743] },
   { id: 41, name: 'League One', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 44, name: "Women's Super League", country: 'England', coords: [52.3555, -1.1743] },
+  { id: 699, name: "Women's Championship", country: 'England', coords: [52.3555, -1.1743] },
   { id: 140, name: 'La Liga', country: 'Spain', coords: [40.4637, -3.7492] },
   { id: 78, name: 'Bundesliga', country: 'Germany', coords: [51.1657, 10.4515] },
+  { id: 79, name: 'Bundesliga 2', country: 'Germany', coords: [51.1657, 10.4515] },
+  { id: 218, name: 'Austrian Bundesliga', country: 'Austria', coords: [47.5162, 14.5501] },
+  { id: 219, name: 'Austrian 2. Liga', country: 'Austria', coords: [47.5162, 14.5501] },
+  { id: 211, name: 'Prva HNL', country: 'Croatia', coords: [45.1000, 15.2000] },
   { id: 135, name: 'Serie A', country: 'Italy', coords: [41.8719, 12.5674] },
   { id: 61, name: 'Ligue 1', country: 'France', coords: [46.6034, 1.8883] },
   { id: 2, name: 'Champions League', country: 'Europe', coords: null, isInternational: true },
@@ -37,7 +41,7 @@ const AVAILABLE_LEAGUES = [
   { id: 88, name: 'Eredivisie', country: 'Netherlands', coords: [52.1326, 5.2913] },
   { id: 144, name: 'Jupiler Pro League', country: 'Belgium', coords: [50.5039, 4.4699] },
   { id: 203, name: 'Süper Lig', country: 'Turkey', coords: [38.9637, 35.2433] },
-  { id: 218, name: 'Saudi Pro League', country: 'Saudi Arabia', coords: [23.8859, 45.0792] },
+  { id: 307, name: 'Saudi Pro League', country: 'Saudi Arabia', coords: [23.8859, 45.0792] },
   { id: 253, name: 'Major League Soccer', country: 'USA', coords: [39.8283, -98.5795] },
   { id: 71, name: 'Série A', country: 'Brazil', coords: [-14.2350, -51.9253] },
   { id: 262, name: 'Liga MX', country: 'Mexico', coords: [23.6345, -102.5528] },
@@ -296,6 +300,33 @@ class ApiService {
       return { success: true, data };
     } catch (error) {
       console.error('Error removing match from trip:', error);
+      throw error;
+    }
+  }
+
+  async updateMatchPlanning(tripId, matchId, planningData) {
+    try {
+      console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });
+      
+      const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}/planning`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(planningData)
+      });
+      
+      const data = await response.json();
+      console.log('📋 API Service - Update planning response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to update match planning');
+      }
+      
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error updating match planning:', error);
       throw error;
     }
   }
