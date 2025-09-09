@@ -13,6 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
+import MatchPlanningModal from '../components/MatchPlanningModal';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -29,11 +30,13 @@ import HeartButton from '../components/HeartButton';
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById } = useItineraries();
+  const { getItineraryById, updateMatchPlanning } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [planningModalVisible, setPlanningModalVisible] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
 
   useEffect(() => {
     if (itineraryId) {
@@ -45,6 +48,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
+
+  const handleMatchPress = (match) => {
+    setSelectedMatch(match);
+    setPlanningModalVisible(true);
+  };
+
+  const handlePlanningUpdated = (updatedTrip) => {
+    // Update local state with the updated trip data
+    setItinerary(updatedTrip);
+    setPlanningModalVisible(false);
+    setSelectedMatch(null);
+  };
+
+  const handleClosePlanningModal = () => {
+    setPlanningModalVisible(false);
+    setSelectedMatch(null);
+  };
 
   // Group matches by date for chronological organization
   // This creates a hierarchical structure: Date Headers -> Matches for that date
@@ -165,10 +185,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
       <View style={styles.matchCard}>
         <MatchCard
           match={transformedMatch}
-          onPress={() => {
-            // No navigation - match cards are not clickable
-            console.log('📱 Match card tapped (no action)');
-          }}
+          onPress={() => handleMatchPress(item)}
           variant="default"
           showHeart={true}
           style={styles.matchCardStyle}
@@ -338,6 +355,15 @@ const TripOverviewScreen = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
       )}
+
+      {/* Match Planning Modal */}
+      <MatchPlanningModal
+        visible={planningModalVisible}
+        onClose={handleClosePlanningModal}
+        match={selectedMatch}
+        tripId={itineraryId}
+        onPlanningUpdated={handlePlanningUpdated}
+      />
     </SafeAreaView>
   );
 };

@@ -18,6 +18,7 @@ class LeagueService {
             '41': { name: 'League One', country: 'England' },
             '140': { name: 'La Liga', country: 'Spain' },
             '78': { name: 'Bundesliga', country: 'Germany' },
+            '79': { name: 'Bundesliga 2', country: 'Germany' },
             '135': { name: 'Serie A', country: 'Italy' },
             '61': { name: 'Ligue 1', country: 'France' },
             '2': { name: 'Champions League', country: 'Europe' },
@@ -26,9 +27,14 @@ class LeagueService {
             '94': { name: 'Primeira Liga', country: 'Portugal' },
             '88': { name: 'Eredivisie', country: 'Netherlands' },
             '203': { name: 'Süper Lig', country: 'Turkey' },
-            '218': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
+            '218': { name: 'Austrian Bundesliga', country: 'Austria' },
+            '219': { name: 'Austrian 2. Liga', country: 'Austria' },
+            '211': { name: 'Prva HNL', country: 'Croatia' },
+            '307': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
             '188': { name: 'Scottish Premiership', country: 'Scotland' },
-            '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' }
+            '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' },
+            '44': { name: 'Women\'s Super League', country: 'England' },
+            '699': { name: 'Women\'s Championship', country: 'England' }
         };
     }
 

@@ -248,6 +248,11 @@ export const getTimezoneFromLocation = (city, country) => {
     'Lisbon': 'Europe/Lisbon',
     'Porto': 'Europe/Lisbon',
     
+    // Croatia
+    'Zagreb': 'Europe/Zagreb',
+    'Split': 'Europe/Zagreb',
+    'Rijeka': 'Europe/Zagreb',
+    
     // Belgium
     'Brussels': 'Europe/Brussels',
     'Antwerp': 'Europe/Brussels',
@@ -329,6 +334,7 @@ export const getTimezoneFromLocation = (city, country) => {
     'France': 'Europe/Paris',
     'Netherlands': 'Europe/Amsterdam',
     'Portugal': 'Europe/Lisbon',
+    'Croatia': 'Europe/Zagreb',
     'Belgium': 'Europe/Brussels',
     'Turkey': 'Europe/Istanbul',
     'USA': 'America/New_York',
@@ -421,6 +427,7 @@ export const getTimezoneOffset = (timezone) => {
     'Europe/Madrid': 120,    // CEST (UTC+2) in summer, CET (UTC+1) in winter
     'Europe/Rome': 120,      // CEST (UTC+2) in summer, CET (UTC+1) in winter
     'Europe/Amsterdam': 120, // CEST (UTC+2) in summer, CET (UTC+1) in winter
+    'Europe/Zagreb': 120,    // CEST (UTC+2) in summer, CET (UTC+1) in winter
     
     // Americas
     'America/New_York': -240,    // EDT (UTC-4) in summer, EST (UTC-5) in winter
@@ -498,7 +505,8 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
     let formattedDate = '';
     if (showDate) {
       const dateOptions = {
-        month: 'short',
+        weekday: 'short',  // Add day of the week (e.g., "Fri")
+        month: 'short',    // Use abbreviated month name (e.g., "Apr")
         day: 'numeric',
         timeZone: timezone // Force venue timezone
       };
@@ -560,6 +568,7 @@ export const getTimezoneLabel = (timezone) => {
     'Asia/Shanghai': 'Shanghai Time',
     'Asia/Seoul': 'Seoul Time',
     'Asia/Singapore': 'Singapore Time',
+    'Europe/Zagreb': 'Zagreb Time',
     'Australia/Sydney': 'Sydney Time',
     'Australia/Melbourne': 'Melbourne Time',
     'Pacific/Auckland': 'Auckland Time',

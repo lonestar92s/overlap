@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
+import PlanningStatusIndicator from './PlanningStatusIndicator';
 import { getMatchStatus, getMatchResult, formatMatchDate } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 
@@ -38,7 +39,7 @@ const MatchCard = ({
       const formattedTime = formatMatchTimeInVenueTimezone(dateString, fixture, {
         showTimezone: true,
         showDate: true,
-        showYear: false,
+        showYear: true,  // Show year by default
         timeFormat: '12hour'
       });
       
@@ -239,6 +240,14 @@ const MatchCard = ({
           })()}
         </Text>
       </View>
+
+      {/* Planning Status Indicator - only show for matches with planning data */}
+      {match.planning && (
+        <PlanningStatusIndicator 
+          planning={match.planning} 
+          size={variant === 'overlay' ? 'small' : 'default'}
+        />
+      )}
     </TouchableOpacity>
   );
 };

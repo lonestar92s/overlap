@@ -131,7 +131,6 @@ const TripsListScreen = ({ navigation }) => {
           {itineraries.length} {itineraries.length === 1 ? 'itinerary' : 'itineraries'}
         </Text>
         <Text style={styles.headerNote}>Shows all your planned trips and saved matches</Text>
-        <Text style={styles.headerTip}>💡 Long press a trip to delete it</Text>
       </View>
 
       {itineraries.length > 0 ? (

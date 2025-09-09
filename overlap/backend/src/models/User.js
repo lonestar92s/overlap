@@ -214,6 +214,27 @@ const userSchema = new mongoose.Schema({
             addedAt: {
                 type: Date,
                 default: Date.now
+            },
+            planning: {
+                ticketsAcquired: {
+                    type: String,
+                    enum: ['yes', 'no', 'in-progress'],
+                    default: 'no'
+                },
+                flight: {
+                    type: String,
+                    enum: ['yes', 'no', 'in-progress'],
+                    default: 'no'
+                },
+                accommodation: {
+                    type: String,
+                    enum: ['yes', 'no', 'in-progress'],
+                    default: 'no'
+                },
+                notes: {
+                    type: String,
+                    default: ''
+                }
             }
         }],
         createdAt: {

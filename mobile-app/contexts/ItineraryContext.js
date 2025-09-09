@@ -106,6 +106,33 @@ export const ItineraryProvider = ({ children }) => {
     }
   };
 
+  // Update match planning details
+  const updateMatchPlanning = async (itineraryId, matchId, planningData) => {
+    try {
+      console.log('📋 Updating match planning:', { itineraryId, matchId, planningData });
+      
+      const response = await ApiService.updateMatchPlanning(itineraryId, matchId, planningData);
+      console.log('📋 Planning update response:', response);
+      
+      if (response.success && response.data.trip) {
+        const updatedTrip = response.data.trip;
+        console.log('📋 Updated trip from API:', updatedTrip);
+        
+        // Update local state with the updated trip from API
+        setItineraries(prev => prev.map(itinerary => 
+          (itinerary.id === itineraryId || itinerary._id === itineraryId) ? updatedTrip : itinerary
+        ));
+        
+        return updatedTrip;
+      } else {
+        throw new Error('Failed to update match planning via API');
+      }
+    } catch (error) {
+      console.error('Error updating match planning:', error);
+      throw error;
+    }
+  };
+
   // Remove a match from an itinerary
   const removeMatchFromItinerary = async (itineraryId, matchId) => {
     try {
@@ -253,6 +280,7 @@ export const ItineraryProvider = ({ children }) => {
     loading,
     createItinerary,
     addMatchToItinerary,
+    updateMatchPlanning,
     removeMatchFromItinerary,
     updateItinerary,
     deleteItinerary,

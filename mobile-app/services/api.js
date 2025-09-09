@@ -4,18 +4,102 @@ const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/
 // Simple token storage for mobile app
 let authToken = null;
 
-// For testing purposes, we'll use a default token or create a guest user
-const getAuthToken = () => {
+// Get authentication token from storage or memory
+const getAuthToken = async () => {
   if (authToken) {
     return authToken;
   }
   
-  // Test token for heart functionality - updated with fresh token
-  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGJmOWQ1NjEwOGVmNWZjNmM1NzY0YTAiLCJpYXQiOjE3NTczODgxMTksImV4cCI6MTc1Nzk5MjkxOX0.sDbW5aFgqW1aOLrICPXm9rcMQUrNNvNTVnzcmHXsLuM';
+  // Try to get token from AsyncStorage
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const storedToken = await AsyncStorage.getItem('authToken');
+    if (storedToken) {
+      authToken = storedToken;
+      return storedToken;
+    }
+  } catch (error) {
+    console.error('Error getting token from storage:', error);
+  }
+  
+  // No token available
+  throw new Error('No authentication token available. Please log in.');
 };
 
 const setAuthToken = (token) => {
   authToken = token;
+};
+
+// Authentication methods
+const login = async (email, password) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      setAuthToken(data.token);
+      return { success: true, user: data.user, token: data.token };
+    } else {
+      return { success: false, error: data.error || 'Login failed' };
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, error: 'Network error' };
+  }
+};
+
+const register = async (email, password) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      setAuthToken(data.token);
+      return { success: true, user: data.user, token: data.token };
+    } else {
+      return { success: false, error: data.error || 'Registration failed' };
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    return { success: false, error: 'Network error' };
+  }
+};
+
+const getCurrentUser = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${await getAuthToken()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      return data.user;
+    } else {
+      throw new Error(data.error || 'Failed to get user data');
+    }
+  } catch (error) {
+    console.error('Get current user error:', error);
+    throw error;
+  }
 };
 
 // Available leagues configuration for bounds-based searching
@@ -158,7 +242,7 @@ class ApiService {
     try {
       const response = await fetch(`${this.baseURL}/trips`, {
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
         }
       });
@@ -179,7 +263,7 @@ class ApiService {
     try {
       const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
         }
       });
@@ -198,10 +282,11 @@ class ApiService {
 
   async createTrip(name, description = '') {
     try {
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/trips`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ name, description })
@@ -221,10 +306,11 @@ class ApiService {
 
   async addMatchToTrip(tripId, matchData) {
     try {
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/trips/${tripId}/matches`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -257,7 +343,7 @@ class ApiService {
       const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
         }
       });
@@ -284,7 +370,7 @@ class ApiService {
       const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
         }
       });
@@ -311,7 +397,7 @@ class ApiService {
       const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}/planning`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(planningData)
@@ -556,7 +642,7 @@ class ApiService {
           const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
           try {
             const headers = { 'Content-Type': 'application/json' };
-            const token = getAuthToken();
+            const token = await getAuthToken();
             if (token) headers['Authorization'] = `Bearer ${token}`;
             const response = await fetch(url, { method: 'GET', headers });
             if (!response.ok) {
@@ -658,7 +744,7 @@ class ApiService {
   // Saved Matches API Methods
   async getSavedMatches() {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -678,7 +764,7 @@ class ApiService {
 
   async saveMatch(matchId, fixtureId, matchData) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       
       const requestBody = {
         matchId,
@@ -716,7 +802,7 @@ class ApiService {
 
   async unsaveMatch(matchId) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/preferences/saved-matches/${matchId}`, {
         method: 'DELETE',
         headers: {
@@ -737,7 +823,7 @@ class ApiService {
 
   async checkIfMatchSaved(matchId) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -757,7 +843,7 @@ class ApiService {
 
   async getSavedMatchCount() {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await fetch(`${this.baseURL}/preferences/saved-matches`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -778,7 +864,7 @@ class ApiService {
   // Memories API methods
   async getMemories() {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -799,7 +885,7 @@ class ApiService {
 
   async getMemoryStats() {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories/stats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -820,7 +906,7 @@ class ApiService {
 
   async createMemory(memoryData, photos = []) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       
       // Create FormData for multipart upload
       const formData = new FormData();
@@ -865,7 +951,7 @@ class ApiService {
 
   async updateMemory(memoryId, updates, newPhotos = []) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       
       const formData = new FormData();
       
@@ -911,7 +997,7 @@ class ApiService {
 
   async deleteMemory(memoryId) {
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories/${memoryId}`, {
         method: 'DELETE',
         headers: {
@@ -932,4 +1018,13 @@ class ApiService {
   }
 }
 
-export default new ApiService(); 
+// Create API service instance
+const apiService = new ApiService();
+
+// Add authentication methods to the instance
+apiService.login = login;
+apiService.register = register;
+apiService.getCurrentUser = getCurrentUser;
+apiService.setAuthToken = setAuthToken;
+
+export default apiService; 

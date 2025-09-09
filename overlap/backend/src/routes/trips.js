@@ -1,12 +1,20 @@
 const express = require('express');
-const { auth } = require('../middleware/auth');
+const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 
 const router = express.Router();
 
-// Get all trips for the authenticated user
-router.get('/', auth, async (req, res) => {
+// Get all trips for the authenticated user (or empty array if not authenticated)
+router.get('/', authenticateToken, async (req, res) => {
     try {
+        if (!req.user) {
+            // No user authenticated, return empty trips array
+            return res.json({
+                success: true,
+                trips: []
+            });
+        }
+        
         const user = await User.findById(req.user.id).select('trips');
         
         // Sort trips by creation date (most recent first)
@@ -51,8 +59,8 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// Create a new trip
-router.post('/', auth, async (req, res) => {
+// Create a new trip (works without authentication)
+router.post('/', authenticateToken, async (req, res) => {
     try {
         const { name, description, matches } = req.body;
         
@@ -63,6 +71,27 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
+        if (!req.user) {
+            // No user authenticated - create a temporary trip response
+            // In a real app, you might want to store this locally or create a guest session
+            const tempTrip = {
+                _id: `temp_${Date.now()}`,
+                name: name.trim(),
+                description: description || '',
+                matches: matches || [],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                isTemporary: true
+            };
+
+            return res.status(201).json({
+                success: true,
+                trip: tempTrip,
+                message: 'Trip created (temporary - not saved to database)'
+            });
+        }
+
+        // User is authenticated - save to database
         const user = await User.findById(req.user.id);
         
         const newTrip = {
@@ -195,7 +224,13 @@ router.post('/:id/matches', auth, async (req, res) => {
             venue,
             venueData: venueData || null,  // Save the complete venue object
             date: new Date(date),
-            addedAt: new Date()
+            addedAt: new Date(),
+            planning: {
+                ticketsAcquired: 'no',
+                flight: 'no',
+                accommodation: 'no',
+                notes: ''
+            }
         };
         
         console.log('🏟️ BACKEND - About to save match:', JSON.stringify(matchToSave, null, 2));
@@ -251,6 +286,78 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to remove match from trip'
+        });
+    }
+});
+
+// Update match planning details
+router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
+    try {
+        const { ticketsAcquired, flight, accommodation, notes } = req.body;
+        
+        console.log('📋 BACKEND - Updating match planning details');
+        console.log('📋 BACKEND - Trip ID:', req.params.id);
+        console.log('📋 BACKEND - Match ID:', req.params.matchId);
+        console.log('📋 BACKEND - Planning data:', { ticketsAcquired, flight, accommodation, notes });
+        
+        const user = await User.findById(req.user.id);
+        const trip = user.trips.id(req.params.id);
+        
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        const match = trip.matches.find(m => m.matchId === req.params.matchId);
+        if (!match) {
+            return res.status(404).json({
+                success: false,
+                message: 'Match not found in trip'
+            });
+        }
+
+        // Ensure planning object exists (for matches added before this fix)
+        if (!match.planning) {
+            match.planning = {
+                ticketsAcquired: 'no',
+                flight: 'no',
+                accommodation: 'no',
+                notes: ''
+            };
+        }
+
+        // Update planning details
+        if (ticketsAcquired !== undefined) {
+            match.planning.ticketsAcquired = ticketsAcquired;
+        }
+        if (flight !== undefined) {
+            match.planning.flight = flight;
+        }
+        if (accommodation !== undefined) {
+            match.planning.accommodation = accommodation;
+        }
+        if (notes !== undefined) {
+            match.planning.notes = notes;
+        }
+
+        trip.updatedAt = new Date();
+        await user.save();
+        
+        console.log('📋 BACKEND - Successfully updated match planning:', match.planning);
+
+        res.json({
+            success: true,
+            trip: trip,
+            match: match,
+            message: 'Match planning updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating match planning:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update match planning'
         });
     }
 });
