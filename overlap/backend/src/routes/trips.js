@@ -224,13 +224,7 @@ router.post('/:id/matches', auth, async (req, res) => {
             venue,
             venueData: venueData || null,  // Save the complete venue object
             date: new Date(date),
-            addedAt: new Date(),
-            planning: {
-                ticketsAcquired: 'no',
-                flight: 'no',
-                accommodation: 'no',
-                notes: ''
-            }
+            addedAt: new Date()
         };
         
         console.log('🏟️ BACKEND - About to save match:', JSON.stringify(matchToSave, null, 2));
@@ -316,16 +310,6 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                 success: false,
                 message: 'Match not found in trip'
             });
-        }
-
-        // Ensure planning object exists (for matches added before this fix)
-        if (!match.planning) {
-            match.planning = {
-                ticketsAcquired: 'no',
-                flight: 'no',
-                accommodation: 'no',
-                notes: ''
-            };
         }
 
         // Update planning details

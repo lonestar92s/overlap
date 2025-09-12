@@ -126,17 +126,25 @@ const MapSearchScreen = ({ navigation }) => {
   // Format date for display
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'Select date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
+    
+    console.log('Formatting date string:', dateString);
+    
+    // Format directly from string without any Date object conversion
+    const [year, month, day] = dateString.split('-');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = monthNames[parseInt(month) - 1];
+    
+    const formatted = `${monthName} ${parseInt(day)}, ${year}`;
+    
+    console.log('Direct formatting result:', formatted);
+    return formatted;
   };
 
   // Handle date selection in calendar
   const onDayPress = (day) => {
     const dateString = day.dateString;
+    console.log('Selected day object:', day);
+    console.log('Date string from calendar:', dateString);
     
     if (!dateFrom || (dateFrom && dateTo)) {
       // Starting fresh or restarting selection
@@ -168,40 +176,68 @@ const MapSearchScreen = ({ navigation }) => {
         // Valid end date selection
         setDateTo(dateString);
         
-        // Create range marking
+        // Create range marking using string-based date arithmetic
         const range = {};
-        const start = new Date(dateFrom);
-        const end = new Date(dateString);
+        const startDate = dateFrom;
+        const endDate = dateString;
         
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const currentDate = `${year}-${month}-${day}`;
+        // Parse dates as strings to avoid timezone issues
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+        
+        // Create date range without using Date objects
+        const dates = [];
+        let currentYear = startYear;
+        let currentMonth = startMonth;
+        let currentDay = startDay;
+        
+        while (currentYear < endYear || (currentYear === endYear && currentMonth < endMonth) || 
+               (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)) {
           
-          if (currentDate === dateFrom) {
-            range[currentDate] = {
+          const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+          dates.push(dateStr);
+          
+          // Move to next day
+          currentDay++;
+          // Get days in month without using Date object
+          const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+          const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
+          const maxDays = currentMonth === 2 && isLeapYear ? 29 : daysInMonth[currentMonth - 1];
+          
+          if (currentDay > maxDays) {
+            currentDay = 1;
+            currentMonth++;
+            if (currentMonth > 12) {
+              currentMonth = 1;
+              currentYear++;
+            }
+          }
+        }
+        
+        // Mark dates in range
+        dates.forEach((dateStr, index) => {
+          if (dateStr === dateFrom) {
+            range[dateStr] = {
               selected: true,
               startingDay: true,
               color: '#1976d2',
               textColor: 'white'
             };
-          } else if (currentDate === dateString) {
-            range[currentDate] = {
+          } else if (dateStr === dateString) {
+            range[dateStr] = {
               selected: true,
               endingDay: true,
               color: '#1976d2',
               textColor: 'white'
             };
           } else {
-            range[currentDate] = {
+            range[dateStr] = {
               selected: true,
               color: '#e3f2fd',
               textColor: '#1976d2'
             };
           }
-        }
+        });
         
         setSelectedDates(range);
         // Auto-close calendar after selecting date range

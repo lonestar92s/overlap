@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
@@ -30,13 +31,15 @@ import MatchPlanningModal from '../components/MatchPlanningModal';
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById, updateMatchPlanning } = useItineraries();
+  const { getItineraryById, updateMatchPlanning, updateItinerary } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [planningModalVisible, setPlanningModalVisible] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [newName, setNewName] = useState('');
 
   useEffect(() => {
     if (itineraryId) {
@@ -328,7 +331,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
                 <Icon name="chevron-right" size={20} color="#ccc" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.modalOption}>
+              <TouchableOpacity style={styles.modalOption} onPress={() => { setRenameModalVisible(true); setModalVisible(false); setNewName(itinerary.name); }}>
                 <View style={styles.modalOptionLeft}>
                   <Icon name="edit" size={20} color="#666" />
                   <Text style={styles.modalOptionText}>Rename</Text>
@@ -364,6 +367,64 @@ const TripOverviewScreen = ({ navigation, route }) => {
         tripId={itineraryId}
         onPlanningUpdated={handlePlanningUpdated}
       />
+
+      {/* Rename Modal */}
+      <Modal
+        visible={renameModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRenameModalVisible(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Rename Trip</Text>
+                <TouchableOpacity style={styles.modalCloseButton} onPress={() => setRenameModalVisible(false)}>
+                  <Icon name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ marginTop: 8 }}>
+                <TextInput
+                  value={newName}
+                  onChangeText={setNewName}
+                  placeholder="Enter new trip name"
+                  style={styles.renameInput}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={async () => {
+                    try {
+                      if (!newName.trim()) return;
+                      const updated = await updateItinerary(itineraryId, { name: newName.trim() });
+                      setItinerary(updated);
+                      setRenameModalVisible(false);
+                    } catch (e) {
+                      Alert.alert('Rename failed', e.message || 'Please try again');
+                    }
+                  }}
+                />
+                <TouchableOpacity
+                  style={[styles.addMatchesButton, { backgroundColor: '#1976d2', marginTop: 12 }]}
+                  onPress={async () => {
+                    try {
+                      if (!newName.trim()) return;
+                      const updated = await updateItinerary(itineraryId, { name: newName.trim() });
+                      setItinerary(updated);
+                      setRenameModalVisible(false);
+                    } catch (e) {
+                      Alert.alert('Rename failed', e.message || 'Please try again');
+                    }
+                  }}
+                >
+                  <Icon name="check" size={20} color="#fff" style={styles.mapButtonIcon} />
+                  <Text style={styles.mapButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -617,6 +678,16 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
     color: '#333',
+  },
+  renameInput: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#fafafa',
   },
 });
 

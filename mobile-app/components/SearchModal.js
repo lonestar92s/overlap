@@ -35,21 +35,46 @@ const SearchModal = ({
     // Set selected dates for calendar
     if (initialDateFrom && initialDateTo) {
       const dates = {};
-      const start = new Date(initialDateFrom);
-      const end = new Date(initialDateTo);
       
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
+      // Create range using string-based date arithmetic
+      const [startYear, startMonth, startDay] = initialDateFrom.split('-').map(Number);
+      const [endYear, endMonth, endDay] = initialDateTo.split('-').map(Number);
+      
+      const rangeDates = [];
+      let currentYear = startYear;
+      let currentMonth = startMonth;
+      let currentDay = startDay;
+      
+      while (currentYear < endYear || (currentYear === endYear && currentMonth < endMonth) || 
+             (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)) {
+        
+        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+        rangeDates.push(dateStr);
+        
+        // Move to next day
+        currentDay++;
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
+        const maxDays = currentMonth === 2 && isLeapYear ? 29 : daysInMonth[currentMonth - 1];
+        
+        if (currentDay > maxDays) {
+          currentDay = 1;
+          currentMonth++;
+          if (currentMonth > 12) {
+            currentMonth = 1;
+            currentYear++;
+          }
+        }
+      }
+      
+      rangeDates.forEach((dateStr, index) => {
         dates[dateStr] = {
           selected: true,
-          startingDay: d.getTime() === start.getTime(),
-          endingDay: d.getTime() === end.getTime(),
+          startingDay: index === 0,
+          endingDay: index === rangeDates.length - 1,
         };
-      }
+      });
+      
       setSelectedDates(dates);
     }
   }, [initialLocation, initialDateFrom, initialDateTo]);
@@ -61,11 +86,13 @@ const SearchModal = ({
 
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'Add dates';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    });
+    
+    // Format directly from string without any Date object conversion
+    const [year, month, day] = dateString.split('-');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = monthNames[parseInt(month) - 1];
+    
+    return `${monthName} ${parseInt(day)}`;
   };
 
   const onDayPress = (day) => {
@@ -83,43 +110,96 @@ const SearchModal = ({
         }
       });
     } else {
-      // Complete selection
-      const start = new Date(dateFrom);
-      const end = new Date(selectedDate);
-      
-      if (end < start) {
+      // Complete selection - compare dates as strings to avoid timezone issues
+      if (selectedDate < dateFrom) {
         // Swap dates if end is before start
         setDateFrom(selectedDate);
         setDateTo(dateFrom);
         const dates = {};
-        for (let d = new Date(end); d <= start; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
+        
+        // Create range from selectedDate to dateFrom
+        const [startYear, startMonth, startDay] = selectedDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = dateFrom.split('-').map(Number);
+        
+        const rangeDates = [];
+        let currentYear = startYear;
+        let currentMonth = startMonth;
+        let currentDay = startDay;
+        
+        while (currentYear < endYear || (currentYear === endYear && currentMonth < endMonth) || 
+               (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)) {
+          
+          const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+          rangeDates.push(dateStr);
+          
+          // Move to next day
+          currentDay++;
+          const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+          const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
+          const maxDays = currentMonth === 2 && isLeapYear ? 29 : daysInMonth[currentMonth - 1];
+          
+          if (currentDay > maxDays) {
+            currentDay = 1;
+            currentMonth++;
+            if (currentMonth > 12) {
+              currentMonth = 1;
+              currentYear++;
+            }
+          }
+        }
+        
+        rangeDates.forEach((dateStr, index) => {
           dates[dateStr] = {
             selected: true,
-            startingDay: d.getTime() === end.getTime(),
-            endingDay: d.getTime() === start.getTime(),
+            startingDay: index === 0,
+            endingDay: index === rangeDates.length - 1,
           };
-        }
+        });
+        
         setSelectedDates(dates);
       } else {
         setDateTo(selectedDate);
         const dates = { ...selectedDates };
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
+        
+        // Create range from dateFrom to selectedDate
+        const [startYear, startMonth, startDay] = dateFrom.split('-').map(Number);
+        const [endYear, endMonth, endDay] = selectedDate.split('-').map(Number);
+        
+        const rangeDates = [];
+        let currentYear = startYear;
+        let currentMonth = startMonth;
+        let currentDay = startDay;
+        
+        while (currentYear < endYear || (currentYear === endYear && currentMonth < endMonth) || 
+               (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)) {
+          
+          const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+          rangeDates.push(dateStr);
+          
+          // Move to next day
+          currentDay++;
+          const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+          const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
+          const maxDays = currentMonth === 2 && isLeapYear ? 29 : daysInMonth[currentMonth - 1];
+          
+          if (currentDay > maxDays) {
+            currentDay = 1;
+            currentMonth++;
+            if (currentMonth > 12) {
+              currentMonth = 1;
+              currentYear++;
+            }
+          }
+        }
+        
+        rangeDates.forEach((dateStr, index) => {
           dates[dateStr] = {
             selected: true,
-            startingDay: d.getTime() === start.getTime(),
-            endingDay: d.getTime() === end.getTime(),
+            startingDay: index === 0,
+            endingDay: index === rangeDates.length - 1,
           };
-        }
+        });
+        
         setSelectedDates(dates);
       }
     }

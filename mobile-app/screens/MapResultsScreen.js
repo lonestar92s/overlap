@@ -71,6 +71,12 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // State for smooth transitions between search results
   const [isTransitioningResults, setIsTransitioningResults] = useState(false);
+  
+  // Force FlatList re-render when matches change
+  const [flatListKey, setFlatListKey] = useState(0);
+  
+  // Force bottom sheet content remount when data changes significantly
+  const [bottomSheetContentKey, setBottomSheetContentKey] = useState(0);
 
   
 
@@ -81,7 +87,6 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
-  const bottomInsetValue = 0; // let the sheet sit flush with the bottom
   
     // Filter context
   const {
@@ -460,6 +465,14 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // Simply update the matches state
     setMatches(newMatches);
+    
+    // Force FlatList to re-render with new data
+    setFlatListKey(prev => prev + 1);
+    
+    // Force bottom sheet content to completely remount (disabled for stability)
+    // setBottomSheetContentKey(prev => prev + 1);
+    
+    // Don't force any bottom sheet snapping - let it stay in current position
   };
 
   // Center map on markers without changing zoom level
@@ -629,7 +642,9 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Format date for display
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
+    // Parse the date string as local time to avoid timezone conversion issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -1048,35 +1063,27 @@ const MapResultsScreen = ({ navigation, route }) => {
       <BottomSheetFlatList
         data={flatListData}
         renderItem={renderItem}
-        keyExtractor={(item, index) => {
-          if (item.type === 'header') {
-            const key = item.dateHeader instanceof Date ? item.dateHeader.toISOString() : `${item.dateHeader}`;
-            return `header-${key}`;
-          }
-          const matchId = item?.fixture?.id || item?.id;
-          return `match-${matchId ?? index}`.toString();
-        }}
-        extraData={displayFilteredMatches}
+        keyExtractor={(item, index) => (item.id || `item-${index}`).toString()}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.bottomSheetContent,
-          { paddingBottom: bottomPadding + (insets?.bottom || 0) + 8 }
+          { paddingBottom: bottomPadding }
         ]}
         removeClippedSubviews={false}
-        initialNumToRender={10}
+        initialNumToRender={20}
         maxToRenderPerBatch={10}
         windowSize={10}
         scrollEnabled={true}
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled={true}
-        overScrollMode="never"
-        bounces={false}
-        alwaysBounceVertical={false}
-        scrollEventThrottle={16}
-        directionalLockEnabled={true}
-        showsHorizontalScrollIndicator={false}
-        updateCellsBatchingPeriod={50}
-        disableVirtualization={false}
+        key={`flatlist-${flatListKey}-${displayFilteredMatches?.length || 0}`}
+        extraData={flatListKey}
+        onContentSizeChange={() => {
+          // Force layout recalculation when content size changes
+          console.log('📏 FlatList content size changed, forcing layout update');
+        }}
+        onLayout={() => {
+          // Force layout when component layout changes
+          console.log('📐 FlatList layout changed');
+        }}
       />
     );
   };
@@ -1231,7 +1238,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         enableContentPanningGesture={true}
         enableHandlePanningGesture={true}
         keyboardBehavior="interactive"
-        bottomInset={bottomInsetValue}
+        bottomInset={0}
         backgroundStyle={styles.bottomSheetBackground}
         handleComponent={() => (
           <View style={styles.customHandle}>
@@ -1514,7 +1521,6 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   bottomSheetContent: {
-    // Do not force flex here; let content grow naturally
     padding: 16,
   },
   fullContentContainer: {

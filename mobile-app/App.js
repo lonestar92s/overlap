@@ -3,10 +3,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Alert, Text } from 'react-native';
+import { View, Text, Button, StyleSheet } from 'react-native';
 
-import { MaterialIcons } from '@expo/vector-icons';
-import { Button } from 'react-native-elements';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -18,73 +18,31 @@ import TripsListScreen from './screens/TripsListScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
 import ItineraryMapScreen from './screens/ItineraryMapScreen';
 import TripMapView from './screens/TripMapView';
-import LoginScreen from './screens/LoginScreen';
-import RegisterScreen from './screens/RegisterScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
 
-// Placeholder screens for other tabs
+// Placeholder / basic screens for other tabs
 const MessagesScreen = () => <></>;
-
-// Account screen with logout functionality
 const AccountScreen = () => {
   const { user, logout } = useAuth();
-  
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout }
-      ]
-    );
+
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
     <View style={styles.accountContainer}>
-      <View style={styles.accountHeader}>
-        <MaterialIcons name="account-circle" size={80} color="#1976d2" />
-        <Text style={styles.accountTitle}>Account</Text>
-        <Text style={styles.accountEmail}>{user?.email}</Text>
-      </View>
-      
-      <View style={styles.accountActions}>
-        <Button
-          title="Logout"
-          onPress={handleLogout}
-          buttonStyle={styles.logoutButton}
-          titleStyle={styles.logoutButtonTitle}
-        />
+      <Text style={styles.accountTitle}>Account</Text>
+      {!!user?.email && <Text style={styles.accountSubtitle}>{user.email}</Text>}
+      <View style={styles.logoutButtonWrapper}>
+        <Button title="Logout" color="#d32f2f" onPress={handleLogout} />
       </View>
     </View>
   );
 };
-
-// Loading screen component
-const LoadingScreen = () => (
-  <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#1976d2" />
-  </View>
-);
-
-// Authentication stack navigator
-function AuthStack() {
-  const Stack = createStackNavigator();
-  
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: '#f5f5f5' }
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-    </Stack.Navigator>
-  );
-}
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -181,119 +139,104 @@ function MemoriesStack() {
   );
 }
 
-// Main app component with authentication
-function AppContent() {
+function RootNavigator() {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return <LoadingScreen />;
+    return null;
+  }
+
+  if (!isAuthenticated()) {
+    return (
+      <NavigationContainer>
+        <StatusBar style="light" backgroundColor="#1976d2" />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
   }
 
   return (
     <NavigationContainer>
       <StatusBar style="light" backgroundColor="#1976d2" />
-      {isAuthenticated() ? (
-        <FilterProvider>
-          <ItineraryProvider>
-            <Tab.Navigator
-              initialRouteName="SearchTab"
-              screenOptions={({ route }) => ({
-                headerShown: false,
-                tabBarActiveTintColor: '#1976d2',
-                tabBarInactiveTintColor: '#888',
-                tabBarStyle: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#eee' },
-                tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
-                tabBarIcon: ({ color, size }) => {
-                  let iconName;
-                  switch (route.name) {
-                    case 'SearchTab':
-                      iconName = 'search';
-                      break;
-                    case 'MemoriesTab':
-                      iconName = 'memory';
-                      break;
-                    case 'TripsTab':
-                      iconName = 'work-outline';
-                      break;
-                    case 'MessagesTab':
-                      iconName = 'chat-bubble-outline';
-                      break;
-                    case 'AccountTab':
-                      iconName = 'person-outline';
-                      break;
-                    default:
-                      iconName = 'circle';
-                  }
-                  return <MaterialIcons name={iconName} size={size} color={color} />;
-                },
-              })}
-            >
-              <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
-              <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
-              <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
-              <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
-              <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
-            </Tab.Navigator>
-          </ItineraryProvider>
-        </FilterProvider>
-      ) : (
-        <AuthStack />
-      )}
+      <Tab.Navigator
+        initialRouteName="SearchTab"
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarActiveTintColor: '#1976d2',
+          tabBarInactiveTintColor: '#888',
+          tabBarStyle: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#eee' },
+          tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
+          tabBarIcon: ({ color, size }) => {
+            let iconName;
+            switch (route.name) {
+              case 'SearchTab':
+                iconName = 'search';
+                break;
+              case 'MemoriesTab':
+                iconName = 'memory';
+                break;
+              case 'TripsTab':
+                iconName = 'work-outline';
+                break;
+              case 'MessagesTab':
+                iconName = 'chat-bubble-outline';
+                break;
+              case 'AccountTab':
+                iconName = 'person-outline';
+                break;
+              default:
+                iconName = 'circle';
+            }
+            return <Icon name={iconName} size={size} color={color} />;
+          },
+        })}
+      >
+        <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
+        <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
+        <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
+        <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
+        <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
+      </Tab.Navigator>
     </NavigationContainer>
   );
 }
 
+export default function App() {
+  return (
+    <FilterProvider>
+      <ItineraryProvider>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </ItineraryProvider>
+    </FilterProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
   accountContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 20,
-  },
-  accountHeader: {
-    alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 40,
+    padding: 24,
+    backgroundColor: '#fff',
   },
   accountTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#333',
-    marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  accountEmail: {
-    fontSize: 16,
+  accountSubtitle: {
+    fontSize: 14,
     color: '#666',
+    marginBottom: 24,
   },
-  accountActions: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoutButton: {
-    backgroundColor: '#f44336',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-  },
-  logoutButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  logoutButtonWrapper: {
+    marginTop: 8,
+    width: 160,
   },
 });
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-}
 
 
