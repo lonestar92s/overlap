@@ -24,6 +24,8 @@ const AVAILABLE_LEAGUES = [
   { id: 39, name: 'Premier League', country: 'England', coords: [52.3555, -1.1743] },
   { id: 40, name: 'Championship', country: 'England', coords: [52.3555, -1.1743] },
   { id: 41, name: 'League One', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 45, name: 'FA Cup', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 48, name: 'EFL Cup', country: 'England', coords: [52.3555, -1.1743] },
   { id: 44, name: "Women's Super League", country: 'England', coords: [52.3555, -1.1743] },
   { id: 699, name: "Women's Championship", country: 'England', coords: [52.3555, -1.1743] },
   { id: 140, name: 'La Liga', country: 'Spain', coords: [40.4637, -3.7492] },
@@ -37,6 +39,10 @@ const AVAILABLE_LEAGUES = [
   { id: 2, name: 'Champions League', country: 'Europe', coords: null, isInternational: true },
   { id: 3, name: 'Europa League', country: 'Europe', coords: null, isInternational: true },
   { id: 848, name: 'Europa Conference League', country: 'Europe', coords: null, isInternational: true },
+  { id: 4, name: 'Copa del Rey', country: 'Spain', coords: [40.4637, -3.7492] },
+  { id: 81, name: 'DFB-Pokal', country: 'Germany', coords: [51.1657, 10.4515] },
+  { id: 137, name: 'Coppa Italia', country: 'Italy', coords: [41.8719, 12.5674] },
+  { id: 66, name: 'Coupe de France', country: 'France', coords: [46.6034, 1.8883] },
   { id: 94, name: 'Primeira Liga', country: 'Portugal', coords: [39.3999, -8.2245] },
   { id: 88, name: 'Eredivisie', country: 'Netherlands', coords: [52.1326, 5.2913] },
   { id: 144, name: 'Jupiler Pro League', country: 'Belgium', coords: [50.5039, 4.4699] },
@@ -45,9 +51,13 @@ const AVAILABLE_LEAGUES = [
   { id: 253, name: 'Major League Soccer', country: 'USA', coords: [39.8283, -98.5795] },
   { id: 71, name: 'Série A', country: 'Brazil', coords: [-14.2350, -51.9253] },
   { id: 262, name: 'Liga MX', country: 'Mexico', coords: [23.6345, -102.5528] },
+  { id: 263, name: 'Liga de Expansión MX', country: 'Mexico', coords: [23.6345, -102.5528] },
+  { id: 264, name: 'Copa MX', country: 'Mexico', coords: [23.6345, -102.5528] },
   { id: 188, name: 'Scottish Premiership', country: 'Scotland', coords: [56.4907, -4.2026] },
   { id: 207, name: 'Swiss Super League', country: 'Switzerland', coords: [46.8182, 8.2275] },
-  { id: 244, name: 'Veikkausliiga', country: 'Finland', coords: [64.0, 26.0] }
+  { id: 244, name: 'Veikkausliiga', country: 'Finland', coords: [64.0, 26.0] },
+  { id: 98, name: 'J1 League', country: 'Japan', coords: [36.2048, 138.2529] },
+  { id: 99, name: 'J2 League', country: 'Japan', coords: [36.2048, 138.2529] }
 ];
 
 class ApiService {
@@ -92,14 +102,14 @@ class ApiService {
   }
 
   // Auth: Register
-  async register(email, password) {
+  async register(email, password, tier = 'freemium') {
     try {
       const response = await this.fetchWithTimeout(`${this.baseURL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, subscriptionTier: tier }),
       }, 15000);
 
       const data = await response.json();
@@ -600,7 +610,9 @@ class ApiService {
           'Italy': isInEurope && centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19,
           'France': isInEurope && centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8,
           'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
+          'Mexico': isInNorthAmerica && centerLat > 14 && centerLat < 33 && centerLng > -118 && centerLng < -86,
           'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
+          'Japan': centerLat > 30 && centerLat < 46 && centerLng > 129 && centerLng < 146,
         };
 
         console.log(`🔍 League ${league.name} (${league.country}):`, {

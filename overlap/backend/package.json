@@ -5,7 +5,9 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "check-user": "node check-user-status.js",
+    "make-pro": "node update-user-to-pro.js"
   },
   "dependencies": {
     "axios": "^1.6.7",

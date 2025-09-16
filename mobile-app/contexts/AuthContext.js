@@ -89,10 +89,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (email, password) => {
+  const register = async (email, password, tier = 'freemium') => {
     try {
       setLoading(true);
-      const response = await ApiService.register(email, password);
+      const response = await ApiService.register(email, password, tier);
       
       if (response.success) {
         const { user: userData, token: authToken } = response;

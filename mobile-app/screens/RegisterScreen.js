@@ -21,6 +21,7 @@ const RegisterScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [selectedTier, setSelectedTier] = useState('freemium');
   const [errors, setErrors] = useState({});
 
   const validateForm = () => {
@@ -52,10 +53,10 @@ const RegisterScreen = ({ navigation }) => {
     if (!validateForm()) return;
 
     try {
-      const result = await register(email.trim().toLowerCase(), password);
+      const result = await register(email.trim().toLowerCase(), password, selectedTier);
       
       if (result.success) {
-        Alert.alert('Success', 'Account created successfully! Welcome to Flight Match Finder!');
+        Alert.alert('Success', `Account created successfully with ${selectedTier} plan! Welcome to Flight Match Finder!`);
         // Navigation will be handled by App.js based on auth state
       } else {
         Alert.alert('Registration Failed', result.error || 'Please try again');
@@ -147,6 +148,63 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={[styles.requirement, password.length >= 8 && styles.requirementMet]}>
                 • At least 8 characters
               </Text>
+            </View>
+
+            {/* Tier Selection */}
+            <View style={styles.tierSection}>
+              <Text style={styles.tierTitle}>Choose Your Plan</Text>
+              <View style={styles.tierOptions}>
+                <TouchableOpacity
+                  style={[styles.tierOption, selectedTier === 'freemium' && styles.tierOptionSelected]}
+                  onPress={() => setSelectedTier('freemium')}
+                >
+                  <View style={styles.tierHeader}>
+                    <Text style={[styles.tierName, selectedTier === 'freemium' && styles.tierNameSelected]}>
+                      Free
+                    </Text>
+                    <View style={[styles.tierBadge, styles.freeBadge]}>
+                      <Text style={styles.tierBadgeText}>FREE</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.tierDescription}>
+                    Premier League + international only
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.tierOption, selectedTier === 'pro' && styles.tierOptionSelected]}
+                  onPress={() => setSelectedTier('pro')}
+                >
+                  <View style={styles.tierHeader}>
+                    <Text style={[styles.tierName, selectedTier === 'pro' && styles.tierNameSelected]}>
+                      Pro
+                    </Text>
+                    <View style={[styles.tierBadge, styles.proBadge]}>
+                      <Text style={styles.tierBadgeText}>PRO</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.tierDescription}>
+                    Access to leagues around the world
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.tierOption, selectedTier === 'planner' && styles.tierOptionSelected]}
+                  onPress={() => setSelectedTier('planner')}
+                >
+                  <View style={styles.tierHeader}>
+                    <Text style={[styles.tierName, selectedTier === 'planner' && styles.tierNameSelected]}>
+                      Planner
+                    </Text>
+                    <View style={[styles.tierBadge, styles.plannerBadge]}>
+                      <Text style={styles.tierBadgeText}>PLANNER</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.tierDescription}>
+                    Access to all leagues and premium features
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <Button
@@ -271,6 +329,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1976d2',
     fontWeight: '600',
+  },
+  // Tier Selection Styles
+  tierSection: {
+    marginBottom: 20,
+  },
+  tierTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 15,
+  },
+  tierOptions: {
+    gap: 12,
+  },
+  tierOption: {
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    padding: 16,
+    backgroundColor: '#fff',
+  },
+  tierOptionSelected: {
+    borderColor: '#1976d2',
+    backgroundColor: '#f3f8ff',
+  },
+  tierHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tierName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  tierNameSelected: {
+    color: '#1976d2',
+  },
+  tierBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  freeBadge: {
+    backgroundColor: '#4CAF50',
+  },
+  proBadge: {
+    backgroundColor: '#FF9800',
+  },
+  plannerBadge: {
+    backgroundColor: '#9C27B0',
+  },
+  tierBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  tierDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
   },
 });
 

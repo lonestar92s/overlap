@@ -28,10 +28,13 @@ import FilterModal from '../components/FilterModal';
 import FilterIcon from '../components/FilterIcon';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
+import TierBadge from '../components/TierBadge';
 import ApiService from '../services/api';
 import { useFilter } from '../contexts/FilterContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const SearchScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [location, setLocation] = useState(null);
   const [selectedDates, setSelectedDates] = useState({});
   const [dateFrom, setDateFrom] = useState(null);
@@ -500,18 +503,6 @@ const SearchScreen = ({ navigation }) => {
         />
       </View>
 
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        <TouchableOpacity style={styles.filterButton}>
-          <Text style={styles.filterButtonText}>Calendar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterButton}>
-          <Text style={styles.filterButtonText}>Location</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterButton}>
-          <Text style={styles.filterButtonText}>League</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 
@@ -923,6 +914,9 @@ const SearchScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Tier Badge */}
+      <TierBadge tier={user?.subscription?.tier || 'freemium'} />
+      
       <FlatList
         data={sections}
         renderItem={renderSection}
