@@ -11,6 +11,16 @@ class GeocodingService {
             totalRequests: 0
         };
         
+        // Manual overrides for venues with known geocoding issues
+        this.manualOverrides = new Map([
+            ['The Cherry Red Records Stadium', {
+                lat: 51.43139,
+                lng: -0.18667,
+                display_name: 'The Cherry Red Records Stadium, London, England',
+                confidence: 1.0
+            }]
+        ]);
+        
         console.log(`🔑 GeocodingService initialized with API key: ${this.apiKey ? 'SET' : 'MISSING'}`);
         if (!this.apiKey) {
             console.error('❌ LOCATIONIQ_API_KEY environment variable is not loaded');
@@ -26,11 +36,6 @@ class GeocodingService {
      * @returns {Object|null} - Coordinates object with lat/lng or null if failed
      */
     async geocodeVenue(venueName, city = null, country = null) {
-        if (!this.apiKey) {
-            console.error('❌ LocationIQ API key not configured - set LOCATIONIQ_API_KEY environment variable');
-            return null;
-        }
-
         // Create cache key
         const cacheKey = `${venueName}|${city}|${country}`;
         
@@ -41,16 +46,29 @@ class GeocodingService {
             return this.cache.get(cacheKey);
         }
 
+        // Check for manual overrides first (before API key check)
+        if (this.manualOverrides.has(venueName)) {
+            console.log(`🎯 Using manual override for: ${venueName}`);
+            const override = this.manualOverrides.get(venueName);
+            this.cache.set(cacheKey, override);
+            return override;
+        }
+
+        if (!this.apiKey) {
+            console.error('❌ LocationIQ API key not configured - set LOCATIONIQ_API_KEY environment variable');
+            return null;
+        }
+
         this.cacheStats.misses++;
         this.cacheStats.totalRequests++;
 
-        try {
-            // Build search query
-            let query = venueName;
-            if (city) query += `, ${city}`;
-            if (country) query += `, ${country}`;
+        // Build search query
+        let query = venueName;
+        if (city) query += `, ${city}`;
+        if (country) query += `, ${country}`;
 
-       
+        try {
+            console.log(`🔍 Geocoding query: "${query}"`);
 
             const response = await axios.get(`${this.baseURL}/search.php`, {
                 params: {
@@ -72,7 +90,7 @@ class GeocodingService {
                     confidence: result.importance || 0
                 };
 
-
+                console.log(`✅ Geocoding success for "${query}":`, coordinates);
                 
                 // Cache the result
                 this.cache.set(cacheKey, coordinates);
