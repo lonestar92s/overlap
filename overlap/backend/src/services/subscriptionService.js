@@ -37,7 +37,20 @@ class SubscriptionService {
     getAccessibleLeagues(user) {
         // This method is now less useful since we use blacklist approach
         // But keeping for compatibility - return all leagues except restricted ones
-        const allLeagues = ["39", "40", "41", "61", "140", "78", "207", "88", "94", "135", "144", "71", "253", "98", "2", "4", "13", "1"];
+        const allLeagues = [
+            // Domestic Leagues
+            "39", "40", "41", "61", "140", "78", "207", "88", "94", "135", "144", "71", "253", "98",
+            // Existing International Competitions
+            "2", "4", "13", "1", "1083",
+            // New International Competitions - UEFA
+            "5", "960", "3", "848",
+            // World Cup Qualifiers
+            "32", "31", "34", "29", "30", "37", "33",
+            // Continental Championships
+            "6", "36", "922", "7", "35", "897", "9", "926", "22", "858", "1057", "536",
+            // International Friendlies & Others
+            "10", "666", "667", "480", "524", "21", "913"
+        ];
         
         if (!user || !user.subscription) {
             return allLeagues.filter(leagueId => !this.tierAccess.freemium.restrictedLeagues.includes(leagueId));

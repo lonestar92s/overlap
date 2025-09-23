@@ -39,11 +39,67 @@ export const LEAGUES = {
         { id: '98', name: 'J1 League', tier: 1, country: 'Japan', countryCode: 'JP' }
     ],
     'INT': [ // International Competitions
+        // UEFA Competitions
         { id: '2', name: 'UEFA Champions League', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '3', name: 'UEFA Europa League', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '848', name: 'UEFA Europa Conference League', tier: 1, country: 'Europe', countryCode: 'INT' },
         { id: '4', name: 'European Championship', tier: 1, country: 'Europe', countryCode: 'INT' },
-        { id: '13', name: 'Copa Libertadores', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '960', name: 'Euro Championship - Qualification', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '5', name: 'UEFA Nations League', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '1040', name: 'UEFA Nations League - Women', tier: 1, country: 'Europe', countryCode: 'INT' },
+        
+        // FIFA World Cup & Qualifiers
         { id: '1', name: 'FIFA World Cup', tier: 1, country: 'International', countryCode: 'INT' },
-        { id: '1083', name: 'UEFA Women\'s Euro 2025', tier: 1, country: 'Europe', countryCode: 'INT' }
+        { id: '8', name: 'World Cup - Women', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '29', name: 'World Cup - Qualification Africa', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '30', name: 'World Cup - Qualification Asia', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '31', name: 'World Cup - Qualification CONCACAF', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '32', name: 'World Cup - Qualification Europe', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '33', name: 'World Cup - Qualification Oceania', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '34', name: 'World Cup - Qualification South America', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '37', name: 'World Cup - Qualification Intercontinental Play-offs', tier: 1, country: 'International', countryCode: 'INT' },
+        
+        // Continental Championships
+        { id: '6', name: 'Africa Cup of Nations', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '36', name: 'Africa Cup of Nations - Qualification', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '922', name: 'Africa Cup of Nations - Women', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '7', name: 'Asian Cup', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '35', name: 'Asian Cup - Qualification', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '897', name: 'Asian Cup Women', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '9', name: 'Copa America', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '926', name: 'Copa America Femenina', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '22', name: 'CONCACAF Gold Cup', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '858', name: 'CONCACAF Gold Cup - Qualification', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '1057', name: 'CONCACAF Gold Cup - Women', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '536', name: 'CONCACAF Nations League', tier: 1, country: 'North America', countryCode: 'INT' },
+        
+        // Club Competitions
+        { id: '13', name: 'Copa Libertadores', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '11', name: 'CONMEBOL Sudamericana', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '12', name: 'CAF Champions League', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '16', name: 'CONCACAF Champions League', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '17', name: 'AFC Champions League', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '15', name: 'FIFA Club World Cup', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '1168', name: 'FIFA Intercontinental Cup', tier: 1, country: 'International', countryCode: 'INT' },
+        
+        // International Friendlies & Others
+        { id: '10', name: 'International Friendlies', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '666', name: 'Friendlies Women', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '667', name: 'Friendlies Clubs', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '480', name: 'Olympics Men', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '524', name: 'Olympics Women', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '21', name: 'Confederations Cup', tier: 1, country: 'International', countryCode: 'INT' },
+        { id: '913', name: 'CONMEBOL - UEFA Finalissima', tier: 1, country: 'International', countryCode: 'INT' },
+        
+        // Women's Competitions
+        { id: '1083', name: 'UEFA Women\'s Euro 2025', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '743', name: 'UEFA Championship - Women', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '525', name: 'UEFA Champions League Women', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '1191', name: 'UEFA Europa Cup - Women', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '949', name: 'CONMEBOL Libertadores Femenina', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '1140', name: 'AFC Women\'s Champions League', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '1164', name: 'CAF Women\'s Champions League', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '1136', name: 'CONCACAF W Champions Cup', tier: 1, country: 'North America', countryCode: 'INT' }
     ]
 };
 

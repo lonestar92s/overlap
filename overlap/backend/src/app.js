@@ -13,6 +13,7 @@ const attendedMatchesRoutes = require('./routes/attendedMatches');
 const memoriesRoutes = require('./routes/memories');
 const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
+const surveysRoutes = require('./routes/surveys');
 const adminRouter = require('./routes/admin');
 
 

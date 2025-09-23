@@ -106,6 +106,174 @@ const LEAGUES_DATA = [
         tier: 1,
         emblem: 'https://media.api-sports.io/football/leagues/1083.png',
         season: { start: '2025-07-02', end: '2025-07-27', current: true }
+    },
+    
+    // International Competitions - UEFA
+    {
+        apiId: '5',
+        name: 'UEFA Nations League',
+        shortName: 'UNL',
+        country: 'Europe',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/5.png',
+        season: { start: '2025-09-01', end: '2026-06-30', current: true }
+    },
+    {
+        apiId: '960',
+        name: 'Euro Championship - Qualification',
+        shortName: 'EUROQ',
+        country: 'Europe',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/960.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    
+    // FIFA World Cup & Qualifiers
+    {
+        apiId: '1',
+        name: 'FIFA World Cup',
+        shortName: 'WC',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/1.png',
+        season: { start: '2026-06-01', end: '2026-07-31', current: false }
+    },
+    {
+        apiId: '32',
+        name: 'World Cup - Qualification Europe',
+        shortName: 'WCQE',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/32.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    {
+        apiId: '31',
+        name: 'World Cup - Qualification CONCACAF',
+        shortName: 'WCQC',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/31.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    {
+        apiId: '34',
+        name: 'World Cup - Qualification South America',
+        shortName: 'WCQS',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/34.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    {
+        apiId: '29',
+        name: 'World Cup - Qualification Africa',
+        shortName: 'WCQA',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/29.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    {
+        apiId: '30',
+        name: 'World Cup - Qualification Asia',
+        shortName: 'WCQAS',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/30.png',
+        season: { start: '2025-03-01', end: '2026-11-30', current: true }
+    },
+    
+    // Continental Championships
+    {
+        apiId: '6',
+        name: 'Africa Cup of Nations',
+        shortName: 'AFCON',
+        country: 'Africa',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/6.png',
+        season: { start: '2025-12-21', end: '2026-01-18', current: true }
+    },
+    {
+        apiId: '36',
+        name: 'Africa Cup of Nations - Qualification',
+        shortName: 'AFCONQ',
+        country: 'Africa',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/36.png',
+        season: { start: '2025-03-01', end: '2025-11-30', current: true }
+    },
+    {
+        apiId: '7',
+        name: 'Asian Cup',
+        shortName: 'AC',
+        country: 'Asia',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/7.png',
+        season: { start: '2027-01-01', end: '2027-02-28', current: false }
+    },
+    {
+        apiId: '9',
+        name: 'Copa America',
+        shortName: 'CA',
+        country: 'South America',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/9.png',
+        season: { start: '2028-06-01', end: '2028-07-31', current: false }
+    },
+    {
+        apiId: '22',
+        name: 'CONCACAF Gold Cup',
+        shortName: 'GC',
+        country: 'North America',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/22.png',
+        season: { start: '2027-06-01', end: '2027-07-31', current: false }
+    },
+    {
+        apiId: '536',
+        name: 'CONCACAF Nations League',
+        shortName: 'CNL',
+        country: 'North America',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/536.png',
+        season: { start: '2025-09-01', end: '2026-03-31', current: true }
+    },
+    
+    // International Friendlies
+    {
+        apiId: '10',
+        name: 'International Friendlies',
+        shortName: 'FRIEND',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/10.png',
+        season: { start: '2025-01-01', end: '2025-12-31', current: true }
+    },
+    {
+        apiId: '666',
+        name: 'Friendlies Women',
+        shortName: 'FRIENDW',
+        country: 'International',
+        countryCode: 'INT',
+        tier: 1,
+        emblem: 'https://media.api-sports.io/football/leagues/666.png',
+        season: { start: '2025-01-01', end: '2025-12-31', current: true }
     }
 ];
 

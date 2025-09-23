@@ -39,6 +39,42 @@ const AVAILABLE_LEAGUES = [
   { id: 2, name: 'Champions League', country: 'Europe', coords: null, isInternational: true },
   { id: 3, name: 'Europa League', country: 'Europe', coords: null, isInternational: true },
   { id: 848, name: 'Europa Conference League', country: 'Europe', coords: null, isInternational: true },
+  { id: 5, name: 'UEFA Nations League', country: 'Europe', coords: null, isInternational: true },
+  { id: 960, name: 'Euro Championship - Qualification', country: 'Europe', coords: null, isInternational: true },
+  
+  // FIFA World Cup & Qualifiers
+  { id: 1, name: 'FIFA World Cup', country: 'International', coords: null, isInternational: true },
+  { id: 8, name: 'World Cup - Women', country: 'International', coords: null, isInternational: true },
+  { id: 29, name: 'World Cup - Qualification Africa', country: 'International', coords: null, isInternational: true },
+  { id: 30, name: 'World Cup - Qualification Asia', country: 'International', coords: null, isInternational: true },
+  { id: 31, name: 'World Cup - Qualification CONCACAF', country: 'International', coords: null, isInternational: true },
+  { id: 32, name: 'World Cup - Qualification Europe', country: 'International', coords: null, isInternational: true },
+  { id: 33, name: 'World Cup - Qualification Oceania', country: 'International', coords: null, isInternational: true },
+  { id: 34, name: 'World Cup - Qualification South America', country: 'International', coords: null, isInternational: true },
+  { id: 37, name: 'World Cup - Qualification Intercontinental Play-offs', country: 'International', coords: null, isInternational: true },
+  
+  // Continental Championships
+  { id: 6, name: 'Africa Cup of Nations', country: 'Africa', coords: null, isInternational: true },
+  { id: 36, name: 'Africa Cup of Nations - Qualification', country: 'Africa', coords: null, isInternational: true },
+  { id: 922, name: 'Africa Cup of Nations - Women', country: 'Africa', coords: null, isInternational: true },
+  { id: 7, name: 'Asian Cup', country: 'Asia', coords: null, isInternational: true },
+  { id: 35, name: 'Asian Cup - Qualification', country: 'Asia', coords: null, isInternational: true },
+  { id: 897, name: 'Asian Cup Women', country: 'Asia', coords: null, isInternational: true },
+  { id: 9, name: 'Copa America', country: 'South America', coords: null, isInternational: true },
+  { id: 926, name: 'Copa America Femenina', country: 'South America', coords: null, isInternational: true },
+  { id: 22, name: 'CONCACAF Gold Cup', country: 'North America', coords: null, isInternational: true },
+  { id: 858, name: 'CONCACAF Gold Cup - Qualification', country: 'North America', coords: null, isInternational: true },
+  { id: 1057, name: 'CONCACAF Gold Cup - Women', country: 'North America', coords: null, isInternational: true },
+  { id: 536, name: 'CONCACAF Nations League', country: 'North America', coords: null, isInternational: true },
+  
+  // International Friendlies & Others
+  { id: 10, name: 'International Friendlies', country: 'International', coords: null, isInternational: true },
+  { id: 666, name: 'Friendlies Women', country: 'International', coords: null, isInternational: true },
+  { id: 667, name: 'Friendlies Clubs', country: 'International', coords: null, isInternational: true },
+  { id: 480, name: 'Olympics Men', country: 'International', coords: null, isInternational: true },
+  { id: 524, name: 'Olympics Women', country: 'International', coords: null, isInternational: true },
+  { id: 21, name: 'Confederations Cup', country: 'International', coords: null, isInternational: true },
+  { id: 913, name: 'CONMEBOL - UEFA Finalissima', country: 'International', coords: null, isInternational: true },
   { id: 4, name: 'Copa del Rey', country: 'Spain', coords: [40.4637, -3.7492] },
   { id: 81, name: 'DFB-Pokal', country: 'Germany', coords: [51.1657, 10.4515] },
   { id: 137, name: 'Coppa Italia', country: 'Italy', coords: [41.8719, 12.5674] },
@@ -1049,6 +1085,54 @@ class ApiService {
       return data;
     } catch (error) {
       console.error('Error deleting memory:', error);
+      throw error;
+    }
+  }
+
+  // Survey methods
+  async submitSurvey(surveyData) {
+    try {
+      console.log('Submitting survey:', surveyData);
+      
+      const response = await fetch(`${this.baseURL}/surveys`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify(surveyData),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to submit survey');
+      }
+      
+      console.log('Survey submitted successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error submitting survey:', error);
+      throw error;
+    }
+  }
+
+  async getSurveyStats() {
+    try {
+      const response = await fetch(`${this.baseURL}/surveys/stats`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch survey stats');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching survey stats:', error);
       throw error;
     }
   }

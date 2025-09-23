@@ -45,7 +45,39 @@ class LeagueService {
             '66': { name: 'Coupe de France', country: 'France' },
             '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' },
             '44': { name: 'Women\'s Super League', country: 'England' },
-            '699': { name: 'Women\'s Championship', country: 'England' }
+            '699': { name: 'Women\'s Championship', country: 'England' },
+            
+            // International Competitions
+            '5': { name: 'UEFA Nations League', country: 'Europe' },
+            '960': { name: 'Euro Championship - Qualification', country: 'Europe' },
+            '1': { name: 'FIFA World Cup', country: 'International' },
+            '8': { name: 'World Cup - Women', country: 'International' },
+            '29': { name: 'World Cup - Qualification Africa', country: 'International' },
+            '30': { name: 'World Cup - Qualification Asia', country: 'International' },
+            '31': { name: 'World Cup - Qualification CONCACAF', country: 'International' },
+            '32': { name: 'World Cup - Qualification Europe', country: 'International' },
+            '33': { name: 'World Cup - Qualification Oceania', country: 'International' },
+            '34': { name: 'World Cup - Qualification South America', country: 'International' },
+            '37': { name: 'World Cup - Qualification Intercontinental Play-offs', country: 'International' },
+            '6': { name: 'Africa Cup of Nations', country: 'Africa' },
+            '36': { name: 'Africa Cup of Nations - Qualification', country: 'Africa' },
+            '922': { name: 'Africa Cup of Nations - Women', country: 'Africa' },
+            '7': { name: 'Asian Cup', country: 'Asia' },
+            '35': { name: 'Asian Cup - Qualification', country: 'Asia' },
+            '897': { name: 'Asian Cup Women', country: 'Asia' },
+            '9': { name: 'Copa America', country: 'South America' },
+            '926': { name: 'Copa America Femenina', country: 'South America' },
+            '22': { name: 'CONCACAF Gold Cup', country: 'North America' },
+            '858': { name: 'CONCACAF Gold Cup - Qualification', country: 'North America' },
+            '1057': { name: 'CONCACAF Gold Cup - Women', country: 'North America' },
+            '536': { name: 'CONCACAF Nations League', country: 'North America' },
+            '10': { name: 'International Friendlies', country: 'International' },
+            '666': { name: 'Friendlies Women', country: 'International' },
+            '667': { name: 'Friendlies Clubs', country: 'International' },
+            '480': { name: 'Olympics Men', country: 'International' },
+            '524': { name: 'Olympics Women', country: 'International' },
+            '21': { name: 'Confederations Cup', country: 'International' },
+            '913': { name: 'CONMEBOL - UEFA Finalissima', country: 'International' }
         };
     }
 
