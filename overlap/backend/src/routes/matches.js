@@ -181,13 +181,20 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             image: apiFootballVenue?.image || null
                         };
 
-                        // Handle Champions League/Europa League fixtures where venue data is in fixture.venue
-                        // For European competitions, always check fixture.venue as it's the primary source
+                        // Handle international competitions where venue data is in fixture.venue
+                        // For international competitions, always check fixture.venue as it's the primary source
+                        const isInternationalCompetition = [
+                            2, 3, 848, // UEFA club competitions
+                            1, 8, 4, 5, 960, 1083, 743, // FIFA World Cup, Euro championships, Nations League
+                            29, 30, 31, 32, 33, 34, 37, // World Cup qualifiers
+                            6, 36, 922, 7, 35, 897, // Continental championships
+                            9, 926, 22, 858, 1057, 536, // Americas competitions
+                            10, 666, 667, 480, 524, 21, 913 // Friendlies and other international
+                        ].includes(parseInt(competitionId));
+                        
                         if (fx.fixture?.venue?.name && (
-                            parseInt(competitionId) === 2 || // Champions League
-                            parseInt(competitionId) === 3 || // Europa League  
-                            parseInt(competitionId) === 848 || // Europa Conference League
-                            fx.league?.country === 'World' // Other European competitions
+                            isInternationalCompetition ||
+                            fx.league?.country === 'World' // Other international competitions
                         )) {
                             minimal.name = fx.fixture.venue.name;
                             minimal.city = fx.fixture.venue.city;
@@ -307,7 +314,8 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             console.log(`🚫 [${searchSessionId}] Venue filtered out: ${transformed.fixture.venue.name} - hasCoords: ${hasCoords}, coords: ${JSON.stringify(transformed.fixture.venue.coordinates)}`);
                         }
                     } else {
-                        // No bounds: include even without coordinates so lists still show
+                        // No bounds: include all matches (with or without coordinates)
+                        // This allows venues to be geocoded and saved for future location-based searches
                         transformedFixtures.push(transformed);
                     }
                 } catch (err) {
@@ -564,10 +572,9 @@ router.get('/search', async (req, res) => {
                         transformedMatches.push(transformed);
                     }
                 } else {
-                    // For global, include only those with coordinates
-                    if (transformed.fixture.venue.coordinates) {
-                        transformedMatches.push(transformed);
-                    }
+                    // For global searches, include all matches (with or without coordinates)
+                    // This allows venues to be geocoded and saved for future location-based searches
+                    transformedMatches.push(transformed);
                 }
             }
 
