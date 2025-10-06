@@ -20,12 +20,10 @@ import ItineraryMapScreen from './screens/ItineraryMapScreen';
 import TripMapView from './screens/TripMapView';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import MessagesScreen from './screens/MessagesScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-
-// Placeholder screens for other tabs
-const MessagesScreen = () => <></>;
 
 // Account screen with logout functionality
 const AccountScreen = () => {
