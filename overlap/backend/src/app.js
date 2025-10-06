@@ -59,8 +59,8 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Connect to MongoDB
-if (process.env.MONGODB_URI) {
-    mongoose.connect(process.env.MONGODB_URI)
+if (process.env.MONGO_URL || process.env.MONGODB_URI) {
+    mongoose.connect(process.env.MONGO_URL || process.env.MONGODB_URI)
     .then(() => {})
     .catch((error) => {});
 } else {
