@@ -304,6 +304,30 @@ class ApiService {
     }
   }
 
+  async updateTrip(tripId, updates) {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updates)
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update trip');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error updating trip:', error);
+      throw error;
+    }
+  }
+
   async addMatchToTrip(tripId, matchData) {
     try {
       const token = await getAuthToken();

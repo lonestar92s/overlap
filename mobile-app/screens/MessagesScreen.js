@@ -206,7 +206,7 @@ const MessagesScreen = ({ navigation }) => {
                 </View>
               )}
               
-              {item.data.parsed.location && (
+              {item.data.parsed.location && item.data.parsed.location.city && item.data.parsed.location.country && (
                 <View style={styles.parsedSection}>
                   <Text style={styles.parsedLabel}>Location:</Text>
                   <Text style={styles.parsedValue}>

@@ -28,6 +28,7 @@ import FilterModal from '../components/FilterModal';
 import FilterIcon from '../components/FilterIcon';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
+import TripCountdownWidget from '../components/TripCountdownWidget';
 import ApiService from '../services/api';
 import { useFilter } from '../contexts/FilterContext';
 
@@ -497,6 +498,14 @@ const SearchScreen = ({ navigation }) => {
           searchIcon={{ name: 'search', type: 'ionicon' }}
         />
       </View>
+
+      {/* Trip Countdown Widget */}
+      <TripCountdownWidget 
+        onTripPress={(trip) => {
+          // Navigate to trip details or trip overview
+          navigation.navigate('TripOverview', { itineraryId: trip.id || trip._id });
+        }}
+      />
 
       {/* Filter Buttons */}
       <View style={styles.filterContainer}>

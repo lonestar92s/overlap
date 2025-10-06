@@ -180,8 +180,29 @@ export const ItineraryProvider = ({ children }) => {
 
   // Update itinerary details
   const updateItinerary = async (itineraryId, updates) => {
-    // TODO: Implement API call to update trip
-    console.log('🔄 Update itinerary not yet implemented via API');
+    try {
+      console.log('🔄 Updating itinerary:', { itineraryId, updates });
+      
+      const response = await ApiService.updateTrip(itineraryId, updates);
+      console.log('🔄 API response:', response);
+      
+      if (response.success && response.trip) {
+        const updatedTrip = response.trip;
+        console.log('🔄 Updated trip from API:', updatedTrip);
+        
+        // Update local state with the updated trip from API
+        setItineraries(prev => prev.map(itinerary => 
+          (itinerary.id === itineraryId || itinerary._id === itineraryId) ? updatedTrip : itinerary
+        ));
+        
+        return updatedTrip;
+      } else {
+        throw new Error('Failed to update trip via API');
+      }
+    } catch (error) {
+      console.error('Error updating itinerary via API:', error);
+      throw error;
+    }
   };
 
   // Delete an itinerary

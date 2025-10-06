@@ -7,13 +7,22 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
 
 const TripsListScreen = ({ navigation }) => {
-  const { itineraries, deleteItinerary, loading, refreshItineraries } = useItineraries();
+  const { itineraries, deleteItinerary, updateItinerary, loading, refreshItineraries } = useItineraries();
   const [refreshing, setRefreshing] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [newTripName, setNewTripName] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
 
 
@@ -48,12 +57,67 @@ const TripsListScreen = ({ navigation }) => {
     );
   };
 
+  const handleSettingsPress = (itinerary) => {
+    setSelectedTrip(itinerary);
+    setSettingsModalVisible(true);
+  };
+
+  const handleRenamePress = () => {
+    setSettingsModalVisible(false);
+    setNewTripName(selectedTrip.name);
+    setRenameModalVisible(true);
+  };
+
+  const handleDeletePress = () => {
+    setSettingsModalVisible(false);
+    handleDeleteItinerary(selectedTrip);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!newTripName.trim()) {
+      Alert.alert('Error', 'Please enter a trip name');
+      return;
+    }
+
+    if (newTripName.trim() === selectedTrip.name) {
+      setRenameModalVisible(false);
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await updateItinerary(selectedTrip.id || selectedTrip._id, {
+        name: newTripName.trim()
+      });
+      setRenameModalVisible(false);
+      setSelectedTrip(null);
+      setNewTripName('');
+      // Show success message
+      Alert.alert('Success', 'Trip renamed successfully!');
+    } catch (error) {
+      console.error('Error renaming trip:', error);
+      Alert.alert('Error', 'Failed to rename trip. Please try again.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRenameCancel = () => {
+    setRenameModalVisible(false);
+    setSelectedTrip(null);
+    setNewTripName('');
+  };
+
+  const handleSettingsCancel = () => {
+    setSettingsModalVisible(false);
+    setSelectedTrip(null);
+  };
+
   const renderItineraryItem = ({ item }) => (
     <View style={styles.itineraryCard}>
       <TouchableOpacity
         style={styles.itineraryContent}
         onPress={() => handleItineraryPress(item)}
-        onLongPress={() => handleDeleteItinerary(item)}
         activeOpacity={0.7}
       >
         <View style={styles.itineraryHeader}>
@@ -86,13 +150,13 @@ const TripsListScreen = ({ navigation }) => {
         )}
       </TouchableOpacity>
       
-      {/* Delete Button */}
+      {/* Settings Button */}
       <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleDeleteItinerary(item)}
+        style={styles.settingsButton}
+        onPress={() => handleSettingsPress(item)}
         activeOpacity={0.7}
       >
-        <Icon name="delete" size={20} color="#ff4444" />
+        <Icon name="more-vert" size={20} color="#666" />
       </TouchableOpacity>
     </View>
   );
@@ -146,6 +210,113 @@ const TripsListScreen = ({ navigation }) => {
       ) : (
         renderEmptyState()
       )}
+
+      {/* Settings Modal */}
+      <Modal
+        visible={settingsModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSettingsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.settingsModalContainer}>
+            <View style={styles.settingsModalContent}>
+              <Text style={styles.settingsModalTitle}>Trip Options</Text>
+              <Text style={styles.settingsModalSubtitle}>
+                What would you like to do with "{selectedTrip?.name}"?
+              </Text>
+              
+              <TouchableOpacity
+                style={styles.settingsOption}
+                onPress={handleRenamePress}
+              >
+                <View style={styles.settingsOptionLeft}>
+                  <Icon name="edit" size={20} color="#1976d2" />
+                  <Text style={styles.settingsOptionText}>Rename Trip</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.settingsOption}
+                onPress={handleDeletePress}
+              >
+                <View style={styles.settingsOptionLeft}>
+                  <Icon name="delete" size={20} color="#ff4444" />
+                  <Text style={[styles.settingsOptionText, styles.deleteOptionText]}>Delete Trip</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.settingsCancelButton}
+                onPress={handleSettingsCancel}
+              >
+                <Text style={styles.settingsCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rename Modal */}
+      <Modal
+        visible={renameModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleRenameCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Rename Trip</Text>
+              <Text style={styles.modalSubtitle}>
+                Enter a new name for "{selectedTrip?.name}"
+              </Text>
+              
+              <TextInput
+                style={styles.textInput}
+                value={newTripName}
+                onChangeText={setNewTripName}
+                placeholder="Enter trip name"
+                autoFocus={true}
+                maxLength={50}
+                returnKeyType="done"
+                onSubmitEditing={handleRenameSubmit}
+              />
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={handleRenameCancel}
+                  disabled={isUpdating}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton, 
+                    styles.saveButton,
+                    (!newTripName.trim() || isUpdating) && styles.saveButtonDisabled
+                  ]}
+                  onPress={handleRenameSubmit}
+                  disabled={!newTripName.trim() || isUpdating}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -203,10 +374,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  deleteButton: {
-    backgroundColor: '#fff5f5',
+  settingsButton: {
+    backgroundColor: '#f8f9fa',
     borderLeftWidth: 1,
-    borderLeftColor: '#ffebee',
+    borderLeftColor: '#e9ecef',
     paddingHorizontal: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -312,6 +483,150 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#444',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  // Settings modal styles
+  settingsModalContainer: {
+    width: '100%',
+    maxWidth: 350,
+  },
+  settingsModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  settingsModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  settingsModalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  settingsOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  settingsOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  settingsOptionText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  deleteOptionText: {
+    color: '#ff4444',
+  },
+  settingsCancelButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  settingsCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  saveButton: {
+    backgroundColor: '#1976d2',
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 });
 
