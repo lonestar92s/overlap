@@ -785,6 +785,28 @@ const buildSearchParameters = (parsed) => {
     return params;
 };
 
+// Debug endpoint to check database connection
+router.get('/debug-db', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const dbName = mongoose.connection.db.databaseName;
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        
+        res.json({
+            databaseName: dbName,
+            collections: collections.map(c => c.name),
+            connectionString: process.env.MONGO_URL ? 'SET' : 'MISSING',
+            mongoUrl: process.env.MONGO_URL
+        });
+    } catch (error) {
+        res.json({
+            error: error.message,
+            databaseName: 'UNKNOWN',
+            connectionString: process.env.MONGO_URL ? 'SET' : 'MISSING'
+        });
+    }
+});
+
 // Natural language search endpoint
 router.post('/natural-language', async (req, res) => {
     try {
