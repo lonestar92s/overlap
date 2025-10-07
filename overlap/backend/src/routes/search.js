@@ -1001,6 +1001,13 @@ const ConversationStateManager = {
             console.log('✅ Cleared error message for valid broad query');
         }
         
+        // Clear error message for any query that has both location and dates (even if not marked as broad)
+        if (result.errorMessage && result.location && result.dateRange) {
+            result.errorMessage = null;
+            result.confidence = Math.max(result.confidence, 50); // Boost confidence
+            console.log('✅ Cleared error message for query with location and dates');
+        }
+        
         return result;
     }
 };
@@ -1380,8 +1387,8 @@ router.post('/natural-language', async (req, res) => {
         
 
         
-        // Handle error messages from parsing (but allow broad queries with location and dates)
-        if (parsed.errorMessage && !(parsed.isBroadQuery && parsed.location && parsed.dateRange)) {
+        // Handle error messages from parsing (but allow queries with location and dates)
+        if (parsed.errorMessage && !(parsed.location && parsed.dateRange)) {
             return res.json({
                 success: false,
                 message: parsed.errorMessage,
