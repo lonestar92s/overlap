@@ -129,10 +129,14 @@ const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    httpAgent: httpsAgent
-});
+// Initialize OpenAI only if API key is available
+let openai = null;
+if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        httpAgent: httpsAgent
+    });
+}
 
 // Helper function to format date as YYYY-MM-DD
 const formatDate = (date) => {
@@ -939,13 +943,14 @@ const parseNaturalLanguage = async (query) => {
     };
 
     try {
-        // First try OpenAI for intelligent parsing
-        try {
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth() + 1;
-            
-            const completion = await openai.chat.completions.create({
+        // First try OpenAI for intelligent parsing (if available)
+        if (openai) {
+            try {
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const currentMonth = now.getMonth() + 1;
+                
+                const completion = await openai.chat.completions.create({
                 model: "gpt-3.5-turbo",
                 messages: [
                     {
@@ -957,6 +962,8 @@ const parseNaturalLanguage = async (query) => {
                         - ALWAYS require a date/timeframe - if none provided, return error message
                         - Use smart defaults for location based on teams/leagues
                         - Be conversational in error messages
+                        - For broad queries (location + dates only), set isBroadQuery: true
+                        - Provide helpful suggestions for refining broad searches
                         
                         For date parsing:
                         - If a specific year is mentioned (e.g., "January 2026"), use that exact year
@@ -974,15 +981,17 @@ const parseNaturalLanguage = async (query) => {
                         - teams (array of team names)
                         - matchTypes (array of types like 'derby', 'rivalry', etc.)
                         - errorMessage (string if there's an error, null otherwise)
+                        - isBroadQuery (boolean - true if only location + dates provided)
+                        - suggestions (array of helpful suggestions for refining the search)
                         
-                        Available leagues:
-                        - PL (Premier League)
-                        - ELC (Championship)
-                        - PD (La Liga)
-                        - BL1 (Bundesliga)
-                        - FL1 (Ligue 1)
-                        - DED (Eredivisie)
-                        - PPL (Primeira Liga)
+                        Available leagues (use these exact IDs):
+                        - 39 (Premier League)
+                        - 40 (Championship)
+                        - 140 (La Liga)
+                        - 78 (Bundesliga)
+                        - 61 (Ligue 1)
+                        - 88 (Eredivisie)
+                        - 94 (Primeira Liga)
                         
                         Team/League to Country mapping:
                         - Manchester United, Arsenal, Chelsea, Liverpool, etc. → England
@@ -993,7 +1002,7 @@ const parseNaturalLanguage = async (query) => {
                         - Benfica, Porto, etc. → Portugal
                         - Ajax, PSV, etc. → Netherlands
                         
-                        Example response format:
+                        Example response format for specific query:
                         {
                             "location": {
                                 "city": "London",
@@ -1004,11 +1013,37 @@ const parseNaturalLanguage = async (query) => {
                                 "start": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-15",
                                 "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-17"
                             },
-                            "leagues": ["PL"],
+                            "leagues": ["39"],
                             "maxDistance": 50,
                             "teams": ["Arsenal FC", "Chelsea FC"],
                             "matchTypes": ["derby"],
-                            "errorMessage": null
+                            "errorMessage": null,
+                            "isBroadQuery": false,
+                            "suggestions": []
+                        }
+                        
+                        Example response format for broad query:
+                        {
+                            "location": {
+                                "city": "London",
+                                "country": "United Kingdom",
+                                "coordinates": [-0.118092, 51.509865]
+                            },
+                            "dateRange": {
+                                "start": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-01",
+                                "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-30"
+                            },
+                            "leagues": [],
+                            "maxDistance": 50,
+                            "teams": [],
+                            "matchTypes": [],
+                            "errorMessage": null,
+                            "isBroadQuery": true,
+                            "suggestions": [
+                                "Try: Premier League matches in London next month",
+                                "Try: Arsenal matches in London next month",
+                                "Try: Manchester United vs Chelsea in London next month"
+                            ]
                         }`
                     },
                     {
@@ -1034,6 +1069,8 @@ const parseNaturalLanguage = async (query) => {
             result.dateRange = parsedResponse.dateRange;
             result.distance = parsedResponse.maxDistance;
             result.matchType = parsedResponse.matchTypes?.[0] || null;
+            result.isBroadQuery = parsedResponse.isBroadQuery || false;
+            result.suggestions = parsedResponse.suggestions || [];
             
             // Convert team names to our team objects (simplified for now)
             if (parsedResponse.teams && parsedResponse.teams.length > 0) {
@@ -1057,9 +1094,12 @@ const parseNaturalLanguage = async (query) => {
 
             return result;
 
-        } catch (openaiError) {
-            console.log('OpenAI parsing failed, falling back to regex parser:', openaiError.message);
-            // Fall through to regex parser
+            } catch (openaiError) {
+                console.log('OpenAI parsing failed, falling back to regex parser:', openaiError.message);
+                // Fall through to regex parser
+            }
+        } else {
+            console.log('OpenAI not available, using regex parser');
         }
 
         // Fallback to regex-based parsing
@@ -1212,7 +1252,7 @@ router.post('/natural-language', async (req, res) => {
                 message: parsed.errorMessage,
                 confidence: parsed.confidence,
                 parsed: parsed,
-                suggestions: [
+                suggestions: parsed.suggestions || [
                     "Try mentioning specific team names",
                     "Include a league name (e.g., Premier League, La Liga)",
                     "Add a location or city name",
@@ -1254,7 +1294,7 @@ router.post('/natural-language', async (req, res) => {
             }
         }
         
-        // Determine which leagues to search based on location
+        // Determine which leagues to search based on location and query type
         let leagueIds = [];
         if (searchParams.leagues && searchParams.leagues.length > 0) {
             // Use explicitly specified leagues
@@ -1279,6 +1319,11 @@ router.post('/natural-language', async (req, res) => {
         } else {
             // Default to major European leagues
             leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
+        }
+        
+        // For broad queries, use all major European leagues to get comprehensive results
+        if (parsed.isBroadQuery) {
+            leagueIds = ['39', '40', '140', '141', '135', '136', '78', '79', '61', '62', '88', '94']; // All major leagues
         }
         
         // For messages screen, we don't need bounds-based filtering
@@ -1309,7 +1354,37 @@ router.post('/natural-language', async (req, res) => {
             matches = [];
         }
 
-        // Format response
+        // Handle broad queries with conversational responses
+        if (parsed.isBroadQuery && matches.length > 0) {
+            const locationName = parsed.location ? `${parsed.location.city}, ${parsed.location.country}` : 'that location';
+            const dateRange = parsed.dateRange ? 
+                `${new Date(parsed.dateRange.start).toLocaleDateString()} to ${new Date(parsed.dateRange.end).toLocaleDateString()}` : 
+                'that time period';
+            
+            return res.json({
+                success: true,
+                query: query,
+                confidence: parsed.confidence,
+                message: `Found ${matches.length} matches in ${locationName} from ${dateRange}. Is there a certain league or team you'd like to see?`,
+                parsed: {
+                    teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
+                    leagues: parsed.leagues.map(l => ({ name: l.name, id: l.apiId })),
+                    location: parsed.location,
+                    dateRange: parsed.dateRange,
+                    distance: parsed.distance,
+                    isBroadQuery: true
+                },
+                matches: matches.slice(0, 5), // Show first 5 matches as examples
+                count: matches.length,
+                suggestions: parsed.suggestions || [
+                    "Try: Premier League matches in " + locationName,
+                    "Try: Arsenal matches in " + locationName,
+                    "Try: Manchester United vs Chelsea in " + locationName
+                ]
+            });
+        }
+
+        // Format response for specific queries
         const response = {
             success: true,
             query: query,
@@ -1319,7 +1394,8 @@ router.post('/natural-language', async (req, res) => {
                 leagues: parsed.leagues.map(l => ({ name: l.name, id: l.apiId })),
                 location: parsed.location,
                 dateRange: parsed.dateRange,
-                distance: parsed.distance
+                distance: parsed.distance,
+                isBroadQuery: parsed.isBroadQuery || false
             },
             matches: matches, // No distance calculation needed for messages screen
             count: matches.length
