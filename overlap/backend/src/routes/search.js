@@ -1403,8 +1403,8 @@ router.post('/natural-language', async (req, res) => {
             });
         }
 
-        // If confidence is too low, return suggested clarifications
-        if (parsed.confidence < 25) {
+        // If confidence is too low, return suggested clarifications (but allow queries with location and dates)
+        if (parsed.confidence < 25 && !(parsed.location && parsed.dateRange)) {
             return res.json({
                 success: false,
                 message: "I couldn't understand your query well enough. Try being more specific about teams, leagues, or locations.",
