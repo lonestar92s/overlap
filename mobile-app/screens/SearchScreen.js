@@ -26,7 +26,7 @@ import { formatDateToLocalString, getTodayLocalString, createDateRange } from '.
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import FilterModal from '../components/FilterModal';
 import FilterIcon from '../components/FilterIcon';
-import PopularMatches from '../components/PopularMatches';
+import MatchCard from '../components/MatchCard';
 import PopularMatchModal from '../components/PopularMatchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import ApiService from '../services/api';
@@ -48,6 +48,7 @@ const SearchScreen = ({ navigation }) => {
   const [teamIdInput, setTeamIdInput] = useState('');
   const [teamNameInput, setTeamNameInput] = useState('');
   const [popularMatches, setPopularMatches] = useState([]);
+  const [popularMatchesLoading, setPopularMatchesLoading] = useState(true);
   const [showPopularMatchModal, setShowPopularMatchModal] = useState(false);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [showLeaguePicker, setShowLeaguePicker] = useState(false);
@@ -59,6 +60,42 @@ const SearchScreen = ({ navigation }) => {
   const [isSearchingLeagues, setIsSearchingLeagues] = useState(false);
   const [isSearchingTeams, setIsSearchingTeams] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+
+  // Fetch popular matches data
+  const fetchPopularMatches = async (retryCount = 0) => {
+    try {
+      setPopularMatchesLoading(true);
+      const response = await ApiService.getPopularMatches();
+      
+      // Handle different response structures
+      let matchesData = [];
+      if (response.success && response.matches) {
+        matchesData = response.matches;
+      } else if (response.matches) {
+        matchesData = response.matches;
+      } else if (Array.isArray(response)) {
+        matchesData = response;
+      } else if (response.data && Array.isArray(response.data)) {
+        matchesData = response.data;
+      }
+      
+      setPopularMatches(matchesData);
+    } catch (error) {
+      console.error('Error fetching popular matches:', error);
+      
+      // Retry once if it's a timeout error
+      if (error.message.includes('timeout') && retryCount < 1) {
+        console.log('🔄 Retrying popular matches request...');
+        setTimeout(() => fetchPopularMatches(retryCount + 1), 2000);
+        return;
+      }
+      
+      console.error('Failed to load popular matches');
+      setPopularMatches([]);
+    } finally {
+      setPopularMatchesLoading(false);
+    }
+  };
 
   // Local leagues data for search
   const getAllLeagues = () => [
@@ -112,6 +149,12 @@ const SearchScreen = ({ navigation }) => {
           image: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=400&h=300&fit=crop'
         },
       ]
+    },
+    {
+      id: 'popular-matches',
+      title: 'Popular Matches',
+      type: 'horizontal',
+      data: popularMatches
     }
   ];
 
@@ -468,18 +511,40 @@ const SearchScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderMatchCard = ({ item }) => (
+    <MatchCard
+      match={item}
+      onPress={() => handlePopularMatchPress(item)}
+      variant="default"
+      showHeart={true}
+      style={styles.popularMatchCard}
+    />
+  );
+
   const renderSection = ({ item }) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{item.title}</Text>
-      <FlatList
-        data={item.data}
-        renderItem={renderDestinationCard}
-        keyExtractor={(cardItem, index) => (cardItem.id || `card-${index}`).toString()}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.horizontalList}
-        scrollEnabled={true}
-      />
+      {item.id === 'popular-matches' && popularMatchesLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#1976d2" />
+          <Text style={styles.loadingText}>Loading matches...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={item.data}
+          renderItem={item.id === 'popular-matches' ? renderMatchCard : renderDestinationCard}
+          keyExtractor={(cardItem, index) => {
+            if (item.id === 'popular-matches') {
+              return (cardItem.id || cardItem.fixture?.id || `match-${index}`).toString();
+            }
+            return (cardItem.id || `card-${index}`).toString();
+          }}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+          scrollEnabled={true}
+        />
+      )}
     </View>
   );
 
@@ -598,9 +663,10 @@ const SearchScreen = ({ navigation }) => {
     }
   };
 
-  // Load recent searches on component mount
+  // Load recent searches and popular matches on component mount
   useEffect(() => {
     loadRecentSearches();
+    fetchPopularMatches();
   }, []);
 
   // Handle matches near me with time period
@@ -937,12 +1003,6 @@ const SearchScreen = ({ navigation }) => {
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
-      />
-
-      {/* Popular Matches Section */}
-      <PopularMatches 
-        onMatchPress={handlePopularMatchPress}
-        onMatchesLoaded={setPopularMatches}
       />
 
       {/* New Search Modal */}
@@ -1364,6 +1424,22 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardCountry: {
+    fontSize: 14,
+    color: '#666',
+  },
+  popularMatchCard: {
+    width: 280,
+    marginRight: 15,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginLeft: 10,
     fontSize: 14,
     color: '#666',
   },

@@ -1,9 +1,128 @@
 const express = require('express');
 // const OpenAI = require('openai');
 const https = require('https');
+const axios = require('axios');
 const teamService = require('../services/teamService');
 const leagueService = require('../services/leagueService');
 const router = express.Router();
+
+// API-Sports configuration
+const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
+const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
+
+// Create HTTPS agent for search
+const searchHttpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
+
+// Function to perform search directly (extracted from matches route)
+async function performSearch({ competitions, dateFrom, dateTo, season, bounds }) {
+    const requests = [];
+    
+    // League requests
+    for (const leagueId of competitions) {
+        requests.push(
+            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
+                headers: { 'x-apisports-key': API_SPORTS_KEY },
+                httpsAgent: searchHttpsAgent,
+                timeout: 10000
+            }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
+              .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
+        );
+    }
+
+    const settled = await Promise.allSettled(requests);
+    const fixtures = [];
+    for (const s of settled) {
+        if (s.status === 'fulfilled') {
+            const payload = s.value;
+            if (payload?.data?.response?.length) {
+                fixtures.push(...payload.data.response);
+            }
+        }
+    }
+
+    // Transform and filter matches
+    const transformedMatches = [];
+    for (const match of fixtures) {
+        const venue = match.fixture?.venue;
+        let venueInfo = null;
+        
+        if (venue?.id) {
+            // Use API venue data directly - no database lookup needed
+            venueInfo = {
+                id: venue.id,
+                name: venue.name,
+                city: venue.city,
+                country: venue.country,
+                coordinates: null, // No coordinates needed for messages screen
+                image: null
+            };
+        }
+        
+        if (!venueInfo) {
+            venueInfo = {
+                id: venue?.id || null,
+                name: venue?.name || 'Unknown Venue',
+                city: venue?.city || 'Unknown City',
+                country: match.league?.country || 'Unknown Country',
+                coordinates: null
+            };
+        }
+
+        const transformed = {
+            id: match.fixture.id,
+            fixture: {
+                id: match.fixture.id,
+                date: match.fixture.date,
+                venue: venueInfo,
+                status: match.fixture.status
+            },
+            league: {
+                id: match.league.id,
+                name: match.league.name,
+                country: match.league.country,
+                logo: match.league.logo
+            },
+            teams: {
+                home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
+                away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
+            }
+        };
+
+        // For messages screen, we don't need coordinate-based filtering
+        // Just include all matches regardless of coordinates
+        transformedMatches.push(transformed);
+    }
+
+    // Sort by date
+    transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+    return transformedMatches;
+}
+
+// Function to check if coordinates are within bounds
+function isWithinBounds(coordinates, bounds) {
+    if (!coordinates || !bounds || coordinates.length !== 2) {
+        return false;
+    }
+    const [lon, lat] = coordinates;
+    const { northeast, southwest } = bounds;
+    return lat >= southwest.lat && lat <= northeast.lat &&
+           lon >= southwest.lng && lon <= northeast.lng;
+}
+
+// Helper function to calculate distance between two coordinates
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c * 0.621371; // Convert km to miles
+}
 
 // Create custom HTTPS agent that ignores SSL certificate issues (for development only)
 const httpsAgent = new https.Agent({
@@ -104,6 +223,26 @@ const parseComplexDates = (query) => {
 
     // Specific date range patterns
     const dateRangePatterns = [
+        // "January 2026" or "january 2026" (single month with year)
+        {
+            pattern: /(\w+)\s+(\d{4})/,
+            handler: (match) => {
+                const [, monthName, year] = match;
+                const month = getMonthNumber(monthName);
+                const yearToUse = parseInt(year);
+                
+                if (month !== -1) {
+                    const startOfMonth = new Date(yearToUse, month - 1, 1);
+                    const endOfMonth = new Date(yearToUse, month, 0); // Last day of month
+                    return {
+                        start: formatDate(startOfMonth),
+                        end: formatDate(endOfMonth)
+                    };
+                }
+                return null;
+            }
+        },
+        
         // "between March 15-30" or "March 15-30"
         {
             pattern: /(?:between\s+)?(\w+)\s+(\d{1,2})\s*[-–]\s*(\d{1,2})(?:\s*,?\s*(\d{4}))?/,
@@ -358,7 +497,13 @@ const parseQuery = async (query) => {
                 {
                     role: "system",
                     content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
-                    The current date is ${formatDate(now)}. For dates, if a month is mentioned and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1}). Otherwise, use the current year (${currentYear}).
+                    The current date is ${formatDate(now)}. 
+                    
+                    For date parsing:
+                    - If a specific year is mentioned (e.g., "January 2026"), use that exact year
+                    - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
+                    - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
+                    - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
                     
                     When handling weekends, always use Friday through Sunday (3 days).
                     
@@ -821,6 +966,9 @@ router.post('/natural-language', async (req, res) => {
         const parsed = await parseNaturalLanguage(query);
         const searchParams = buildSearchParameters(parsed);
         
+        console.log('🔍 Parsed query:', parsed);
+        console.log('🔍 Search params:', searchParams);
+        
 
         
         // If confidence is too low, return suggested clarifications
@@ -839,118 +987,77 @@ router.post('/natural-language', async (req, res) => {
             });
         }
 
-        // Build MongoDB query for matches
-        const matchQuery = {};
-        const pipeline = [];
-
-        // Team filtering
-        if (searchParams.homeTeam && searchParams.awayTeam) {
-            matchQuery.$and = [
-                { 'teams.home.id': searchParams.homeTeam.toString() },
-                { 'teams.away.id': searchParams.awayTeam.toString() }
-            ];
-        } else if (searchParams.teams && searchParams.teams.length > 0) {
-            const teamIds = searchParams.teams.map(id => id.toString());
-            matchQuery.$or = [
-                { 'teams.home.id': { $in: teamIds } },
-                { 'teams.away.id': { $in: teamIds } }
-            ];
-        }
-
-        // League filtering
-        if (searchParams.leagues && searchParams.leagues.length > 0) {
-            matchQuery.league = { $in: searchParams.leagues };
-        }
-
-        // Date filtering
-        if (searchParams.startDate || searchParams.endDate) {
-            matchQuery.date = {};
-            if (searchParams.startDate) {
-                matchQuery.date.$gte = searchParams.startDate;
-            }
-            if (searchParams.endDate) {
-                matchQuery.date.$lte = searchParams.endDate;
-            }
-        }
-
-        // Location + distance filtering
-        if (searchParams.location && searchParams.location.coordinates) {
-            const [longitude, latitude] = searchParams.location.coordinates;
-            const maxDistance = searchParams.maxDistance || 50; // Default 50 miles
-            
-            // First find venues within the distance
-            const Venue = require('../models/Venue');
-            const nearbyVenues = await Venue.findNear(longitude, latitude, maxDistance * 1609.34);
-
-            if (nearbyVenues.length > 0) {
-                const venueIds = nearbyVenues.map(venue => venue._id);
-                matchQuery.venueId = { $in: venueIds };
-                
-                // Store venue distances for later use
-                const venueDistances = {};
-                nearbyVenues.forEach(venue => {
-                    // Simple distance calculation (approximate)
-                    const lat1 = latitude * Math.PI / 180;
-                    const lat2 = venue.location.coordinates[1] * Math.PI / 180;
-                    const deltaLat = (venue.location.coordinates[1] - latitude) * Math.PI / 180;
-                    const deltaLon = (venue.location.coordinates[0] - longitude) * Math.PI / 180;
-                    
-                    const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
-                            Math.cos(lat1) * Math.cos(lat2) *
-                            Math.sin(deltaLon/2) * Math.sin(deltaLon/2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                    const distance = 6371 * c * 0.621371; // Convert km to miles
-                    
-                    venueDistances[venue._id.toString()] = Math.round(distance * 100) / 100;
-                });
-                
-                pipeline.push({ $match: matchQuery });
-                
-                // Add venue lookup
-                pipeline.push({
-                    $lookup: {
-                        from: 'venues',
-                        localField: 'venueId',
-                        foreignField: '_id',
-                        as: 'venue'
-                    }
-                });
-                pipeline.push({ $unwind: '$venue' });
-                
-                // Add distance field based on pre-calculated distances
-                pipeline.push({
-                    $addFields: {
-                        distance: {
-                            $switch: {
-                                branches: Object.entries(venueDistances).map(([venueId, distance]) => ({
-                                    case: { $eq: [{ $toString: '$venueId' }, venueId] },
-                                    then: distance
-                                })),
-                                default: null
-                            }
-                        }
-                    }
-                });
+        // Use existing search infrastructure instead of raw API calls
+        const axios = require('axios');
+        
+        // Determine season based on the date range
+        let season = 2025; // Default season
+        if (searchParams.startDate) {
+            const startYear = new Date(searchParams.startDate).getFullYear();
+            // For football seasons, if the date is in the second half of the year, 
+            // it's likely the start of the next season
+            const startMonth = new Date(searchParams.startDate).getMonth() + 1;
+            if (startMonth >= 7) {
+                season = startYear;
             } else {
-                // No venues found within distance
-                matchQuery._id = null; // This will return no results
-                pipeline.push({ $match: matchQuery });
+                season = startYear - 1;
+            }
+        }
+        
+        // Determine which leagues to search based on location
+        let leagueIds = [];
+        if (searchParams.leagues && searchParams.leagues.length > 0) {
+            // Use explicitly specified leagues
+            leagueIds = searchParams.leagues;
+        } else if (searchParams.location) {
+            // Auto-select leagues based on location
+            const country = searchParams.location.country?.toLowerCase();
+            if (country === 'france' || searchParams.location.city?.toLowerCase().includes('paris')) {
+                leagueIds = ['61', '62']; // Ligue 1 and Ligue 2
+            } else if (country === 'england' || country === 'united kingdom') {
+                leagueIds = ['39', '40']; // Premier League and Championship
+            } else if (country === 'spain') {
+                leagueIds = ['140', '141']; // La Liga and Segunda División
+            } else if (country === 'germany') {
+                leagueIds = ['78', '79']; // Bundesliga and 2. Bundesliga
+            } else if (country === 'italy') {
+                leagueIds = ['135', '136']; // Serie A and Serie B
+            } else {
+                // Default to major European leagues
+                leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
             }
         } else {
-            pipeline.push({ $match: matchQuery });
+            // Default to major European leagues
+            leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
         }
-
-        // Add sorting
-        if (!searchParams.location) {
-            pipeline.push({ $sort: { date: 1 } });
+        
+        // For messages screen, we don't need bounds-based filtering
+        // Location is used for league selection only
+        
+        console.log('🔍 Natural language calling existing search with params:', {
+            competitions: leagueIds.join(','),
+            dateFrom: searchParams.startDate,
+            dateTo: searchParams.endDate,
+            season: season
+        });
+        
+        // Call the search logic directly instead of making HTTP request
+        let matches = [];
+        try {
+            matches = await performSearch({
+                competitions: leagueIds,
+                dateFrom: searchParams.startDate,
+                dateTo: searchParams.endDate,
+                season: season,
+                bounds: null // No bounds filtering needed for messages screen
+            });
+            console.log('🔍 Direct search result:', {
+                matches: matches.length
+            });
+        } catch (error) {
+            console.error('🔍 Search Error:', error.message);
+            matches = [];
         }
-
-        // Limit results
-        pipeline.push({ $limit: 50 });
-
-        // Execute search
-        const Match = require('../models/Match');
-        const matches = await Match.aggregate(pipeline);
 
         // Format response
         const response = {
@@ -964,10 +1071,7 @@ router.post('/natural-language', async (req, res) => {
                 dateRange: parsed.dateRange,
                 distance: parsed.distance
             },
-            matches: matches.map(match => ({
-                ...match,
-                distance: match.distance ? Math.round(match.distance * 0.000621371 * 100) / 100 : undefined // Convert meters to miles
-            })),
+            matches: matches, // No distance calculation needed for messages screen
             count: matches.length
         };
 
