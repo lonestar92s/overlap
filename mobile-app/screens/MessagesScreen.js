@@ -97,7 +97,7 @@ const MessagesScreen = ({ navigation }) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
       console.log('🚀 MessagesScreen - Starting natural language query...');
-      const response = await processNaturalLanguageQuery(inputText.trim());
+      const response = await processNaturalLanguageQuery(inputText.trim(), messages);
       console.log('🚀 MessagesScreen - Got response:', response);
       
       const formattedResponse = formatSearchResults(response);
@@ -106,7 +106,7 @@ const MessagesScreen = ({ navigation }) => {
       if (formattedResponse.success) {
         const botMessage = {
           id: (Date.now() + 1).toString(),
-          text: `Found ${formattedResponse.count} matches!`,
+          text: formattedResponse.message || `Found ${formattedResponse.count} matches!`,
           isBot: true,
           timestamp: new Date(),
           data: formattedResponse,

@@ -1,8 +1,9 @@
 const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
 
-export const processNaturalLanguageQuery = async (query) => {
+export const processNaturalLanguageQuery = async (query, conversationHistory = []) => {
     try {
         console.log('🤖 Natural Language Service - Sending query:', query);
+        console.log('🤖 Natural Language Service - Conversation history length:', conversationHistory.length);
         console.log('🤖 Natural Language Service - API URL:', `${API_BASE_URL}/search/natural-language`);
         
         const response = await fetch(`${API_BASE_URL}/search/natural-language`, {
@@ -10,7 +11,10 @@ export const processNaturalLanguageQuery = async (query) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ 
+                query,
+                conversationHistory: conversationHistory.slice(-5) // Only send last 5 messages to avoid token limits
+            })
         });
         
         console.log('🤖 Natural Language Service - Response status:', response.status);
@@ -90,14 +94,17 @@ export const formatSearchResults = (response) => {
         success: true,
         query: response.query,
         confidence: response.confidence,
+        message: response.message, // Preserve conversational messages
         matches: response.matches || [],
         count: response.count || 0,
+        suggestions: response.suggestions || [], // Preserve suggestions
         parsed: {
             teams: response.parsed?.teams || [],
             leagues: response.parsed?.leagues || [],
             location: response.parsed?.location,
             dateRange: response.parsed?.dateRange,
-            distance: response.parsed?.distance
+            distance: response.parsed?.distance,
+            isBroadQuery: response.parsed?.isBroadQuery || false
         }
     };
 };

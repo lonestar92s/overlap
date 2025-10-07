@@ -928,8 +928,78 @@ const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
     return null;
 };
 
+// Conversation State Manager - tracks current search context
+const ConversationStateManager = {
+    // Extract the current search context from conversation history
+    getCurrentContext: (conversationHistory) => {
+        if (!conversationHistory || conversationHistory.length === 0) {
+            return null;
+        }
+        
+        // Find the most recent successful search
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+            const msg = conversationHistory[i];
+            if (msg.isBot && msg.data && msg.data.parsed && !msg.data.parsed.errorMessage) {
+                return msg.data.parsed;
+            }
+        }
+        
+        return null;
+    },
+    
+    // Fill missing information in the current result using conversation context
+    fillMissingContext: (result, conversationHistory) => {
+        const context = ConversationStateManager.getCurrentContext(conversationHistory);
+        
+        if (!context) {
+            console.log('🧠 No conversation context available');
+            return result;
+        }
+        
+        console.log('🧠 Found conversation context:', {
+            location: context.location,
+            dateRange: context.dateRange,
+            leagues: context.leagues,
+            teams: context.teams
+        });
+        
+        // Fill missing date range
+        if (!result.dateRange && context.dateRange) {
+            result.dateRange = context.dateRange;
+            console.log('📅 Filled missing date range from context:', result.dateRange);
+        }
+        
+        // Fill missing location
+        if (!result.location && context.location) {
+            result.location = context.location;
+            console.log('📍 Filled missing location from context:', result.location);
+        }
+        
+        // For follow-up queries like "just premier league", inherit leagues from context
+        if (result.leagues.length === 0 && context.leagues && context.leagues.length > 0) {
+            result.leagues = context.leagues;
+            console.log('🏆 Filled missing leagues from context:', result.leagues);
+        }
+        
+        // For follow-up queries like "only Arsenal", inherit teams from context
+        if (result.teams.any.length === 0 && context.teams && context.teams.any && context.teams.any.length > 0) {
+            result.teams = context.teams;
+            console.log('⚽ Filled missing teams from context:', result.teams);
+        }
+        
+        // Clear error message if we successfully filled missing information
+        if (result.errorMessage && (result.dateRange || result.location)) {
+            result.errorMessage = null;
+            result.confidence = Math.max(result.confidence, 50); // Boost confidence after filling
+            console.log('✅ Cleared error message after filling missing context');
+        }
+        
+        return result;
+    }
+};
+
 // Enhanced natural language parser with OpenAI and smart defaults
-const parseNaturalLanguage = async (query) => {
+const parseNaturalLanguage = async (query, conversationHistory = []) => {
     const result = {
         location: null,
         date: null,
@@ -950,6 +1020,24 @@ const parseNaturalLanguage = async (query) => {
                 const currentYear = now.getFullYear();
                 const currentMonth = now.getMonth() + 1;
                 
+                // Build conversation context
+                let conversationContext = "";
+                if (conversationHistory && conversationHistory.length > 0) {
+                    conversationContext = "\n\nCONVERSATION HISTORY:\n";
+                    conversationHistory.forEach((msg, index) => {
+                        if (msg.isBot && msg.data && msg.data.parsed) {
+                            const parsed = msg.data.parsed;
+                            conversationContext += `Previous search ${index + 1}: `;
+                            if (parsed.location) conversationContext += `Location: ${parsed.location.city}, ${parsed.location.country}. `;
+                            if (parsed.dateRange) conversationContext += `Dates: ${parsed.dateRange.start} to ${parsed.dateRange.end}. `;
+                            if (parsed.leagues && parsed.leagues.length > 0) conversationContext += `Leagues: ${parsed.leagues.map(l => l.name).join(', ')}. `;
+                            if (parsed.teams && parsed.teams.length > 0) conversationContext += `Teams: ${parsed.teams.map(t => t.name).join(', ')}. `;
+                            conversationContext += "\n";
+                        }
+                    });
+                    conversationContext += "\nIMPORTANT: If the current query is a follow-up (like 'just premier league' or 'only Arsenal'), use the context from previous searches to fill in missing information (location, dates, etc.).\n";
+                }
+                
                 const completion = await openai.chat.completions.create({
                 model: "gpt-3.5-turbo",
                 messages: [
@@ -959,11 +1047,25 @@ const parseNaturalLanguage = async (query) => {
                         The current date is ${formatDate(now)}. 
                         
                         IMPORTANT RULES:
-                        - ALWAYS require a date/timeframe - if none provided, return error message
+                        - ALWAYS require a date/timeframe - if none provided AND no conversation history, return error message
+                        - If conversation history exists, inherit missing information (location, dates) from previous searches
+                        - For follow-up queries like "just premier league" or "only Arsenal", inherit location and dates from conversation history
                         - Use smart defaults for location based on teams/leagues
                         - Be conversational in error messages
                         - For broad queries (location + dates only), set isBroadQuery: true
                         - Provide helpful suggestions for refining broad searches
+                        - Use conversation history to fill in missing context for follow-up queries${conversationContext}
+                        
+                        CONTEXT INHERITANCE RULES:
+                        - If the current query is incomplete (missing location, dates, or both) AND conversation history exists, inherit missing information
+                        - For queries like "just premier league", "only Arsenal", "champions league", etc., inherit location and dates from conversation history
+                        - For queries like "in Manchester", "next week", etc., inherit other missing information from conversation history
+                        - Always include inherited information in your JSON response
+                        
+                        CONTEXT INHERITANCE EXAMPLES:
+                        - Query: "just premier league" + History: "London next month" → Inherit London location and November 2025 dates
+                        - Query: "only Arsenal" + History: "London next month premier league" → Inherit London location, November 2025 dates, and Premier League
+                        - Query: "in Manchester" + History: "next month premier league" → Inherit November 2025 dates and Premier League
                         
                         For date parsing:
                         - If a specific year is mentioned (e.g., "January 2026"), use that exact year
@@ -1044,6 +1146,26 @@ const parseNaturalLanguage = async (query) => {
                                 "Try: Arsenal matches in London next month",
                                 "Try: Manchester United vs Chelsea in London next month"
                             ]
+                        }
+                        
+                        Example response format for follow-up query "just premier league" (with conversation history):
+                        {
+                            "location": {
+                                "city": "London",
+                                "country": "United Kingdom",
+                                "coordinates": [-0.118092, 51.509865]
+                            },
+                            "dateRange": {
+                                "start": "2025-11-01",
+                                "end": "2025-11-30"
+                            },
+                            "leagues": [{"apiId": "39", "name": "Premier League", "country": "England"}],
+                            "maxDistance": 50,
+                            "teams": [],
+                            "matchTypes": [],
+                            "errorMessage": null,
+                            "isBroadQuery": false,
+                            "suggestions": []
                         }`
                     },
                     {
@@ -1061,7 +1183,7 @@ const parseNaturalLanguage = async (query) => {
             if (parsedResponse.errorMessage) {
                 result.errorMessage = parsedResponse.errorMessage;
                 result.confidence = 0;
-                return result;
+                // Don't return early - let context inheritance handle it
             }
 
             // Map OpenAI response to our result format
@@ -1091,6 +1213,9 @@ const parseNaturalLanguage = async (query) => {
             if (result.distance) confidence += 10;
             
             result.confidence = Math.min(confidence, 100);
+
+            // Apply conversation state management after AI parsing
+            result = ConversationStateManager.fillMissingContext(result, conversationHistory);
 
             return result;
 
@@ -1125,6 +1250,9 @@ const parseNaturalLanguage = async (query) => {
         } else if (queryLower.includes('away') || queryLower.includes('at away')) {
             result.matchType = 'away';
         }
+
+        // Apply conversation state management after regex parsing
+        result = ConversationStateManager.fillMissingContext(result, conversationHistory);
 
         // DATE VALIDATION - Always require dates
         if (!result.dateRange) {
@@ -1229,7 +1357,7 @@ router.get('/debug-db', async (req, res) => {
 // Natural language search endpoint
 router.post('/natural-language', async (req, res) => {
     try {
-        const { query } = req.body;
+        const { query, conversationHistory } = req.body;
         
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
@@ -1237,7 +1365,7 @@ router.post('/natural-language', async (req, res) => {
 
 
         
-        const parsed = await parseNaturalLanguage(query);
+        const parsed = await parseNaturalLanguage(query, conversationHistory);
         const searchParams = buildSearchParameters(parsed);
         
         console.log('🔍 Parsed query:', parsed);
