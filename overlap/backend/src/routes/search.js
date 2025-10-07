@@ -56,7 +56,7 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds })
                 name: venue.name,
                 city: venue.city,
                 country: venue.country,
-                coordinates: null, // No coordinates needed for messages screen
+                coordinates: venue.coordinates, // Include coordinates for geographic filtering
                 image: null
             };
         }
@@ -91,9 +91,15 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds })
             }
         };
 
-        // For messages screen, we don't need coordinate-based filtering
-        // Just include all matches regardless of coordinates
-        transformedMatches.push(transformed);
+        // Apply bounds filtering if provided
+        if (bounds) {
+            if (transformed.fixture.venue.coordinates && isWithinBounds(transformed.fixture.venue.coordinates, bounds)) {
+                transformedMatches.push(transformed);
+            }
+        } else {
+            // No bounds filtering - include all matches
+            transformedMatches.push(transformed);
+        }
     }
 
     // Sort by date
@@ -1229,7 +1235,8 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
             result.confidence = Math.min(confidence, 100);
 
             // Apply conversation state management after AI parsing
-            result = ConversationStateManager.fillMissingContext(result, conversationHistory);
+            const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
+            Object.assign(result, updatedResult);
 
             return result;
 
@@ -1266,7 +1273,8 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         }
 
         // Apply conversation state management after regex parsing
-        result = ConversationStateManager.fillMissingContext(result, conversationHistory);
+        const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
+        Object.assign(result, updatedResult);
 
         // DATE VALIDATION - Always require dates
         if (!result.dateRange) {
@@ -1463,13 +1471,28 @@ router.post('/natural-language', async (req, res) => {
             leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
         }
         
-        // For broad queries, use all major European leagues to get comprehensive results
-        if (parsed.isBroadQuery) {
-            leagueIds = ['39', '40', '140', '141', '135', '136', '78', '79', '61', '62', '88', '94']; // All major leagues
-        }
+        // For broad queries, still respect location-based league selection
+        // This ensures Paris searches show French leagues, London shows English leagues, etc.
         
-        // For messages screen, we don't need bounds-based filtering
-        // Location is used for league selection only
+        // Add geographic distance filtering for natural language search
+        // Use default 50-mile radius around the specified city
+        let bounds = null;
+        if (searchParams.location && searchParams.location.coordinates) {
+            const [lng, lat] = searchParams.location.coordinates;
+            const radiusMiles = 50; // Default radius
+            const radiusKm = radiusMiles * 1.60934; // Convert to km
+            
+            // Calculate bounds for the radius
+            const latDelta = radiusKm / 111.32; // Approximate km per degree latitude
+            const lngDelta = radiusKm / (111.32 * Math.cos(lat * Math.PI / 180)); // Adjust for longitude
+            
+            bounds = {
+                northeast: { lat: lat + latDelta, lng: lng + lngDelta },
+                southwest: { lat: lat - latDelta, lng: lng - lngDelta }
+            };
+            
+            console.log(`🗺️ Created bounds for ${searchParams.location.city}: NE[${bounds.northeast.lat.toFixed(6)}, ${bounds.northeast.lng.toFixed(6)}] SW[${bounds.southwest.lat.toFixed(6)}, ${bounds.southwest.lng.toFixed(6)}]`);
+        }
         
         console.log('🔍 Natural language calling existing search with params:', {
             competitions: leagueIds.join(','),
@@ -1486,7 +1509,7 @@ router.post('/natural-language', async (req, res) => {
                 dateFrom: searchParams.startDate,
                 dateTo: searchParams.endDate,
                 season: season,
-                bounds: null // No bounds filtering needed for messages screen
+                bounds: bounds // Use geographic bounds for distance filtering
             });
             console.log('🔍 Direct search result:', {
                 matches: matches.length
