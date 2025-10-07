@@ -4,6 +4,8 @@ const https = require('https');
 const axios = require('axios');
 const teamService = require('../services/teamService');
 const leagueService = require('../services/leagueService');
+const venueService = require('../services/venueService');
+const geocodingService = require('../services/geocodingService');
 const router = express.Router();
 
 // API-Sports configuration
@@ -50,15 +52,68 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds })
         let venueInfo = null;
         
         if (venue?.id) {
-            // Use API venue data directly - no database lookup needed
-            venueInfo = {
-                id: venue.id,
-                name: venue.name,
-                city: venue.city,
-                country: venue.country,
-                coordinates: venue.coordinates, // Include coordinates for geographic filtering
-                image: null
-            };
+            // Try to get venue coordinates from local database first
+            const localVenue = await venueService.getVenueByApiId(venue.id);
+            if (localVenue) {
+                venueInfo = {
+                    id: venue.id,
+                    name: localVenue.name,
+                    city: localVenue.city,
+                    country: localVenue.country,
+                    coordinates: localVenue.coordinates || localVenue.location?.coordinates,
+                    image: localVenue.image || null
+                };
+            } else {
+                // Fall back to venue name lookup
+                const byName = await venueService.getVenueByName(venue.name, venue.city);
+                if (byName?.coordinates) {
+                    venueInfo = {
+                        id: venue.id,
+                        name: byName.name,
+                        city: byName.city,
+                        country: byName.country,
+                        coordinates: byName.coordinates,
+                        image: null
+                    };
+                } else {
+                    // Try geocoding if no coordinates available
+                    let coordinates = venue.coordinates; // Usually null from API
+                    if (!coordinates && venue.name && venue.city) {
+                        try {
+                            console.log(`🔍 Attempting geocoding for: ${venue.name}, ${venue.city}, ${venue.country}`);
+                            const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
+                                venue.name,
+                                venue.city,
+                                venue.country
+                            );
+                            if (geocodedCoords) {
+                                coordinates = geocodedCoords;
+                                console.log(`🎯 Geocoding successful for ${venue.name}:`, coordinates);
+                                
+                                // Save to database for future use
+                                await venueService.saveVenueWithCoordinates({
+                                    venueId: venue.id,
+                                    name: venue.name,
+                                    city: venue.city,
+                                    country: venue.country,
+                                    coordinates: coordinates
+                                });
+                            }
+                        } catch (geocodeError) {
+                            console.log(`❌ Geocoding failed for ${venue.name}:`, geocodeError.message);
+                        }
+                    }
+                    
+                    venueInfo = {
+                        id: venue.id,
+                        name: venue.name,
+                        city: venue.city,
+                        country: venue.country,
+                        coordinates: coordinates,
+                        image: null
+                    };
+                }
+            }
         }
         
         if (!venueInfo) {
@@ -718,23 +773,23 @@ const extractLeagues = async (query) => {
 
         // Fallback to common league mappings if database search fails
         const leagueMapping = {
-            'premier league': 'PL',
-            'championship': 'ELC', 
-            'la liga': 'PD',
-            'bundesliga': 'BL1',
-            'ligue 1': 'FL1',
-            'serie a': 'SA',
-            'eredivisie': 'DED',
-            'primeira liga': 'PPL',
-            'portuguese league': 'PPL',
-            'champions league': 'CL',
-            'europa league': 'EL',
-            'conference league': 'ECL'
+            'premier league': { apiId: '39', name: 'Premier League', country: 'England' },
+            'championship': { apiId: '40', name: 'Championship', country: 'England' },
+            'la liga': { apiId: '140', name: 'La Liga', country: 'Spain' },
+            'bundesliga': { apiId: '78', name: 'Bundesliga', country: 'Germany' },
+            'ligue 1': { apiId: '61', name: 'Ligue 1', country: 'France' },
+            'serie a': { apiId: '135', name: 'Serie A', country: 'Italy' },
+            'eredivisie': { apiId: '88', name: 'Eredivisie', country: 'Netherlands' },
+            'primeira liga': { apiId: '94', name: 'Primeira Liga', country: 'Portugal' },
+            'portuguese league': { apiId: '94', name: 'Primeira Liga', country: 'Portugal' },
+            'champions league': { apiId: '2', name: 'Champions League', country: 'Europe' },
+            'europa league': { apiId: '3', name: 'Europa League', country: 'Europe' },
+            'conference league': { apiId: '848', name: 'Conference League', country: 'Europe' }
         };
 
-        Object.entries(leagueMapping).forEach(([name, apiId]) => {
-            if (queryLower.includes(name) && !leagues.find(l => l.apiId === apiId)) {
-                leagues.push({ apiId, name });
+        Object.entries(leagueMapping).forEach(([name, leagueData]) => {
+            if (queryLower.includes(name) && !leagues.find(l => l.apiId === leagueData.apiId)) {
+                leagues.push(leagueData);
             }
         });
 
@@ -935,6 +990,26 @@ const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
 };
 
 // Conversation State Manager - tracks current search context
+// Helper function to map league IDs to names
+const mapLeagueIdsToNames = (leagueIds) => {
+    console.log('🗺️ Mapping league IDs to names:', leagueIds);
+    const leagueMap = {
+        '39': 'Premier League',
+        '40': 'Championship', 
+        '61': 'Ligue 1',
+        '62': 'Ligue 2',
+        '78': 'Bundesliga',
+        '79': 'Bundesliga 2',
+        '135': 'Serie A',
+        '136': 'Serie B',
+        '140': 'La Liga',
+        '141': 'Segunda División'
+    };
+    const result = leagueIds.map(id => ({ name: leagueMap[id] || `League ${id}`, id: id }));
+    console.log('🗺️ Mapped result:', result);
+    return result;
+};
+
 const ConversationStateManager = {
     // Extract the current search context from conversation history
     getCurrentContext: (conversationHistory) => {
@@ -1446,10 +1521,42 @@ router.post('/natural-language', async (req, res) => {
         
         // Determine which leagues to search based on location and query type
         let leagueIds = [];
+        console.log('🔍 Search params for league selection:', {
+            hasLeagues: !!(searchParams.leagues && searchParams.leagues.length > 0),
+            leagues: searchParams.leagues,
+            hasLocation: !!searchParams.location,
+            location: searchParams.location
+        });
+        
         if (searchParams.leagues && searchParams.leagues.length > 0) {
-            // Use explicitly specified leagues
-            leagueIds = searchParams.leagues;
-        } else if (searchParams.location) {
+            // Check if the specified leagues match the location
+            const country = searchParams.location?.country?.toLowerCase();
+            const city = searchParams.location?.city?.toLowerCase();
+            
+            // If we have a location, validate that the leagues match
+            if (searchParams.location) {
+                const isLocationMatch = (
+                    (country === 'france' && searchParams.leagues.includes('61')) ||
+                    (country === 'england' && searchParams.leagues.includes('39')) ||
+                    (country === 'spain' && searchParams.leagues.includes('140')) ||
+                    (country === 'germany' && searchParams.leagues.includes('78')) ||
+                    (country === 'italy' && searchParams.leagues.includes('135'))
+                );
+                
+                if (isLocationMatch) {
+                    leagueIds = searchParams.leagues;
+                    console.log('🏆 Using location-matched leagues:', leagueIds);
+                } else {
+                    console.log('🚫 Leagues do not match location, will use location-based selection');
+                    // Fall through to location-based selection
+                }
+            } else {
+                leagueIds = searchParams.leagues;
+                console.log('🏆 Using explicitly specified leagues (no location):', leagueIds);
+            }
+        }
+        
+        if (leagueIds.length === 0 && searchParams.location) {
             // Auto-select leagues based on location
             const country = searchParams.location.country?.toLowerCase();
             if (country === 'france' || searchParams.location.city?.toLowerCase().includes('paris')) {
@@ -1520,6 +1627,14 @@ router.post('/natural-language', async (req, res) => {
         }
 
         // Handle broad queries with conversational responses
+        console.log('🔍 Checking if broad query:', {
+            isBroadQuery: parsed.isBroadQuery,
+            matchesLength: matches.length,
+            hasLocation: !!parsed.location,
+            hasDateRange: !!parsed.dateRange,
+            leagueIds: leagueIds
+        });
+        
         if (parsed.isBroadQuery && matches.length > 0) {
             const locationName = parsed.location ? `${parsed.location.city}, ${parsed.location.country}` : 'that location';
             const dateRange = parsed.dateRange ? 
@@ -1533,7 +1648,7 @@ router.post('/natural-language', async (req, res) => {
                 message: `Found ${matches.length} matches in ${locationName} from ${dateRange}. Is there a certain league or team you'd like to see?`,
                 parsed: {
                     teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
-                    leagues: parsed.leagues.map(l => ({ name: l.name, id: l.apiId })),
+                    leagues: mapLeagueIdsToNames(leagueIds),
                     location: parsed.location,
                     dateRange: parsed.dateRange,
                     distance: parsed.distance,
@@ -1556,7 +1671,7 @@ router.post('/natural-language', async (req, res) => {
             confidence: parsed.confidence,
             parsed: {
                 teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
-                leagues: parsed.leagues.map(l => ({ name: l.name, id: l.apiId })),
+                leagues: mapLeagueIdsToNames(leagueIds),
                 location: parsed.location,
                 dateRange: parsed.dateRange,
                 distance: parsed.distance,
