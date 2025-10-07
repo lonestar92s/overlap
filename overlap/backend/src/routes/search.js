@@ -17,8 +17,41 @@ const searchHttpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
+// Function to generate helpful error messages using OpenAI
+async function generateHelpfulErrorMessage(context) {
+    if (!openai) {
+        // Fallback message if OpenAI is not available
+        return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
+    }
+
+    try {
+        const prompt = `
+A user searched for "${context.requestedLeague} matches in ${context.requestedLocation}" but this combination doesn't make sense because ${context.requestedLeague} is not played in ${context.requestedLocation}.
+
+Generate a helpful, conversational message suggesting alternatives:
+- ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}
+- ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}
+
+Be friendly and helpful, not technical. Keep it under 100 characters.
+        `;
+        
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+            max_tokens: 100
+        });
+        
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.log('OpenAI error message generation failed:', error.message);
+        // Fallback message
+        return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
+    }
+}
+
 // Function to perform search directly (extracted from matches route)
-async function performSearch({ competitions, dateFrom, dateTo, season, bounds }) {
+async function performSearch({ competitions, dateFrom, dateTo, season, bounds, teams, leagues, matchTypes }) {
     const requests = [];
     
     // League requests
@@ -145,6 +178,62 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds })
                 away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
             }
         };
+
+        // Apply team filtering if provided
+        if (teams && teams.length > 0) {
+            const homeTeamName = transformed.teams.home.name.toLowerCase();
+            const awayTeamName = transformed.teams.away.name.toLowerCase();
+            const teamMatches = teams.some(team => 
+                homeTeamName.includes(team.toLowerCase()) || 
+                awayTeamName.includes(team.toLowerCase())
+            );
+            if (!teamMatches) {
+                continue; // Skip this match if it doesn't match any of the specified teams
+            }
+        }
+
+        // Apply league filtering if provided (additional to competitions)
+        if (leagues && leagues.length > 0) {
+            const leagueName = transformed.league.name.toLowerCase();
+            const leagueMatches = leagues.some(league => 
+                leagueName.includes(league.toLowerCase())
+            );
+            if (!leagueMatches) {
+                continue; // Skip this match if it doesn't match any of the specified leagues
+            }
+        }
+
+        // Apply match type filtering if provided
+        if (matchTypes && matchTypes.length > 0) {
+            const isHomeMatch = matchTypes.includes('home');
+            const isAwayMatch = matchTypes.includes('away');
+            
+            if (isHomeMatch && isAwayMatch) {
+                // Both home and away - include all matches
+            } else if (isHomeMatch) {
+                // Only home matches - need to check if this is a home match for the specified team
+                if (teams && teams.length > 0) {
+                    const homeTeamName = transformed.teams.home.name.toLowerCase();
+                    const isHomeForSpecifiedTeam = teams.some(team => 
+                        homeTeamName.includes(team.toLowerCase())
+                    );
+                    if (!isHomeForSpecifiedTeam) {
+                        continue; // Skip if not a home match for the specified team
+                    }
+                }
+            } else if (isAwayMatch) {
+                // Only away matches - need to check if this is an away match for the specified team
+                if (teams && teams.length > 0) {
+                    const awayTeamName = transformed.teams.away.name.toLowerCase();
+                    const isAwayForSpecifiedTeam = teams.some(team => 
+                        awayTeamName.includes(team.toLowerCase())
+                    );
+                    if (!isAwayForSpecifiedTeam) {
+                        continue; // Skip if not an away match for the specified team
+                    }
+                }
+            }
+        }
 
         // Apply bounds filtering if provided
         if (bounds) {
@@ -1095,7 +1184,7 @@ const ConversationStateManager = {
 
 // Enhanced natural language parser with OpenAI and smart defaults
 const parseNaturalLanguage = async (query, conversationHistory = []) => {
-    const result = {
+    let result = {
         location: null,
         date: null,
         dateRange: null,
@@ -1470,8 +1559,8 @@ router.post('/natural-language', async (req, res) => {
         
 
         
-        // Handle error messages from parsing (but allow queries with location and dates)
-        if (parsed.errorMessage && !(parsed.location && parsed.dateRange)) {
+        // Handle error messages from parsing (but allow valid broad queries with location and dates)
+        if (parsed.errorMessage && !(parsed.isBroadQuery && parsed.location && parsed.dateRange)) {
             return res.json({
                 success: false,
                 message: parsed.errorMessage,
@@ -1548,7 +1637,104 @@ router.post('/natural-language', async (req, res) => {
                     console.log('🏆 Using location-matched leagues:', leagueIds);
                 } else {
                     console.log('🚫 Leagues do not match location, will use location-based selection');
-                    // Fall through to location-based selection
+                    
+                    // Generate helpful error message for league/location mismatch
+                    const requestedLeague = searchParams.leagues.map(id => {
+                        const leagueMap = {
+                            '39': 'Premier League', '40': 'Championship',
+                            '61': 'Ligue 1', '62': 'Ligue 2',
+                            '78': 'Bundesliga', '79': 'Bundesliga 2',
+                            '135': 'Serie A', '136': 'Serie B',
+                            '140': 'La Liga', '141': 'Segunda División'
+                        };
+                        return leagueMap[id] || `League ${id}`;
+                    }).join(', ');
+                    
+                    const requestedLocation = `${searchParams.location.city}, ${searchParams.location.country}`;
+                    
+                    // Determine suggested alternatives based on location and league
+                    let suggestedAlternatives = [];
+                    
+                    // Map league IDs to their correct countries
+                    const leagueCountries = {
+                        '39': 'United Kingdom', '40': 'United Kingdom', // Premier League, Championship
+                        '61': 'France', '62': 'France', // Ligue 1, Ligue 2
+                        '78': 'Germany', '79': 'Germany', // Bundesliga, Bundesliga 2
+                        '135': 'Italy', '136': 'Italy', // Serie A, Serie B
+                        '140': 'Spain', '141': 'Spain' // La Liga, Segunda División
+                    };
+                    
+                    const requestedLeagueCountry = leagueCountries[searchParams.leagues[0]];
+                    
+                    if (country === 'france') {
+                        // User is in France, suggest French leagues or move to the league's country
+                        suggestedAlternatives = [
+                            { league: 'Ligue 1', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
+                        ];
+                    } else if (country === 'england' || country === 'united kingdom') {
+                        // User is in UK, suggest English leagues or move to the league's country
+                        suggestedAlternatives = [
+                            { league: 'Premier League', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'Paris'}, ${requestedLeagueCountry}` }
+                        ];
+                    } else if (country === 'germany') {
+                        // User is in Germany, suggest German leagues or move to the league's country
+                        suggestedAlternatives = [
+                            { league: 'Bundesliga', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
+                        ];
+                    } else if (country === 'italy') {
+                        // User is in Italy, suggest Italian leagues or move to the league's country
+                        suggestedAlternatives = [
+                            { league: 'Serie A', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
+                        ];
+                    } else if (country === 'spain') {
+                        // User is in Spain, suggest Spanish leagues or move to the league's country
+                        suggestedAlternatives = [
+                            { league: 'La Liga', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : 'London'}, ${requestedLeagueCountry}` }
+                        ];
+                    } else {
+                        // Generic fallback
+                        suggestedAlternatives = [
+                            { league: 'Local leagues', location: requestedLocation },
+                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
+                        ];
+                    }
+                    
+                    const helpfulMessage = await generateHelpfulErrorMessage({
+                        requestedLeague,
+                        requestedLocation,
+                        suggestedAlternatives
+                    });
+                    
+                    // Return early with helpful message instead of proceeding with search
+                    return res.json({
+                        success: false,
+                        query: query,
+                        message: helpfulMessage,
+                        parsed: {
+                            teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
+                            leagues: searchParams.leagues.map(id => ({ name: requestedLeague, id: id })),
+                            location: parsed.location,
+                            dateRange: parsed.dateRange,
+                            distance: parsed.distance,
+                            isBroadQuery: false
+                        },
+                        preSelectedFilters: {
+                            country: parsed.location?.country || null,
+                            leagues: [requestedLeague],
+                            teams: parsed.teams.any.map(t => t.name)
+                        },
+                        matches: [],
+                        count: 0,
+                        suggestions: [
+                            `Try: ${suggestedAlternatives[0].league} matches in ${suggestedAlternatives[0].location}`,
+                            `Try: ${suggestedAlternatives[1].league} matches in ${suggestedAlternatives[1].location}`
+                        ]
+                    });
                 }
             } else {
                 leagueIds = searchParams.leagues;
@@ -1610,15 +1796,31 @@ router.post('/natural-language', async (req, res) => {
             season: season
         });
         
+        // Extract teams, leagues, and matchTypes from parsed query for filtering
+        const teams = parsed.teams?.any?.map(team => team.name) || [];
+        const leagues = parsed.leagues?.map(league => league.name) || [];
+        const matchTypes = parsed.matchTypes || [];
+        
+        console.log('🔍 Extracted filtering parameters:', {
+            teams: teams,
+            leagues: leagues,
+            matchTypes: matchTypes,
+            parsedTeams: parsed.teams
+        });
+
         // Call the search logic directly instead of making HTTP request
         let matches = [];
         try {
+
             matches = await performSearch({
                 competitions: leagueIds,
                 dateFrom: searchParams.startDate,
                 dateTo: searchParams.endDate,
                 season: season,
-                bounds: bounds // Use geographic bounds for distance filtering
+                bounds: bounds, // Use geographic bounds for distance filtering
+                teams: teams, // NEW: Team filtering
+                leagues: leagues, // NEW: League filtering
+                matchTypes: matchTypes // NEW: Match type filtering
             });
             console.log('🔍 Direct search result:', {
                 matches: matches.length
@@ -1656,6 +1858,11 @@ router.post('/natural-language', async (req, res) => {
                     distance: parsed.distance,
                     isBroadQuery: true
                 },
+                preSelectedFilters: {
+                    country: parsed.location?.country || null, // Country-level filter
+                    leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name), // League-level filters
+                    teams: parsed.teams.any.map(t => t.name) // Team-level filters
+                },
                 matches: matches.slice(0, 5), // Show first 5 matches as examples
                 count: matches.length,
                 suggestions: parsed.suggestions || [
@@ -1678,6 +1885,11 @@ router.post('/natural-language', async (req, res) => {
                 dateRange: parsed.dateRange,
                 distance: parsed.distance,
                 isBroadQuery: parsed.isBroadQuery || false
+            },
+            preSelectedFilters: {
+                country: parsed.location?.country || null, // Country-level filter
+                leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name), // League-level filters
+                teams: parsed.teams.any.map(t => t.name) // Team-level filters
             },
             matches: matches, // No distance calculation needed for messages screen
             count: matches.length
