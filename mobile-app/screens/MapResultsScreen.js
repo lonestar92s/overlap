@@ -28,7 +28,7 @@ import MatchMapView from '../components/MapView';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
-  const { searchParams, matches: initialMatches, initialRegion, hasWho } = route.params || {};
+  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters } = route.params || {};
   
   // Search state
   const [location, setLocation] = useState(searchParams?.location || null);
@@ -324,6 +324,71 @@ const MapResultsScreen = ({ navigation, route }) => {
       setInitialSearchRegion(initialRegion);
     }
   }, [initialRegion, initialSearchRegion]);
+
+  // Apply pre-selected filters from natural language search
+  useEffect(() => {
+    if (preSelectedFilters && filterData) {
+      console.log('🎯 Applying pre-selected filters:', preSelectedFilters);
+      
+      // Convert pre-selected filter names to IDs by matching with filterData
+      const selectedFilters = {
+        countries: [],
+        leagues: [],
+        teams: []
+      };
+
+      // Match country
+      if (preSelectedFilters.country && filterData.countries) {
+        const countryMatch = filterData.countries.find(c => 
+          c.name.toLowerCase() === preSelectedFilters.country.toLowerCase()
+        );
+        if (countryMatch) {
+          selectedFilters.countries = [countryMatch.id];
+          console.log('🏴 Selected country:', countryMatch.name, countryMatch.id);
+        }
+      }
+
+      // Match leagues
+      if (preSelectedFilters.leagues && preSelectedFilters.leagues.length > 0 && filterData.leagues) {
+        const leagueMatches = preSelectedFilters.leagues
+          .map(leagueName => filterData.leagues.find(l => 
+            l.name.toLowerCase() === leagueName.toLowerCase()
+          ))
+          .filter(Boolean);
+        
+        if (leagueMatches.length > 0) {
+          selectedFilters.leagues = leagueMatches.map(l => l.id);
+          console.log('🏆 Selected leagues:', leagueMatches.map(l => l.name), selectedFilters.leagues);
+        }
+      }
+
+      // Match teams
+      if (preSelectedFilters.teams && preSelectedFilters.teams.length > 0 && filterData.teams) {
+        const teamMatches = preSelectedFilters.teams
+          .map(teamName => filterData.teams.find(t => 
+            t.name.toLowerCase() === teamName.toLowerCase()
+          ))
+          .filter(Boolean);
+        
+        if (teamMatches.length > 0) {
+          selectedFilters.teams = teamMatches.map(t => t.id);
+          console.log('⚽ Selected teams:', teamMatches.map(t => t.name), selectedFilters.teams);
+        }
+      }
+
+      // Apply the filters if we found any matches
+      const hasFilters = selectedFilters.countries.length > 0 || 
+                        selectedFilters.leagues.length > 0 || 
+                        selectedFilters.teams.length > 0;
+      
+      if (hasFilters) {
+        updateSelectedFilters(selectedFilters);
+        console.log('✅ Applied pre-selected filters:', selectedFilters);
+      } else {
+        console.log('⚠️ No matching filters found for pre-selected values');
+      }
+    }
+  }, [preSelectedFilters, filterData, updateSelectedFilters]);
 
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {

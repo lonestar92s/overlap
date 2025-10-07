@@ -261,7 +261,8 @@ const MessagesScreen = ({ navigation }) => {
           autoFitKey,
           hasLocation,
           hasDates,
-          hasWho
+          hasWho,
+          preSelectedFilters: data.preSelectedFilters // Pass pre-selected filters from natural language search
         }
       });
       
