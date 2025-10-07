@@ -16,6 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import { processNaturalLanguageQuery, formatSearchResults, getSearchExamples } from '../services/naturalLanguageService';
+import ApiService from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -150,20 +151,126 @@ const MessagesScreen = ({ navigation }) => {
     setShowExamples(false);
   };
 
-  const handleSearchResultPress = (data) => {
-    // Navigate to search results with the parsed parameters
-    navigation.navigate('SearchTab', {
-      screen: 'MapResults',
-      params: {
-        searchParams: {
-          location: data.parsed.location,
-          dateRange: data.parsed.dateRange,
-          leagues: data.parsed.leagues?.map(l => l.id) || [],
-          teams: data.parsed.teams?.map(t => t.id) || [],
-          maxDistance: data.parsed.distance
+  const handleSearchResultPress = async (data) => {
+    try {
+      setLoading(true);
+      
+      // Extract parsed parameters
+      const location = data.parsed.location;
+      const dateFrom = data.parsed.dateRange?.start || null;
+      const dateTo = data.parsed.dateRange?.end || null;
+      const leagues = data.parsed.leagues?.map(l => l.id) || [];
+      const teams = data.parsed.teams?.map(t => t.id) || [];
+      
+      // Check if we have search criteria
+      const hasLocation = !!location;
+      const hasDates = !!(dateFrom && dateTo);
+      const hasWho = (leagues.length + teams.length) > 0;
+      
+      // Validate search parameters (same logic as SearchScreen)
+      if (!hasWho) {
+        if (!hasLocation) {
+          Alert.alert('Error', 'Please select a location');
+          return;
+        }
+        if (!hasDates) {
+          Alert.alert('Error', 'Please select your travel dates');
+          return;
         }
       }
-    });
+      
+      if (hasWho && !hasLocation && !hasDates) {
+        Alert.alert('Error', 'Please select at least a location or travel dates when searching by teams/leagues');
+        return;
+      }
+      
+      const searchParams = {
+        location,
+        dateFrom,
+        dateTo
+      };
+      
+      let matches = [];
+      let initialRegion = null;
+      let autoFitKey = 0;
+      
+      if (hasWho) {
+        // Global search by leagues/teams
+        const apiParams = {
+          competitions: leagues.map(l => String(l)),
+          teams: teams.map(t => String(t)),
+        };
+        
+        // Add optional date range if provided
+        if (hasDates) {
+          apiParams.dateFrom = searchParams.dateFrom;
+          apiParams.dateTo = searchParams.dateTo;
+        }
+        
+        // Add optional bounds if location is provided
+        if (hasLocation) {
+          apiParams.bounds = {
+            northeast: { lat: location.coordinates[1] + 0.25, lng: location.coordinates[0] + 0.25 },
+            southwest: { lat: location.coordinates[1] - 0.25, lng: location.coordinates[0] - 0.25 }
+          };
+          // Set initial region for map centering
+          initialRegion = {
+            latitude: location.coordinates[1],
+            longitude: location.coordinates[0],
+            latitudeDelta: 0.5,
+            longitudeDelta: 0.5,
+          };
+        }
+        
+        console.log('MessagesScreen: Calling searchAggregatedMatches with params:', apiParams);
+        
+        const agg = await ApiService.searchAggregatedMatches(apiParams);
+        console.log('MessagesScreen: searchAggregatedMatches response:', agg);
+        matches = agg?.data || [];
+        console.log('MessagesScreen: Final matches from aggregated search:', matches);
+        autoFitKey = Date.now(); // trigger map to auto-fit
+      } else {
+        // Traditional bounds-based search (requires both location and dates)
+        const bounds = {
+          northeast: { lat: location.coordinates[1] + 0.25, lng: location.coordinates[0] + 0.25 },
+          southwest: { lat: location.coordinates[1] - 0.25, lng: location.coordinates[0] - 0.25 }
+        };
+        const response = await ApiService.searchMatchesByBounds({
+          bounds,
+          dateFrom: searchParams.dateFrom,
+          dateTo: searchParams.dateTo
+        });
+        matches = response.data || [];
+        
+        // Set initial region for bounds-based search
+        initialRegion = {
+          latitude: location.coordinates[1],
+          longitude: location.coordinates[0],
+          latitudeDelta: 0.5,
+          longitudeDelta: 0.5,
+        };
+      }
+      
+      // Navigate to MapResults with the search results
+      navigation.navigate('SearchTab', {
+        screen: 'MapResults',
+        params: { 
+          searchParams,
+          matches,
+          initialRegion,
+          autoFitKey,
+          hasLocation,
+          hasDates,
+          hasWho
+        }
+      });
+      
+    } catch (error) {
+      console.error('MessagesScreen: Search error:', error);
+      Alert.alert('Error', error.message || 'Failed to search matches');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderMessage = ({ item }) => {

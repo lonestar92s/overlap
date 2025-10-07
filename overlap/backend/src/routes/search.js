@@ -1,5 +1,5 @@
 const express = require('express');
-// const OpenAI = require('openai');
+const OpenAI = require('openai');
 const https = require('https');
 const axios = require('axios');
 const teamService = require('../services/teamService');
@@ -129,10 +129,10 @@ const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
-// const openai = new OpenAI({
-//     apiKey: process.env.OPENAI_API_KEY,
-//     httpAgent: httpsAgent
-// });
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    httpAgent: httpsAgent
+});
 
 // Helper function to format date as YYYY-MM-DD
 const formatDate = (date) => {
@@ -243,6 +243,7 @@ const parseComplexDates = (query) => {
             }
         },
         
+        
         // "between March 15-30" or "March 15-30"
         {
             pattern: /(?:between\s+)?(\w+)\s+(\d{1,2})\s*[-–]\s*(\d{1,2})(?:\s*,?\s*(\d{4}))?/,
@@ -298,6 +299,28 @@ const parseComplexDates = (query) => {
                     return {
                         start: formatDate(weekend.start),
                         end: formatDate(weekend.end)
+                    };
+                }
+                return null;
+            }
+        },
+        
+        // "November" or "november" (single month without year) - must be last to avoid conflicts
+        {
+            pattern: /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i,
+            handler: (match) => {
+                const [, monthName] = match;
+                const month = getMonthNumber(monthName);
+                
+                if (month !== -1) {
+                    // Determine year: if month is in the past, use next year
+                    const yearToUse = month < now.getMonth() + 1 ? currentYear + 1 : currentYear;
+                    
+                    const startOfMonth = new Date(yearToUse, month - 1, 1);
+                    const endOfMonth = new Date(yearToUse, month, 0); // Last day of month
+                    return {
+                        start: formatDate(startOfMonth),
+                        end: formatDate(endOfMonth)
                     };
                 }
                 return null;
@@ -811,10 +834,98 @@ const extractDistance = (query) => {
     return null;
 };
 
-// Enhanced natural language parser
+// Smart location inference based on teams and leagues
+const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
+    // Team-based country mapping
+    const teamCountryMapping = {
+        // English teams
+        'manchester united': { city: 'Manchester', country: 'United Kingdom', coordinates: [-2.244644, 53.483959] },
+        'manchester city': { city: 'Manchester', country: 'United Kingdom', coordinates: [-2.244644, 53.483959] },
+        'liverpool': { city: 'Liverpool', country: 'United Kingdom', coordinates: [-2.991573, 53.408371] },
+        'arsenal': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'chelsea': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'tottenham': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'west ham': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'leeds': { city: 'Leeds', country: 'United Kingdom', coordinates: [-1.549077, 53.801277] },
+        'birmingham': { city: 'Birmingham', country: 'United Kingdom', coordinates: [-1.898575, 52.489471] },
+        'newcastle': { city: 'Newcastle', country: 'United Kingdom', coordinates: [-1.612404, 54.978252] },
+        'brighton': { city: 'Brighton', country: 'United Kingdom', coordinates: [-0.137163, 50.822530] },
+        
+        // Spanish teams
+        'barcelona': { city: 'Barcelona', country: 'Spain', coordinates: [2.170006, 41.387097] },
+        'real madrid': { city: 'Madrid', country: 'Spain', coordinates: [-3.703790, 40.416775] },
+        'atletico madrid': { city: 'Madrid', country: 'Spain', coordinates: [-3.703790, 40.416775] },
+        'sevilla': { city: 'Seville', country: 'Spain', coordinates: [-5.984459, 37.389092] },
+        'valencia': { city: 'Valencia', country: 'Spain', coordinates: [-0.375156, 39.469907] },
+        'athletic bilbao': { city: 'Bilbao', country: 'Spain', coordinates: [-2.935010, 43.263012] },
+        
+        // German teams
+        'bayern munich': { city: 'Munich', country: 'Germany', coordinates: [11.581981, 48.135125] },
+        'borussia dortmund': { city: 'Dortmund', country: 'Germany', coordinates: [7.468554, 51.513400] },
+        'rb leipzig': { city: 'Leipzig', country: 'Germany', coordinates: [12.387772, 51.343479] },
+        'bayer leverkusen': { city: 'Leverkusen', country: 'Germany', coordinates: [7.0043, 51.0459] },
+        
+        // French teams
+        'paris saint-germain': { city: 'Paris', country: 'France', coordinates: [2.352222, 48.856614] },
+        'olympique marseille': { city: 'Marseille', country: 'France', coordinates: [5.369780, 43.296482] },
+        'olympique lyon': { city: 'Lyon', country: 'France', coordinates: [4.835659, 45.764043] },
+        
+        // Italian teams
+        'juventus': { city: 'Turin', country: 'Italy', coordinates: [7.686856, 45.070312] },
+        'ac milan': { city: 'Milan', country: 'Italy', coordinates: [9.185982, 45.465422] },
+        'inter milan': { city: 'Milan', country: 'Italy', coordinates: [9.185982, 45.465422] },
+        'napoli': { city: 'Naples', country: 'Italy', coordinates: [14.268124, 40.851775] },
+        'roma': { city: 'Rome', country: 'Italy', coordinates: [12.496366, 41.902782] },
+        
+        // Portuguese teams
+        'benfica': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
+        'porto': { city: 'Porto', country: 'Portugal', coordinates: [-8.611837, 41.149968] },
+        'sporting cp': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
+        
+        // Dutch teams
+        'ajax': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] },
+        'psv': { city: 'Eindhoven', country: 'Netherlands', coordinates: [5.469722, 51.441642] },
+        'feyenoord': { city: 'Rotterdam', country: 'Netherlands', coordinates: [4.477733, 51.924420] }
+    };
+
+    // League-based country mapping
+    const leagueCountryMapping = {
+        'premier league': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'championship': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
+        'la liga': { city: 'Madrid', country: 'Spain', coordinates: [-3.703790, 40.416775] },
+        'bundesliga': { city: 'Berlin', country: 'Germany', coordinates: [13.404954, 52.520008] },
+        'ligue 1': { city: 'Paris', country: 'France', coordinates: [2.352222, 48.856614] },
+        'serie a': { city: 'Rome', country: 'Italy', coordinates: [12.496366, 41.902782] },
+        'primeira liga': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
+        'eredivisie': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] }
+    };
+
+    // First, try to infer from teams
+    if (teams && teams.any && teams.any.length > 0) {
+        for (const team of teams.any) {
+            const teamName = team.name.toLowerCase();
+            if (teamCountryMapping[teamName]) {
+                return teamCountryMapping[teamName];
+            }
+        }
+    }
+
+    // If no team match, try to infer from leagues
+    if (leagues && leagues.length > 0) {
+        for (const league of leagues) {
+            const leagueName = league.name.toLowerCase();
+            if (leagueCountryMapping[leagueName]) {
+                return leagueCountryMapping[leagueName];
+            }
+        }
+    }
+
+    // If no match found, return null (no default location)
+    return null;
+};
+
+// Enhanced natural language parser with OpenAI and smart defaults
 const parseNaturalLanguage = async (query) => {
-    
-    
     const result = {
         location: null,
         date: null,
@@ -823,11 +934,135 @@ const parseNaturalLanguage = async (query) => {
         leagues: [],
         distance: null,
         matchType: null,
-        confidence: 0
+        confidence: 0,
+        errorMessage: null
     };
 
     try {
-        // Extract all entities in parallel for efficiency
+        // First try OpenAI for intelligent parsing
+        try {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            
+            const completion = await openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
+                        The current date is ${formatDate(now)}. 
+                        
+                        IMPORTANT RULES:
+                        - ALWAYS require a date/timeframe - if none provided, return error message
+                        - Use smart defaults for location based on teams/leagues
+                        - Be conversational in error messages
+                        
+                        For date parsing:
+                        - If a specific year is mentioned (e.g., "January 2026"), use that exact year
+                        - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
+                        - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
+                        - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
+                        
+                        When handling weekends, always use Friday through Sunday (3 days).
+                        
+                        Return only a JSON object with the following fields:
+                        - location (object with city, country, and coordinates) - infer from teams/leagues if not specified
+                        - dateRange (start and end dates in YYYY-MM-DD format) - REQUIRED
+                        - leagues (array of league IDs)
+                        - maxDistance (in miles)
+                        - teams (array of team names)
+                        - matchTypes (array of types like 'derby', 'rivalry', etc.)
+                        - errorMessage (string if there's an error, null otherwise)
+                        
+                        Available leagues:
+                        - PL (Premier League)
+                        - ELC (Championship)
+                        - PD (La Liga)
+                        - BL1 (Bundesliga)
+                        - FL1 (Ligue 1)
+                        - DED (Eredivisie)
+                        - PPL (Primeira Liga)
+                        
+                        Team/League to Country mapping:
+                        - Manchester United, Arsenal, Chelsea, Liverpool, etc. → England
+                        - Barcelona, Real Madrid, etc. → Spain
+                        - Bayern Munich, Borussia Dortmund, etc. → Germany
+                        - Paris Saint-Germain, etc. → France
+                        - Juventus, AC Milan, Inter Milan, etc. → Italy
+                        - Benfica, Porto, etc. → Portugal
+                        - Ajax, PSV, etc. → Netherlands
+                        
+                        Example response format:
+                        {
+                            "location": {
+                                "city": "London",
+                                "country": "United Kingdom",
+                                "coordinates": [-0.118092, 51.509865]
+                            },
+                            "dateRange": {
+                                "start": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-15",
+                                "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-17"
+                            },
+                            "leagues": ["PL"],
+                            "maxDistance": 50,
+                            "teams": ["Arsenal FC", "Chelsea FC"],
+                            "matchTypes": ["derby"],
+                            "errorMessage": null
+                        }`
+                    },
+                    {
+                        role: "user",
+                        content: query
+                    }
+                ],
+                temperature: 0.3,
+                max_tokens: 500
+            });
+
+            const parsedResponse = JSON.parse(completion.choices[0].message.content);
+            
+            // Convert OpenAI response to our format
+            if (parsedResponse.errorMessage) {
+                result.errorMessage = parsedResponse.errorMessage;
+                result.confidence = 0;
+                return result;
+            }
+
+            // Map OpenAI response to our result format
+            result.location = parsedResponse.location;
+            result.dateRange = parsedResponse.dateRange;
+            result.distance = parsedResponse.maxDistance;
+            result.matchType = parsedResponse.matchTypes?.[0] || null;
+            
+            // Convert team names to our team objects (simplified for now)
+            if (parsedResponse.teams && parsedResponse.teams.length > 0) {
+                result.teams.any = parsedResponse.teams.map(teamName => ({ name: teamName }));
+            }
+            
+            // Convert league IDs to our league objects (simplified for now)
+            if (parsedResponse.leagues && parsedResponse.leagues.length > 0) {
+                result.leagues = parsedResponse.leagues.map(leagueId => ({ apiId: leagueId, name: leagueId }));
+            }
+
+            // Calculate confidence score
+            let confidence = 0;
+            if (result.teams.any.length > 0) confidence += 30;
+            if (result.leagues.length > 0) confidence += 25;
+            if (result.location) confidence += 25;
+            if (result.dateRange) confidence += 15;
+            if (result.distance) confidence += 10;
+            
+            result.confidence = Math.min(confidence, 100);
+
+            return result;
+
+        } catch (openaiError) {
+            console.log('OpenAI parsing failed, falling back to regex parser:', openaiError.message);
+            // Fall through to regex parser
+        }
+
+        // Fallback to regex-based parsing
         const [teams, leagues, location, dateRange, distance] = await Promise.all([
             extractTeams(query),
             extractLeagues(query),
@@ -851,6 +1086,18 @@ const parseNaturalLanguage = async (query) => {
             result.matchType = 'away';
         }
 
+        // DATE VALIDATION - Always require dates
+        if (!result.dateRange) {
+            result.errorMessage = "Please specify when you want to see these matches";
+            result.confidence = 0;
+            return result;
+        }
+
+        // SMART LOCATION DEFAULTS - If no location specified, infer from teams/leagues
+        if (!result.location) {
+            result.location = inferLocationFromTeamsAndLeagues(result.teams, result.leagues);
+        }
+
         // Calculate confidence score based on extracted entities
         let confidence = 0;
         if (result.teams.any.length > 0) confidence += 30;
@@ -859,27 +1106,14 @@ const parseNaturalLanguage = async (query) => {
         if (result.dateRange) confidence += 15;
         if (result.distance) confidence += 10;
         
-        // If no date specified, add default future date range and some confidence
-        if (!result.dateRange && (result.teams.any.length > 0 || result.leagues.length > 0 || result.location)) {
-            const now = new Date();
-            const futureDate = new Date();
-            futureDate.setMonth(futureDate.getMonth() + 3); // Next 3 months
-            
-            result.dateRange = {
-                start: formatDate(now),
-                end: formatDate(futureDate)
-            };
-            confidence += 10; // Add some confidence for default date filtering
-        }
-        
         result.confidence = Math.min(confidence, 100);
-
-
 
         return result;
 
     } catch (error) {
         console.error('Enhanced NL Parser error:', error);
+        result.errorMessage = "I couldn't understand your query. Please try being more specific!";
+        result.confidence = 0;
         return result;
     }
 };
@@ -971,6 +1205,22 @@ router.post('/natural-language', async (req, res) => {
         
 
         
+        // Handle error messages from parsing
+        if (parsed.errorMessage) {
+            return res.json({
+                success: false,
+                message: parsed.errorMessage,
+                confidence: parsed.confidence,
+                parsed: parsed,
+                suggestions: [
+                    "Try mentioning specific team names",
+                    "Include a league name (e.g., Premier League, La Liga)",
+                    "Add a location or city name",
+                    "Specify a date range"
+                ]
+            });
+        }
+
         // If confidence is too low, return suggested clarifications
         if (parsed.confidence < 25) {
             return res.json({
