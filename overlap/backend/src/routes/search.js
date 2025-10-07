@@ -987,11 +987,18 @@ const ConversationStateManager = {
             console.log('⚽ Filled missing teams from context:', result.teams);
         }
         
-        // Clear error message if we successfully filled missing information
+        // Clear error message if we successfully filled missing information or have a valid broad query
         if (result.errorMessage && (result.dateRange || result.location)) {
             result.errorMessage = null;
             result.confidence = Math.max(result.confidence, 50); // Boost confidence after filling
             console.log('✅ Cleared error message after filling missing context');
+        }
+        
+        // Also clear error message for broad queries that have location and dates
+        if (result.errorMessage && result.isBroadQuery && result.location && result.dateRange) {
+            result.errorMessage = null;
+            result.confidence = Math.max(result.confidence, 60); // Boost confidence for valid broad queries
+            console.log('✅ Cleared error message for valid broad query');
         }
         
         return result;
@@ -1052,8 +1059,8 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - For follow-up queries like "just premier league" or "only Arsenal", inherit location and dates from conversation history
                         - Use smart defaults for location based on teams/leagues
                         - Be conversational in error messages
-                        - For broad queries (location + dates only), set isBroadQuery: true
-                        - Provide helpful suggestions for refining broad searches
+                        - For broad queries (location + dates only), set isBroadQuery: true and DO NOT return error message
+                        - Broad queries with location and dates are VALID - provide helpful suggestions for refinement
                         - Use conversation history to fill in missing context for follow-up queries${conversationContext}
                         
                         CONTEXT INHERITANCE RULES:
@@ -1373,8 +1380,8 @@ router.post('/natural-language', async (req, res) => {
         
 
         
-        // Handle error messages from parsing
-        if (parsed.errorMessage) {
+        // Handle error messages from parsing (but allow broad queries with location and dates)
+        if (parsed.errorMessage && !(parsed.isBroadQuery && parsed.location && parsed.dateRange)) {
             return res.json({
                 success: false,
                 message: parsed.errorMessage,
