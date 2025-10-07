@@ -33,6 +33,24 @@ class LeagueService {
             '307': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
             '188': { name: 'Scottish Premiership', country: 'Scotland' },
             '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' },
+            
+            // International Competitions
+            '1': { name: 'FIFA World Cup', country: 'International' },
+            '4': { name: 'European Championship', country: 'Europe' },
+            '5': { name: 'UEFA World Cup Qualifiers', country: 'Europe' },
+            '6': { name: 'CONMEBOL World Cup Qualifiers', country: 'South America' },
+            '7': { name: 'CONCACAF World Cup Qualifiers', country: 'North America' },
+            '8': { name: 'AFC World Cup Qualifiers', country: 'Asia' },
+            '9': { name: 'CAF World Cup Qualifiers', country: 'Africa' },
+            '10': { name: 'OFC World Cup Qualifiers', country: 'Oceania' },
+            '11': { name: 'International Friendlies', country: 'International' },
+            '12': { name: 'UEFA Nations League', country: 'Europe' },
+            '13': { name: 'Copa Libertadores', country: 'South America' },
+            '14': { name: 'Copa América', country: 'South America' },
+            '15': { name: 'CONCACAF Gold Cup', country: 'North America' },
+            '16': { name: 'AFC Asian Cup', country: 'Asia' },
+            '17': { name: 'Africa Cup of Nations', country: 'Africa' },
+            '18': { name: 'OFC Nations Cup', country: 'Oceania' },
             '44': { name: 'Women\'s Super League', country: 'England' },
             '699': { name: 'Women\'s Championship', country: 'England' }
         };

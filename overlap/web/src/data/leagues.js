@@ -43,7 +43,26 @@ export const LEAGUES = {
         { id: '4', name: 'European Championship', tier: 1, country: 'Europe', countryCode: 'INT' },
         { id: '13', name: 'Copa Libertadores', tier: 1, country: 'South America', countryCode: 'INT' },
         { id: '1', name: 'FIFA World Cup', tier: 1, country: 'International', countryCode: 'INT' },
-        { id: '1083', name: 'UEFA Women\'s Euro 2025', tier: 1, country: 'Europe', countryCode: 'INT' }
+        { id: '1083', name: 'UEFA Women\'s Euro 2025', tier: 1, country: 'Europe', countryCode: 'INT' },
+        
+        // World Cup Qualifiers
+        { id: '5', name: 'UEFA World Cup Qualifiers', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '6', name: 'CONMEBOL World Cup Qualifiers', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '7', name: 'CONCACAF World Cup Qualifiers', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '8', name: 'AFC World Cup Qualifiers', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '9', name: 'CAF World Cup Qualifiers', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '10', name: 'OFC World Cup Qualifiers', tier: 1, country: 'Oceania', countryCode: 'INT' },
+        
+        // International Friendlies
+        { id: '11', name: 'International Friendlies', tier: 1, country: 'International', countryCode: 'INT' },
+        
+        // Other International Competitions
+        { id: '12', name: 'UEFA Nations League', tier: 1, country: 'Europe', countryCode: 'INT' },
+        { id: '14', name: 'Copa América', tier: 1, country: 'South America', countryCode: 'INT' },
+        { id: '15', name: 'CONCACAF Gold Cup', tier: 1, country: 'North America', countryCode: 'INT' },
+        { id: '16', name: 'AFC Asian Cup', tier: 1, country: 'Asia', countryCode: 'INT' },
+        { id: '17', name: 'Africa Cup of Nations', tier: 1, country: 'Africa', countryCode: 'INT' },
+        { id: '18', name: 'OFC Nations Cup', tier: 1, country: 'Oceania', countryCode: 'INT' }
     ]
 };
 
