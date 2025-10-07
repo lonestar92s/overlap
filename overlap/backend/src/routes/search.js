@@ -1560,22 +1560,24 @@ router.post('/natural-language', async (req, res) => {
             // Auto-select leagues based on location
             const country = searchParams.location.country?.toLowerCase();
             if (country === 'france' || searchParams.location.city?.toLowerCase().includes('paris')) {
-                leagueIds = ['61', '62']; // Ligue 1 and Ligue 2
+                leagueIds = ['61', '62', '10']; // Ligue 1, Ligue 2, and Friendlies
             } else if (country === 'england' || country === 'united kingdom') {
-                leagueIds = ['39', '40']; // Premier League and Championship
+                leagueIds = ['39', '40', '10']; // Premier League, Championship, and Friendlies
             } else if (country === 'spain') {
-                leagueIds = ['140', '141']; // La Liga and Segunda División
+                leagueIds = ['140', '141', '10']; // La Liga, Segunda División, and Friendlies
             } else if (country === 'germany') {
-                leagueIds = ['78', '79']; // Bundesliga and 2. Bundesliga
+                leagueIds = ['78', '79', '10']; // Bundesliga, 2. Bundesliga, and Friendlies
             } else if (country === 'italy') {
-                leagueIds = ['135', '136']; // Serie A and Serie B
+                leagueIds = ['135', '136', '10']; // Serie A, Serie B, and Friendlies
+            } else if (country === 'united states' || country === 'usa') {
+                leagueIds = ['253', '10', '31']; // MLS, Friendlies, and CONCACAF World Cup Qualifiers
             } else {
-                // Default to major European leagues
-                leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
+                // Default to major European leagues plus international competitions
+                leagueIds = ['39', '140', '135', '78', '61', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Friendlies, World Cup, Champions League
             }
         } else {
-            // Default to major European leagues
-            leagueIds = ['39', '140', '135', '78', '61']; // PL, La Liga, Serie A, Bundesliga, Ligue 1
+            // Default to major European leagues plus international competitions
+            leagueIds = ['39', '140', '135', '78', '61', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Friendlies, World Cup, Champions League
         }
         
         // For broad queries, still respect location-based league selection

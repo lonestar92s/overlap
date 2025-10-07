@@ -39,24 +39,26 @@ export const LEAGUES = [
   { id: '1', name: 'FIFA World Cup', country: 'International', countryCode: 'INT', tier: 1 },
   { id: '1083', name: 'UEFA Women\'s Euro 2025', country: 'Europe', countryCode: 'INT', tier: 1 },
   
-  // World Cup Qualifiers
-  { id: '5', name: 'UEFA World Cup Qualifiers', country: 'Europe', countryCode: 'INT', tier: 1 },
-  { id: '6', name: 'CONMEBOL World Cup Qualifiers', country: 'South America', countryCode: 'INT', tier: 1 },
-  { id: '7', name: 'CONCACAF World Cup Qualifiers', country: 'North America', countryCode: 'INT', tier: 1 },
-  { id: '8', name: 'AFC World Cup Qualifiers', country: 'Asia', countryCode: 'INT', tier: 1 },
-  { id: '9', name: 'CAF World Cup Qualifiers', country: 'Africa', countryCode: 'INT', tier: 1 },
-  { id: '10', name: 'OFC World Cup Qualifiers', country: 'Oceania', countryCode: 'INT', tier: 1 },
+  // World Cup Qualifiers (Real API IDs)
+  { id: '29', name: 'World Cup - Qualification Africa', country: 'Africa', countryCode: 'INT', tier: 1 },
+  { id: '30', name: 'World Cup - Qualification Asia', country: 'Asia', countryCode: 'INT', tier: 1 },
+  { id: '31', name: 'World Cup - Qualification CONCACAF', country: 'North America', countryCode: 'INT', tier: 1 },
+  { id: '32', name: 'World Cup - Qualification Europe', country: 'Europe', countryCode: 'INT', tier: 1 },
+  { id: '33', name: 'World Cup - Qualification Oceania', country: 'Oceania', countryCode: 'INT', tier: 1 },
+  { id: '34', name: 'World Cup - Qualification South America', country: 'South America', countryCode: 'INT', tier: 1 },
+  { id: '37', name: 'World Cup - Qualification Intercontinental Play-offs', country: 'International', countryCode: 'INT', tier: 1 },
   
   // International Friendlies
-  { id: '11', name: 'International Friendlies', country: 'International', countryCode: 'INT', tier: 1 },
+  { id: '10', name: 'Friendlies', country: 'International', countryCode: 'INT', tier: 1 },
   
   // Other International Competitions
-  { id: '12', name: 'UEFA Nations League', country: 'Europe', countryCode: 'INT', tier: 1 },
-  { id: '14', name: 'Copa América', country: 'South America', countryCode: 'INT', tier: 1 },
-  { id: '15', name: 'CONCACAF Gold Cup', country: 'North America', countryCode: 'INT', tier: 1 },
-  { id: '16', name: 'AFC Asian Cup', country: 'Asia', countryCode: 'INT', tier: 1 },
-  { id: '17', name: 'Africa Cup of Nations', country: 'Africa', countryCode: 'INT', tier: 1 },
-  { id: '18', name: 'OFC Nations Cup', country: 'Oceania', countryCode: 'INT', tier: 1 }
+  { id: '5', name: 'UEFA Nations League', country: 'Europe', countryCode: 'INT', tier: 1 },
+  { id: '6', name: 'Africa Cup of Nations', country: 'Africa', countryCode: 'INT', tier: 1 },
+  { id: '7', name: 'Asian Cup', country: 'Asia', countryCode: 'INT', tier: 1 },
+  { id: '8', name: 'World Cup - Women', country: 'International', countryCode: 'INT', tier: 1 },
+  { id: '9', name: 'Copa America', country: 'South America', countryCode: 'INT', tier: 1 },
+  { id: '15', name: 'FIFA Club World Cup', country: 'International', countryCode: 'INT', tier: 1 },
+  { id: '26', name: 'International Champions Cup', country: 'International', countryCode: 'INT', tier: 1 }
 ];
 
 // Popular leagues for quick selection
@@ -69,8 +71,8 @@ export const POPULAR_LEAGUES = [
   { id: '61', name: 'Ligue 1', country: 'France' },
   { id: '2', name: 'Champions League', country: 'Europe' },
   { id: '1', name: 'FIFA World Cup', country: 'International' },
-  { id: '11', name: 'International Friendlies', country: 'International' },
-  { id: '5', name: 'UEFA World Cup Qualifiers', country: 'Europe' }
+  { id: '10', name: 'Friendlies', country: 'International' },
+  { id: '32', name: 'World Cup - Qualification Europe', country: 'Europe' }
 ];
 
 // Helper functions

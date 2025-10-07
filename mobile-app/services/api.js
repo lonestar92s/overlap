@@ -131,7 +131,28 @@ const AVAILABLE_LEAGUES = [
   { id: 262, name: 'Liga MX', country: 'Mexico', coords: [23.6345, -102.5528] },
   { id: 188, name: 'Scottish Premiership', country: 'Scotland', coords: [56.4907, -4.2026] },
   { id: 207, name: 'Swiss Super League', country: 'Switzerland', coords: [46.8182, 8.2275] },
-  { id: 244, name: 'Veikkausliiga', country: 'Finland', coords: [64.0, 26.0] }
+  { id: 244, name: 'Veikkausliiga', country: 'Finland', coords: [64.0, 26.0] },
+  
+  // International Competitions
+  { id: 1, name: 'FIFA World Cup', country: 'International', coords: null, isInternational: true },
+  { id: 4, name: 'European Championship', country: 'Europe', coords: null, isInternational: true },
+  { id: 5, name: 'UEFA Nations League', country: 'Europe', coords: null, isInternational: true },
+  { id: 6, name: 'Africa Cup of Nations', country: 'Africa', coords: null, isInternational: true },
+  { id: 7, name: 'Asian Cup', country: 'Asia', coords: null, isInternational: true },
+  { id: 8, name: 'World Cup - Women', country: 'International', coords: null, isInternational: true },
+  { id: 9, name: 'Copa America', country: 'South America', coords: null, isInternational: true },
+  { id: 10, name: 'Friendlies', country: 'International', coords: null, isInternational: true },
+  { id: 13, name: 'Copa Libertadores', country: 'South America', coords: null, isInternational: true },
+  { id: 15, name: 'FIFA Club World Cup', country: 'International', coords: null, isInternational: true },
+  { id: 26, name: 'International Champions Cup', country: 'International', coords: null, isInternational: true },
+  { id: 29, name: 'World Cup - Qualification Africa', country: 'Africa', coords: null, isInternational: true },
+  { id: 30, name: 'World Cup - Qualification Asia', country: 'Asia', coords: null, isInternational: true },
+  { id: 31, name: 'World Cup - Qualification CONCACAF', country: 'North America', coords: null, isInternational: true },
+  { id: 32, name: 'World Cup - Qualification Europe', country: 'Europe', coords: null, isInternational: true },
+  { id: 33, name: 'World Cup - Qualification Oceania', country: 'Oceania', coords: null, isInternational: true },
+  { id: 34, name: 'World Cup - Qualification South America', country: 'South America', coords: null, isInternational: true },
+  { id: 37, name: 'World Cup - Qualification Intercontinental Play-offs', country: 'International', coords: null, isInternational: true },
+  { id: 1083, name: 'UEFA Women\'s Euro 2025', country: 'Europe', coords: null, isInternational: true }
 ];
 
 class ApiService {
@@ -560,11 +581,10 @@ class ApiService {
     for (const league of AVAILABLE_LEAGUES) {
       let shouldInclude = false;
 
-      // Always include international competitions in their regions
+      // Always include international competitions globally
       if (league.isInternational) {
-        if (isInEurope) {
-          shouldInclude = true; // Champions League, Europa League, etc.
-        }
+        shouldInclude = true; // International competitions can happen anywhere
+        console.log(`✅ Including international competition: ${league.name}`);
       } else {
         // Skip leagues without coordinates
         if (!league.coords || league.coords.length !== 2) {
