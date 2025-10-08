@@ -1893,17 +1893,17 @@ router.post('/natural-language', async (req, res) => {
                 } else if (country === 'italy') {
                     leagueIds = ['135', '136', '10']; // Serie A, Serie B, and Friendlies
                 } else if (country === 'portugal') {
-                    leagueIds = ['94', '97', '10']; // Primeira Liga, Taca de Portugal, and Friendlies
+                    leagueIds = ['94', '96', '97', '10']; // Primeira Liga, Taca de Portugal, Taca da Liga, and Friendlies
                 } else if (country === 'united states' || country === 'usa') {
                     leagueIds = ['253', '10', '31']; // MLS, Friendlies, and CONCACAF World Cup Qualifiers
                 } else {
                     // Default to major European leagues plus international competitions
-                    leagueIds = ['39', '140', '135', '78', '61', '94', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca de Portugal, Eredivisie, Friendlies, World Cup, Champions League
+                    leagueIds = ['39', '140', '135', '78', '61', '94', '96', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca de Portugal, Taca da Liga, Eredivisie, Friendlies, World Cup, Champions League
                 }
                 console.log('🗺️ Using location-based league selection:', leagueIds);
             } else {
                 // Default to major European leagues plus international competitions
-                leagueIds = ['39', '140', '135', '78', '61', '94', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca de Portugal, Eredivisie, Friendlies, World Cup, Champions League
+                leagueIds = ['39', '140', '135', '78', '61', '94', '96', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca de Portugal, Taca da Liga, Eredivisie, Friendlies, World Cup, Champions League
                 console.log('🌍 Using default league selection:', leagueIds);
             }
         }

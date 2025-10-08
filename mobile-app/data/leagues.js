@@ -13,7 +13,8 @@ export const LEAGUES = [
   { id: '140', name: 'La Liga', country: 'Spain', countryCode: 'ES', tier: 1 },
   
   // Portugal
-  { id: '97', name: 'Taca de Portugal', country: 'Portugal', countryCode: 'PT', tier: 1 },
+  { id: '96', name: 'Taca de Portugal', country: 'Portugal', countryCode: 'PT', tier: 1 },
+  { id: '97', name: 'Taca da Liga', country: 'Portugal', countryCode: 'PT', tier: 1 },
   
   // Bundesliga
   { id: '78', name: 'Bundesliga', country: 'Germany', countryCode: 'DE', tier: 1 },
