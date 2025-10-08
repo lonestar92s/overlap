@@ -96,7 +96,19 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
     const date = matchData.fixture?.date || matchData.date;
     
     // IMPORTANT: Save the complete venue object for map functionality
-    const venueData = matchData.fixture?.venue || matchData.venue || {};
+    let venueData = matchData.fixture?.venue || matchData.venue || {};
+    
+    // Ensure venue data has the required structure for maps and recommendations
+    if (!venueData.coordinates && venueData.name && venueData.city) {
+      // If coordinates are missing but we have name/city, create a proper venue object
+      venueData = {
+        name: venueData.name,
+        city: venueData.city,
+        country: venueData.country || matchData.league?.country || 'Unknown Country',
+        coordinates: null, // Will be geocoded by the backend when needed
+        ...venueData // Keep any other properties
+      };
+    }
     
 
     

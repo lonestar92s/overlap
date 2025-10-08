@@ -716,8 +716,17 @@ router.get('/popular', async (req, res) => {
             popularLeagueIds = ids;
             popularLeagueNames = ids.map(id => `League ${id}`);
         } else {
-            const leagueMappings = { 39: 'Premier League', 140: 'La Liga', 135: 'Serie A', 78: 'Bundesliga', 61: 'Ligue 1' };
-            popularLeagueIds = [39, 140, 135, 78, 61];
+            const leagueMappings = { 
+                39: 'Premier League', 
+                140: 'La Liga', 
+                135: 'Serie A', 
+                78: 'Bundesliga', 
+                61: 'Ligue 1',
+                94: 'Primeira Liga',
+                97: 'Taca de Portugal',
+                88: 'Eredivisie'
+            };
+            popularLeagueIds = [39, 140, 135, 78, 61, 94, 97, 88];
             popularLeagueNames = popularLeagueIds.map(id => leagueMappings[id] || `League ${id}`);
         }
         const today = new Date();

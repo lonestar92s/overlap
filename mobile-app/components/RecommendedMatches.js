@@ -231,7 +231,7 @@ const RecommendedMatches = ({ tripId, onMatchAdded }) => {
           
           <FlatList
             data={selectedRecommendation?.alternativeDates || []}
-            keyExtractor={(item, index) => index.toString()}
+            keyExtractor={(item, index) => `alt-date-${index}`}
             renderItem={({ item: date }) => (
               <TouchableOpacity style={styles.alternativeDateItem}>
                 <Text style={styles.alternativeDateText}>
@@ -305,7 +305,7 @@ const RecommendedMatches = ({ tripId, onMatchAdded }) => {
       <FlatList
         data={recommendations}
         renderItem={renderRecommendationItem}
-        keyExtractor={(item) => item.matchId}
+        keyExtractor={(item, index) => `${item.matchId}-${index}`}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
       />

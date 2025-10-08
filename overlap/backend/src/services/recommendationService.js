@@ -17,6 +17,8 @@ class RecommendationService {
     constructor() {
         this.defaultRadius = 400; // miles
         this.earthRadiusMiles = 3959; // Earth's radius in miles
+        this.cache = new Map(); // In-memory cache
+        this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
     }
 
     /**
@@ -30,25 +32,45 @@ class RecommendationService {
         try {
             console.log(`🎯 Generating recommendations for trip: ${tripId}`);
             
+            // Check cache first
+            const cacheKey = this.generateCacheKey(tripId, user, trip);
+            const cachedResult = this.getFromCache(cacheKey);
+            if (cachedResult) {
+                console.log(`⚡ Returning cached recommendations for trip: ${tripId}`);
+                return {
+                    recommendations: cachedResult,
+                    cached: true
+                };
+            }
+            
             // Get trip date range
             const tripDates = this.getTripDateRange(trip);
             if (!tripDates.start || !tripDates.end) {
                 console.log('❌ Invalid trip dates');
-                return [];
+                return {
+                    recommendations: [],
+                    cached: false
+                };
             }
 
             // Get days without matches
             const daysWithoutMatches = this.getDaysWithoutMatches(trip, tripDates);
             if (daysWithoutMatches.length === 0) {
                 console.log('✅ Trip already has matches for all days');
-                return [];
+                return {
+                    recommendations: [],
+                    cached: false
+                };
             }
 
             // Get saved match venues for proximity search
-            const savedMatchVenues = this.extractVenuesFromTrip(trip);
+            const savedMatchVenues = await this.extractVenuesFromTrip(trip);
             if (savedMatchVenues.length === 0) {
-                console.log('❌ No saved matches to base recommendations on');
-                return [];
+                console.log('❌ No saved matches with coordinates to base recommendations on');
+                return {
+                    recommendations: [],
+                    cached: false
+                };
             }
 
             // Get user's subscription tier for league filtering
@@ -75,12 +97,21 @@ class RecommendationService {
                 }
             }
 
+            // Cache the results
+            this.setCache(cacheKey, recommendations);
+            
             console.log(`✅ Generated ${recommendations.length} recommendations`);
-            return recommendations;
+            return {
+                recommendations,
+                cached: false
+            };
 
         } catch (error) {
             console.error('❌ Error generating recommendations:', error);
-            return [];
+            return {
+                recommendations: [],
+                cached: false
+            };
         }
     }
 
@@ -485,19 +516,46 @@ class RecommendationService {
         return daysWithoutMatches;
     }
 
-    extractVenuesFromTrip(trip) {
+    async extractVenuesFromTrip(trip) {
         const venues = [];
         
-        trip.matches.forEach(match => {
+        for (const match of trip.matches) {
             if (match.venueData && match.venueData.coordinates) {
+                // Venue already has coordinates
                 venues.push({
                     name: match.venue,
                     coordinates: match.venueData.coordinates,
                     city: match.venueData.city,
                     country: match.venueData.country
                 });
+            } else if (match.venueData && match.venueData.name && match.venueData.city) {
+                // Try to geocode the venue
+                try {
+                    const geocodingService = require('./geocodingService');
+                    const coordinates = await geocodingService.geocodeVenueCoordinates(
+                        match.venueData.name,
+                        match.venueData.city,
+                        match.venueData.country
+                    );
+                    
+                    if (coordinates) {
+                        venues.push({
+                            name: match.venue,
+                            coordinates: coordinates,
+                            city: match.venueData.city,
+                            country: match.venueData.country
+                        });
+                        console.log(`✅ Geocoded venue for recommendations: ${match.venue} at [${coordinates[0]}, ${coordinates[1]}]`);
+                    } else {
+                        console.log(`⚠️ Could not geocode venue for recommendations: ${match.venue}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Error geocoding venue ${match.venue}:`, error);
+                }
+            } else {
+                console.log(`⚠️ Match ${match.matchId} has insufficient venue data for recommendations`);
             }
-        });
+        }
 
         return venues;
     }
@@ -535,6 +593,7 @@ class RecommendationService {
             '78', // Bundesliga
             '88', // Eredivisie
             '94', // Primeira Liga
+            '97', // Taca de Portugal
             '203', // Süper Lig
             '113', // Belgian Pro League
             '144', // Jupiler Pro League
@@ -551,6 +610,66 @@ class RecommendationService {
                   Math.sin(dLon/2) * Math.sin(dLon/2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         return this.earthRadiusMiles * c;
+    }
+
+    // Cache methods
+    generateCacheKey(tripId, user, trip) {
+        // Create a cache key based on trip ID, user subscription, and trip content
+        const userKey = `${user._id}-${user.subscription?.tier || 'freemium'}-${user.preferences?.recommendationRadius || this.defaultRadius}`;
+        const tripKey = `${tripId}-${trip.matches?.length || 0}-${JSON.stringify(trip.matches?.map(m => m.id).sort())}`;
+        return `recommendations:${userKey}:${tripKey}`;
+    }
+
+    getFromCache(key) {
+        const cached = this.cache.get(key);
+        if (!cached) {
+            return null;
+        }
+
+        // Check if cache has expired
+        if (Date.now() - cached.timestamp > this.cacheExpiry) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        return cached.data;
+    }
+
+    setCache(key, data) {
+        this.cache.set(key, {
+            data: data,
+            timestamp: Date.now()
+        });
+
+        // Clean up old cache entries periodically
+        this.cleanupCache();
+    }
+
+    cleanupCache() {
+        const now = Date.now();
+        for (const [key, value] of this.cache.entries()) {
+            if (now - value.timestamp > this.cacheExpiry) {
+                this.cache.delete(key);
+            }
+        }
+    }
+
+    // Method to invalidate cache for a specific trip
+    invalidateTripCache(tripId) {
+        for (const key of this.cache.keys()) {
+            if (key.includes(`:${tripId}-`)) {
+                this.cache.delete(key);
+            }
+        }
+    }
+
+    // Method to invalidate cache for a specific user
+    invalidateUserCache(userId) {
+        for (const key of this.cache.keys()) {
+            if (key.includes(`:${userId}-`)) {
+                this.cache.delete(key);
+            }
+        }
     }
 }
 

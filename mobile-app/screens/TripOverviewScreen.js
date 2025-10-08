@@ -14,7 +14,7 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
-import RecommendedMatches from '../components/RecommendedMatches';
+import apiService from '../services/api';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -37,18 +37,119 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [planningModalVisible, setPlanningModalVisible] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
 
   useEffect(() => {
     if (itineraryId) {
       const foundItinerary = getItineraryById(itineraryId);
       if (foundItinerary) {
-
         setItinerary(foundItinerary);
+        // Fetch recommendations if trip has matches
+        if (foundItinerary.matches && foundItinerary.matches.length > 0) {
+          fetchRecommendations(foundItinerary.id || foundItinerary._id);
+        }
       }
       setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
+
+  const fetchRecommendations = async (tripId, forceRefresh = false) => {
+    setRecommendationsLoading(true);
+    try {
+      const data = await apiService.getRecommendations(tripId, forceRefresh);
+      if (data.success) {
+        setRecommendations(data.recommendations || []);
+        
+        // Track that user viewed recommendations (only if not cached)
+        if (!data.cached) {
+          data.recommendations?.forEach(rec => {
+            trackRecommendation(rec.matchId, 'viewed', tripId, rec.recommendedForDate, rec.score, rec.reason);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching recommendations:', err);
+    } finally {
+      setRecommendationsLoading(false);
+    }
+  };
+
+  const trackRecommendation = async (matchId, action, tripId, recommendedDate, score, reason) => {
+    try {
+      await apiService.trackRecommendation(matchId, action, tripId, recommendedDate, score, reason);
+    } catch (err) {
+      console.error('Error tracking recommendation:', err);
+    }
+  };
+
+  const handleAddRecommendationToTrip = async (recommendation) => {
+    try {
+      // Track that user saved the recommendation
+      await trackRecommendation(
+        recommendation.matchId, 
+        'saved', 
+        itinerary.id || itinerary._id, 
+        recommendation.recommendedForDate, 
+        recommendation.score, 
+        recommendation.reason
+      );
+
+      // Invalidate cache since trip content has changed
+      apiService.invalidateRecommendationCache(itinerary.id || itinerary._id);
+
+      // Format match data for the mobile app API
+      const formattedMatchData = {
+        matchId: recommendation.match.id || recommendation.match.matchId,
+        homeTeam: {
+          name: recommendation.match.teams.home.name,
+          logo: recommendation.match.teams.home.logo
+        },
+        awayTeam: {
+          name: recommendation.match.teams.away.name,
+          logo: recommendation.match.teams.away.logo
+        },
+        league: recommendation.match.league.name,
+        venue: recommendation.match.fixture.venue.name,
+        venueData: recommendation.match.fixture.venue,
+        date: recommendation.match.fixture.date
+      };
+
+      // Add match to trip
+      await addMatchToItinerary(itinerary.id || itinerary._id, formattedMatchData);
+      
+      // Remove the recommendation from the list
+      setRecommendations(prev => prev.filter(rec => rec.matchId !== recommendation.matchId));
+      
+    } catch (err) {
+      console.error('Error adding recommendation to trip:', err);
+      Alert.alert('Error', 'Failed to add match to trip');
+    }
+  };
+
+  const handleDismissRecommendation = async (recommendation) => {
+    try {
+      // Track that user dismissed the recommendation
+      await trackRecommendation(
+        recommendation.matchId, 
+        'dismissed', 
+        itinerary.id || itinerary._id, 
+        recommendation.recommendedForDate, 
+        recommendation.score, 
+        recommendation.reason
+      );
+
+      // Invalidate cache since user preferences have changed
+      apiService.invalidateRecommendationCache(itinerary.id || itinerary._id);
+
+      // Remove the recommendation from the list
+      setRecommendations(prev => prev.filter(rec => rec.matchId !== recommendation.matchId));
+      
+    } catch (err) {
+      console.error('Error dismissing recommendation:', err);
+    }
+  };
 
   const handleMatchPress = (match) => {
     setSelectedMatch(match);
@@ -130,8 +231,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
       });
     });
     
+    // Add recommendations section if we have recommendations
+    if (recommendations.length > 0) {
+      data.push({ type: 'recommendations-header' });
+      recommendations.forEach((recommendation, index) => {
+        data.push({ type: 'recommendation', ...recommendation, index });
+      });
+    }
+    
     return data;
-  }, [groupedMatches]);
+  }, [groupedMatches, recommendations]);
 
   // Format date for display with smart labels
   // Shows "Today", "Tomorrow", or formatted date (e.g., "Monday, January 3")
@@ -191,6 +300,64 @@ const TripOverviewScreen = ({ navigation, route }) => {
           showHeart={true}
           style={styles.matchCardStyle}
         />
+      </View>
+    );
+  };
+
+  const renderRecommendationItem = ({ item }) => {
+    const recommendation = item;
+    const match = recommendation.match;
+    
+    const transformedMatch = {
+      id: match.id || match.matchId,
+      fixture: {
+        id: match.id || match.matchId,
+        date: match.fixture.date,
+        venue: match.fixture.venue
+      },
+      teams: {
+        home: {
+          id: match.teams.home.id,
+          name: match.teams.home.name,
+          logo: match.teams.home.logo
+        },
+        away: {
+          id: match.teams.away.id,
+          name: match.teams.away.name,
+          logo: match.teams.away.logo
+        }
+      },
+      league: {
+        id: match.league.id,
+        name: match.league.name
+      }
+    };
+
+    return (
+      <View style={styles.recommendationItem}>
+        <MatchCard
+          match={transformedMatch}
+          onPress={() => {}} // No press action for recommendations
+          variant="default"
+          showHeart={true}
+          style={styles.matchCardStyle}
+        />
+        
+        {/* Recommendation-specific info and actions */}
+        <View style={styles.recommendationInfo}>
+          <View style={styles.recommendationReason}>
+            <Text style={styles.recommendationReasonText}>💡 {recommendation.reason}</Text>
+          </View>
+          
+          <View style={styles.recommendationActions}>
+            <TouchableOpacity
+              style={styles.dismissRecommendationButton}
+              onPress={() => handleDismissRecommendation(recommendation)}
+            >
+              <Text style={styles.dismissRecommendationButtonText}>Not Interested</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   };
@@ -280,11 +447,32 @@ const TripOverviewScreen = ({ navigation, route }) => {
                   </Text>
                 </View>
               );
+            } else if (item.type === 'recommendations-header') {
+              return (
+                <View style={styles.recommendationsHeader}>
+                  <Icon name="recommend" size={20} color="#FF385C" />
+                  <Text style={styles.recommendationsHeaderText}>
+                    Recommended Matches to Check Out on Your Trip
+                  </Text>
+                  <View style={styles.recommendationsCountChip}>
+                    <Text style={styles.recommendationsCountText}>
+                      {recommendations.length} recommendation{recommendations.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+              );
+            } else if (item.type === 'recommendation') {
+              return renderRecommendationItem({ item });
             } else {
               return renderMatchItem({ item });
             }
           }}
-          keyExtractor={(item, index) => (item.type === 'header' ? `header-${index}` : item.matchId || `match-${index}`).toString()}
+          keyExtractor={(item, index) => {
+            if (item.type === 'header') return `header-${index}`;
+            if (item.type === 'recommendations-header') return `recommendations-header-${index}`;
+            if (item.type === 'recommendation') return `recommendation-${item.matchId}-${index}`;
+            return item.matchId || `match-${index}`;
+          }}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
@@ -292,40 +480,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
         renderEmptyState()
       )}
 
-      {/* Recommended Matches Section */}
-      {itinerary.matches && itinerary.matches.length > 0 && (
-        <RecommendedMatches 
-          tripId={itinerary.id || itinerary._id}
-          onMatchAdded={async (matchData) => {
-            try {
-              // Format match data for the mobile app API
-              const formattedMatchData = {
-                matchId: matchData.id || matchData.matchId,
-                homeTeam: {
-                  name: matchData.teams.home.name,
-                  logo: matchData.teams.home.logo
-                },
-                awayTeam: {
-                  name: matchData.teams.away.name,
-                  logo: matchData.teams.away.logo
-                },
-                league: matchData.league.name,
-                venue: matchData.fixture.venue.name,
-                venueData: matchData.fixture.venue,
-                date: matchData.fixture.date
-              };
-
-              // Add match to trip using the existing context
-              await addMatchToItinerary(itinerary.id || itinerary._id, formattedMatchData);
-              console.log('Match added to trip successfully');
-              return true;
-            } catch (error) {
-              console.error('Error adding match to trip:', error);
-              return false;
-            }
-          }}
-        />
-      )}
 
       {/* Map Button - Floating at bottom */}
       <TouchableOpacity
@@ -653,6 +807,70 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
     color: '#333',
+  },
+  // Recommendation styles
+  recommendationsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
+  },
+  recommendationsHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginLeft: 8,
+    flex: 1,
+  },
+  recommendationsCountChip: {
+    backgroundColor: '#FF385C',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  recommendationsCountText: {
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
+  },
+  recommendationItem: {
+    marginBottom: 16,
+  },
+  recommendationInfo: {
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  recommendationReason: {
+    marginBottom: 12,
+  },
+  recommendationReasonText: {
+    fontSize: 14,
+    color: '#FF385C',
+    fontStyle: 'italic',
+  },
+  recommendationActions: {
+    alignItems: 'center',
+  },
+  dismissRecommendationButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  dismissRecommendationButtonText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

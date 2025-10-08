@@ -39,17 +39,25 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
         }
 
         // Generate recommendations
-        const recommendations = await recommendationService.getRecommendationsForTrip(
+        const result = await recommendationService.getRecommendationsForTrip(
             tripId,
             user,
             trip
         );
 
+        // Set cache headers for client-side caching
+        res.set({
+            'Cache-Control': 'private, max-age=3600', // Cache for 1 hour on client
+            'ETag': `"${tripId}-${user._id}-${Date.now()}"`, // Simple ETag for cache validation
+            'Last-Modified': new Date().toUTCString()
+        });
+
         res.json({
             success: true,
-            recommendations,
+            recommendations: result.recommendations || result, // Handle both formats for backward compatibility
             tripId,
-            generatedAt: new Date().toISOString()
+            generatedAt: new Date().toISOString(),
+            cached: result.cached || false
         });
 
     } catch (error) {
@@ -114,6 +122,12 @@ router.post('/:matchId/track', authenticateToken, async (req, res) => {
 
         user.recommendationHistory.push(recommendationEntry);
         await user.save();
+
+        // Invalidate cache when user interacts with recommendations
+        if (tripId) {
+            recommendationService.invalidateTripCache(tripId);
+        }
+        recommendationService.invalidateUserCache(req.user.id);
 
         res.json({
             success: true,

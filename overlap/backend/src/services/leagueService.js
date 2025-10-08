@@ -25,6 +25,7 @@ class LeagueService {
             '3': { name: 'Europa League', country: 'Europe' },
             '848': { name: 'Europa Conference League', country: 'Europe' },
             '94': { name: 'Primeira Liga', country: 'Portugal' },
+            '97': { name: 'Taca de Portugal', country: 'Portugal' },
             '88': { name: 'Eredivisie', country: 'Netherlands' },
             '203': { name: 'Süper Lig', country: 'Turkey' },
             '218': { name: 'Austrian Bundesliga', country: 'Austria' },

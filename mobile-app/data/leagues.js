@@ -12,6 +12,9 @@ export const LEAGUES = [
   // La Liga
   { id: '140', name: 'La Liga', country: 'Spain', countryCode: 'ES', tier: 1 },
   
+  // Portugal
+  { id: '97', name: 'Taca de Portugal', country: 'Portugal', countryCode: 'PT', tier: 1 },
+  
   // Bundesliga
   { id: '78', name: 'Bundesliga', country: 'Germany', countryCode: 'DE', tier: 1 },
   
@@ -69,6 +72,8 @@ export const POPULAR_LEAGUES = [
   { id: '78', name: 'Bundesliga', country: 'Germany' },
   { id: '135', name: 'Serie A', country: 'Italy' },
   { id: '61', name: 'Ligue 1', country: 'France' },
+  { id: '94', name: 'Primeira Liga', country: 'Portugal' },
+  { id: '88', name: 'Eredivisie', country: 'Netherlands' },
   { id: '2', name: 'Champions League', country: 'Europe' },
   { id: '1', name: 'FIFA World Cup', country: 'International' },
   { id: '10', name: 'Friendlies', country: 'International' },

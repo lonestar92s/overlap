@@ -216,13 +216,38 @@ router.post('/:id/matches', auth, async (req, res) => {
             });
         }
 
+        // Try to geocode venue if coordinates are missing
+        let finalVenueData = venueData;
+        if (venueData && !venueData.coordinates && venueData.name && venueData.city) {
+            try {
+                const geocodingService = require('../services/geocodingService');
+                const coordinates = await geocodingService.geocodeVenueCoordinates(
+                    venueData.name,
+                    venueData.city,
+                    venueData.country
+                );
+                
+                if (coordinates) {
+                    finalVenueData = {
+                        ...venueData,
+                        coordinates: coordinates
+                    };
+                    console.log(`✅ Geocoded venue for trip: ${venueData.name} at [${coordinates[0]}, ${coordinates[1]}]`);
+                } else {
+                    console.log(`⚠️ Could not geocode venue for trip: ${venueData.name}`);
+                }
+            } catch (error) {
+                console.error(`❌ Error geocoding venue ${venueData.name}:`, error);
+            }
+        }
+
         const matchToSave = {
             matchId,
             homeTeam,
             awayTeam,
             league,
             venue,
-            venueData: venueData || null,  // Save the complete venue object
+            venueData: finalVenueData || null,  // Save the complete venue object
             date: new Date(date),
             addedAt: new Date(),
             planning: {

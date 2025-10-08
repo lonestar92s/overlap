@@ -152,16 +152,25 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   const transformMatchesForMap = (matches) => {
     return matches.map(match => {
       // Transform the saved match data back to the structure expected by MatchMapView
+      let venueData = match.venueData;
+      
+      // If venueData doesn't have coordinates, try to create a basic venue object
+      if (!venueData || !venueData.coordinates) {
+        venueData = {
+          name: match.venue || 'Unknown Venue',
+          city: match.venueData?.city || 'Unknown City',
+          country: match.venueData?.country || 'Unknown Country',
+          coordinates: null // Will be filtered out by map component
+        };
+      }
+      
       return {
         ...match,
         id: match.matchId,
         fixture: {
           id: match.matchId,
           date: match.date,
-          venue: match.venueData || {
-            name: match.venue,
-            coordinates: null
-          }
+          venue: venueData
         },
         teams: {
           home: match.homeTeam,

@@ -4,6 +4,10 @@ const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/
 // Simple token storage for mobile app
 let authToken = null;
 
+// Client-side cache for recommendations
+const recommendationCache = new Map();
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+
 // Get authentication token from storage or memory
 const getAuthToken = async () => {
   if (authToken) {
@@ -122,6 +126,7 @@ const AVAILABLE_LEAGUES = [
   { id: 3, name: 'Europa League', country: 'Europe', coords: null, isInternational: true },
   { id: 848, name: 'Europa Conference League', country: 'Europe', coords: null, isInternational: true },
   { id: 94, name: 'Primeira Liga', country: 'Portugal', coords: [39.3999, -8.2245] },
+  { id: 97, name: 'Taca de Portugal', country: 'Portugal', coords: [39.3999, -8.2245] },
   { id: 88, name: 'Eredivisie', country: 'Netherlands', coords: [52.1326, 5.2913] },
   { id: 144, name: 'Jupiler Pro League', country: 'Belgium', coords: [50.5039, 4.4699] },
   { id: 203, name: 'Süper Lig', country: 'Turkey', coords: [38.9637, 35.2433] },
@@ -619,6 +624,8 @@ class ApiService {
           'Germany': isInEurope && centerLat > 47 && centerLat < 55 && centerLng > 5 && centerLng < 15,
           'Italy': isInEurope && centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19,
           'France': isInEurope && centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8,
+          'Portugal': isInEurope && centerLat > 36 && centerLat < 42 && centerLng > -10 && centerLng < -6,
+          'Netherlands': isInEurope && centerLat > 50 && centerLat < 54 && centerLng > 3 && centerLng < 8,
           'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
           'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
         };
@@ -1062,9 +1069,22 @@ class ApiService {
   }
 
   // Recommendation API methods
-  async getRecommendations(tripId) {
+  async getRecommendations(tripId, forceRefresh = false) {
     try {
       console.log('🎯 API Service - Getting recommendations for trip:', tripId);
+      
+      // Check client-side cache first
+      if (!forceRefresh) {
+        const cacheKey = `recommendations:${tripId}`;
+        const cached = recommendationCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+          console.log('⚡ API Service - Returning cached recommendations');
+          return {
+            ...cached.data,
+            cached: true
+          };
+        }
+      }
       
       const response = await fetch(`${this.baseURL}/recommendations/trips/${tripId}/recommendations`, {
         headers: {
@@ -1079,6 +1099,13 @@ class ApiService {
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch recommendations');
       }
+      
+      // Cache the response
+      const cacheKey = `recommendations:${tripId}`;
+      recommendationCache.set(cacheKey, {
+        data,
+        timestamp: Date.now()
+      });
       
       return data;
     } catch (error) {
@@ -1118,6 +1145,24 @@ class ApiService {
       console.error('Error tracking recommendation:', error);
       throw error;
     }
+  }
+
+  // Cache management methods
+  invalidateRecommendationCache(tripId) {
+    if (tripId) {
+      const cacheKey = `recommendations:${tripId}`;
+      recommendationCache.delete(cacheKey);
+      console.log('🗑️ API Service - Invalidated recommendation cache for trip:', tripId);
+    } else {
+      // Clear all recommendation cache
+      recommendationCache.clear();
+      console.log('🗑️ API Service - Cleared all recommendation cache');
+    }
+  }
+
+  clearAllCache() {
+    recommendationCache.clear();
+    console.log('🗑️ API Service - Cleared all cache');
   }
 }
 
