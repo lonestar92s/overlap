@@ -14,6 +14,7 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
+import RecommendedMatches from '../components/RecommendedMatches';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -30,7 +31,7 @@ import MatchPlanningModal from '../components/MatchPlanningModal';
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById, updateMatchPlanning } = useItineraries();
+  const { getItineraryById, updateMatchPlanning, addMatchToItinerary } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -289,6 +290,41 @@ const TripOverviewScreen = ({ navigation, route }) => {
         />
       ) : (
         renderEmptyState()
+      )}
+
+      {/* Recommended Matches Section */}
+      {itinerary.matches && itinerary.matches.length > 0 && (
+        <RecommendedMatches 
+          tripId={itinerary.id || itinerary._id}
+          onMatchAdded={async (matchData) => {
+            try {
+              // Format match data for the mobile app API
+              const formattedMatchData = {
+                matchId: matchData.id || matchData.matchId,
+                homeTeam: {
+                  name: matchData.teams.home.name,
+                  logo: matchData.teams.home.logo
+                },
+                awayTeam: {
+                  name: matchData.teams.away.name,
+                  logo: matchData.teams.away.logo
+                },
+                league: matchData.league.name,
+                venue: matchData.fixture.venue.name,
+                venueData: matchData.fixture.venue,
+                date: matchData.fixture.date
+              };
+
+              // Add match to trip using the existing context
+              await addMatchToItinerary(itinerary.id || itinerary._id, formattedMatchData);
+              console.log('Match added to trip successfully');
+              return true;
+            } catch (error) {
+              console.error('Error adding match to trip:', error);
+              return false;
+            }
+          }}
+        />
       )}
 
       {/* Map Button - Floating at bottom */}

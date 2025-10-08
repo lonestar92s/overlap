@@ -1060,6 +1060,65 @@ class ApiService {
       throw error;
     }
   }
+
+  // Recommendation API methods
+  async getRecommendations(tripId) {
+    try {
+      console.log('🎯 API Service - Getting recommendations for trip:', tripId);
+      
+      const response = await fetch(`${this.baseURL}/recommendations/trips/${tripId}/recommendations`, {
+        headers: {
+          'Authorization': `Bearer ${await getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      console.log('🎯 API Service - Recommendations response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch recommendations');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      throw error;
+    }
+  }
+
+  async trackRecommendation(matchId, action, tripId, recommendedDate, score, reason) {
+    try {
+      console.log('📊 API Service - Tracking recommendation:', { matchId, action, tripId });
+      
+      const response = await fetch(`${this.baseURL}/recommendations/${matchId}/track`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action,
+          tripId,
+          recommendedDate,
+          score,
+          reason
+        })
+      });
+      
+      const data = await response.json();
+      console.log('📊 API Service - Track recommendation response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to track recommendation');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error tracking recommendation:', error);
+      throw error;
+    }
+  }
 }
 
 // Create API service instance
