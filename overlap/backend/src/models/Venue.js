@@ -10,6 +10,9 @@ const venueSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    aliases: [{
+        type: String
+    }],
     city: {
         type: String,
         required: true

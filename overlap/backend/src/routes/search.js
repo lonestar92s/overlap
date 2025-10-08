@@ -6,6 +6,7 @@ const teamService = require('../services/teamService');
 const leagueService = require('../services/leagueService');
 const venueService = require('../services/venueService');
 const geocodingService = require('../services/geocodingService');
+const Team = require('../models/Team');
 const router = express.Router();
 
 // API-Sports configuration
@@ -179,13 +180,34 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
         }
         
         if (!venueInfo) {
-            venueInfo = {
-                id: venue?.id || null,
-                name: venue?.name || 'Unknown Venue',
-                city: venue?.city || 'Unknown City',
-                country: match.league?.country || 'Unknown Country',
-                coordinates: null
-            };
+            // Try team venue fallback if no venue ID
+            const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
+            const team = await Team.findOne({
+                $or: [
+                    { name: mappedHome },
+                    { name: { $regex: new RegExp(`^${mappedHome}$`, 'i') } },
+                    { apiName: mappedHome },
+                    { aliases: mappedHome }
+                ]
+            });
+            
+            if (team?.venue?.coordinates) {
+                venueInfo = {
+                    id: venue?.id || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                    name: team.venue.name || venue?.name || 'Unknown Venue',
+                    city: team.city || venue?.city || 'Unknown City',
+                    country: team.country || match.league?.country || 'Unknown Country',
+                    coordinates: team.venue.coordinates
+                };
+            } else {
+                venueInfo = {
+                    id: venue?.id || null,
+                    name: venue?.name || 'Unknown Venue',
+                    city: venue?.city || 'Unknown City',
+                    country: match.league?.country || 'Unknown Country',
+                    coordinates: venue?.coordinates || null  // Use API coordinates if available
+                };
+            }
         }
 
         const transformed = {

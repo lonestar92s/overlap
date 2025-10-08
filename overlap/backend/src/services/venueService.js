@@ -70,8 +70,24 @@ class VenueService {
                 
                 venue = await Venue.findOne(caseInsensitiveQuery);
             }
+
+            // Strategy 3: Search by aliases
+            if (!venue) {
+                const escapeRegex = (string) => {
+                    return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                };
+                
+                const aliasQuery = {
+                    aliases: { $regex: new RegExp(`^${escapeRegex(venueName)}$`, 'i') }
+                };
+                if (city) {
+                    aliasQuery.city = { $regex: new RegExp(`^${escapeRegex(city)}$`, 'i') };
+                }
+                
+                venue = await Venue.findOne(aliasQuery);
+            }
             
-            // Strategy 3: Normalized search (fallback)
+            // Strategy 4: Normalized search (fallback)
             if (!venue) {
                 const allVenues = await Venue.find({});
                 venue = allVenues.find(v => {
