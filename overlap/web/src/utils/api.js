@@ -23,4 +23,52 @@ export const apiRequest = async (url, options = {}) => {
 
   const response = await fetch(url, { ...defaultOptions, ...options });
   return response;
+};
+
+// Recommendation API functions
+export const recommendationAPI = {
+  // Get recommendations for a specific trip
+  async getRecommendations(tripId) {
+    const response = await apiRequest(`${API_BASE_URL}/api/recommendations/trips/${tripId}/recommendations`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recommendations');
+    }
+    return response.json();
+  },
+
+  // Track user interaction with a recommendation
+  async trackRecommendation(matchId, action, tripId, recommendedDate, score, reason) {
+    const response = await apiRequest(`${API_BASE_URL}/api/recommendations/${matchId}/track`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action,
+        tripId,
+        recommendedDate,
+        score,
+        reason
+      })
+    });
+    if (!response.ok) {
+      throw new Error('Failed to track recommendation');
+    }
+    return response.json();
+  },
+
+  // Get recommendation history
+  async getRecommendationHistory() {
+    const response = await apiRequest(`${API_BASE_URL}/api/recommendations/history`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recommendation history');
+    }
+    return response.json();
+  },
+
+  // Get recommendation analytics
+  async getRecommendationAnalytics() {
+    const response = await apiRequest(`${API_BASE_URL}/api/recommendations/analytics`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recommendation analytics');
+    }
+    return response.json();
+  }
 }; 

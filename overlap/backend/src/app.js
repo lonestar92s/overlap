@@ -13,6 +13,7 @@ const attendedMatchesRoutes = require('./routes/attendedMatches');
 const memoriesRoutes = require('./routes/memories');
 const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
+const recommendationsRoutes = require('./routes/recommendations');
 const adminRouter = require('./routes/admin');
 
 
@@ -76,6 +77,7 @@ app.use('/api/trips', tripsRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/memories', memoriesRoutes);
+app.use('/api/recommendations', recommendationsRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);

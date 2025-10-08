@@ -71,6 +71,12 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 100
         },
+        recommendationRadius: {
+            type: Number,
+            default: 400, // miles
+            min: 50,
+            max: 1000
+        },
         currency: {
             type: String,
             default: 'USD'
@@ -244,6 +250,41 @@ const userSchema = new mongoose.Schema({
         updatedAt: {
             type: Date,
             default: Date.now
+        }
+    }],
+    recommendationHistory: [{
+        matchId: {
+            type: String,
+            required: true
+        },
+        tripId: {
+            type: String,
+            default: null
+        },
+        recommendedDate: {
+            type: Date,
+            default: null
+        },
+        recommendedAt: {
+            type: Date,
+            default: Date.now
+        },
+        viewedAt: {
+            type: Date,
+            default: Date.now
+        },
+        action: {
+            type: String,
+            enum: ['viewed', 'saved', 'dismissed'],
+            default: 'viewed'
+        },
+        score: {
+            type: Number,
+            default: 0
+        },
+        reason: {
+            type: String,
+            default: ''
         }
     }]
 }, {

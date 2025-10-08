@@ -29,6 +29,7 @@ import { formatMatchDateTime } from '../utils/timezone';
 import useVisitedStadiums from '../hooks/useVisitedStadiums';
 import TripModal from './TripModal';
 import TeamLogo from './TeamLogo';
+import RecommendedMatches from './RecommendedMatches';
 
 // Component for displaying trips
 const TripsSection = () => {
@@ -102,6 +103,35 @@ const TripsSection = () => {
       }
     } catch (error) {
       console.error('Error removing match from trip:', error);
+    }
+  };
+
+  const addMatchToTrip = async (tripId, matchData) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return false;
+
+      const response = await fetch(`http://localhost:3001/api/trips/${tripId}/matches`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(matchData)
+      });
+
+      if (response.ok) {
+        // Refresh trips to show the new match
+        fetchTrips();
+        return true;
+      } else {
+        const errorData = await response.json();
+        console.error('Error adding match to trip:', errorData.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error adding match to trip:', error);
+      return false;
     }
   };
 
@@ -247,6 +277,22 @@ const TripsSection = () => {
                                 +{trip.matches.length - 3} more match{trip.matches.length - 3 !== 1 ? 'es' : ''}
                               </Typography>
                             )}
+                          </Box>
+                        )}
+
+                        {/* Recommended Matches Section */}
+                        {trip.matches.length > 0 && (
+                          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f0f0f0' }}>
+                            <RecommendedMatches 
+                              tripId={trip._id}
+                              onMatchAdded={async (matchData) => {
+                                const success = await addMatchToTrip(trip._id, matchData);
+                                if (success) {
+                                  console.log('Match added to trip successfully');
+                                }
+                                return success;
+                              }}
+                            />
                           </Box>
                         )}
                       </CardContent>

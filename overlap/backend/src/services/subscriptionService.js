@@ -57,6 +57,11 @@ class SubscriptionService {
         return this.tierAccess;
     }
 
+    getRestrictedLeagues(subscriptionTier) {
+        const tierConfig = this.tierAccess[subscriptionTier];
+        return tierConfig ? tierConfig.restrictedLeagues : this.tierAccess.freemium.restrictedLeagues;
+    }
+
     updateUserTier(user, newTier) {
         if (!this.tierAccess[newTier]) {
             throw new Error("Invalid subscription tier");
