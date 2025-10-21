@@ -67,8 +67,25 @@ export const getMatchStatus = (match) => {
     }
   }
   
-  // Fallback: determine status based on date
+  // Fallback: determine status based on date and time
   if (isPast) {
+    // For past matches, check if they're likely still in progress
+    const matchTime = new Date(utcDate);
+    const now = new Date();
+    const timeDiff = now - matchTime;
+    const hoursDiff = timeDiff / (1000 * 60 * 60);
+    
+    // If match started less than 3 hours ago, it might still be live
+    if (hoursDiff < 3 && hoursDiff > 0) {
+      console.log('🔍 Time-based live detection:', {
+        matchTime: utcDate,
+        now: new Date().toISOString(),
+        hoursDiff,
+        isLikelyLive: true
+      });
+      return { text: 'Likely Live', type: 'live', isPast: false };
+    }
+    
     return { text: 'Completed', type: 'completed', isPast: true };
   } else {
     return { text: 'Upcoming', type: 'upcoming', isPast: false };

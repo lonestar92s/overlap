@@ -71,6 +71,17 @@ const MatchCard = ({
   const matchResult = getMatchResult(match);
   const formattedDate = formatMatchDate(fixture.date, matchStatus.isPast);
   
+  // Temporary debug to see what data we have
+  if (match?.id === '1451061' || match?.fixture?.id === '1451061') {
+    console.log('🔍 Arsenal match debug:', {
+      match,
+      status: match?.status,
+      fixtureStatus: fixture?.status,
+      matchStatus,
+      isLive: matchStatus.type === 'live'
+    });
+  }
+  
 
   // Check if match is completed and should show attendance prompt
   const isPast = isMatchPast(fixture.date);
