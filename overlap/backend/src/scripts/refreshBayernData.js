@@ -44,7 +44,6 @@ async function refreshBayernData() {
 
         // Verify the update
         const bayern = await Team.findOne({ name: 'FC Bayern München' });
-        console.log('📍 Updated venue data:', bayern.venue);
 
     } catch (error) {
         console.error('❌ Error:', error);

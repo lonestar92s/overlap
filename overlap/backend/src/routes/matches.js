@@ -422,7 +422,39 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
             httpsAgent
         });
 
+        // Special logging for Champions League API response
+        if (competitionId === '2' || competitionId === 2) {
+            console.log(`🏆 [${searchSessionId}] Champions League API Response:`, {
+                totalResults: apiResponse.data.results || 0,
+                hasResponse: !!apiResponse.data.response,
+                responseLength: apiResponse.data.response?.length || 0,
+                firstMatch: apiResponse.data.response?.[0] ? {
+                    id: apiResponse.data.response[0].id,
+                    teams: `${apiResponse.data.response[0].teams?.home?.name} vs ${apiResponse.data.response[0].teams?.away?.name}`,
+                    date: apiResponse.data.response[0].fixture?.date,
+                    venue: apiResponse.data.response[0].fixture?.venue?.name,
+                    city: apiResponse.data.response[0].fixture?.venue?.city
+                } : 'No matches'
+            });
+        }
+
         const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds, searchSessionId);
+        
+        // Special logging for Champions League after transformation
+        if (competitionId === '2' || competitionId === 2) {
+            console.log(`🏆 [${searchSessionId}] Champions League After Transformation:`, {
+                totalMatches: transformedData.response?.length || 0,
+                hasMatches: !!transformedData.response && transformedData.response.length > 0,
+                firstMatch: transformedData.response?.[0] ? {
+                    id: transformedData.response[0].id,
+                    teams: `${transformedData.response[0].teams?.home?.name} vs ${transformedData.response[0].teams?.away?.name}`,
+                    venue: transformedData.response[0].fixture?.venue?.name,
+                    city: transformedData.response[0].fixture?.venue?.city,
+                    coordinates: transformedData.response[0].fixture?.venue?.coordinates
+                } : 'No matches'
+            });
+        }
+        
         matchesCache.set(cacheKey, transformedData);
         res.json(transformedData);
     } catch (error) {

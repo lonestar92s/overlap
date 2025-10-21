@@ -43,7 +43,7 @@ async function fixFrankfurtVenue() {
 
         // Verify the update
         const frankfurt = await Team.findOne({ name: 'Eintracht Frankfurt' });
-        console.log('📍 Updated venue data:', frankfurt.venue);
+   
 
     } catch (error) {
         console.error('❌ Error:', error);

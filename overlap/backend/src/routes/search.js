@@ -1322,7 +1322,6 @@ const ConversationStateManager = {
         // Fill missing location
         if (!result.location && context.location) {
             result.location = context.location;
-            console.log('📍 Filled missing location from context:', result.location);
         }
         
         // For follow-up queries like "just premier league", inherit leagues from context

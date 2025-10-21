@@ -35,13 +35,7 @@ const testConversationMemory = async () => {
         });
         
         const data1 = await response1.json();
-        console.log('✅ Response:', data1.message || 'Success');
-        console.log('📍 Location:', data1.parsed?.location);
-        console.log('📅 Date Range:', data1.parsed?.dateRange);
-        console.log('🏆 Is Broad Query:', data1.parsed?.isBroadQuery);
-        console.log('💡 Suggestions:', data1.parsed?.suggestions);
-        console.log('');
-        
+ 
     } catch (error) {
         console.error('❌ Test 1 failed:', error.message);
     }
@@ -62,13 +56,7 @@ const testConversationMemory = async () => {
         });
         
         const data2 = await response2.json();
-        console.log('✅ Response:', data2.message || 'Success');
-        console.log('📍 Location (should inherit from context):', data2.parsed?.location);
-        console.log('📅 Date Range (should inherit from context):', data2.parsed?.dateRange);
-        console.log('🏆 Leagues (should be Premier League):', data2.parsed?.leagues);
-        console.log('🏆 Is Broad Query:', data2.parsed?.isBroadQuery);
-        console.log('');
-        
+    
     } catch (error) {
         console.error('❌ Test 2 failed:', error.message);
     }
@@ -105,13 +93,7 @@ const testConversationMemory = async () => {
         });
         
         const data3 = await response3.json();
-        console.log('✅ Response:', data3.message || 'Success');
-        console.log('📍 Location (should inherit):', data3.parsed?.location);
-        console.log('📅 Date Range (should inherit):', data3.parsed?.dateRange);
-        console.log('🏆 Leagues (should inherit Premier League):', data3.parsed?.leagues);
-        console.log('⚽ Teams (should be Arsenal):', data3.parsed?.teams);
-        console.log('🏆 Is Broad Query:', data3.parsed?.isBroadQuery);
-        console.log('');
+
         
     } catch (error) {
         console.error('❌ Test 3 failed:', error.message);
