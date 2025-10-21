@@ -83,7 +83,7 @@ export const getMatchStatus = (match) => {
         hoursDiff,
         isLikelyLive: true
       });
-      return { text: 'Likely Live', type: 'live', isPast: false };
+      return { text: 'Live', type: 'live', isPast: false };
     }
     
     return { text: 'Completed', type: 'completed', isPast: true };
@@ -98,14 +98,24 @@ export const getMatchStatus = (match) => {
  * @returns {Object|null} - Result info or null if match not completed
  */
 export const getMatchResult = (match) => {
-  if (!match || !isMatchPast(match.utcDate)) return null;
+  if (!match) return null;
   
   const { score, teams } = match;
+  const matchStatus = getMatchStatus(match);
   
-  if (!score?.fullTime?.home || !score?.fullTime?.away) return null;
+  // For live matches, use halftime score if available
+  // For completed matches, use fulltime score
+  let homeScore, awayScore;
   
-  const homeScore = score.fullTime.home;
-  const awayScore = score.fullTime.away;
+  if (matchStatus.type === 'live' && score?.halftime?.home !== null && score?.halftime?.away !== null) {
+    homeScore = score.halftime.home;
+    awayScore = score.halftime.away;
+  } else if (matchStatus.type === 'completed' && score?.fullTime?.home !== null && score?.fullTime?.away !== null) {
+    homeScore = score.fullTime.home;
+    awayScore = score.fullTime.away;
+  } else {
+    return null;
+  }
   
   let result = 'Draw';
   let winner = null;
@@ -123,7 +133,9 @@ export const getMatchResult = (match) => {
     awayScore,
     result,
     winner,
-    isDraw: result === 'Draw'
+    isDraw: result === 'Draw',
+    isLive: matchStatus.type === 'live',
+    type: matchStatus.type
   };
 };
 
