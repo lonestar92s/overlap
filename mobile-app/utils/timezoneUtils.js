@@ -3,6 +3,67 @@
  */
 
 /**
+ * Validate if a timezone string is valid
+ * @param {string} timezone - Timezone string to validate
+ * @returns {boolean} - True if timezone is valid
+ */
+export const isValidTimezone = (timezone) => {
+  if (!timezone || typeof timezone !== 'string') {
+    return false;
+  }
+  
+  // List of known valid timezones
+  const validTimezones = [
+    'UTC',
+    'Europe/London',
+    'Europe/Paris',
+    'Europe/Berlin',
+    'Europe/Rome',
+    'Europe/Madrid',
+    'Europe/Amsterdam',
+    'Europe/Brussels',
+    'Europe/Vienna',
+    'Europe/Zurich',
+    'Europe/Stockholm',
+    'Europe/Oslo',
+    'Europe/Copenhagen',
+    'Europe/Helsinki',
+    'Europe/Warsaw',
+    'Europe/Prague',
+    'Europe/Budapest',
+    'Europe/Bucharest',
+    'Europe/Sofia',
+    'Europe/Athens',
+    'Europe/Istanbul',
+    'Europe/Moscow',
+    'America/New_York',
+    'America/Chicago',
+    'America/Denver',
+    'America/Los_Angeles',
+    'America/Toronto',
+    'America/Mexico_City',
+    'America/Sao_Paulo',
+    'America/Buenos_Aires',
+    'America/Lima',
+    'America/Bogota',
+    'America/Caracas',
+    'Asia/Tokyo',
+    'Asia/Shanghai',
+    'Asia/Hong_Kong',
+    'Asia/Singapore',
+    'Asia/Seoul',
+    'Asia/Dubai',
+    'Asia/Riyadh',
+    'Asia/Kolkata',
+    'Australia/Sydney',
+    'Australia/Melbourne',
+    'Pacific/Auckland'
+  ];
+  
+  return validTimezones.includes(timezone);
+};
+
+/**
  * Get venue timezone from fixture data
  * @param {Object} fixture - Fixture object from API
  * @returns {string} - Timezone string (e.g., "UTC", "Europe/London")
@@ -10,15 +71,15 @@
 export const getVenueTimezone = (fixture) => {
   if (!fixture) return 'UTC';
   
-  // Use timezone from API if available and not generic UTC
-  if (fixture.timezone && fixture.timezone !== 'UTC') {
+  // Use timezone from API if available and valid
+  if (fixture.timezone && fixture.timezone !== 'UTC' && isValidTimezone(fixture.timezone)) {
     return fixture.timezone;
   }
   
   // Try to determine timezone from venue coordinates
   if (fixture.venue?.coordinates) {
     const timezone = getTimezoneFromCoordinates(fixture.venue.coordinates);
-    if (timezone) {
+    if (timezone && isValidTimezone(timezone)) {
       return timezone;
     }
   }
@@ -26,12 +87,12 @@ export const getVenueTimezone = (fixture) => {
   // Try to determine timezone from venue city/country
   if (fixture.venue?.city || fixture.venue?.country) {
     const timezone = getTimezoneFromLocation(fixture.venue.city, fixture.venue.country);
-    if (timezone) {
+    if (timezone && isValidTimezone(timezone)) {
       return timezone;
     }
   }
   
-  // Fallback to UTC if no timezone can be determined
+  // Fallback to UTC if no valid timezone can be determined
   return 'UTC';
 };
 
@@ -481,41 +542,68 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
   try {
     const timezone = getVenueTimezone(fixture);
     
-    const venueDate = parseMatchDateToVenueTime(dateString, timezone);
+    // Validate timezone before using it
+    const validTimezone = isValidTimezone(timezone) ? timezone : 'UTC';
     
-    // Format time
+    const venueDate = parseMatchDateToVenueTime(dateString, validTimezone);
+    
+    // Format time with fallback
     let timeString;
-    if (timeFormat === '24hour') {
+    try {
+      if (timeFormat === '24hour') {
+        timeString = venueDate.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: validTimezone
+        });
+      } else {
+        timeString = venueDate.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: validTimezone
+        });
+      }
+    } catch (timeError) {
+      console.warn('Timezone formatting failed, using UTC fallback:', timeError);
+      // Fallback to UTC formatting
       timeString = venueDate.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
-        timeZone: timezone // Force venue timezone
-      });
-    } else {
-      timeString = venueDate.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: timezone // Force venue timezone
+        hour12: timeFormat !== '24hour'
       });
     }
     
-    // Format date
+    // Format date with fallback
     let formattedDate = '';
     if (showDate) {
-      const dateOptions = {
-        weekday: 'short',  // Add day of the week (e.g., "Fri")
-        month: 'short',    // Use abbreviated month name (e.g., "Apr")
-        day: 'numeric',
-        timeZone: timezone // Force venue timezone
-      };
-      
-      if (showYear) {
-        dateOptions.year = 'numeric';
+      try {
+        const dateOptions = {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          timeZone: validTimezone
+        };
+        
+        if (showYear) {
+          dateOptions.year = 'numeric';
+        }
+        
+        formattedDate = venueDate.toLocaleDateString('en-US', dateOptions);
+      } catch (dateError) {
+        console.warn('Date formatting failed, using UTC fallback:', dateError);
+        // Fallback to UTC formatting
+        const fallbackOptions = {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        };
+        if (showYear) {
+          fallbackOptions.year = 'numeric';
+        }
+        formattedDate = venueDate.toLocaleDateString('en-US', fallbackOptions);
       }
-      
-      formattedDate = venueDate.toLocaleDateString('en-US', dateOptions);
     }
     
     // Build final string
@@ -527,7 +615,7 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
     // Add timezone indicator
     if (showTimezone) {
       let timezoneLabel;
-      if (timezone === 'UTC') {
+      if (validTimezone === 'UTC') {
         // For UTC venues, show the venue city instead of "UTC"
         const venueCity = fixture?.venue?.city;
         if (venueCity) {
@@ -536,7 +624,7 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
           timezoneLabel = 'UTC';
         }
       } else {
-        timezoneLabel = getTimezoneLabel(timezone);
+        timezoneLabel = getTimezoneLabel(validTimezone);
       }
       result += ` (${timezoneLabel})`;
     }

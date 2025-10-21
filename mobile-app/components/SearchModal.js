@@ -6,6 +6,9 @@ import {
   Alert,
   TouchableOpacity,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { Button, Overlay } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
@@ -172,60 +175,72 @@ const SearchModal = ({
         </View>
 
         {/* Search Form */}
-        <View style={styles.form}>
-          {/* Location */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Where</Text>
-            <LocationAutocomplete
-              onLocationSelect={setLocation}
-              initialValue={location?.city}
-              placeholder="Search for a city"
-            />
-          </View>
-
-          {/* Dates */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>When</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowCalendar(!showCalendar)}
-            >
-              <Text style={styles.dateButtonText}>
-                {dateFrom && dateTo 
-                  ? `${formatDisplayDate(dateFrom)} - ${formatDisplayDate(dateTo)}`
-                  : 'Select dates'
-                }
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Calendar */}
-          {showCalendar && (
-            <View style={styles.calendarContainer}>
-              <Calendar
-                onDayPress={onDayPress}
-                markedDates={selectedDates}
-                markingType="period"
-                theme={{
-                  selectedDayBackgroundColor: '#007AFF',
-                  selectedDayTextColor: '#ffffff',
-                  todayTextColor: '#007AFF',
-                  dayTextColor: '#2d4150',
-                  textDisabledColor: '#d9e1e8',
-                  arrowColor: '#007AFF',
-                  monthTextColor: '#2d4150',
-                  indicatorColor: '#007AFF',
-                  textDayFontWeight: '300',
-                  textMonthFontWeight: 'bold',
-                  textDayHeaderFontWeight: '300',
-                  textDayFontSize: 16,
-                  textMonthFontSize: 16,
-                  textDayHeaderFontSize: 13
-                }}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={100}
+          style={styles.keyboardAvoidingView}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            <View style={styles.form}>
+            {/* Location */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Where</Text>
+              <LocationAutocomplete
+                onLocationSelect={setLocation}
+                initialValue={location?.city}
+                placeholder="Search for a city"
               />
             </View>
-          )}
-        </View>
+
+            {/* Dates */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>When</Text>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowCalendar(!showCalendar)}
+              >
+                <Text style={styles.dateButtonText}>
+                  {dateFrom && dateTo 
+                    ? `${formatDisplayDate(dateFrom)} - ${formatDisplayDate(dateTo)}`
+                    : 'Select dates'
+                  }
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Calendar */}
+            {showCalendar && (
+              <View style={styles.calendarContainer}>
+                <Calendar
+                  onDayPress={onDayPress}
+                  markedDates={selectedDates}
+                  markingType="period"
+                  theme={{
+                    selectedDayBackgroundColor: '#007AFF',
+                    selectedDayTextColor: '#ffffff',
+                    todayTextColor: '#007AFF',
+                    dayTextColor: '#2d4150',
+                    textDisabledColor: '#d9e1e8',
+                    arrowColor: '#007AFF',
+                    monthTextColor: '#2d4150',
+                    indicatorColor: '#007AFF',
+                    textDayFontWeight: '300',
+                    textMonthFontWeight: 'bold',
+                    textDayHeaderFontWeight: '300',
+                    textDayFontSize: 16,
+                    textMonthFontSize: 16,
+                    textDayHeaderFontSize: 13
+                  }}
+                />
+              </View>
+            )}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
         {/* Search Button */}
         <View style={styles.buttonContainer}>
@@ -282,6 +297,12 @@ const styles = StyleSheet.create({
   clearButtonText: {
     fontSize: 16,
     color: '#007AFF',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   form: {
     flex: 1,

@@ -44,7 +44,7 @@ const AccountScreen = () => {
     <View style={styles.accountContainer}>
       <View style={styles.accountHeader}>
         <MaterialIcons name="account-circle" size={80} color="#1976d2" />
-        <Text style={styles.accountTitle}>Account</Text>
+        <Text style={styles.accountTitle}>Profile</Text>
         <Text style={styles.accountEmail}>{user?.email}</Text>
       </View>
       
@@ -230,7 +230,7 @@ function AppContent() {
               <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
               <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
               <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
-              <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Account' }} />
+              <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Profile' }} />
             </Tab.Navigator>
           </ItineraryProvider>
         </FilterProvider>

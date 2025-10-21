@@ -6,7 +6,9 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
-  FlatList
+  FlatList,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import Autocomplete from 'react-native-autocomplete-input';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -31,7 +33,9 @@ const LocationAutocomplete = ({
   value, 
   onSelect, 
   placeholder = "Search destinations...",
-  style = {}
+  style = {},
+  onFocusCallback = null,
+  onOptionsChange = null,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [options, setOptions] = useState([]);
@@ -39,6 +43,9 @@ const LocationAutocomplete = ({
   const [error, setError] = useState(null);
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [userLocation, setUserLocation] = useState(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [dropdownMaxHeight, setDropdownMaxHeight] = useState(180); // Fixed height for 3 items
+  const inputRef = React.useRef(null);
 
   // Get user's current location
   const getUserLocation = async () => {
@@ -81,6 +88,42 @@ const LocationAutocomplete = ({
     getUserLocation();
   }, []);
 
+  // Listen to keyboard events to adjust dropdown height
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      calculateDropdownHeight(e.endCoordinates.height);
+    });
+    
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      calculateDropdownHeight(e.endCoordinates.height);
+    });
+    
+    const keyboardWillHide = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardHeight(0);
+      setDropdownMaxHeight(180);
+    });
+    
+    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+      setDropdownMaxHeight(180);
+    });
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardDidShow.remove();
+      keyboardWillHide.remove();
+      keyboardDidHide.remove();
+    };
+  }, []);
+
+  const calculateDropdownHeight = (kbHeight) => {
+    // For 3 items, we need about 180px (3 * 60px per item)
+    // This should fit above keyboard on most devices
+    setDropdownMaxHeight(180);
+  };
+
   const formatLocationDisplay = (option) => {
     if (!option) return '';
     return `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}`;
@@ -110,7 +153,7 @@ const LocationAutocomplete = ({
       }
       setLastRequestTime(Date.now());
       const response = await axios.get(LOCATIONIQ_BASE_URL, {
-        params: { key: LOCATIONIQ_API_KEY, q: query, limit: 5, dedupe: 1, 'accept-language': 'en' }
+        params: { key: LOCATIONIQ_API_KEY, q: query, limit: 3, dedupe: 1, 'accept-language': 'en' }
       });
       const suggestions = response.data.map(item => {
         const nameParts = item.display_name.split(', ');
@@ -127,6 +170,7 @@ const LocationAutocomplete = ({
       );
       
       setOptions(uniqueSuggestions);
+      if (onOptionsChange) onOptionsChange(uniqueSuggestions.length > 0);
     } catch (error) {
       console.error('Error fetching location suggestions:', error);
       if (error.response?.status === 429) {
@@ -136,11 +180,13 @@ const LocationAutocomplete = ({
         const filteredMockData = MOCK_LOCATIONS.filter(location =>
           location.city.toLowerCase().includes(query.toLowerCase()) ||
           location.country.toLowerCase().includes(query.toLowerCase())
-        );
+        ).slice(0, 3); // Limit to 3 results
         setOptions(filteredMockData);
+        if (onOptionsChange) onOptionsChange(filteredMockData.length > 0);
       } else {
         setError('Error fetching locations');
         setOptions([]);
+        if (onOptionsChange) onOptionsChange(false);
       }
     } finally {
       setLoading(false);
@@ -171,28 +217,42 @@ const LocationAutocomplete = ({
           isNearYou: true
         };
         setOptions([nearYouOption]);
+        if (onOptionsChange) onOptionsChange(true); // Notify parent that options are showing
       } else {
         setOptions([]);
+        if (onOptionsChange) onOptionsChange(false); // Notify parent that no options
       }
       onSelect(null);
     } else {
+      if (onOptionsChange) onOptionsChange(true); // Notify parent that we're fetching options
       debouncedFetchSuggestions(text);
     }
   };
 
   const handleInputFocus = () => {
-    // Focus behavior - could be used for other purposes in the future
+    // Notify parent component that input was focused (so it can scroll if needed)
+    if (onFocusCallback) {
+      onFocusCallback();
+    }
   };
 
   const handleSelectLocation = (location) => {
     const displayText = formatLocationDisplay(location);
     setInputValue(displayText);
     setOptions([]);
+    if (onOptionsChange) onOptionsChange(false); // Notify parent that options are hidden
     onSelect(location);
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.locationItem} onPress={() => handleSelectLocation(item)} activeOpacity={0.7}>
+  const renderItem = ({ item, index }) => (
+    <TouchableOpacity 
+      style={[
+        styles.locationItem,
+        index === options.length - 1 && styles.lastLocationItem
+      ]} 
+      onPress={() => handleSelectLocation(item)} 
+      activeOpacity={0.7}
+    >
       <View style={styles.locationIcon}>
         <Icon name="location-on" size={20} color="#1976d2" />
       </View>
@@ -216,11 +276,17 @@ const LocationAutocomplete = ({
           onChangeText={handleInputChange}
           onFocus={handleInputFocus}
           placeholder={placeholder}
-          flatListProps={{ keyExtractor: (item) => item.place_id, renderItem: renderItem, keyboardShouldPersistTaps: 'handled', showsVerticalScrollIndicator: false }}
+          flatListProps={{ 
+            keyExtractor: (item) => item.place_id, 
+            renderItem: renderItem, 
+            keyboardShouldPersistTaps: 'handled', 
+            showsVerticalScrollIndicator: true,
+            style: { maxHeight: dropdownMaxHeight }
+          }}
           inputContainerStyle={styles.inputContainer}
           containerStyle={styles.autocompleteContainer}
-          listContainerStyle={styles.listContainer}
-          listStyle={styles.listStyle}
+          listContainerStyle={[styles.listContainer, { maxHeight: dropdownMaxHeight }]}
+          listStyle={[styles.listStyle, { maxHeight: dropdownMaxHeight }]}
           hideResults={options.length === 0}
         />
         {inputValue.length > 0 && (
@@ -246,10 +312,10 @@ const styles = StyleSheet.create({
   clearButton: { position: 'absolute', right: 12, top: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', zIndex: 10001, elevation: 5 },
   clearButtonText: { fontSize: 16, color: '#666', fontWeight: 'bold', lineHeight: 16 },
   loadingIndicator: { marginLeft: 8 },
-  listContainer: { maxHeight: 200, borderWidth: 1, borderColor: '#ddd', borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 15, zIndex: 10000 },
-  listStyle: { maxHeight: 200 },
-  dropdownList: { maxHeight: 200 },
+  listContainer: { borderWidth: 1, borderColor: '#ddd', borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 15, zIndex: 10000 },
+  listStyle: {},
   locationItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', backgroundColor: '#fff' },
+  lastLocationItem: { borderBottomWidth: 0 },
   locationIcon: { 
     marginRight: 12, 
     justifyContent: 'center', 

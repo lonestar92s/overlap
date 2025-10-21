@@ -50,3 +50,4 @@ async function fixBenficaVenueId() {
 }
 
 fixBenficaVenueId();
+

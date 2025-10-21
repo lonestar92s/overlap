@@ -9,6 +9,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
 import PlanningStatusIndicator from './PlanningStatusIndicator';
+import ErrorBoundary from './ErrorBoundary';
 import { getMatchStatus, getMatchResult, formatMatchDate } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 
@@ -76,11 +77,12 @@ const MatchCard = ({
   const isOverlay = variant === 'overlay' || variant === 'compact';
 
   return (
-    <TouchableOpacity 
-      style={[styles.card, isOverlay && styles.overlayCard, style]} 
-      onPress={handlePress}
-      activeOpacity={0.7}
-    >
+    <ErrorBoundary>
+      <TouchableOpacity 
+        style={[styles.card, isOverlay && styles.overlayCard, style]} 
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
       <View style={styles.header}>
         <View style={styles.dateTimeContainer}>
           <Icon name="access-time" size={16} color="#666" />
@@ -248,7 +250,8 @@ const MatchCard = ({
           size={variant === 'overlay' ? 'small' : 'default'}
         />
       )}
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </ErrorBoundary>
   );
 };
 

@@ -98,10 +98,25 @@ const getCurrentUser = async () => {
     if (response.ok) {
       return data.user;
     } else {
-      throw new Error(data.error || 'Failed to get user data');
+      // Provide more specific error messages based on status code
+      if (response.status === 401) {
+        throw new Error('Authentication failed - please log in again');
+      } else if (response.status === 403) {
+        throw new Error('Access denied - insufficient permissions');
+      } else if (response.status >= 500) {
+        throw new Error('Server error - please try again later');
+      } else {
+        throw new Error(data.error || 'Failed to get user data');
+      }
     }
   } catch (error) {
     console.error('Get current user error:', error);
+    
+    // Distinguish between network errors and authentication errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Network error - please check your connection');
+    }
+    
     throw error;
   }
 };
@@ -126,7 +141,6 @@ const AVAILABLE_LEAGUES = [
   { id: 3, name: 'Europa League', country: 'Europe', coords: null, isInternational: true },
   { id: 848, name: 'Europa Conference League', country: 'Europe', coords: null, isInternational: true },
   { id: 94, name: 'Primeira Liga', country: 'Portugal', coords: [39.3999, -8.2245] },
-  { id: 96, name: 'Taca de Portugal', country: 'Portugal', coords: [39.3999, -8.2245] },
   { id: 97, name: 'Taca da Liga', country: 'Portugal', coords: [39.3999, -8.2245] },
   { id: 88, name: 'Eredivisie', country: 'Netherlands', coords: [52.1326, 5.2913] },
   { id: 144, name: 'Jupiler Pro League', country: 'Belgium', coords: [50.5039, 4.4699] },
@@ -591,6 +605,12 @@ class ApiService {
       if (league.isInternational) {
         shouldInclude = true; // International competitions can happen anywhere
         console.log(`✅ Including international competition: ${league.name}`);
+      }
+      
+      // Always include Champions League specifically (backup for international competitions)
+      if (league.name === 'Champions League' || league.id === 2) {
+        shouldInclude = true;
+        console.log(`✅ Including Champions League specifically: ${league.name}`);
       } else {
         // Skip leagues without coordinates
         if (!league.coords || league.coords.length !== 2) {

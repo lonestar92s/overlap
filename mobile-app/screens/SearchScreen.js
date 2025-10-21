@@ -107,8 +107,8 @@ const SearchScreen = ({ navigation }) => {
     { id: 88, name: 'Eredivisie', country: 'Netherlands' },
     { id: 94, name: 'Primeira Liga', country: 'Portugal' },
     { id: 119, name: 'Super Lig', country: 'Turkey' },
-    { id: 179, name: 'UEFA Champions League', country: 'Europe' },
-    { id: 180, name: 'UEFA Europa League', country: 'Europe' },
+    { id: 2, name: 'UEFA Champions League', country: 'Europe' },
+    { id: 3, name: 'UEFA Europa League', country: 'Europe' },
   ];
 
   // Combined data for the main FlatList

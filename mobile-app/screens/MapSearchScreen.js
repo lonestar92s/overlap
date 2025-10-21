@@ -8,6 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -84,6 +86,7 @@ const MapSearchScreen = ({ navigation }) => {
   const handleLocationSelect = (selectedLocation) => {
     setLocation(selectedLocation);
     setShowLocationSearch(false);
+    setIsAutocompleteActive(false);
     
     if (selectedLocation && mapRef.current) {
       // Center map on selected location
@@ -219,30 +222,42 @@ const MapSearchScreen = ({ navigation }) => {
 
   // Render search controls
   const renderSearchControls = () => (
-    <View style={styles.searchControls}>
-      {showLocationSearch ? (
-        <View style={styles.locationSearchContainer}>
-          <Text style={styles.searchLabel}>Where are you traveling?</Text>
-          <LocationAutocomplete
-            value={location}
-            onSelect={handleLocationSelect}
-            placeholder="Enter your destination..."
-            style={styles.locationInput}
-          />
-        </View>
-      ) : (
-        <TouchableOpacity 
-          style={styles.locationSummary}
-          onPress={() => setShowLocationSearch(true)}
-        >
-          <Text style={styles.locationSummaryText}>
-            📍 {location?.city}, {location?.country}
-          </Text>
-          <Text style={styles.changeLocationText}>Tap to change</Text>
-        </TouchableOpacity>
-      )}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={100}
+      style={styles.keyboardAvoidingView}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.searchControls}>
+        {showLocationSearch ? (
+          <View style={styles.locationSearchContainer}>
+            <Text style={styles.searchLabel}>Where are you traveling?</Text>
+            <LocationAutocomplete
+              value={location}
+              onSelect={handleLocationSelect}
+              placeholder="Enter your destination..."
+              style={styles.locationInput}
+              onFocusCallback={() => setIsAutocompleteActive(true)}
+              onOptionsChange={(hasOptions) => setIsAutocompleteActive(hasOptions)}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.locationSummary}
+            onPress={() => setShowLocationSearch(true)}
+          >
+            <Text style={styles.locationSummaryText}>
+              📍 {location?.city}, {location?.country}
+            </Text>
+            <Text style={styles.changeLocationText}>Tap to change</Text>
+          </TouchableOpacity>
+        )}
 
-      <View style={styles.dateControls}>
+        <View style={styles.dateControls}>
         <Text style={styles.searchLabel}>Travel dates</Text>
         <TouchableOpacity
           style={styles.dateRangeButton}
@@ -289,8 +304,10 @@ const MapSearchScreen = ({ navigation }) => {
             />
           </View>
         )}
-      </View>
-    </View>
+        </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 
   // Render match item
@@ -436,13 +453,15 @@ const MapSearchScreen = ({ navigation }) => {
         </View>
       )}
 
-      {/* Bottom Sheet */}
-      <BottomSheet
-        onStateChange={setSheetState}
-        initialState="collapsed"
-      >
-        {renderBottomSheetContent()}
-      </BottomSheet>
+      {/* Bottom Sheet - Hide when autocomplete is active */}
+      {!isAutocompleteActive && (
+        <BottomSheet
+          onStateChange={setSheetState}
+          initialState="collapsed"
+        >
+          {renderBottomSheetContent()}
+        </BottomSheet>
+      )}
     </View>
   );
 };
@@ -475,6 +494,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     color: '#333',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   searchControls: {
     gap: 16,

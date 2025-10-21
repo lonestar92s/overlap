@@ -4,7 +4,6 @@ const https = require('https');
 const venueService = require('../services/venueService');
 const leagueService = require('../services/leagueService');
 const teamService = require('../services/teamService');
-const coordinateService = require('../services/coordinateService');
 const subscriptionService = require('../services/subscriptionService');
 const geocodingService = require('../services/geocodingService');
 const User = require('../models/User');
@@ -744,11 +743,10 @@ router.get('/popular', async (req, res) => {
                 78: 'Bundesliga', 
                 61: 'Ligue 1',
                 94: 'Primeira Liga',
-                96: 'Taca de Portugal',
                 97: 'Taca da Liga',
                 88: 'Eredivisie'
             };
-            popularLeagueIds = [39, 140, 135, 78, 61, 94, 96, 97, 88];
+            popularLeagueIds = [39, 140, 135, 78, 61, 94, 97, 88];
             popularLeagueNames = popularLeagueIds.map(id => leagueMappings[id] || `League ${id}`);
         }
         const today = new Date();

@@ -41,8 +41,17 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
         } catch (error) {
           console.log('Token validation failed, clearing auth state');
-          // Token is invalid, clear it
-          await logout();
+          console.log('Token validation error details:', error.message);
+          
+          // Check if it's a network error vs authentication error
+          if (error.message.includes('Network error') || error.message.includes('timeout')) {
+            console.log('Network error during token validation, keeping token for retry');
+            // Don't clear auth state for network errors, just set user to null temporarily
+            setUser(null);
+          } else {
+            // Token is invalid or expired, clear it
+            await logout();
+          }
         }
       }
     } catch (error) {

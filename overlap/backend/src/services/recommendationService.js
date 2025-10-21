@@ -593,7 +593,6 @@ class RecommendationService {
             '78', // Bundesliga
             '88', // Eredivisie
             '94', // Primeira Liga
-            '96', // Taca de Portugal
             '97', // Taca da Liga
             '203', // Süper Lig
             '113', // Belgian Pro League
