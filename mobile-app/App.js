@@ -21,12 +21,13 @@ import TripMapView from './screens/TripMapView';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import MessagesScreen from './screens/MessagesScreen';
+import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Account screen with logout functionality
-const AccountScreen = () => {
+const AccountScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
   
   const handleLogout = () => {
@@ -40,6 +41,10 @@ const AccountScreen = () => {
     );
   };
 
+  const handleViewAttendedMatches = () => {
+    navigation.navigate('MemoriesTab');
+  };
+
   return (
     <View style={styles.accountContainer}>
       <View style={styles.accountHeader}>
@@ -49,6 +54,13 @@ const AccountScreen = () => {
       </View>
       
       <View style={styles.accountActions}>
+        <Button
+          title="View Match Memories"
+          onPress={handleViewAttendedMatches}
+          buttonStyle={styles.attendedMatchesButton}
+          titleStyle={styles.attendedMatchesButtonTitle}
+          icon={<MaterialIcons name="memory" size={20} color="#fff" />}
+        />
         <Button
           title="Logout"
           onPress={handleLogout}
@@ -120,6 +132,14 @@ function SearchStack() {
           component={ResultsScreen}
           options={{
             title: 'Match Results',
+            headerTitleAlign: 'center',
+          }}
+        />
+        <Stack.Screen
+          name="AttendedMatches"
+          component={AttendedMatchesScreen}
+          options={{
+            title: 'Attended Matches',
             headerTitleAlign: 'center',
           }}
         />
@@ -273,6 +293,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  attendedMatchesButton: {
+    backgroundColor: '#1976d2',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    marginBottom: 16,
+  },
+  attendedMatchesButtonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   logoutButton: {
     backgroundColor: '#f44336',

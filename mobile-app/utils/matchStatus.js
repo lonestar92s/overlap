@@ -25,8 +25,11 @@ export const isMatchPast = (matchDate) => {
 export const getMatchStatus = (match) => {
   if (!match) return { text: 'Unknown', type: 'unknown', isPast: false };
   
-  const { status, utcDate } = match;
+  // Check multiple possible locations for status
+  const status = match.status || match.fixture?.status;
+  const utcDate = match.utcDate || match.fixture?.date;
   const isPast = isMatchPast(utcDate);
+  
   
   // If we have explicit status from API, use that
   if (status?.long) {
@@ -34,14 +37,33 @@ export const getMatchStatus = (match) => {
     
     if (statusText === 'Not Started') {
       return { text: 'Upcoming', type: 'upcoming', isPast: false };
-    } else if (statusText === 'Finished') {
+    } else if (statusText === 'Match Finished' || statusText === 'Finished') {
       return { text: 'Completed', type: 'completed', isPast: true };
-    } else if (statusText === 'Live') {
+    } else if (statusText === 'Live' || statusText === 'In Play') {
       return { text: 'Live', type: 'live', isPast: false };
-    } else if (statusText.includes('Half Time')) {
+    } else if (statusText.includes('Half') || statusText === 'Halftime') {
       return { text: 'Half Time', type: 'live', isPast: false };
     } else if (statusText.includes('Extra Time')) {
       return { text: 'Extra Time', type: 'live', isPast: false };
+    } else if (statusText.includes('Suspended') || statusText.includes('Postponed')) {
+      return { text: 'Suspended', type: 'suspended', isPast: false };
+    }
+  }
+  
+  // Check short status as well
+  if (status?.short) {
+    const statusText = status.short;
+    
+    if (statusText === 'LIVE' || statusText === '1H' || statusText === '2H') {
+      return { text: 'Live', type: 'live', isPast: false };
+    } else if (statusText === 'HT') {
+      return { text: 'Half Time', type: 'live', isPast: false };
+    } else if (statusText === 'FT') {
+      return { text: 'Completed', type: 'completed', isPast: true };
+    } else if (statusText === 'NS') {
+      return { text: 'Upcoming', type: 'upcoming', isPast: false };
+    } else if (statusText === 'PST' || statusText === 'SUSP') {
+      return { text: 'Suspended', type: 'suspended', isPast: false };
     }
   }
   

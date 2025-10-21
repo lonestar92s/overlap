@@ -298,6 +298,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
           onPress={() => handleMatchPress(item)}
           variant="default"
           showHeart={true}
+          showAttendancePrompt={true}
           style={styles.matchCardStyle}
         />
       </View>

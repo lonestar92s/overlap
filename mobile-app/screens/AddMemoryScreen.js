@@ -36,7 +36,7 @@ const AddMemoryScreen = () => {
   const pickImage = useCallback(async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'Images',
         allowsEditing: false,  // No forced editing
         quality: 0.8,
         allowsMultipleSelection: true,

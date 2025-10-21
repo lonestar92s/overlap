@@ -70,10 +70,12 @@ const MatchCard = ({
   const matchStatus = getMatchStatus(match);
   const matchResult = getMatchResult(match);
   const formattedDate = formatMatchDate(fixture.date, matchStatus.isPast);
+  
 
-  // Check if match is past and should show attendance prompt
+  // Check if match is completed and should show attendance prompt
   const isPast = isMatchPast(fixture.date);
-  const shouldShowAttendancePrompt = showAttendancePrompt && isPast && !match.userAttended;
+  const isCompleted = matchStatus.type === 'completed';
+  const shouldShowAttendancePrompt = showAttendancePrompt && isPast && isCompleted && !match.userAttended;
 
   const handlePress = () => {
     if (shouldShowAttendancePrompt) {
@@ -210,20 +212,27 @@ const MatchCard = ({
           ) : (
             <View style={styles.vsContent}>
               <Text style={[styles.vsText, isOverlay && styles.overlayVsText]}>vs</Text>
-              {/* Show attendance prompt indicator for past matches */}
-              {shouldShowAttendancePrompt && (
-                <View style={styles.attendancePrompt}>
-                  <Icon name="check-circle" size={16} color="#1976d2" />
-                  <Text style={styles.attendancePromptText}>Tap to confirm attendance</Text>
-                </View>
-              )}
-              {/* Show attended indicator */}
-              {match.userAttended && (
-                <View style={styles.attendedIndicator}>
-                  <Icon name="check-circle" size={16} color="#4caf50" />
-                  <Text style={styles.attendedText}>Attended</Text>
-                </View>
-              )}
+            {/* Show match in progress indicator */}
+            {matchStatus.type === 'live' && (
+              <View style={styles.liveIndicator}>
+                <Icon name="radio-button-on" size={16} color="#ff5722" />
+                <Text style={styles.liveText}>Match in Progress</Text>
+              </View>
+            )}
+            {/* Show attendance prompt indicator for completed matches */}
+            {shouldShowAttendancePrompt && (
+              <View style={styles.attendancePrompt}>
+                <Icon name="check-circle" size={16} color="#1976d2" />
+                <Text style={styles.attendancePromptText}>Tap to confirm attendance</Text>
+              </View>
+            )}
+            {/* Show attended indicator */}
+            {match.userAttended && (
+              <View style={styles.attendedIndicator}>
+                <Icon name="check-circle" size={16} color="#4caf50" />
+                <Text style={styles.attendedText}>Attended</Text>
+              </View>
+            )}
             </View>
           )}
         </View>
@@ -504,6 +513,21 @@ const styles = StyleSheet.create({
   attendedText: {
     fontSize: 10,
     color: '#4caf50',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#fff3e0',
+    borderRadius: 12,
+  },
+  liveText: {
+    fontSize: 10,
+    color: '#ff5722',
     marginLeft: 4,
     fontWeight: '500',
   },

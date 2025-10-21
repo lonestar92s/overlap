@@ -34,7 +34,7 @@ export const calculateCountdown = (targetDate, currentDate = new Date()) => {
 
   return {
     status: 'countdown',
-    message: `Next trip in ${timeString}`,
+    message: `Next match is in ${timeString}`,
     timeString,
     days,
     hours,
