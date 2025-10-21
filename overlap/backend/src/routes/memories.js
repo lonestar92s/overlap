@@ -171,7 +171,7 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
             
             // Only add photo if we have essential fields
             if (uploadResult.metadata.publicId && uploadResult.metadata.url) {
-              photos.push({
+              const photoObject = {
                 publicId: uploadResult.metadata.publicId,
                 url: uploadResult.metadata.url,
                 thumbnailUrl: cloudinaryService.generateThumbnailUrl(uploadResult.metadata.publicId),
@@ -183,7 +183,11 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
                 dateTaken: uploadResult.metadata.dateTaken,
                 uploadDate: new Date(),
                 caption: ''
-              });
+              };
+              
+              console.log('🔍 Photo object before push:', photoObject);
+              photos.push(photoObject);
+              console.log('🔍 Photos array after push:', photos);
             } else {
               console.error('❌ Photo metadata incomplete, skipping:', uploadResult.metadata);
             }
@@ -247,8 +251,11 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
 
     // Add to user's memories
     const user = await User.findById(req.user.id);
+    console.log('🔍 Memory object before save:', JSON.stringify(memory, null, 2));
+    console.log('🔍 Photos array before save:', JSON.stringify(photos, null, 2));
     user.attendedMatches.push(memory);
     await user.save();
+    console.log('🔍 Memory saved to database');
 
     // Return the newly created memory
     const newMemory = user.attendedMatches[user.attendedMatches.length - 1];
