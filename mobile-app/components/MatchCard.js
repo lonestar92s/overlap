@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
 import PlanningStatusIndicator from './PlanningStatusIndicator';
 import ErrorBoundary from './ErrorBoundary';
-import { getMatchStatus, getMatchResult, formatMatchDate } from '../utils/matchStatus';
+import AttendanceModal from './AttendanceModal';
+import { getMatchStatus, getMatchResult, formatMatchDate, isMatchPast } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 
 const MatchCard = ({ 
@@ -20,8 +21,10 @@ const MatchCard = ({
   showHeart = false,
   showResults = false, // Only show detailed results for saved matches
   showRelativeTime = false, // Only show relative time on itinerary pages
+  showAttendancePrompt = false, // Show attendance prompt for past matches
   style = {},
 }) => {
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   
   // Extract data from the API response format with defensive programming
   const fixture = match?.fixture || {};
@@ -68,10 +71,24 @@ const MatchCard = ({
   const matchResult = getMatchResult(match);
   const formattedDate = formatMatchDate(fixture.date, matchStatus.isPast);
 
+  // Check if match is past and should show attendance prompt
+  const isPast = isMatchPast(fixture.date);
+  const shouldShowAttendancePrompt = showAttendancePrompt && isPast && !match.userAttended;
+
   const handlePress = () => {
-    if (onPress && match) {
+    if (shouldShowAttendancePrompt) {
+      setShowAttendanceModal(true);
+    } else if (onPress && match) {
       onPress(match);
     }
+  };
+
+  const handleAttendanceConfirmed = () => {
+    // Update the match to show it was attended
+    if (match) {
+      match.userAttended = true;
+    }
+    setShowAttendanceModal(false);
   };
 
   const isOverlay = variant === 'overlay' || variant === 'compact';
@@ -191,7 +208,23 @@ const MatchCard = ({
               </Text>
             </View>
           ) : (
-            <Text style={[styles.vsText, isOverlay && styles.overlayVsText]}>vs</Text>
+            <View style={styles.vsContent}>
+              <Text style={[styles.vsText, isOverlay && styles.overlayVsText]}>vs</Text>
+              {/* Show attendance prompt indicator for past matches */}
+              {shouldShowAttendancePrompt && (
+                <View style={styles.attendancePrompt}>
+                  <Icon name="check-circle" size={16} color="#1976d2" />
+                  <Text style={styles.attendancePromptText}>Tap to confirm attendance</Text>
+                </View>
+              )}
+              {/* Show attended indicator */}
+              {match.userAttended && (
+                <View style={styles.attendedIndicator}>
+                  <Icon name="check-circle" size={16} color="#4caf50" />
+                  <Text style={styles.attendedText}>Attended</Text>
+                </View>
+              )}
+            </View>
           )}
         </View>
 
@@ -250,6 +283,14 @@ const MatchCard = ({
           size={variant === 'overlay' ? 'small' : 'default'}
         />
       )}
+
+      {/* Attendance Modal */}
+      <AttendanceModal
+        visible={showAttendanceModal}
+        onClose={() => setShowAttendanceModal(false)}
+        match={match}
+        onAttendanceConfirmed={handleAttendanceConfirmed}
+      />
       </TouchableOpacity>
     </ErrorBoundary>
   );
@@ -431,6 +472,40 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 6,
     flex: 1,
+  },
+  vsContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attendancePrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 12,
+  },
+  attendancePromptText: {
+    fontSize: 10,
+    color: '#1976d2',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  attendedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#e8f5e8',
+    borderRadius: 12,
+  },
+  attendedText: {
+    fontSize: 10,
+    color: '#4caf50',
+    marginLeft: 4,
+    fontWeight: '500',
   },
 });
 

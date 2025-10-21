@@ -778,6 +778,92 @@ class ApiService {
     }
   }
 
+  // Attendance tracking methods
+  async markMatchAttended(attendanceData) {
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/attendance/mark-attended`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(attendanceData)
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to mark match as attended');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error marking match as attended:', error);
+      throw error;
+    }
+  }
+
+  async getUserAttendedMatches() {
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/attendance/user-matches`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch attended matches');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching attended matches:', error);
+      throw error;
+    }
+  }
+
+  async removeAttendedMatch(matchId) {
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/attendance/${matchId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to remove attended match');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error removing attended match:', error);
+      throw error;
+    }
+  }
+
   // LEGACY: Keep for backward compatibility during transition
   async searchAllMatchesByLocation(params) {
     console.warn('⚠️ searchAllMatchesByLocation is deprecated - use searchMatchesByBounds instead');
