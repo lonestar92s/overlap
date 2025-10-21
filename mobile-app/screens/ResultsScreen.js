@@ -108,7 +108,8 @@ const ResultsScreen = ({ route, navigation }) => {
     else if (selectedLeagues.length > 0) {
       filtered = filtered.filter(match => {
         const leagueId = match.competition?.id || match.league?.id;
-        return selectedLeagues.includes(leagueId);
+        // Convert both to strings for comparison to handle data type mismatches
+        return selectedLeagues.includes(String(leagueId));
       });
     }
 

@@ -692,6 +692,14 @@ class ApiService {
         : this.getRelevantLeagues(bounds);
 
       console.log('🔍 searchMatchesByBounds: Target leagues:', targetLeagues.map(l => `${l.name} (${l.id})`));
+      
+      // Special logging for Champions League
+      const championsLeague = targetLeagues.find(l => l.id === 2 || l.name === 'Champions League');
+      if (championsLeague) {
+        console.log('🏆 CHAMPIONS LEAGUE INCLUDED in search!', championsLeague);
+      } else {
+        console.log('❌ CHAMPIONS LEAGUE NOT FOUND in target leagues');
+      }
 
       // Format dates for API
       const formattedDates = {

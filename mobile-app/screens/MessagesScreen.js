@@ -209,9 +209,12 @@ const MessagesScreen = ({ navigation }) => {
         
         // Add optional bounds if location is provided
         if (hasLocation) {
+          // Use dynamic bounds based on map viewport instead of fixed bounds
+          // This ensures all matches in the current map view are shown
+          const viewportSpan = 0.5; // Reasonable default span for initial search
           apiParams.bounds = {
-            northeast: { lat: location.coordinates[1] + 0.25, lng: location.coordinates[0] + 0.25 },
-            southwest: { lat: location.coordinates[1] - 0.25, lng: location.coordinates[0] - 0.25 }
+            northeast: { lat: location.coordinates[1] + viewportSpan, lng: location.coordinates[0] + viewportSpan },
+            southwest: { lat: location.coordinates[1] - viewportSpan, lng: location.coordinates[0] - viewportSpan }
           };
           // Set initial region for map centering
           initialRegion = {

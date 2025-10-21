@@ -401,7 +401,14 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         
         // Generate unique search session ID for tracking
         const searchSessionId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        console.log(`🔍 [${searchSessionId}] Starting search with bounds: ${bounds ? 'YES' : 'NO'}`);
+        console.log(`🔍 [${searchSessionId}] Starting search for competition ${competitionId} with bounds: ${bounds ? 'YES' : 'NO'}`);
+        
+        // Special logging for Champions League
+        if (competitionId === '2' || competitionId === 2) {
+            console.log(`🏆 [${searchSessionId}] CHAMPIONS LEAGUE SEARCH DETECTED! Competition ID: ${competitionId}`);
+            console.log(`🏆 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
+            console.log(`🏆 [${searchSessionId}] Bounds: ${bounds ? JSON.stringify(bounds) : 'NO BOUNDS'}`);
+        }
         
         const cachedData = matchesCache.get(cacheKey);
         if (cachedData) {
