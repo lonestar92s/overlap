@@ -169,19 +169,24 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
               height: uploadResult.metadata.height
             });
             
-            photos.push({
-              publicId: uploadResult.metadata.publicId,
-              url: uploadResult.metadata.url,
-              thumbnailUrl: cloudinaryService.generateThumbnailUrl(uploadResult.metadata.publicId),
-              width: uploadResult.metadata.width,
-              height: uploadResult.metadata.height,
-              format: uploadResult.metadata.format,
-              size: uploadResult.metadata.size,
-              coordinates: uploadResult.metadata.coordinates,
-              dateTaken: uploadResult.metadata.dateTaken,
-              uploadDate: new Date(),
-              caption: ''
-            });
+            // Only add photo if we have essential fields
+            if (uploadResult.metadata.publicId && uploadResult.metadata.url) {
+              photos.push({
+                publicId: uploadResult.metadata.publicId,
+                url: uploadResult.metadata.url,
+                thumbnailUrl: cloudinaryService.generateThumbnailUrl(uploadResult.metadata.publicId),
+                width: uploadResult.metadata.width,
+                height: uploadResult.metadata.height,
+                format: uploadResult.metadata.format,
+                size: uploadResult.metadata.size,
+                coordinates: uploadResult.metadata.coordinates,
+                dateTaken: uploadResult.metadata.dateTaken,
+                uploadDate: new Date(),
+                caption: ''
+              });
+            } else {
+              console.error('❌ Photo metadata incomplete, skipping:', uploadResult.metadata);
+            }
 
             console.log(`✅ Photo saved to memory: ${uploadResult.metadata.publicId}`);
             console.log(`🖼️ Photo URLs:`, {
@@ -191,11 +196,20 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
             });
           } else {
             console.error('❌ Photo upload failed:', uploadResult.error);
+            console.error('❌ Upload failure details:', {
+              error: uploadResult.error,
+              cloudinaryConfigured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+            });
             // Continue with memory creation even if photo upload fails
             console.log('⚠️ Continuing with memory creation without photos...');
           }
         } catch (uploadError) {
           console.error('❌ Photo upload error:', uploadError);
+          console.error('❌ Upload error details:', {
+            message: uploadError.message,
+            stack: uploadError.stack,
+            name: uploadError.name
+          });
         }
       }
     } else {
