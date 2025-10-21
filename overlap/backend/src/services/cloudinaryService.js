@@ -20,6 +20,15 @@ class CloudinaryService {
    */
   async uploadPhoto(fileBuffer, options = {}) {
     try {
+      // Check if Cloudinary is properly configured
+      if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === 'demo') {
+        console.warn('⚠️ Cloudinary not configured - using fallback storage');
+        return {
+          success: false,
+          error: 'Cloudinary not configured. Please set up CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.'
+        };
+      }
+
       const uploadOptions = {
         resource_type: 'auto',
         folder: 'memories',

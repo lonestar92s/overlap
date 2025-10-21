@@ -191,6 +191,8 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
             });
           } else {
             console.error('❌ Photo upload failed:', uploadResult.error);
+            // Continue with memory creation even if photo upload fails
+            console.log('⚠️ Continuing with memory creation without photos...');
           }
         } catch (uploadError) {
           console.error('❌ Photo upload error:', uploadError);
