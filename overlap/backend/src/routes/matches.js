@@ -266,6 +266,16 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             venue: venue,
                             status: fx.fixture.status
                         },
+                    // Add status at root level for easier access
+                    status: fx.fixture.status,
+                    
+                    // Debug status data
+                    _debug: {
+                        originalStatus: fx.fixture.status,
+                        statusLong: fx.fixture.status?.long,
+                        statusShort: fx.fixture.status?.short,
+                        statusElapsed: fx.fixture.status?.elapsed
+                    },
                         league: {
                             id: competitionId.toString(),
                             name: leagueName
