@@ -103,14 +103,19 @@ export const getMatchResult = (match) => {
   const { score, teams } = match;
   const matchStatus = getMatchStatus(match);
   
+  // If no score data available (common for saved matches), return null
+  if (!score) {
+    return null;
+  }
+  
   // For live matches, use halftime score if available
   // For completed matches, use fulltime score
   let homeScore, awayScore;
   
-  if (matchStatus.type === 'live' && score?.halftime?.home !== null && score?.halftime?.away !== null) {
+  if (matchStatus.type === 'live' && score?.halftime && score.halftime.home !== null && score.halftime.away !== null) {
     homeScore = score.halftime.home;
     awayScore = score.halftime.away;
-  } else if (matchStatus.type === 'completed' && score?.fullTime?.home !== null && score?.fullTime?.away !== null) {
+  } else if (matchStatus.type === 'completed' && score?.fullTime && score.fullTime.home !== null && score.fullTime.away !== null) {
     homeScore = score.fullTime.home;
     awayScore = score.fullTime.away;
   } else {
