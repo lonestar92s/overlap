@@ -13,7 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Card, Button } from 'react-native-elements';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import ApiService from '../services/api';
 import { MAP_PROVIDER } from '../utils/mapConfig';
 
@@ -221,7 +221,7 @@ const MemoriesMapScreen = () => {
         onRegionChangeComplete={setMapRegion}
         showsUserLocation={true}
         showsMyLocationButton={true}
-        provider="google"
+        provider={PROVIDER_GOOGLE}
       >
         {memories.map((memory, index) => {
           const coordinates = getMemoryCoordinates(memory);

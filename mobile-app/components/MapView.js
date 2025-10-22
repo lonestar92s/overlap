@@ -282,7 +282,7 @@ const MatchMapView = ({
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
+        provider={PROVIDER_GOOGLE}
         initialRegion={region}
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={handleMapReady}
