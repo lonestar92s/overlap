@@ -316,7 +316,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
     // Check if match is completed and has a score
     const matchDate = new Date(item.date);
     const now = new Date();
-    const isCompleted = matchDate < now && item.finalScore;
+    const isPast = matchDate < now;
+    const hasScore = item.finalScore && item.finalScore.home !== null && item.finalScore.away !== null;
+    const shouldShowResults = isPast && hasScore;
     
     const transformedMatch = {
       ...item,
@@ -350,11 +352,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
           variant="default"
           showHeart={true}
           showAttendancePrompt={true}
-          showResults={isCompleted}
+          showResults={shouldShowResults}
           style={styles.matchCardStyle}
         />
         {/* Show loading indicator for score fetching */}
-        {scoresLoading && matchDate < now && !item.finalScore && (
+        {scoresLoading && isPast && !hasScore && (
           <View style={styles.scoreLoadingContainer}>
             <ActivityIndicator size="small" color="#1976d2" />
             <Text style={styles.scoreLoadingText}>Fetching score...</Text>

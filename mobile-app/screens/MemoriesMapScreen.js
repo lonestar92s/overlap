@@ -159,8 +159,11 @@ const MemoriesMapScreen = () => {
               {new Date(selectedMemory.date).toLocaleDateString()}
             </Text>
             
-            {selectedMemory.userScore && (
-              <Text style={styles.scoreText}>{selectedMemory.userScore}</Text>
+            {/* Score Display */}
+            {(selectedMemory.userScore || selectedMemory.apiMatchData?.officialScore) && (
+              <Text style={styles.scoreText}>
+                {selectedMemory.apiMatchData?.officialScore || selectedMemory.userScore}
+              </Text>
             )}
             
             {selectedMemory.competition && (

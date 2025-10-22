@@ -907,6 +907,43 @@ class ApiService {
     }
   }
 
+  async getRecommendedMatches(limit = 10, days = 30) {
+    try {
+      const token = await getAuthToken();
+      const params = new URLSearchParams();
+      params.append('limit', limit.toString());
+      params.append('days', days.toString());
+      
+      const url = `${this.baseURL}/matches/recommended?${params.toString()}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch recommended matches');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching recommended matches:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - please try again');
+      }
+      throw error;
+    }
+  }
+
   // Saved Matches API Methods
   async getSavedMatches() {
     try {

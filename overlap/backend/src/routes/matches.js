@@ -6,6 +6,7 @@ const leagueService = require('../services/leagueService');
 const teamService = require('../services/teamService');
 const subscriptionService = require('../services/subscriptionService');
 const geocodingService = require('../services/geocodingService');
+const recommendationService = require('../services/recommendationService');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
@@ -995,6 +996,353 @@ router.get('/popular', async (req, res) => {
     } catch (error) {
         clearTimeout(timeout);
         res.status(500).json({ success: false, message: 'Failed to fetch popular matches', error: error.message });
+    }
+});
+
+// Recommended matches - personalized based on user data
+router.get('/recommended', authenticateToken, async (req, res) => {
+    const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+            res.status(408).json({ success: false, message: 'Request timeout - recommended matches endpoint took too long to respond' });
+        }
+    }, 30000);
+    
+    try {
+        const { limit = 10, days = 30 } = req.query;
+        const userId = req.user.id;
+        
+        // Get user with all their data
+        const user = await User.findById(userId);
+        if (!user) {
+            clearTimeout(timeout);
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
+        }
+
+        // Check cache first for recommended matches
+        const cacheKey = `recommended_matches_${userId}_${days}_${limit}`;
+        const cachedData = popularMatchesCache.get(cacheKey);
+        
+        if (cachedData) {
+            console.log('🔍 Recommended matches cache hit - returning cached data');
+            clearTimeout(timeout);
+            return res.json({ 
+                success: true, 
+                matches: cachedData, 
+                fromCache: true,
+                cachedAt: new Date().toISOString()
+            });
+        }
+
+        console.log(`🎯 Generating personalized recommendations for user: ${userId}`);
+
+        // Get user's preferences and behavior data
+        const userPreferences = {
+            favoriteLeagues: user.preferences?.favoriteLeagues || [],
+            favoriteTeams: user.preferences?.favoriteTeams || [],
+            defaultLocation: user.preferences?.defaultLocation,
+            recommendationRadius: user.preferences?.recommendationRadius || 400,
+            defaultSearchRadius: user.preferences?.defaultSearchRadius || 100
+        };
+
+        // Get user's recent search patterns and trip context
+        const recentSearches = user.recommendationHistory?.slice(-20) || [];
+        const savedMatches = user.savedMatches || [];
+        const visitedStadiums = user.visitedStadiums || [];
+        const activeTrips = user.trips?.filter(trip => {
+            const tripEnd = new Date(trip.matches[trip.matches.length - 1]?.date || trip.createdAt);
+            return tripEnd > new Date();
+        }) || [];
+
+        // Determine date range based on user behavior
+        const today = new Date();
+        const dateFrom = today.toISOString().split('T')[0];
+        const dateTo = new Date(today.getTime() + (parseInt(days) * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+
+        // Get leagues to search based on user preferences
+        let targetLeagues = [];
+        
+        if (userPreferences.favoriteLeagues.length > 0) {
+            // Use user's favorite leagues
+            targetLeagues = userPreferences.favoriteLeagues;
+        } else if (activeTrips.length > 0) {
+            // Extract leagues from active trips
+            const tripLeagues = new Set();
+            activeTrips.forEach(trip => {
+                trip.matches.forEach(match => {
+                    if (match.league) {
+                        tripLeagues.add(match.league);
+                    }
+                });
+            });
+            targetLeagues = Array.from(tripLeagues);
+        } else {
+            // Fallback to popular leagues
+            targetLeagues = ['39', '140', '135', '78', '61', '94', '97', '88'];
+        }
+
+        console.log(`🔍 Searching leagues: ${targetLeagues.join(', ')}`);
+
+        // Fetch matches from API
+        const allMatches = [];
+        const apiPromises = targetLeagues.map(async (leagueId) => {
+            try {
+                const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                    params: { 
+                        league: leagueId, 
+                        season: '2025', 
+                        from: dateFrom, 
+                        to: dateTo 
+                    },
+                    headers: { 'x-apisports-key': API_SPORTS_KEY },
+                    httpsAgent,
+                    timeout: 10000
+                });
+                
+                if (apiResponse.data && apiResponse.data.response && apiResponse.data.response.length > 0) {
+                    console.log(`✅ League ${leagueId}: Found ${apiResponse.data.response.length} matches`);
+                    return apiResponse.data.response;
+                } else {
+                    console.log(`⚠️ League ${leagueId}: No matches found`);
+                    return [];
+                }
+            } catch (error) {
+                console.log(`❌ League ${leagueId}: Error - ${error.message}`);
+                return [];
+            }
+        });
+
+        const results = await Promise.allSettled(apiPromises);
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value.length > 0) {
+                allMatches.push(...result.value);
+            }
+        });
+
+        if (allMatches.length === 0) {
+            console.log('⚠️ No matches found from any league, returning empty response');
+            clearTimeout(timeout);
+            return res.json({ 
+                success: true, 
+                matches: [], 
+                message: 'No recommended matches found' 
+            });
+        }
+
+        // Score and rank matches based on user preferences
+        const scoredMatches = await Promise.all(allMatches.map(async (match) => {
+            let score = 0;
+            const reasons = [];
+
+            // Base score
+            score += 10;
+
+            // Favorite teams bonus
+            if (userPreferences.favoriteTeams.length > 0) {
+                const homeTeam = match.teams?.home?.name?.toLowerCase();
+                const awayTeam = match.teams?.away?.name?.toLowerCase();
+                
+                userPreferences.favoriteTeams.forEach(favTeam => {
+                    const teamName = favTeam.name?.toLowerCase();
+                    if (teamName && (homeTeam?.includes(teamName) || awayTeam?.includes(teamName))) {
+                        score += 50;
+                        reasons.push(`Your favorite team ${favTeam.name} is playing`);
+                    }
+                });
+            }
+
+            // Favorite leagues bonus
+            if (userPreferences.favoriteLeagues.includes(match.league?.id?.toString())) {
+                score += 30;
+                reasons.push(`From your favorite league: ${match.league?.name}`);
+            }
+
+            // Location-based scoring
+            if (userPreferences.defaultLocation?.coordinates && match.venue?.id) {
+                try {
+                    const venueData = await venueService.getVenueById(match.venue.id);
+                    if (venueData && venueData.coordinates) {
+                        const distance = recommendationService.calculateDistance(
+                            userPreferences.defaultLocation.coordinates[1], // lat
+                            userPreferences.defaultLocation.coordinates[0], // lng
+                            venueData.coordinates[1],
+                            venueData.coordinates[0]
+                        );
+                        
+                        if (distance <= userPreferences.recommendationRadius) {
+                            const locationScore = Math.max(0, 40 - (distance / 10));
+                            score += locationScore;
+                            reasons.push(`Close to your location (${Math.round(distance)} miles away)`);
+                        }
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Error getting venue data for ${match.venue.id}: ${error.message}`);
+                }
+            }
+
+            // Avoid recently visited stadiums
+            const venueName = match.venue?.name?.toLowerCase();
+            const recentlyVisited = visitedStadiums.some(visited => {
+                const visitedName = visited.venueName?.toLowerCase();
+                return visitedName && venueName && visitedName.includes(venueName);
+            });
+            
+            if (recentlyVisited) {
+                score -= 20;
+                reasons.push('You recently visited this stadium');
+            }
+
+            // Avoid already saved matches
+            const alreadySaved = savedMatches.some(saved => saved.matchId === match.fixture?.id?.toString());
+            if (alreadySaved) {
+                score -= 100; // Heavily penalize already saved matches
+                reasons.push('You already saved this match');
+            }
+
+            // Avoid recently dismissed recommendations
+            const recentlyDismissed = recentSearches.some(rec => 
+                rec.matchId === match.fixture?.id?.toString() && 
+                rec.action === 'dismissed' &&
+                (new Date() - new Date(rec.dismissedAt)) < (7 * 24 * 60 * 60 * 1000) // 7 days
+            );
+            if (recentlyDismissed) {
+                score -= 30;
+                reasons.push('You recently dismissed this match');
+            }
+
+            // Weekend bonus (if user tends to search weekends)
+            const matchDate = new Date(match.fixture?.date);
+            const dayOfWeek = matchDate.getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+                score += 15;
+                reasons.push('Weekend match');
+            }
+
+            // High-profile match bonus (derbies, big teams)
+            const homeTeam = match.teams?.home?.name?.toLowerCase();
+            const awayTeam = match.teams?.away?.name?.toLowerCase();
+            const bigTeams = ['manchester united', 'manchester city', 'liverpool', 'arsenal', 'chelsea', 'tottenham', 
+                            'real madrid', 'barcelona', 'atletico madrid', 'bayern munich', 'borussia dortmund',
+                            'juventus', 'ac milan', 'inter milan', 'psg', 'ajax', 'psv'];
+            
+            const isBigMatch = bigTeams.some(team => 
+                homeTeam?.includes(team) || awayTeam?.includes(team)
+            );
+            if (isBigMatch) {
+                score += 25;
+                reasons.push('High-profile match');
+            }
+
+            return {
+                ...match,
+                recommendationScore: score,
+                recommendationReasons: reasons
+            };
+        }));
+
+        // Sort by score and take top matches
+        const sortedMatches = scoredMatches
+            .filter(match => match.recommendationScore > 0) // Only show positive scores
+            .sort((a, b) => b.recommendationScore - a.recommendationScore)
+            .slice(0, parseInt(limit));
+
+        // Transform matches to match the expected format
+        const transformedMatches = [];
+        for (const match of sortedMatches) {
+            try {
+                const venueData = await venueService.getVenueById(match.venue?.id);
+                
+                transformedMatches.push({
+                    id: match.fixture?.id,
+                    homeTeam: {
+                        id: match.teams?.home?.id,
+                        name: match.teams?.home?.name,
+                        logo: match.teams?.home?.logo
+                    },
+                    awayTeam: {
+                        id: match.teams?.away?.id,
+                        name: match.teams?.away?.name,
+                        logo: match.teams?.away?.logo
+                    },
+                    league: {
+                        id: match.league?.id,
+                        name: match.league?.name,
+                        logo: match.league?.logo
+                    },
+                    venue: {
+                        id: match.venue?.id,
+                        name: match.venue?.name,
+                        city: venueData?.city || match.venue?.name,
+                        country: venueData?.country || 'Unknown',
+                        coordinates: venueData?.coordinates || null
+                    },
+                    date: match.fixture?.date,
+                    status: match.fixture?.status?.short,
+                    score: match.score || {},
+                    recommendationScore: match.recommendationScore,
+                    recommendationReasons: match.recommendationReasons
+                });
+            } catch (error) {
+                console.log(`⚠️ Error processing match ${match.fixture?.id}: ${error.message}`);
+                // Still include the match but with basic venue info
+                transformedMatches.push({
+                    id: match.fixture?.id,
+                    homeTeam: {
+                        id: match.teams?.home?.id,
+                        name: match.teams?.home?.name,
+                        logo: match.teams?.home?.logo
+                    },
+                    awayTeam: {
+                        id: match.teams?.away?.id,
+                        name: match.teams?.away?.name,
+                        logo: match.teams?.away?.logo
+                    },
+                    league: {
+                        id: match.league?.id,
+                        name: match.league?.name,
+                        logo: match.league?.logo
+                    },
+                    venue: {
+                        id: match.venue?.id,
+                        name: match.venue?.name,
+                        city: match.venue?.name,
+                        country: 'Unknown',
+                        coordinates: null
+                    },
+                    date: match.fixture?.date,
+                    status: match.fixture?.status?.short,
+                    score: match.score || {},
+                    recommendationScore: match.recommendationScore,
+                    recommendationReasons: match.recommendationReasons
+                });
+            }
+        }
+        
+        // Cache the recommended matches for future requests (shorter cache for personalized data)
+        popularMatchesCache.set(cacheKey, transformedMatches, 3600000); // 1 hour cache
+        console.log('💾 Recommended matches cached for future requests');
+        
+        clearTimeout(timeout);
+        res.json({ 
+            success: true, 
+            matches: transformedMatches, 
+            totalFound: allMatches.length,
+            personalized: true,
+            dateRange: { from: dateFrom, to: dateTo }, 
+            leagues: targetLeagues,
+            fromCache: false,
+            cachedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        clearTimeout(timeout);
+        console.error('Error getting recommended matches:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to fetch recommended matches', 
+            error: error.message 
+        });
     }
 });
 

@@ -13,19 +13,40 @@ import ApiService from '../services/api';
 import HeartButton from './HeartButton';
 import MatchCard from './MatchCard';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isRecommended, setIsRecommended] = useState(false);
   const { isMatchInItinerary } = useItineraries();
+  const { user } = useAuth();
 
-  const fetchPopularMatches = async (retryCount = 0) => {
+  const fetchMatches = async (retryCount = 0) => {
     try {
       setLoading(true);
-      const response = await ApiService.getPopularMatches();
-      
-      // console.log('Popular matches API response:', response);
+      let response;
+      let isRecommendedData = false;
+
+      // Try to fetch recommended matches if user is authenticated
+      if (user) {
+        try {
+          response = await ApiService.getRecommendedMatches();
+          isRecommendedData = true;
+          setIsRecommended(true);
+          console.log('🎯 Using recommended matches for authenticated user');
+        } catch (authError) {
+          console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
+          // Fall back to popular matches if recommended fails
+          response = await ApiService.getPopularMatches();
+          setIsRecommended(false);
+        }
+      } else {
+        // Use popular matches for non-authenticated users
+        response = await ApiService.getPopularMatches();
+        setIsRecommended(false);
+      }
       
       // Handle different response structures
       let matchesData = [];
@@ -51,16 +72,19 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         }
       }
     } catch (error) {
-      console.error('Error fetching popular matches:', error);
+      console.error('Error fetching matches:', error);
       
       // Retry once if it's a timeout error
       if (error.message.includes('timeout') && retryCount < 1) {
-        console.log('🔄 Retrying popular matches request...');
-        setTimeout(() => fetchPopularMatches(retryCount + 1), 2000);
+        console.log('🔄 Retrying matches request...');
+        setTimeout(() => fetchMatches(retryCount + 1), 2000);
         return;
       }
       
-      Alert.alert('Error', 'Failed to load popular matches');
+      const errorMessage = isRecommended 
+        ? 'Failed to load recommended matches' 
+        : 'Failed to load popular matches';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -68,12 +92,12 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   };
 
   useEffect(() => {
-    fetchPopularMatches();
-  }, []);
+    fetchMatches();
+  }, [user]); // Re-fetch when user authentication status changes
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchPopularMatches();
+    fetchMatches();
   };
 
   const formatMatchDate = (dateString) => {
@@ -101,7 +125,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#1976d2" />
-        <Text style={styles.loadingText}>Loading popular matches...</Text>
+        <Text style={styles.loadingText}>
+          {isRecommended ? 'Loading recommended matches...' : 'Loading popular matches...'}
+        </Text>
       </View>
     );
   }
@@ -109,7 +135,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   if (matches.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No popular matches available</Text>
+        <Text style={styles.emptyText}>
+          {isRecommended ? 'No recommended matches available' : 'No popular matches available'}
+        </Text>
         <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
@@ -119,7 +147,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>Popular Matches</Text>
+      <Text style={styles.sectionTitle}>
+        {isRecommended ? 'Recommended for You' : 'Popular Matches'}
+      </Text>
       <FlatList
         data={matches}
         renderItem={renderMatchCard}

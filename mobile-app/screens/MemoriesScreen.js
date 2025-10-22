@@ -245,8 +245,11 @@ const MemoriesScreen = () => {
               {new Date(memory.date).toLocaleDateString()}
             </Text>
             
-            {memory.userScore && (
-              <Text style={styles.scoreText}>{memory.userScore}</Text>
+            {/* Score Display */}
+            {(memory.userScore || memory.apiMatchData?.officialScore) && (
+              <Text style={styles.scoreText}>
+                {memory.apiMatchData?.officialScore || memory.userScore}
+              </Text>
             )}
             
             {memory.competition && (
