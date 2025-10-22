@@ -24,6 +24,7 @@ const upload = multer({
     if (isImage || isVideo) {
       return cb(null, true);
     } else {
+      console.error(`❌ Invalid file type: ${file.originalname} (${file.mimetype})`);
       cb(new Error('Only image files (JPEG, JPG, PNG, HEIC) and video files (MP4, MOV, AVI, MKV, WEBM) are allowed'));
     }
   }
@@ -97,7 +98,32 @@ router.get('/stats', auth, async (req, res) => {
  * POST /api/memories
  * Create a new memory with photo/video upload to Cloudinary
  */
-router.post('/', auth, upload.array('photos', 10), async (req, res) => {
+// Error handling middleware for multer
+const handleUploadError = (error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'File too large. Maximum size is 100MB.'
+      });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({
+        success: false,
+        message: 'Too many files. Maximum is 10 files.'
+      });
+    }
+  }
+  if (error.message.includes('Only image files')) {
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+  next(error);
+};
+
+router.post('/', auth, upload.array('photos', 10), handleUploadError, async (req, res) => {
   try {
     const {
       matchType,
@@ -280,7 +306,7 @@ router.post('/', auth, upload.array('photos', 10), async (req, res) => {
  * PUT /api/memories/:id
  * Update a memory (including photo management)
  */
-router.put('/:id', auth, upload.array('photos', 10), async (req, res) => {
+router.put('/:id', auth, upload.array('photos', 10), handleUploadError, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     const memory = user.attendedMatches.id(req.params.id);

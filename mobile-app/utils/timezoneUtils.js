@@ -794,16 +794,11 @@ export const testWithRealData = (apiResponse) => {
     const teams = match.teams;
     const venue = fixture?.venue;
     
-    console.log('🏟️ Teams:', `${teams?.home?.name || 'TBD'} vs ${teams?.away?.name || 'TBD'}`);
-    console.log('📍 Venue:', venue?.name || 'Unknown', 'in', venue?.city || 'Unknown City');
-    console.log('🌍 Country:', venue?.country || 'Unknown');
-    console.log('📐 Coordinates:', venue?.coordinates || 'None');
-    console.log('⏰ API Time:', fixture?.date || 'TBD');
-    console.log('🌐 API Timezone:', fixture?.timezone || 'None');
+
     
     // Test timezone detection
     const detectedTimezone = getVenueTimezone(fixture);
-    console.log('🎯 Detected Timezone:', detectedTimezone);
+
     
     // Test time formatting
     if (fixture?.date) {

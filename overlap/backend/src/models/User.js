@@ -170,12 +170,26 @@ const userSchema = new mongoose.Schema({
         userScore: String, // "2-1" or "Arsenal 2-1 Chelsea"
         userNotes: String,
         photos: [{
-            filename: String,
+            // Cloudinary fields
+            publicId: String,
+            url: String,
+            thumbnailUrl: String,
+            width: Number,
+            height: Number,
+            format: String,
+            size: Number,
+            coordinates: {
+                lat: Number,
+                lng: Number
+            },
+            dateTaken: Date,
             uploadDate: {
                 type: Date,
                 default: Date.now
             },
-            caption: String
+            caption: String,
+            // Legacy field for backward compatibility
+            filename: String
         }],
         attendedDate: {
             type: Date,

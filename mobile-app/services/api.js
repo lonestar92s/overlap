@@ -1098,8 +1098,8 @@ class ApiService {
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+          'Authorization': `Bearer ${token}`
+          // Note: Don't set Content-Type for FormData - let the system set it automatically
         },
         body: formData
       });
@@ -1144,8 +1144,8 @@ class ApiService {
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories/${memoryId}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+          'Authorization': `Bearer ${token}`
+          // Note: Don't set Content-Type for FormData - let the system set it automatically
         },
         body: formData
       });
