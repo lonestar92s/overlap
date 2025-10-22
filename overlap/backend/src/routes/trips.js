@@ -410,7 +410,9 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
             const matchDate = new Date(match.date);
             const now = new Date();
             const isPast = matchDate < now;
-            const hasNoScore = !match.finalScore;
+            // Check if finalScore doesn't exist OR if it exists but has null values
+            const hasNoScore = !match.finalScore || 
+                              (match.finalScore.home === null && match.finalScore.away === null);
             return isPast && hasNoScore;
         });
 
