@@ -423,6 +423,7 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
         }
 
         console.log(`🏆 Fetching scores for ${completedMatches.length} completed matches`);
+        console.log(`🏆 Match IDs to fetch:`, completedMatches.map(m => m.matchId));
 
         // Batch fetch scores from API-Sports
         const scorePromises = completedMatches.map(async (match) => {
@@ -437,20 +438,27 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                 if (response.data && response.data.response && response.data.response.length > 0) {
                     const fixture = response.data.response[0];
                     const score = fixture.score;
+                    const goals = fixture.goals;
+                    
+                    console.log(`🔍 Debug fixture ${match.matchId}:`, {
+                        status: fixture.fixture.status,
+                        goals: goals,
+                        score: score
+                    });
                     
                     // Only store if match is finished and has valid scores
                     if (fixture.fixture.status.short === 'FT' && 
-                        score.fulltime.home !== null && 
-                        score.fulltime.away !== null) {
+                        goals.home !== null && 
+                        goals.away !== null) {
                         
                         return {
                             matchId: match.matchId,
                             finalScore: {
-                                home: score.fulltime.home,
-                                away: score.fulltime.away,
+                                home: goals.home,
+                                away: goals.away,
                                 halfTime: {
-                                    home: score.halftime.home,
-                                    away: score.halftime.away
+                                    home: score?.halftime?.home || null,
+                                    away: score?.halftime?.away || null
                                 },
                                 status: fixture.fixture.status.short,
                                 fetchedAt: new Date()
