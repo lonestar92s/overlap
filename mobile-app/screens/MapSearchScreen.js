@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { MaterialIcons } from '@expo/vector-icons';
-import { formatDateToLocalString, getTodayLocalString } from '../utils/dateUtils';
+import { formatDateToLocalString, getTodayLocalString, createDateRange } from '../utils/dateUtils';
 
 import BottomSheet from '../components/BottomSheet';
 import MatchMapView from '../components/MapView';
@@ -129,7 +129,9 @@ const MapSearchScreen = ({ navigation }) => {
   // Format date for display
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'Select date';
-    const date = new Date(dateString);
+    // Parse the date string safely without timezone conversion
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -171,40 +173,18 @@ const MapSearchScreen = ({ navigation }) => {
         // Valid end date selection
         setDateTo(dateString);
         
-        // Create range marking
+        // Create range marking using dateUtils
+        const dateRange = createDateRange(dateFrom, dateString);
         const range = {};
-        const start = new Date(dateFrom);
-        const end = new Date(dateString);
-        
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const currentDate = `${year}-${month}-${day}`;
-          
-          if (currentDate === dateFrom) {
-            range[currentDate] = {
-              selected: true,
-              startingDay: true,
-              color: '#1976d2',
-              textColor: 'white'
-            };
-          } else if (currentDate === dateString) {
-            range[currentDate] = {
-              selected: true,
-              endingDay: true,
-              color: '#1976d2',
-              textColor: 'white'
-            };
-          } else {
-            range[currentDate] = {
-              selected: true,
-              color: '#e3f2fd',
-              textColor: '#1976d2'
-            };
-          }
-        }
+        dateRange.forEach((dateStr, index) => {
+          range[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: index === 0 || index === dateRange.length - 1 ? '#1976d2' : '#e3f2fd',
+            textColor: index === 0 || index === dateRange.length - 1 ? 'white' : '#1976d2'
+          };
+        });
         
         setSelectedDates(range);
         // Auto-close calendar after selecting date range

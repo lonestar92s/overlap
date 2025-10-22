@@ -18,6 +18,7 @@ import FilterModal from '../components/FilterModal';
 import { useFilter } from '../contexts/FilterContext';
 import { useItineraries } from '../contexts/ItineraryContext';
 import ApiService from '../services/api';
+import { calculateSearchBounds } from '../utils/adaptiveBounds';
 import * as Haptics from 'expo-haptics';
 
 import HeartButton from '../components/HeartButton';
@@ -427,31 +428,20 @@ const MapResultsScreen = ({ navigation, route }) => {
       const viewportLatSpan = region.latitudeDelta;
       const viewportLngSpan = region.longitudeDelta;
       
-      // Apply reasonable limits to prevent extremely large searches
-      // Max bounds: 10° × 10° (covers most of a continent/region)
-      const maxSpan = 10.0;
-      const finalLatSpan = Math.min(viewportLatSpan, maxSpan);
-      const finalLngSpan = Math.min(viewportLngSpan, maxSpan);
-      
-      const bounds = {
-        northeast: {
-          lat: region.latitude + (finalLatSpan / 2),
-          lng: region.longitude + (finalLngSpan / 2),
-        },
-        southwest: {
-          lat: region.latitude - (finalLatSpan / 2),
-          lng: region.longitude - (finalLngSpan / 2),
-        },
-      };
+      // Use adaptive search bounds calculation for better match coverage
+      const bounds = calculateSearchBounds(region, {
+        bufferMultiplier: 1.3, // 30% buffer around viewport
+        maxSpan: 10.0,
+      });
       
       console.log('🔍 Viewport-only search (RESPONSIVE):', {
         center: { lat: region.latitude, lng: region.longitude },
         viewport: {
           actualLatDelta: region.latitudeDelta,
           actualLngDelta: region.longitudeDelta,
-          finalLatSpan,
-          finalLngSpan,
-          radiusKm: `${(finalLatSpan * 111 / 2).toFixed(1)}km × ${(finalLngSpan * 111 / 2).toFixed(1)}km`
+          finalLatSpan: viewportLatSpan,
+          finalLngSpan: viewportLngSpan,
+          radiusKm: `${(viewportLatSpan * 111 / 2).toFixed(1)}km × ${(viewportLngSpan * 111 / 2).toFixed(1)}km`
         },
         bounds,
         // Show the zoom level and what it means
@@ -465,9 +455,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         },
         // Add geographic coverage info
         geographicCoverage: {
-          latCoverageKm: (finalLatSpan * 111).toFixed(0),
-          lngCoverageKm: (finalLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180)).toFixed(0),
-          estimatedArea: `${((finalLatSpan * 111) * (finalLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180))).toFixed(0)} km²`
+          latCoverageKm: (viewportLatSpan * 111).toFixed(0),
+          lngCoverageKm: (viewportLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180)).toFixed(0),
+          estimatedArea: `${((viewportLatSpan * 111) * (viewportLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180))).toFixed(0)} km²`
         }
       });
 
@@ -567,13 +557,15 @@ const MapResultsScreen = ({ navigation, route }) => {
       currentZoom: mapRegion?.latitudeDelta || 0.5
     });
     
-    // Move map center to markers, but keep current zoom level
+    // Move map center to markers, but use more generous zoom level
     const currentZoom = mapRegion?.latitudeDelta || 0.5;
+    // Use more generous bounds to ensure all matches are visible
+    const generousZoom = Math.max(currentZoom, 0.8); // Minimum 0.8 degree span
     mapRef.current.animateToRegion({
       latitude: centerLat,
       longitude: centerLng,
-      latitudeDelta: currentZoom,    // Keep current zoom
-      longitudeDelta: currentZoom    // Keep current zoom
+      latitudeDelta: generousZoom,    // More generous zoom
+      longitudeDelta: generousZoom    // More generous zoom
     }, 1000); // 1 second smooth animation
   };
 

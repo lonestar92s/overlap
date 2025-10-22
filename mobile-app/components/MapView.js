@@ -4,6 +4,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
 
 const MatchMapView = ({
   matches = [],
@@ -131,7 +132,7 @@ const MatchMapView = ({
     }
   };
 
-  // Fit map to show all matches
+  // Fit map to show all matches using adaptive bounds
   const fitToMatches = () => {
     if (!matches || matches.length === 0 || !mapRef.current) return;
 
@@ -147,81 +148,16 @@ const MatchMapView = ({
 
     if (coordinates.length === 0) return;
 
-    // For search results, use a more conservative zoom level to avoid excessive zooming out
-    const isSearchResults = coordinates.length > 10; // Assume >10 matches means search results
-    
-    if (isSearchResults) {
-      // For search results, center on the middle of the results but use a reasonable zoom level
-      const lats = coordinates.map(c => c.latitude);
-      const lngs = coordinates.map(c => c.longitude);
-      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-      
-      // Calculate the span of the results
-      const spanLat = Math.abs(Math.max(...lats) - Math.min(...lats));
-      const spanLng = Math.abs(Math.max(...lngs) - Math.min(...lngs));
-      
-      // Add some padding but cap the zoom level to prevent excessive zooming out
-      const MAX_ZOOM_OUT = 3.0; // Maximum zoom out level for search results
-      const padding = 1.5; // Add 50% padding around results
-      
-      const targetLatDelta = Math.min(spanLat * padding, MAX_ZOOM_OUT);
-      const targetLngDelta = Math.min(spanLng * padding, MAX_ZOOM_OUT);
-      
-      mapRef.current.animateToRegion({
-        latitude: centerLat,
-        longitude: centerLng,
-        latitudeDelta: targetLatDelta,
-        longitudeDelta: targetLngDelta,
-      }, 600);
-      return;
-    }
-
-    // Original logic for smaller result sets (like itinerary matches)
-    // Minimum span to avoid over-zooming when there are very few points
-    const MIN_LAT_DELTA = 0.2;
-    const MIN_LNG_DELTA = 0.2;
-
-    if (coordinates.length === 1) {
-      // For a single marker, center with a sane default zoom level
-      const only = coordinates[0];
-      mapRef.current.animateToRegion({
-        latitude: only.latitude,
-        longitude: only.longitude,
-        latitudeDelta: MIN_LAT_DELTA,
-        longitudeDelta: MIN_LNG_DELTA,
-      }, 600);
-      return;
-    }
-
-    // For multiple points, clamp zoom if the cluster is extremely tight
-    const lats = coordinates.map(c => c.latitude);
-    const lngs = coordinates.map(c => c.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    const spanLat = Math.abs(maxLat - minLat);
-    const spanLng = Math.abs(maxLng - minLng);
-
-    if (spanLat < MIN_LAT_DELTA && spanLng < MIN_LNG_DELTA) {
-      // Points are very close together; show a minimum area around their centroid
-      const centerLat = (minLat + maxLat) / 2;
-      const centerLng = (minLng + maxLng) / 2;
-      mapRef.current.animateToRegion({
-        latitude: centerLat,
-        longitude: centerLng,
-        latitudeDelta: Math.max(spanLat, MIN_LAT_DELTA),
-        longitudeDelta: Math.max(spanLng, MIN_LNG_DELTA),
-      }, 600);
-      return;
-    }
-
-    // Normal fit with padding for typical multi-point results
-    mapRef.current.fitToCoordinates(coordinates, {
-      edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
-      animated: true,
+    // Use adaptive bounds calculation for better match coverage
+    const adaptiveRegion = calculateAdaptiveBounds(coordinates, {
+      minSpan: 0.1,
+      maxSpan: 5.0,
+      basePadding: 2.0,
+      urbanPadding: 3.0,
+      ruralPadding: 1.8,
     });
+    
+    mapRef.current.animateToRegion(adaptiveRegion, 600);
   };
 
   // Render match markers with memoization
@@ -282,7 +218,7 @@ const MatchMapView = ({
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
         initialRegion={region}
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={handleMapReady}

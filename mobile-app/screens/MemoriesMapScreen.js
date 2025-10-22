@@ -14,6 +14,7 @@ import { Card, Button } from 'react-native-elements';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Platform } from 'react-native';
 import ApiService from '../services/api';
 import { MAP_PROVIDER } from '../utils/mapConfig';
 
@@ -63,14 +64,14 @@ const MemoriesMapScreen = () => {
             
             const centerLat = (minLat + maxLat) / 2;
             const centerLng = (minLng + maxLng) / 2;
-            const deltaLat = (maxLat - minLat) * 1.5;
-            const deltaLng = (maxLng - minLng) * 1.5;
+            const deltaLat = (maxLat - minLat) * 2.5; // Increased padding
+            const deltaLng = (maxLng - minLng) * 2.5; // Increased padding
             
             setMapRegion({
               latitude: centerLat,
               longitude: centerLng,
-              latitudeDelta: Math.max(deltaLat, 0.1),
-              longitudeDelta: Math.max(deltaLng, 0.1),
+              latitudeDelta: Math.max(deltaLat, 0.2), // Increased minimum
+              longitudeDelta: Math.max(deltaLng, 0.2), // Increased minimum
             });
           }
         }
@@ -221,7 +222,7 @@ const MemoriesMapScreen = () => {
         onRegionChangeComplete={setMapRegion}
         showsUserLocation={true}
         showsMyLocationButton={true}
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
       >
         {memories.map((memory, index) => {
           const coordinates = getMemoryCoordinates(memory);

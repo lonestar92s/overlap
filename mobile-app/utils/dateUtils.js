@@ -57,8 +57,17 @@ export const getLocalDateString = (dateInput) => {
  * @returns {string[]} - Array of date strings in YYYY-MM-DD format
  */
 export const createDateRange = (startDate, endDate) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  // Parse date strings safely without timezone conversion
+  const parseDateString = (dateStr) => {
+    if (typeof dateStr === 'string') {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    return new Date(dateStr);
+  };
+  
+  const start = parseDateString(startDate);
+  const end = parseDateString(endDate);
   const dates = [];
   
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {

@@ -74,8 +74,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       return {
         latitude: 51.5074, // London default
         longitude: -0.1278,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
+        latitudeDelta: 0.8, // More generous default zoom
+        longitudeDelta: 0.8, // More generous default zoom
       };
     }
 
@@ -130,8 +130,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       const region = {
         latitude: (minLat + maxLat) / 2,
         longitude: (minLng + maxLng) / 2,
-        latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.5),
-        longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.5),
+        latitudeDelta: Math.max(0.1, (maxLat - minLat) * 2.5), // Increased padding and minimum
+        longitudeDelta: Math.max(0.1, (maxLng - minLng) * 2.5), // Increased padding and minimum
       };
       
       console.log('🗺️ ItineraryMapScreen - Calculated region:', region);

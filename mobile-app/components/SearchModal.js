@@ -13,6 +13,7 @@ import {
 import { Button, Overlay } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from './LocationAutocomplete';
+import { formatDateToLocalString, createDateRange } from '../utils/dateUtils';
 
 const SearchModal = ({ 
   visible, 
@@ -37,22 +38,15 @@ const SearchModal = ({
     
     // Set selected dates for calendar
     if (initialDateFrom && initialDateTo) {
+      const dateRange = createDateRange(initialDateFrom, initialDateTo);
       const dates = {};
-      const start = new Date(initialDateFrom);
-      const end = new Date(initialDateTo);
-      
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
+      dateRange.forEach((dateStr, index) => {
         dates[dateStr] = {
           selected: true,
-          startingDay: d.getTime() === start.getTime(),
-          endingDay: d.getTime() === end.getTime(),
+          startingDay: index === 0,
+          endingDay: index === dateRange.length - 1,
         };
-      }
+      });
       setSelectedDates(dates);
     }
   }, [initialLocation, initialDateFrom, initialDateTo]);
@@ -64,7 +58,9 @@ const SearchModal = ({
 
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'Add dates';
-    const date = new Date(dateString);
+    // Parse the date string safely without timezone conversion
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric' 
@@ -87,42 +83,31 @@ const SearchModal = ({
       });
     } else {
       // Complete selection
-      const start = new Date(dateFrom);
-      const end = new Date(selectedDate);
-      
-      if (end < start) {
+      if (selectedDate < dateFrom) {
         // Swap dates if end is before start
         setDateFrom(selectedDate);
         setDateTo(dateFrom);
+        const dateRange = createDateRange(selectedDate, dateFrom);
         const dates = {};
-        for (let d = new Date(end); d <= start; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
+        dateRange.forEach((dateStr, index) => {
           dates[dateStr] = {
             selected: true,
-            startingDay: d.getTime() === end.getTime(),
-            endingDay: d.getTime() === start.getTime(),
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
           };
-        }
+        });
         setSelectedDates(dates);
       } else {
         setDateTo(selectedDate);
-        const dates = { ...selectedDates };
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          // Fix: Use local date formatting instead of toISOString() to avoid timezone shift
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
+        const dateRange = createDateRange(dateFrom, selectedDate);
+        const dates = {};
+        dateRange.forEach((dateStr, index) => {
           dates[dateStr] = {
             selected: true,
-            startingDay: d.getTime() === start.getTime(),
-            endingDay: d.getTime() === end.getTime(),
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
           };
-        }
+        });
         setSelectedDates(dates);
       }
     }

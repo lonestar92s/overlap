@@ -109,7 +109,7 @@ const PopularMatchModal = ({
             {venue.coordinates && venue.coordinates.length === 2 ? (
               <MapView
                 style={styles.venueMap}
-                provider={MapView.PROVIDER_GOOGLE}
+                provider={Platform.OS === 'android' ? MapView.PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
                 region={{
                   latitude: venue.coordinates[1], // latitude
                   longitude: venue.coordinates[0], // longitude

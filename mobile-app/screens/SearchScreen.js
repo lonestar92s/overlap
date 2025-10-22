@@ -213,7 +213,9 @@ const SearchScreen = ({ navigation }) => {
 
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'Add dates';
-    const date = new Date(dateString);
+    // Parse the date string safely without timezone conversion
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
