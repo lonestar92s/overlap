@@ -255,6 +255,34 @@ const userSchema = new mongoose.Schema({
                     type: String,
                     default: ''
                 }
+            },
+            finalScore: {
+                home: {
+                    type: Number,
+                    default: null
+                },
+                away: {
+                    type: Number,
+                    default: null
+                },
+                halfTime: {
+                    home: {
+                        type: Number,
+                        default: null
+                    },
+                    away: {
+                        type: Number,
+                        default: null
+                    }
+                },
+                status: {
+                    type: String,
+                    default: null
+                },
+                fetchedAt: {
+                    type: Date,
+                    default: null
+                }
             }
         }],
         createdAt: {

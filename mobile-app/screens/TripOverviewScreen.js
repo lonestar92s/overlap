@@ -40,6 +40,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [recommendations, setRecommendations] = useState([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [scoresLoading, setScoresLoading] = useState(false);
 
   useEffect(() => {
     if (itineraryId) {
@@ -49,6 +50,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
         // Fetch recommendations if trip has matches
         if (foundItinerary.matches && foundItinerary.matches.length > 0) {
           fetchRecommendations(foundItinerary.id || foundItinerary._id);
+          // Fetch scores for completed matches
+          fetchScores(foundItinerary.id || foundItinerary._id);
         }
       }
       setLoading(false);
@@ -73,6 +76,41 @@ const TripOverviewScreen = ({ navigation, route }) => {
       console.error('Error fetching recommendations:', err);
     } finally {
       setRecommendationsLoading(false);
+    }
+  };
+
+  const fetchScores = async (tripId) => {
+    setScoresLoading(true);
+    try {
+      const data = await apiService.fetchScores(tripId);
+      if (data.success && data.updatedMatches && data.updatedMatches.length > 0) {
+        console.log(`🏆 Fetched scores for ${data.updatedMatches.length} matches`);
+        // Update local itinerary state with new scores
+        setItinerary(prevItinerary => {
+          if (!prevItinerary) return prevItinerary;
+          
+          const updatedMatches = prevItinerary.matches.map(match => {
+            const updatedScore = data.updatedMatches.find(score => score.matchId === match.matchId);
+            if (updatedScore) {
+              return {
+                ...match,
+                finalScore: updatedScore.finalScore
+              };
+            }
+            return match;
+          });
+          
+          return {
+            ...prevItinerary,
+            matches: updatedMatches
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching match scores:', err);
+      // Don't show error to user - scores are optional
+    } finally {
+      setScoresLoading(false);
     }
   };
 
@@ -275,6 +313,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
       coordinates: null 
     };
     
+    // Check if match is completed and has a score
+    const matchDate = new Date(item.date);
+    const now = new Date();
+    const isCompleted = matchDate < now && item.finalScore;
+    
     const transformedMatch = {
       ...item,
       id: item.matchId,
@@ -288,7 +331,15 @@ const TripOverviewScreen = ({ navigation, route }) => {
         away: { name: item.awayTeam?.name || 'Unknown', logo: item.awayTeam?.logo || '' }
       },
       league: typeof item.league === 'string' ? item.league : { name: item.league?.name || item.league || 'Unknown League' },
-      venue: venueInfo
+      venue: venueInfo,
+      // Add score data if available
+      score: item.finalScore ? {
+        fullTime: {
+          home: item.finalScore.home,
+          away: item.finalScore.away
+        },
+        halfTime: item.finalScore.halfTime
+      } : null
     };
 
     return (
@@ -299,8 +350,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
           variant="default"
           showHeart={true}
           showAttendancePrompt={true}
+          showResults={isCompleted}
           style={styles.matchCardStyle}
         />
+        {/* Show loading indicator for score fetching */}
+        {scoresLoading && matchDate < now && !item.finalScore && (
+          <View style={styles.scoreLoadingContainer}>
+            <ActivityIndicator size="small" color="#1976d2" />
+            <Text style={styles.scoreLoadingText}>Fetching score...</Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -871,6 +930,22 @@ const styles = StyleSheet.create({
   dismissRecommendationButtonText: {
     color: '#666',
     fontSize: 14,
+    fontWeight: '500',
+  },
+  scoreLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  scoreLoadingText: {
+    fontSize: 12,
+    color: '#1976d2',
+    marginLeft: 8,
     fontWeight: '500',
   },
 });

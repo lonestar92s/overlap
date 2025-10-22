@@ -1,8 +1,13 @@
 const express = require('express');
 const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
+const axios = require('axios');
 
 const router = express.Router();
+
+// API-Sports configuration
+const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
+const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
 
 // Get all trips for the authenticated user (or empty array if not authenticated)
 router.get('/', authenticateToken, async (req, res) => {
@@ -383,6 +388,114 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to update match planning'
+        });
+    }
+});
+
+// Fetch scores for completed matches in a trip
+router.post('/:id/fetch-scores', auth, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        const trip = user.trips.id(req.params.id);
+        
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        // Find completed matches that don't have scores yet
+        const completedMatches = trip.matches.filter(match => {
+            const matchDate = new Date(match.date);
+            const now = new Date();
+            const isPast = matchDate < now;
+            const hasNoScore = !match.finalScore;
+            return isPast && hasNoScore;
+        });
+
+        if (completedMatches.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No completed matches need score updates',
+                updatedMatches: []
+            });
+        }
+
+        console.log(`🏆 Fetching scores for ${completedMatches.length} completed matches`);
+
+        // Batch fetch scores from API-Sports
+        const scorePromises = completedMatches.map(async (match) => {
+            try {
+                // Use matchId to fetch from API-Sports
+                const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                    params: { id: match.matchId },
+                    headers: { 'x-apisports-key': API_SPORTS_KEY },
+                    timeout: 10000
+                });
+
+                if (response.data && response.data.response && response.data.response.length > 0) {
+                    const fixture = response.data.response[0];
+                    const score = fixture.score;
+                    
+                    // Only store if match is finished and has valid scores
+                    if (fixture.fixture.status.short === 'FT' && 
+                        score.fulltime.home !== null && 
+                        score.fulltime.away !== null) {
+                        
+                        return {
+                            matchId: match.matchId,
+                            finalScore: {
+                                home: score.fulltime.home,
+                                away: score.fulltime.away,
+                                halfTime: {
+                                    home: score.halftime.home,
+                                    away: score.halftime.away
+                                },
+                                status: fixture.fixture.status.short,
+                                fetchedAt: new Date()
+                            }
+                        };
+                    }
+                }
+                return null;
+            } catch (error) {
+                console.error(`Error fetching score for match ${match.matchId}:`, error.message);
+                return null;
+            }
+        });
+
+        const scoreResults = await Promise.all(scorePromises);
+        const validScores = scoreResults.filter(result => result !== null);
+
+        // Update matches with scores
+        let updatedCount = 0;
+        validScores.forEach(scoreData => {
+            const match = trip.matches.find(m => m.matchId === scoreData.matchId);
+            if (match) {
+                match.finalScore = scoreData.finalScore;
+                updatedCount++;
+            }
+        });
+
+        trip.updatedAt = new Date();
+        await user.save();
+
+        console.log(`✅ Updated ${updatedCount} matches with scores`);
+
+        res.json({
+            success: true,
+            message: `Updated ${updatedCount} matches with scores`,
+            updatedMatches: validScores,
+            totalCompleted: completedMatches.length
+        });
+
+    } catch (error) {
+        console.error('Error fetching match scores:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch match scores',
+            error: error.message
         });
     }
 });

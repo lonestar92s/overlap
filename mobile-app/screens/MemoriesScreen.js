@@ -67,8 +67,9 @@ const MemoriesScreen = () => {
   const handleMemoryPress = useCallback((memory) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedMemory(memory);
-    // TODO: Navigate to memory detail or open modal
-  }, []);
+    // Navigate to edit memory screen
+    navigation.navigate('EditMemory', { memory });
+  }, [navigation]);
 
   // Delete memory
   const handleDeleteMemory = useCallback(async (memory) => {
@@ -143,18 +144,17 @@ const MemoriesScreen = () => {
     const getImageUrl = (photo) => {
       if (!photo) return null;
       
-      // Try different URL fields in order of preference
-      if (photo.thumbnailUrl) return photo.thumbnailUrl;
+      // Always use the main URL for React Native compatibility
       if (photo.url) return photo.url;
       
-      // If we have a publicId but no URLs, try to construct them
+      // If we have a publicId but no URL, construct a simple one
       if (photo.publicId) {
-        // Construct thumbnail URL from publicId
-        return `https://res.cloudinary.com/dtujkmf8d/image/upload/w_400,h_400,c_fill,q_auto/${photo.publicId}`;
+        // Use a simple, React Native-compatible URL format
+        return `https://res.cloudinary.com/dtujkmf8d/image/upload/w_400,h_400,c_fill,q_auto,f_auto/${photo.publicId}`;
       }
       
       // If we have an _id but no other data, this might be a corrupted photo object
-      if (photo._id && !photo.publicId && !photo.url && !photo.thumbnailUrl) {
+      if (photo._id && !photo.publicId && !photo.url) {
         console.warn('⚠️ Photo object missing essential fields:', photo);
         return null;
       }
@@ -193,8 +193,13 @@ const MemoriesScreen = () => {
                 source={{ uri: imageUrl }}
                 style={styles.photoContainer}
                 resizeMode="cover"
-                onError={(e) => console.error('❌ Error loading image:', e.nativeEvent.error)}
+                onError={(e) => {
+                  console.error('❌ Error loading image:', e.nativeEvent.error);
+                  console.error('❌ Failed URL:', imageUrl);
+                  console.error('❌ Error details:', e.nativeEvent);
+                }}
                 onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
+                onLoadStart={() => console.log('🔄 Starting to load image:', imageUrl)}
               />
             ) : (
               <View style={styles.noPhotoContainer}>

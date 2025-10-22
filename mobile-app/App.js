@@ -13,6 +13,7 @@ import MapResultsScreen from './screens/MapResultsScreen';
 import ResultsScreen from './screens/ResultsScreen';
 import MemoriesScreen from './screens/MemoriesScreen';
 import AddMemoryScreen from './screens/AddMemoryScreen';
+import EditMemoryScreen from './screens/EditMemoryScreen';
 import MemoriesMapScreen from './screens/MemoriesMapScreen';
 import TripsListScreen from './screens/TripsListScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
@@ -190,6 +191,10 @@ function MemoriesStack() {
       <Stack.Screen
         name="AddMemory"
         component={AddMemoryScreen}
+      />
+      <Stack.Screen
+        name="EditMemory"
+        component={EditMemoryScreen}
       />
       <Stack.Screen
         name="MemoriesMap"

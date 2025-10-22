@@ -1262,6 +1262,33 @@ class ApiService {
     }
   }
 
+  // Fetch scores for completed matches in a trip
+  async fetchScores(tripId) {
+    try {
+      console.log('🏆 API Service - Fetching scores for trip:', tripId);
+      
+      const response = await fetch(`${this.baseURL}/trips/${tripId}/fetch-scores`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      console.log('🏆 API Service - Fetch scores response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch match scores');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching match scores:', error);
+      throw error;
+    }
+  }
+
   // Cache management methods
   invalidateRecommendationCache(tripId) {
     if (tripId) {
