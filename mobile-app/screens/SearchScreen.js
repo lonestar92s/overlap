@@ -31,8 +31,10 @@ import PopularMatchModal from '../components/PopularMatchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import ApiService from '../services/api';
 import { useFilter } from '../contexts/FilterContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const SearchScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [location, setLocation] = useState(null);
   const [selectedDates, setSelectedDates] = useState({});
   const [dateFrom, setDateFrom] = useState(null);
@@ -47,8 +49,8 @@ const SearchScreen = ({ navigation }) => {
   const [selectedTeams, setSelectedTeams] = useState([]); // array of {id, name}
   const [teamIdInput, setTeamIdInput] = useState('');
   const [teamNameInput, setTeamNameInput] = useState('');
-  const [popularMatches, setPopularMatches] = useState([]);
-  const [popularMatchesLoading, setPopularMatchesLoading] = useState(true);
+  const [recommendedMatches, setRecommendedMatches] = useState([]);
+  const [recommendedMatchesLoading, setRecommendedMatchesLoading] = useState(true);
   const [showPopularMatchModal, setShowPopularMatchModal] = useState(false);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [showLeaguePicker, setShowLeaguePicker] = useState(false);
@@ -61,11 +63,41 @@ const SearchScreen = ({ navigation }) => {
   const [isSearchingTeams, setIsSearchingTeams] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
 
-  // Fetch popular matches data
-  const fetchPopularMatches = async (retryCount = 0) => {
+  // Fetch recommended matches data (smart: recommended if authenticated, popular if not)
+  const fetchRecommendedMatches = async (retryCount = 0) => {
     try {
-      setPopularMatchesLoading(true);
-      const response = await ApiService.getPopularMatches();
+      setRecommendedMatchesLoading(true);
+      let response;
+
+      console.log('🔍 Fetching matches - User authenticated:', !!user);
+
+      // TEMPORARY: Always use popular matches until backend is deployed
+      // TODO: Re-enable recommended matches after backend deployment
+      console.log('🔧 TEMPORARY: Using popular matches (backend not deployed yet)');
+      response = await ApiService.getPopularMatches();
+      console.log('📊 Popular matches response:', response);
+      
+      // TODO: Uncomment this when backend is deployed
+      /*
+      // Try to fetch recommended matches if user is authenticated
+      if (user) {
+        try {
+          console.log('🎯 Attempting to fetch recommended matches...');
+          response = await ApiService.getRecommendedMatches();
+          console.log('✅ Recommended matches response:', response);
+        } catch (authError) {
+          console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
+          // Fall back to popular matches if recommended fails
+          response = await ApiService.getPopularMatches();
+          console.log('📊 Popular matches fallback response:', response);
+        }
+      } else {
+        // Use popular matches for non-authenticated users
+        console.log('👤 User not authenticated, fetching popular matches...');
+        response = await ApiService.getPopularMatches();
+        console.log('📊 Popular matches response:', response);
+      }
+      */
       
       // Handle different response structures
       let matchesData = [];
@@ -79,21 +111,24 @@ const SearchScreen = ({ navigation }) => {
         matchesData = response.data;
       }
       
-      setPopularMatches(matchesData);
+      console.log('📊 Processed matches data:', matchesData.length, 'matches');
+      console.log('📊 First match:', matchesData[0]);
+      
+      setRecommendedMatches(matchesData);
     } catch (error) {
-      console.error('Error fetching popular matches:', error);
+      console.error('Error fetching recommended matches:', error);
       
       // Retry once if it's a timeout error
       if (error.message.includes('timeout') && retryCount < 1) {
-        console.log('🔄 Retrying popular matches request...');
-        setTimeout(() => fetchPopularMatches(retryCount + 1), 2000);
+        console.log('🔄 Retrying recommended matches request...');
+        setTimeout(() => fetchRecommendedMatches(retryCount + 1), 2000);
         return;
       }
       
-      console.error('Failed to load popular matches');
-      setPopularMatches([]);
+      console.error('Failed to load recommended matches');
+      setRecommendedMatches([]);
     } finally {
-      setPopularMatchesLoading(false);
+      setRecommendedMatchesLoading(false);
     }
   };
 
@@ -152,9 +187,9 @@ const SearchScreen = ({ navigation }) => {
     },
     {
       id: 'popular-matches',
-      title: 'Popular Matches',
+      title: 'Recommended Matches',
       type: 'horizontal',
-      data: popularMatches
+      data: recommendedMatches
     }
   ];
 
@@ -529,7 +564,7 @@ const SearchScreen = ({ navigation }) => {
   const renderSection = ({ item }) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{item.title}</Text>
-      {item.id === 'popular-matches' && popularMatchesLoading ? (
+      {item.id === 'popular-matches' && recommendedMatchesLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#1976d2" />
           <Text style={styles.loadingText}>Loading matches...</Text>
@@ -594,7 +629,7 @@ const SearchScreen = ({ navigation }) => {
 
   const handlePopularMatchPress = (match) => {
     // Find the index of the pressed match in the popular matches array
-    const matchIndex = popularMatches.findIndex(m => m.id === match.id);
+    const matchIndex = recommendedMatches.findIndex(m => m.id === match.id);
     if (matchIndex !== -1) {
       setCurrentMatchIndex(matchIndex);
       setShowPopularMatchModal(true);
@@ -671,7 +706,7 @@ const SearchScreen = ({ navigation }) => {
   // Load recent searches and popular matches on component mount
   useEffect(() => {
     loadRecentSearches();
-    fetchPopularMatches();
+    fetchRecommendedMatches();
   }, []);
 
   // Handle matches near me with time period
@@ -1333,7 +1368,7 @@ const SearchScreen = ({ navigation }) => {
       {/* Popular Match Modal */}
       <PopularMatchModal
         visible={showPopularMatchModal}
-        matches={popularMatches}
+        matches={recommendedMatches}
         currentMatchIndex={currentMatchIndex}
         onClose={handlePopularMatchModalClose}
         onNavigate={handlePopularMatchNavigate}

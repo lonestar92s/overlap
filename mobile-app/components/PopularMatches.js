@@ -148,7 +148,7 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>
-        {isRecommended ? 'Recommended for You' : 'Popular Matches'}
+        {isRecommended ? 'Recommended for You' : 'Recommended for You'}
       </Text>
       <FlatList
         data={matches}

@@ -8,7 +8,9 @@ import {
   Image,
   ScrollView,
   SafeAreaView,
+  Platform,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 
 const PopularMatchModal = ({ 
   visible, 
@@ -102,17 +104,43 @@ const PopularMatchModal = ({
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Venue Image */}
-          <View style={styles.venueImageContainer}>
-            {venue.image ? (
-              <Image 
-                source={{ uri: venue.image }} 
-                style={styles.venueImage}
-                resizeMode="cover"
-              />
+          {/* Venue Map */}
+          <View style={styles.venueMapContainer}>
+            {venue.coordinates && venue.coordinates.length === 2 ? (
+              <MapView
+                style={styles.venueMap}
+                provider={Platform.OS === 'ios' ? MapView.PROVIDER_DEFAULT : MapView.PROVIDER_GOOGLE}
+                region={{
+                  latitude: venue.coordinates[1], // latitude
+                  longitude: venue.coordinates[0], // longitude
+                  latitudeDelta: 0.01, // Small delta for close-up view
+                  longitudeDelta: 0.01,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+                showsUserLocation={false}
+                showsMyLocationButton={false}
+                showsCompass={false}
+                showsScale={false}
+                showsBuildings={true}
+                showsPointsOfInterest={true}
+              >
+                <Marker
+                  coordinate={{
+                    latitude: venue.coordinates[1],
+                    longitude: venue.coordinates[0],
+                  }}
+                  title={venue.name || 'Stadium'}
+                  description={venue.city || 'Match Venue'}
+                  pinColor="#1976d2"
+                />
+              </MapView>
             ) : (
-              <View style={styles.venueImagePlaceholder}>
-                <Text style={styles.venueImagePlaceholderText}>🏟️</Text>
+              <View style={styles.venueMapPlaceholder}>
+                <Text style={styles.venueMapPlaceholderText}>🏟️</Text>
+                <Text style={styles.venueMapPlaceholderSubtext}>Location not available</Text>
               </View>
             )}
           </View>
@@ -271,23 +299,33 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  venueImageContainer: {
+  venueMapContainer: {
     height: 200,
     overflow: 'hidden',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 16,
   },
-  venueImage: {
+  venueMap: {
     width: '100%',
     height: '100%',
   },
-  venueImagePlaceholder: {
+  venueMapPlaceholder: {
     width: '100%',
     height: '100%',
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 8,
   },
-  venueImagePlaceholderText: {
+  venueMapPlaceholderText: {
     fontSize: 48,
+    marginBottom: 8,
+  },
+  venueMapPlaceholderSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
   matchInfo: {
     padding: 20,
