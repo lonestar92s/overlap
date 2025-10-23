@@ -33,6 +33,7 @@ class LeagueService {
             '211': { name: 'Prva HNL', country: 'Croatia' },
             '307': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
             '188': { name: 'Scottish Premiership', country: 'Scotland' },
+            '207': { name: 'Swiss Super League', country: 'Switzerland' },
             '1083': { name: 'UEFA Women\'s Euro 2025', country: 'Europe' },
             
             // International Competitions (Real API IDs)
