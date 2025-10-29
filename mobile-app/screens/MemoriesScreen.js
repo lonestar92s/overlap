@@ -9,15 +9,19 @@ import {
   RefreshControl,
   ActivityIndicator,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, Button } from 'react-native-elements';
+import { Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import ApiService from '../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRID_ITEM_SIZE = SCREEN_WIDTH / 3;
 
 const MemoriesScreen = () => {
   const navigation = useNavigation();
@@ -123,143 +127,62 @@ const MemoriesScreen = () => {
     navigation.navigate('MemoriesMap');
   }, [navigation]);
 
-  // Render memory card
-  const renderMemoryCard = useCallback((memory) => {
+  // Get the best available image URL
+  const getImageUrl = useCallback((photo) => {
+    if (!photo) return null;
+    
+    // Always use the main URL for React Native compatibility
+    if (photo.url) return photo.url;
+    
+    // If we have a publicId but no URL, construct a simple one
+    if (photo.publicId) {
+      // Use a simple, React Native-compatible URL format
+      return `https://res.cloudinary.com/dtujkmf8d/image/upload/w_400,h_400,c_fill,q_auto,f_auto/${photo.publicId}`;
+    }
+    
+    // If we have an _id but no other data, this might be a corrupted photo object
+    if (photo._id && !photo.publicId && !photo.url) {
+      console.warn('⚠️ Photo object missing essential fields:', photo);
+      return null;
+    }
+    
+    return null;
+  }, []);
+
+  // Render memory grid item (single square)
+  const renderMemoryItem = useCallback(({ item: memory }) => {
     const hasPhotos = memory.photos && memory.photos.length > 0;
     const firstPhoto = hasPhotos ? memory.photos[0] : null;
-    
-    // Debug photo data
-    if (hasPhotos) {
-      console.log('🔍 Photo data for memory:', {
-        memoryId: memory._id || memory.matchId,
-        photoCount: memory.photos.length,
-        firstPhoto: firstPhoto,
-        thumbnailUrl: firstPhoto?.thumbnailUrl,
-        url: firstPhoto?.url,
-        publicId: firstPhoto?.publicId
-      });
-    }
-    
-    // Get the best available image URL
-    const getImageUrl = (photo) => {
-      if (!photo) return null;
-      
-      // Always use the main URL for React Native compatibility
-      if (photo.url) return photo.url;
-      
-      // If we have a publicId but no URL, construct a simple one
-      if (photo.publicId) {
-        // Use a simple, React Native-compatible URL format
-        return `https://res.cloudinary.com/dtujkmf8d/image/upload/w_400,h_400,c_fill,q_auto,f_auto/${photo.publicId}`;
-      }
-      
-      // If we have an _id but no other data, this might be a corrupted photo object
-      if (photo._id && !photo.publicId && !photo.url) {
-        console.warn('⚠️ Photo object missing essential fields:', photo);
-        return null;
-      }
-      
-      return null;
-    };
-    
     const imageUrl = getImageUrl(firstPhoto);
-    console.log('🖼️ Final image URL:', imageUrl);
-    
-    // Debug: Show what fields are available
-    if (hasPhotos) {
-      console.log('🔍 Photo object fields:', {
-        hasId: !!firstPhoto._id,
-        hasPublicId: !!firstPhoto.publicId,
-        hasUrl: !!firstPhoto.url,
-        hasThumbnailUrl: !!firstPhoto.thumbnailUrl,
-        hasCaption: !!firstPhoto.caption,
-        hasUploadDate: !!firstPhoto.uploadDate,
-        allKeys: Object.keys(firstPhoto)
-      });
-    }
+    const hasMultiplePhotos = memory.photos && memory.photos.length > 1;
     
     return (
       <TouchableOpacity
-        key={memory._id || memory.matchId}
-        style={styles.memoryCard}
+        style={styles.memoryGridItem}
         onPress={() => handleMemoryPress(memory)}
         activeOpacity={0.8}
       >
-        <Card containerStyle={styles.cardContainer}>
-          {/* Photo Section */}
-          <View style={styles.photoSection}>
-            {hasPhotos && imageUrl ? (
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.photoContainer}
-                resizeMode="cover"
-                onError={(e) => {
-                  console.error('❌ Error loading image:', e.nativeEvent.error);
-                  console.error('❌ Failed URL:', imageUrl);
-                  console.error('❌ Error details:', e.nativeEvent);
-                }}
-                onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
-                onLoadStart={() => console.log('🔄 Starting to load image:', imageUrl)}
-              />
-            ) : (
-              <View style={styles.noPhotoContainer}>
-                <MaterialIcons name="photo" size={40} color="#ccc" />
-                <Text style={styles.noPhotoText}>
-                  {hasPhotos ? 'Image Unavailable' : 'No Photos'}
-                </Text>
-                {hasPhotos && (
-                  <Text style={styles.photoErrorText}>
-                    Photo data incomplete
-                  </Text>
-                )}
-              </View>
-            )}
-            
-            {/* Photo count badge */}
-            {hasPhotos && memory.photos.length > 1 && (
-              <View style={styles.photoCountBadge}>
-                <Text style={styles.photoCountText}>+{memory.photos.length - 1}</Text>
-              </View>
-            )}
-
-            {/* Delete button */}
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeleteMemory(memory)}
-            >
-              <MaterialIcons name="delete" size={20} color="white" />
-            </TouchableOpacity>
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.memoryGridImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.memoryGridPlaceholder}>
+            <MaterialIcons name="photo" size={40} color="#ccc" />
           </View>
-
-          {/* Memory Info */}
-          <View style={styles.memoryInfo}>
-            <Text style={styles.teamsText}>
-              {memory.homeTeam?.name || 'Unknown'} vs {memory.awayTeam?.name || 'Unknown'}
-            </Text>
-            
-            <Text style={styles.venueText}>
-              {memory.venue?.name || 'Unknown Venue'}
-            </Text>
-            
-            <Text style={styles.dateText}>
-              {new Date(memory.date).toLocaleDateString()}
-            </Text>
-            
-            {/* Score Display */}
-            {(memory.userScore || memory.apiMatchData?.officialScore) && (
-              <Text style={styles.scoreText}>
-                {memory.apiMatchData?.officialScore || memory.userScore}
-              </Text>
-            )}
-            
-            {memory.competition && (
-              <Text style={styles.competitionText}>{memory.competition}</Text>
-            )}
+        )}
+        
+        {/* Multi-photo indicator */}
+        {hasMultiplePhotos && (
+          <View style={styles.multiPhotoIndicator}>
+            <MaterialIcons name="collections" size={16} color="white" />
           </View>
-        </Card>
+        )}
       </TouchableOpacity>
     );
-  }, [handleMemoryPress, handleDeleteMemory]);
+  }, [getImageUrl, handleMemoryPress]);
 
   // Render stats section
   const renderStats = useCallback(() => {
@@ -343,9 +266,14 @@ const MemoriesScreen = () => {
 
         {/* Memories Grid */}
         {memories.length > 0 ? (
-          <View style={styles.memoriesGrid}>
-            <Text style={styles.sectionTitle}>Recent Memories</Text>
-            {memories.map(renderMemoryCard)}
+          <View style={styles.memoriesGridContainer}>
+            <FlatList
+              data={memories}
+              renderItem={renderMemoryItem}
+              keyExtractor={(item) => item._id || item.matchId || String(Math.random())}
+              numColumns={3}
+              scrollEnabled={false}
+            />
           </View>
         ) : (
           <View style={styles.emptyState}>
@@ -440,32 +368,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  memoriesGrid: {
-    paddingHorizontal: 20,
+  memoriesGridContainer: {
     paddingBottom: 20,
   },
-  memoryCard: {
-    marginBottom: 16,
-  },
-  cardContainer: {
-    borderRadius: 16,
-    padding: 0,
-    margin: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  photoSection: {
+  memoryGridItem: {
+    width: GRID_ITEM_SIZE,
+    height: GRID_ITEM_SIZE,
     position: 'relative',
+    backgroundColor: '#f0f0f0',
+  },
+  memoryGridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  memoryGridPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  multiPhotoIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+    padding: 4,
   },
   photoContainer: {
     width: '100%',
@@ -476,13 +405,14 @@ const styles = StyleSheet.create({
   },
   noPhotoContainer: {
     width: '100%',
-    height: 200,
+    minHeight: 150,
     backgroundColor: '#f0f0f0',
     borderRadius: 16,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 40,
   },
   noPhotoText: {
     color: '#999',
@@ -603,3 +533,4 @@ const styles = StyleSheet.create({
 });
 
 export default MemoriesScreen;
+

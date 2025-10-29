@@ -51,6 +51,73 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/leagues/search
+ * Search leagues by name or country
+ * Returns results from database first, then falls back to API if needed
+ */
+router.get('/search', async (req, res) => {
+    try {
+        const { query } = req.query;
+        
+        if (!query || query.length < 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query must be at least 2 characters'
+            });
+        }
+
+        // Search in database using leagueService
+        const leagues = await leagueService.searchLeagues(query, { limit: 20 });
+
+        // Format results for response
+        const formattedLeagues = leagues.map(league => ({
+            id: league.apiId,
+            name: league.name,
+            country: league.country,
+            countryCode: league.countryCode,
+            tier: league.tier || 1,
+            emblem: league.emblem || null,
+            isActive: league.isActive !== false
+        }));
+
+        res.json({
+            success: true,
+            results: formattedLeagues,
+            count: formattedLeagues.length
+        });
+
+    } catch (error) {
+        console.error('League search error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to search leagues'
+        });
+    }
+});
+
+/**
+ * GET /api/leagues/stats/cache
+ * Get league service cache statistics
+ */
+router.get('/stats/cache', async (req, res) => {
+    try {
+        const stats = leagueService.getCacheStats();
+        res.json({
+            success: true,
+            cacheStats: stats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error getting league cache stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get cache statistics',
+            error: error.message
+        });
+    }
+});
+
+/**
  * GET /api/leagues/country/:countryCode
  * Get leagues for a specific country
  */
@@ -117,28 +184,6 @@ router.get('/:leagueId', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch league',
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/leagues/stats/cache
- * Get league service cache statistics
- */
-router.get('/stats/cache', async (req, res) => {
-    try {
-        const stats = leagueService.getCacheStats();
-        res.json({
-            success: true,
-            cacheStats: stats,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Error getting league cache stats:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get cache statistics',
             error: error.message
         });
     }

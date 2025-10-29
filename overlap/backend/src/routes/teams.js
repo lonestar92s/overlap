@@ -78,6 +78,55 @@ router.get('/search', async (req, res) => {
 
             const apiTeams = apiResponse.data.response || [];
             
+            // Save API teams to database (on-demand caching)
+            if (apiTeams.length > 0) {
+                // Use setImmediate to avoid blocking the response
+                setImmediate(async () => {
+                    try {
+                        for (const teamData of apiTeams) {
+                            const team = teamData.team;
+                            const venue = teamData.venue;
+                            
+                            try {
+                                // Check if team already exists
+                                const existingTeam = await Team.findOne({ apiId: team.id.toString() });
+                                
+                                if (!existingTeam) {
+                                    // Create new team from API data
+                                    const venueInfo = venue ? {
+                                        name: venue.name || '',
+                                        capacity: venue.capacity || null,
+                                        coordinates: venue.lat && venue.lng 
+                                            ? [parseFloat(venue.lng), parseFloat(venue.lat)]
+                                            : null
+                                    } : null;
+                                    
+                                    await Team.create({
+                                        apiId: team.id.toString(),
+                                        name: team.name,
+                                        code: team.code || null,
+                                        founded: team.founded || null,
+                                        logo: team.logo || null,
+                                        country: team.country || '',
+                                        city: venue?.city || '',
+                                        venue: venueInfo,
+                                        apiSource: 'api-sports',
+                                        lastUpdated: new Date()
+                                    });
+                                    
+                                    console.log(`💾 Saved new team to DB: ${team.name}`);
+                                }
+                            } catch (saveError) {
+                                // Ignore save errors (might be duplicates, etc.)
+                                console.log(`⚠️ Could not save team ${team.name}: ${saveError.message}`);
+                            }
+                        }
+                    } catch (bulkError) {
+                        console.error('Error saving API teams to DB:', bulkError.message);
+                    }
+                });
+            }
+            
             // Combine and deduplicate results
             const allTeams = [
                 ...dbTeams.map(team => ({

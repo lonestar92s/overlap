@@ -14,6 +14,7 @@ const attendanceRoutes = require('./routes/attendance');
 const memoriesRoutes = require('./routes/memories');
 const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
+const venuesRoutes = require('./routes/venues');
 const recommendationsRoutes = require('./routes/recommendations');
 const adminRouter = require('./routes/admin');
 
@@ -74,6 +75,7 @@ app.use('/api/matches', matchesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/leagues', leaguesRoutes);
+app.use('/api/venues', venuesRoutes);
 app.use('/api/trips', tripsRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/matches/attended', attendedMatchesRoutes);
