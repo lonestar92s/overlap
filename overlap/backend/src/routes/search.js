@@ -7,6 +7,8 @@ const leagueService = require('../services/leagueService');
 const venueService = require('../services/venueService');
 const geocodingService = require('../services/geocodingService');
 const Team = require('../models/Team');
+const League = require('../models/League');
+const Venue = require('../models/Venue');
 const router = express.Router();
 
 // API-Sports configuration
@@ -1687,6 +1689,118 @@ const buildSearchParameters = (parsed) => {
 };
 
 // Debug endpoint to check database connection
+/**
+ * GET /api/search/unified
+ * Unified search across leagues, teams, and venues
+ * Returns results from MongoDB only (no API fallback)
+ */
+router.get('/unified', async (req, res) => {
+    try {
+        const { query } = req.query;
+        
+        if (!query || query.length < 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query must be at least 2 characters'
+            });
+        }
+
+        // Search all three collections in parallel for better performance
+        const [leagues, teams, venues] = await Promise.all([
+            // Search leagues
+            League.find({
+                $or: [
+                    { name: { $regex: query, $options: 'i' } },
+                    { shortName: { $regex: query, $options: 'i' } }
+                ],
+                isActive: true
+            })
+            .select('apiId name country countryCode tier emblem')
+            .limit(10)
+            .lean(),
+            
+            // Search teams
+            Team.find({
+                $or: [
+                    { name: { $regex: query, $options: 'i' } },
+                    { aliases: { $regex: query, $options: 'i' } }
+                ]
+            })
+            .select('apiId name country city logo code')
+            .limit(10)
+            .lean(),
+            
+            // Search venues
+            Venue.find({
+                $or: [
+                    { name: { $regex: query, $options: 'i' } },
+                    { city: { $regex: query, $options: 'i' } },
+                    { aliases: { $regex: query, $options: 'i' } }
+                ],
+                isActive: true
+            })
+            .select('venueId name city country countryCode image capacity')
+            .limit(10)
+            .lean()
+        ]);
+
+        // Format results with type identifiers and badges
+        const formattedLeagues = leagues.map(league => ({
+            type: 'league',
+            id: league.apiId,
+            name: league.name,
+            country: league.country,
+            countryCode: league.countryCode,
+            tier: league.tier || 1,
+            badge: league.emblem || `https://media.api-sports.io/football/leagues/${league.apiId}.png`
+        }));
+
+        const formattedTeams = teams.map(team => ({
+            type: 'team',
+            id: team.apiId,
+            name: team.name,
+            country: team.country,
+            city: team.city || '',
+            badge: team.logo || `https://media.api-sports.io/football/teams/${team.apiId}.png`,
+            code: team.code || null
+        }));
+
+        const formattedVenues = venues.map(venue => ({
+            type: 'venue',
+            id: venue.venueId,
+            name: venue.name,
+            city: venue.city,
+            country: venue.country,
+            countryCode: venue.countryCode,
+            badge: venue.image || null,
+            capacity: venue.capacity || null
+        }));
+
+        res.json({
+            success: true,
+            query,
+            results: {
+                leagues: formattedLeagues,
+                teams: formattedTeams,
+                venues: formattedVenues
+            },
+            counts: {
+                leagues: formattedLeagues.length,
+                teams: formattedTeams.length,
+                venues: formattedVenues.length,
+                total: formattedLeagues.length + formattedTeams.length + formattedVenues.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Unified search error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to perform search'
+        });
+    }
+});
+
 router.get('/debug-db', async (req, res) => {
     try {
         const mongoose = require('mongoose');

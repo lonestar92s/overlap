@@ -1,9 +1,24 @@
 // Utility function to get the correct backend URL
 export const getBackendUrl = () => {
-  // If running on localhost, use localhost
-  // Otherwise, use the current hostname (for mobile/network access)
+  // Use Railway URL if available as env variable, otherwise check hostname
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
   const hostname = window.location.hostname;
-  return hostname === 'localhost' ? 'http://localhost:3001' : `http://${hostname}:3001`;
+  
+  // If running on Railway domain, use Railway URL
+  if (hostname.includes('railway') || hostname.includes('up.railway.app')) {
+    return 'https://friendly-gratitude-production-3f31.up.railway.app';
+  }
+  
+  // If running on localhost, use localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // Otherwise, use the current hostname
+  return `http://${hostname}:3001`;
 };
 
 // API base URLs
