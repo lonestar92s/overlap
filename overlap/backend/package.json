@@ -8,6 +8,7 @@
     "dev": "nodemon src/app.js"
   },
   "dependencies": {
+    "@workos-inc/node": "^7.72.1",
     "axios": "^1.6.7",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.7.0",

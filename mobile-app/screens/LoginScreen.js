@@ -8,11 +8,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView
+  SafeAreaView,
+  Linking
 } from 'react-native';
 import { Input, Button, CheckBox } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import ApiService from '../services/api';
 
 const LoginScreen = ({ navigation }) => {
   const { login, loading } = useAuth();
@@ -60,6 +62,23 @@ const LoginScreen = ({ navigation }) => {
 
   const navigateToRegister = () => {
     navigation.navigate('Register');
+  };
+
+  const handleWorkOSLogin = async () => {
+    try {
+      const loginUrl = ApiService.getWorkOSLoginUrl();
+      // Open WorkOS login in browser
+      // Note: For production, you'll want to set up deep linking to handle the callback
+      const supported = await Linking.canOpenURL(loginUrl);
+      if (supported) {
+        await Linking.openURL(loginUrl);
+      } else {
+        Alert.alert('Error', 'Cannot open login URL');
+      }
+    } catch (error) {
+      console.error('WorkOS login error:', error);
+      Alert.alert('Error', 'Failed to open login page. Please try again.');
+    }
   };
 
   return (
@@ -134,6 +153,21 @@ const LoginScreen = ({ navigation }) => {
               titleStyle={styles.buttonTitle}
               containerStyle={styles.buttonContainer}
             />
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleWorkOSLogin}
+              disabled={loading}
+            >
+              <MaterialIcons name="mail" size={20} color="#fff" style={styles.googleIcon} />
+              <Text style={styles.googleButtonText}>Continue with Gmail</Text>
+            </TouchableOpacity>
 
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>Don't have an account? </Text>
@@ -241,6 +275,38 @@ const styles = StyleSheet.create({
   registerLink: {
     fontSize: 14,
     color: '#1976d2',
+    fontWeight: '600',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    fontSize: 14,
+    color: '#666',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DB4437',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

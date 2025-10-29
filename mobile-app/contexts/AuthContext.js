@@ -147,6 +147,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithWorkOS = async (code) => {
+    try {
+      setLoading(true);
+      const response = await ApiService.handleWorkOSCallback(code);
+      
+      if (response.success) {
+        const { user: userData, token: authToken } = response;
+        
+        setUser(userData);
+        setToken(authToken);
+        setRememberMe(true); // Auto-remember WorkOS logins
+        
+        // Set the token in the API service
+        ApiService.setAuthToken(authToken);
+        
+        // Store token and remember me preference
+        await AsyncStorage.setItem('authToken', authToken);
+        await AsyncStorage.setItem('rememberMe', 'true');
+        
+        return { success: true };
+      } else {
+        return { success: false, error: response.error || 'WorkOS login failed' };
+      }
+    } catch (error) {
+      console.error('WorkOS login error:', error);
+      return { success: false, error: error.message || 'WorkOS login failed' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isAuthenticated = () => {
     return !!user && !!token;
   };
@@ -158,6 +189,7 @@ export const AuthProvider = ({ children }) => {
     rememberMe,
     login,
     register,
+    loginWithWorkOS,
     logout,
     isAuthenticated,
     setRememberMe

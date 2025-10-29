@@ -10,11 +10,27 @@ const userSchema = new mongoose.Schema({
         lowercase: true,
         validate: [validator.isEmail, 'Please provide a valid email']
     },
+    username: {
+        type: String,
+        trim: true,
+        sparse: true, // Allows null/undefined but enforces uniqueness when present
+        index: true
+    },
     password: {
         type: String,
-        required: true,
+        required: false, // Made optional - validated manually in pre-save hook
         minlength: 8,
         select: false // Don't include password in queries by default
+    },
+    authProvider: {
+        type: String,
+        enum: ['local', 'workos', 'google'],
+        default: 'local'
+    },
+    workosUserId: {
+        type: String,
+        sparse: true,
+        index: true
     },
     role: {
         type: String,
@@ -333,9 +349,32 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Hash password before saving
+// Hash password before saving (only for local auth)
 userSchema.pre('save', async function(next) {
+    // Skip password hashing if user is using WorkOS or password is not modified
+    if (this.authProvider && this.authProvider !== 'local') {
+        return next();
+    }
+    
+    // If password is not modified, skip
     if (!this.isModified('password')) return next();
+    
+    // For local auth, password is required
+    if (!this.password && (!this.authProvider || this.authProvider === 'local')) {
+        const error = new Error('Password is required for local authentication');
+        error.name = 'ValidationError';
+        return next(error);
+    }
+    
+    // Only hash if password exists (should always exist for local auth at this point)
+    if (!this.password) return next();
+    
+    // Validate password length for local auth
+    if (this.password.length < 8) {
+        const error = new Error('Password must be at least 8 characters long');
+        error.name = 'ValidationError';
+        return next(error);
+    }
     
     try {
         const salt = await bcrypt.genSalt(10);

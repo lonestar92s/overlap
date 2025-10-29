@@ -29,6 +29,7 @@ import FilterIcon from '../components/FilterIcon';
 import MatchCard from '../components/MatchCard';
 import PopularMatchModal from '../components/PopularMatchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
+import OverlapSearchScreenAdapted from '../components/OverlapSearchScreen.adapted';
 import ApiService from '../services/api';
 import { useFilter } from '../contexts/FilterContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -660,6 +661,119 @@ const SearchScreen = ({ navigation }) => {
     }
   };
 
+  // Handler for OverlapSearchScreenAdapted component
+  const handleOverlapSearch = async (searchParams) => {
+    // searchParams comes from OverlapSearchScreenAdapted: { location, dateFrom, dateTo }
+    const hasLocation = !!searchParams.location;
+    const hasDates = !!(searchParams.dateFrom && searchParams.dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+
+    // Validation - same logic as handleSearch
+    if (!hasWho) {
+      if (!hasLocation) {
+        Alert.alert('Error', 'Please select a location');
+        return;
+      }
+      if (!hasDates) {
+        Alert.alert('Error', 'Please select your travel dates');
+        return;
+      }
+    }
+
+    if (hasWho && !hasLocation && !hasDates) {
+      Alert.alert('Error', 'Please select at least a location or travel dates when searching by teams/leagues');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formattedSearchParams = {
+        location: searchParams.location,
+        dateFrom: searchParams.dateFrom ? formatDate(searchParams.dateFrom) : null,
+        dateTo: searchParams.dateTo ? formatDate(searchParams.dateTo) : null,
+      };
+
+      let matches = [];
+      let initialRegion = null;
+      let autoFitKey = 0;
+
+      if (hasWho) {
+        const apiParams = {
+          competitions: selectedLeagues.map(l => String(l.id)),
+          teams: selectedTeams.map(t => String(t.id)),
+        };
+
+        if (hasDates) {
+          apiParams.dateFrom = formattedSearchParams.dateFrom;
+          apiParams.dateTo = formattedSearchParams.dateTo;
+        }
+
+        if (hasLocation) {
+          const viewportSpan = 0.5;
+          apiParams.bounds = {
+            northeast: { lat: searchParams.location.lat + viewportSpan, lng: searchParams.location.lon + viewportSpan },
+            southwest: { lat: searchParams.location.lat - viewportSpan, lng: searchParams.location.lon - viewportSpan }
+          };
+          initialRegion = {
+            latitude: searchParams.location.lat,
+            longitude: searchParams.location.lon,
+            latitudeDelta: 0.5,
+            longitudeDelta: 0.5,
+          };
+        }
+
+        const agg = await ApiService.searchAggregatedMatches(apiParams);
+        matches = agg?.data || [];
+        autoFitKey = Date.now();
+      } else {
+        const viewportSpan = 0.5;
+        const bounds = {
+          northeast: { lat: searchParams.location.lat + viewportSpan, lng: searchParams.location.lon + viewportSpan },
+          southwest: { lat: searchParams.location.lat - viewportSpan, lng: searchParams.location.lon - viewportSpan }
+        };
+        const response = await ApiService.searchMatchesByBounds({
+          bounds,
+          dateFrom: formattedSearchParams.dateFrom,
+          dateTo: formattedSearchParams.dateTo
+        });
+        matches = response.data || [];
+        initialRegion = {
+          latitude: searchParams.location.lat,
+          longitude: searchParams.location.lon,
+          latitudeDelta: 0.5,
+          longitudeDelta: 0.5,
+        };
+      }
+
+      // Save to recent searches
+      saveToRecentSearches(formattedSearchParams, matches, initialRegion);
+
+      // Close modal and navigate
+      setShowSearchModal(false);
+      navigation.navigate('MapResults', {
+        searchParams: formattedSearchParams,
+        matches,
+        initialRegion,
+        autoFitKey,
+        hasLocation,
+        hasDates,
+        hasWho
+      });
+    } catch (error) {
+      console.error('SearchScreen: Overlap search error:', error);
+      Alert.alert('Error', error.message || 'Failed to search matches');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Format recent searches for OverlapSearchScreenAdapted
+  const formatRecentSearchesForOverlap = () => {
+    return recentSearches.map(search => ({
+      location: search.location, // Just the city name string
+    }));
+  };
+
   // Save search to recent searches
   const saveToRecentSearches = async (searchParams, matches, initialRegion) => {
     const newSearch = {
@@ -1047,7 +1161,27 @@ const SearchScreen = ({ navigation }) => {
         contentContainerStyle={styles.listContainer}
       />
 
-      {/* New Search Modal */}
+      {/* New Search Modal - Using OverlapSearchScreenAdapted (currently disabled) */}
+      {false && (
+      <Modal
+        visible={showSearchModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSearchModal(false)}
+      >
+        <OverlapSearchScreenAdapted
+          onClose={() => setShowSearchModal(false)}
+          onSearch={handleOverlapSearch}
+          initialLocation={location}
+          initialDateFrom={dateFrom}
+          initialDateTo={dateTo}
+          recentSearches={formatRecentSearchesForOverlap()}
+          suggestedTeams={[]}
+        />
+      </Modal>
+      )}
+
+      {/* Original Search Modal - Restored */}
       <Modal
         visible={showSearchModal}
         animationType="slide"
@@ -1055,7 +1189,310 @@ const SearchScreen = ({ navigation }) => {
         onRequestClose={() => setShowSearchModal(false)}
       >
         <SafeAreaView style={styles.modalContainer}>
-          {/* Top Navigation Bar */}
+          <View style={styles.modalHeader}>
+            <View style={styles.modalCategories}>
+              <TouchableOpacity style={styles.modalCategoryActive}>
+                <Text style={styles.modalCategoryTextActive}>Matches</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCategory}>
+                <Text style={styles.modalCategoryText}>Teams</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCategory}>
+                <Text style={styles.modalCategoryText}>Venues</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowSearchModal(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={[{ id: 'modal-content' }]}
+            renderItem={() => (
+              <View style={styles.modalSearchCard}>
+                <View style={styles.fieldHeaderRow}>
+                  <Text style={styles.modalSearchTitle}>Where?</Text>
+                  {(selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                    <Text style={styles.optionalText}>(Optional when teams/leagues selected)</Text>
+                  )}
+                </View>
+                
+        <LocationAutocomplete
+          value={location}
+          onSelect={setLocation}
+                  placeholder="Search destinations"
+                  style={styles.modalLocationInput}
+        />
+
+                {/* Recent Searches */}
+                {recentSearches.length > 0 && (
+                  <>
+                    <Text style={styles.modalSectionTitle}>Recent searches</Text>
+                    <FlatList
+                      data={recentSearches}
+                      renderItem={renderRecentSearch}
+                      keyExtractor={(item, index) => (item.id || `recent-${index}`).toString()}
+                      scrollEnabled={false}
+                    />
+                  </>
+                )}
+
+                {/* Matches Near Me - Time Options */}
+                <Text style={styles.modalSectionTitle}>Quick Search</Text>
+                <View style={styles.quickAccessColumn}>
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('today')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby Today</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('thisWeek')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby This Week</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickAccessButton}
+                    onPress={() => handleMatchesNearMe('thisMonth')}
+                  >
+                    <View style={styles.quickAccessIcon}>
+                      <Icon name="sports-soccer" size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.quickAccessText}>Matches Nearby This Month</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* When Input */}
+                <View style={styles.fieldHeaderRow}>
+                  <Text style={styles.modalSearchTitle}>When?</Text>
+                  {(selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                    <Text style={styles.optionalText}>(Optional when teams/leagues selected)</Text>
+                  )}
+                </View>
+        <TouchableOpacity
+                  style={styles.modalSearchInput}
+          onPress={() => setShowCalendar(!showCalendar)}
+        >
+                  <Text style={styles.modalSearchIcon}>📅</Text>
+                  <Text style={styles.modalSearchPlaceholder}>{formatDateRange()}</Text>
+        </TouchableOpacity>
+
+                {/* Calendar */}
+        {showCalendar && (
+                  <View style={styles.modalCalendarContainer}>
+            <Calendar
+              onDayPress={onDayPress}
+              markingType={'period'}
+              markedDates={selectedDates}
+              minDate={getTodayLocalString()}
+              theme={{
+                selectedDayBackgroundColor: '#1976d2',
+                selectedDayTextColor: 'white',
+                todayTextColor: '#1976d2',
+                dayTextColor: '#333',
+                textDisabledColor: '#ccc',
+                arrowColor: '#1976d2',
+                monthTextColor: '#333',
+                textDayFontWeight: '500',
+                textMonthFontWeight: 'bold',
+                textDayHeaderFontWeight: '600',
+              }}
+            />
+          </View>
+        )}
+
+                {/* Who Input */}
+                <Text style={styles.modalSearchTitle}>Who?</Text>
+                {/* Selected chips */}
+                <View style={styles.whoChipsRow}>
+                  {selectedLeagues.map((l) => (
+                    <View key={`league-${l.id}`} style={styles.chip}>
+                      <Text style={styles.chipText}>{l.name}</Text>
+                      <TouchableOpacity onPress={() => removeLeague(l.id)} style={styles.chipClose}>
+                        <Text style={styles.chipCloseText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {selectedTeams.map((t) => (
+                    <View key={`team-${t.id}`} style={styles.chip}>
+                      <Text style={styles.chipText}>{t.name}</Text>
+                      <TouchableOpacity onPress={() => removeTeam(t.id)} style={styles.chipClose}>
+                        <Text style={styles.chipCloseText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+                <View style={styles.whoActionsRow}>
+                  <TouchableOpacity 
+                    style={styles.addButton} 
+                    onPress={() => {
+                      setShowLeaguePicker(!showLeaguePicker);
+                      setShowTeamPicker(false); // Close team picker if open
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>
+                      {showLeaguePicker ? '− Hide Leagues' : '+ Add League'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.addButton} 
+                    onPress={() => {
+                      setShowTeamPicker(!showTeamPicker);
+                      setShowLeaguePicker(false); // Close league picker if open
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>
+                      {showTeamPicker ? '− Hide Teams' : '+ Add Team'}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.whoCountText}>{totalWhoCount()}/{MAX_WHO}</Text>
+                </View>
+
+                {/* League Picker Section */}
+                {showLeaguePicker && (
+                  <View style={styles.pickerSection}>
+                    <View style={styles.pickerHeader}>
+                      <Text style={styles.pickerTitle}>Select Leagues</Text>
+                      <Text style={styles.pickerSubtitle}>Search and select leagues to include in your search</Text>
+                    </View>
+                    
+                    <View style={styles.searchInputContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search leagues..."
+                        value={leagueSearchQuery}
+                        onChangeText={setLeagueSearchQuery}
+                      />
+                    </View>
+
+                    <FlatList
+                      data={leagueSearchResults}
+                      keyExtractor={(item, index) => (item.id || `league-${index}`).toString()}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={styles.pickerListItem}
+                          onPress={() => addLeagueById(item)}
+                        >
+                          <View style={styles.pickerListItemContent}>
+                            <Text style={styles.pickerListItemTitle}>{item.name}</Text>
+                            <Text style={styles.pickerListItemSubtitle}>{item.country}</Text>
+                          </View>
+                          <Icon name="add" size={24} color="#1976d2" />
+                        </TouchableOpacity>
+                      )}
+                      ListEmptyComponent={
+                        <View style={styles.pickerEmptyState}>
+                          {isSearchingLeagues ? (
+                            <ActivityIndicator size="large" color="#1976d2" />
+                          ) : (
+                            <Text style={styles.pickerEmptyText}>
+                              {leagueSearchQuery ? 'No leagues found' : 'Search for leagues to add'}
+                            </Text>
+                          )}
+                        </View>
+                      }
+                      style={styles.pickerList}
+                    />
+                  </View>
+                )}
+
+                {/* Team Picker Section */}
+                {showTeamPicker && (
+                  <View style={styles.pickerSection}>
+                    <View style={styles.pickerHeader}>
+                      <Text style={styles.pickerTitle}>Select Teams</Text>
+                      <Text style={styles.pickerSubtitle}>Search and select teams to include in your search</Text>
+                    </View>
+                    
+                    <View style={styles.searchInputContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search teams..."
+                        value={teamSearchQuery}
+                        onChangeText={setTeamSearchQuery}
+                      />
+                    </View>
+
+                    <FlatList
+                      data={teamSearchResults}
+                      keyExtractor={(item, index) => (item.id || `team-${index}`).toString()}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={styles.pickerListItem}
+                          onPress={() => addTeamFromModal(item)}
+                        >
+                          <View style={styles.pickerListItemContent}>
+                            <Text style={styles.pickerListItemTitle}>{item.name}</Text>
+                            <Text style={styles.pickerListItemSubtitle}>{item.league}</Text>
+                          </View>
+                          <Icon name="add" size={24} color="#1976d2" />
+                        </TouchableOpacity>
+                      )}
+                      ListEmptyComponent={
+                        <View style={styles.pickerEmptyState}>
+                          {isSearchingTeams ? (
+                            <ActivityIndicator size="large" color="#1976d2" />
+                          ) : (
+                            <Text style={styles.pickerEmptyText}>
+                              {teamSearchQuery ? 'No teams found' : 'Search for teams to add'}
+                            </Text>
+                          )}
+                        </View>
+                      }
+                      style={styles.pickerList}
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            style={styles.modalContent}
+          />
+
+          {/* Bottom Action Bar */}
+          <View style={styles.modalActionBar}>
+            <TouchableOpacity onPress={clearAll}>
+              <Text style={styles.modalClearAllText}>Clear all</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                styles.modalSearchButton,
+                (!canSearch()) && styles.modalSearchButtonDisabled
+              ]}
+              onPress={handleSearch}
+              disabled={loading || !canSearch()}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalSearchButtonText}>{getSearchButtonText()}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {false && (
+      <Modal
+        visible={showSearchModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSearchModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <View style={styles.modalCategories}>
               <TouchableOpacity style={styles.modalCategoryActive}>
@@ -1362,6 +1799,8 @@ const SearchScreen = ({ navigation }) => {
           </View>
         </SafeAreaView>
       </Modal>
+      )}
+
 
 
 

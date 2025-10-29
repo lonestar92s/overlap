@@ -83,6 +83,37 @@ const register = async (email, password) => {
   }
 };
 
+// WorkOS login - get authorization URL
+const getWorkOSLoginUrl = () => {
+  return `${API_BASE_URL}/auth/workos/login`;
+};
+
+// WorkOS callback handler - called after OAuth flow completes
+const handleWorkOSCallback = async (code) => {
+  try {
+    // The backend callback endpoint handles the code exchange
+    // We need to make a request to our backend which will complete the OAuth flow
+    const response = await fetch(`${API_BASE_URL}/auth/workos/callback?code=${code}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      setAuthToken(data.token);
+      return { success: true, user: data.user, token: data.token };
+    } else {
+      return { success: false, error: data.error || 'WorkOS authentication failed' };
+    }
+  } catch (error) {
+    console.error('WorkOS callback error:', error);
+    return { success: false, error: 'Network error during WorkOS authentication' };
+  }
+};
+
 const getCurrentUser = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -1353,5 +1384,7 @@ apiService.login = login;
 apiService.register = register;
 apiService.getCurrentUser = getCurrentUser;
 apiService.setAuthToken = setAuthToken;
+apiService.getWorkOSLoginUrl = getWorkOSLoginUrl;
+apiService.handleWorkOSCallback = handleWorkOSCallback;
 
 export default apiService; 

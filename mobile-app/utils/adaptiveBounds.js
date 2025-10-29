@@ -160,3 +160,5 @@ export const getZoomCategory = (latitudeDelta) => {
   if (latitudeDelta < 3.0) return 'region';
   return 'country';
 };
+
+
