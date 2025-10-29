@@ -1,5 +1,7 @@
-// Backend API base URL (Railway)
-const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
+// Backend API base URL - Use Railway production backend
+// Override with EXPO_PUBLIC_API_URL environment variable if needed for local testing
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
+  'https://friendly-gratitude-production-3f31.up.railway.app/api';
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -111,6 +113,55 @@ const handleWorkOSCallback = async (code) => {
   } catch (error) {
     console.error('WorkOS callback error:', error);
     return { success: false, error: 'Network error during WorkOS authentication' };
+  }
+};
+
+// Request password reset
+const requestPasswordReset = async (email) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      return { success: true, message: data.message, ...data };
+    } else {
+      return { success: false, error: data.error || 'Failed to request password reset' };
+    }
+  } catch (error) {
+    console.error('Request password reset error:', error);
+    return { success: false, error: 'Network error' };
+  }
+};
+
+// Reset password with token
+const resetPassword = async (token, password) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password/${token}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      setAuthToken(data.token);
+      return { success: true, user: data.user, token: data.token, message: data.message };
+    } else {
+      return { success: false, error: data.error || 'Failed to reset password' };
+    }
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return { success: false, error: 'Network error' };
   }
 };
 
@@ -1386,5 +1437,7 @@ apiService.getCurrentUser = getCurrentUser;
 apiService.setAuthToken = setAuthToken;
 apiService.getWorkOSLoginUrl = getWorkOSLoginUrl;
 apiService.handleWorkOSCallback = handleWorkOSCallback;
+apiService.requestPasswordReset = requestPasswordReset;
+apiService.resetPassword = resetPassword;
 
 export default apiService; 

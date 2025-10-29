@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { WorkOS } = require('@workos-inc/node');
 const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
@@ -7,10 +8,25 @@ const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Initialize WorkOS client
-const workos = new WorkOS(process.env.WORKOS_API_KEY, {
-    clientId: process.env.WORKOS_CLIENT_ID,
-});
+// Initialize WorkOS client lazily (only when needed)
+// This prevents the server from crashing if WorkOS keys are not set
+let workos = null;
+const getWorkOSClient = () => {
+    if (!workos) {
+        if (!process.env.WORKOS_API_KEY) {
+            throw new Error('WORKOS_API_KEY is not configured. WorkOS features are disabled.');
+        }
+        workos = new WorkOS(process.env.WORKOS_API_KEY, {
+            clientId: process.env.WORKOS_CLIENT_ID,
+        });
+    }
+    return workos;
+};
+
+// Check if WorkOS is configured (for conditional feature enabling)
+const isWorkOSConfigured = () => {
+    return !!(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
+};
 
 // Register a new user
 router.post('/register', async (req, res) => {
@@ -152,9 +168,14 @@ router.post('/logout', auth, async (req, res) => {
 // Initiate WorkOS login (redirects to WorkOS hosted UI)
 router.get('/workos/login', async (req, res) => {
     try {
+        if (!isWorkOSConfigured()) {
+            return res.status(503).json({ error: 'WorkOS is not configured. Please configure WORKOS_API_KEY and WORKOS_CLIENT_ID environment variables.' });
+        }
+
         const redirectUri = process.env.WORKOS_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/workos/callback`;
+        const workosClient = getWorkOSClient();
         
-        const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+        const authorizationUrl = workosClient.userManagement.getAuthorizationUrl({
             provider: 'authkit',
             redirectUri: redirectUri,
             clientId: process.env.WORKOS_CLIENT_ID,
@@ -170,14 +191,20 @@ router.get('/workos/login', async (req, res) => {
 // Handle WorkOS callback
 router.get('/workos/callback', async (req, res) => {
     try {
+        if (!isWorkOSConfigured()) {
+            return res.status(503).json({ error: 'WorkOS is not configured. Please configure WORKOS_API_KEY and WORKOS_CLIENT_ID environment variables.' });
+        }
+
         const { code } = req.query;
 
         if (!code) {
             return res.status(400).json({ error: 'No authorization code provided' });
         }
 
+        const workosClient = getWorkOSClient();
+
         // Exchange code for user
-        const { user: workosUser } = await workos.userManagement.authenticateWithCode({
+        const { user: workosUser } = await workosClient.userManagement.authenticateWithCode({
             code,
             clientId: process.env.WORKOS_CLIENT_ID,
         });
@@ -279,6 +306,165 @@ router.get('/workos/logout', auth, async (req, res) => {
         res.json({ message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Password Reset Routes
+
+// Request password reset (for local users)
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        // Find user
+        const user = await User.findOne({ email: email.toLowerCase() });
+        
+        // For security, always return success even if user doesn't exist
+        // This prevents email enumeration attacks
+        
+        if (!user) {
+            return res.json({ 
+                message: 'If an account with that email exists, a password reset link has been sent.',
+                // In production, you might want to return this only for existing users
+                // but for security, we return this message regardless
+            });
+        }
+
+        // Check if user is a WorkOS user (they should use WorkOS password reset)
+        if (user.authProvider === 'workos' || user.authProvider === 'google' || user.workosUserId) {
+            return res.json({
+                message: 'This account uses social login. Please use the password reset option in the login page or contact Google support if you need to reset your Google password.',
+                useWorkOS: true
+            });
+        }
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        await user.save({ validateBeforeSave: false });
+
+        // In production, send email with reset link
+        // For now, we'll log it and return instructions
+        const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
+        
+        console.log('Password reset link:', resetUrl);
+        console.log('Email:', user.email);
+        
+        // TODO: Integrate email service (nodemailer, SendGrid, etc.)
+        // await sendPasswordResetEmail(user.email, resetUrl);
+
+        res.json({
+            message: 'If an account with that email exists, a password reset link has been sent.',
+            // In development, include the reset token for testing
+            ...(process.env.NODE_ENV !== 'production' && { 
+                resetToken, 
+                resetUrl,
+                note: 'Development mode: Reset token shown for testing'
+            })
+        });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ error: 'Failed to process password reset request' });
+    }
+});
+
+// Reset password (for local users)
+router.post('/reset-password/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        if (!password || password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+        }
+
+        // Hash the token to compare with stored hash
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Find user with valid reset token
+        const user = await User.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        // Check if user is a WorkOS user
+        if (user.authProvider === 'workos' || user.authProvider === 'google' || user.workosUserId) {
+            return res.status(400).json({ 
+                error: 'This account uses social login. Password cannot be reset here.' 
+            });
+        }
+
+        // Update password
+        user.password = password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        user.authProvider = 'local'; // Ensure it's marked as local auth
+        
+        await user.save();
+
+        // Generate new token for automatic login
+        const authToken = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'Password has been reset successfully',
+            user: {
+                id: user._id,
+                email: user.email,
+                username: user.username,
+                role: user.role,
+                profile: user.profile,
+                preferences: user.preferences,
+                subscription: user.subscription
+            },
+            token: authToken
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Failed to reset password' });
+    }
+});
+
+// Get WorkOS password reset URL (for WorkOS users)
+router.get('/workos/forgot-password', async (req, res) => {
+    try {
+        if (!isWorkOSConfigured()) {
+            return res.status(503).json({ error: 'WorkOS is not configured. Please configure WORKOS_API_KEY and WORKOS_CLIENT_ID environment variables.' });
+        }
+
+        // WorkOS handles password reset through their hosted UI
+        // We redirect to their login page with a password reset parameter
+        const redirectUri = process.env.WORKOS_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/workos/callback`;
+        const workosClient = getWorkOSClient();
+        
+        // WorkOS AuthKit has a built-in "Forgot Password" link in their hosted UI
+        // We can redirect to the login page which includes this option
+        const authorizationUrl = workosClient.userManagement.getAuthorizationUrl({
+            provider: 'authkit',
+            redirectUri: redirectUri,
+            clientId: process.env.WORKOS_CLIENT_ID,
+        });
+
+        res.json({ 
+            message: 'Redirect to WorkOS login page to use password reset',
+            url: authorizationUrl
+        });
+    } catch (error) {
+        console.error('WorkOS forgot password error:', error);
+        res.status(500).json({ error: 'Failed to initiate WorkOS password reset' });
     }
 });
 

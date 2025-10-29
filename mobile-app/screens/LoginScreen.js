@@ -8,13 +8,11 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
-  Linking
+  SafeAreaView
 } from 'react-native';
 import { Input, Button, CheckBox } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import ApiService from '../services/api';
 
 const LoginScreen = ({ navigation }) => {
   const { login, loading } = useAuth();
@@ -64,21 +62,9 @@ const LoginScreen = ({ navigation }) => {
     navigation.navigate('Register');
   };
 
-  const handleWorkOSLogin = async () => {
-    try {
-      const loginUrl = ApiService.getWorkOSLoginUrl();
-      // Open WorkOS login in browser
-      // Note: For production, you'll want to set up deep linking to handle the callback
-      const supported = await Linking.canOpenURL(loginUrl);
-      if (supported) {
-        await Linking.openURL(loginUrl);
-      } else {
-        Alert.alert('Error', 'Cannot open login URL');
-      }
-    } catch (error) {
-      console.error('WorkOS login error:', error);
-      Alert.alert('Error', 'Failed to open login page. Please try again.');
-    }
+  const handleWorkOSLogin = () => {
+    // Navigate to WebView screen for in-app authentication
+    navigation.navigate('WorkOSLogin');
   };
 
   return (
@@ -132,16 +118,21 @@ const LoginScreen = ({ navigation }) => {
               labelStyle={styles.label}
             />
 
-            <View style={styles.rememberMeContainer}>
-              <CheckBox
-                title="Remember me"
-                checked={rememberMe}
-                onPress={() => setRememberMe(!rememberMe)}
-                containerStyle={styles.checkboxContainer}
-                textStyle={styles.checkboxText}
-                checkedColor="#1976d2"
-                uncheckedColor="#666"
-              />
+            <View style={styles.passwordActionsContainer}>
+              <View style={styles.rememberMeContainer}>
+                <CheckBox
+                  title="Remember me"
+                  checked={rememberMe}
+                  onPress={() => setRememberMe(!rememberMe)}
+                  containerStyle={styles.checkboxContainer}
+                  textStyle={styles.checkboxText}
+                  checkedColor="#1976d2"
+                  uncheckedColor="#666"
+                />
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
             </View>
 
             <Button
@@ -237,8 +228,19 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  rememberMeContainer: {
+  passwordActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
+  },
+  rememberMeContainer: {
+    flex: 1,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: '#1976d2',
+    fontWeight: '600',
   },
   checkboxContainer: {
     backgroundColor: 'transparent',

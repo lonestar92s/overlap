@@ -4,8 +4,8 @@
   "description": "Backend server for Overlap app",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "start": "NODE_ENV=production node src/app.js",
+    "dev": "NODE_ENV=development nodemon src/app.js"
   },
   "dependencies": {
     "@workos-inc/node": "^7.72.1",

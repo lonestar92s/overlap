@@ -21,6 +21,8 @@ import ItineraryMapScreen from './screens/ItineraryMapScreen';
 import TripMapView from './screens/TripMapView';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import WorkOSLoginScreen from './screens/WorkOSLoginScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
@@ -93,6 +95,15 @@ function AuthStack() {
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen 
+        name="WorkOSLogin" 
+        component={WorkOSLoginScreen}
+        options={{
+          presentation: 'modal',
+          headerShown: false,
+        }}
+      />
     </Stack.Navigator>
   );
 }

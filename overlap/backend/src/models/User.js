@@ -32,6 +32,14 @@ const userSchema = new mongoose.Schema({
         sparse: true,
         index: true
     },
+    resetPasswordToken: {
+        type: String,
+        select: false
+    },
+    resetPasswordExpires: {
+        type: Date,
+        select: false
+    },
     role: {
         type: String,
         enum: ['user', 'admin'],

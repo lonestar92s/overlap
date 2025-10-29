@@ -1,4 +1,7 @@
-const API_BASE_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
+// Use the same API URL logic as the main API service
+// Override with EXPO_PUBLIC_API_URL environment variable if needed for local testing
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
+  'https://friendly-gratitude-production-3f31.up.railway.app/api';
 
 export const processNaturalLanguageQuery = async (query, conversationHistory = []) => {
     try {
