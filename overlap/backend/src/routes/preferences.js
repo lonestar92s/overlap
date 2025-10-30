@@ -87,13 +87,20 @@ router.put('/', auth, async (req, res) => {
     }
 });
 
-// Add favorite team
+// Add favorite team (accepts either Mongo _id as teamId or external API id as teamApiId)
 router.post('/teams', auth, async (req, res) => {
     try {
-        const { teamId } = req.body;
-        
-        // Verify team exists
-        const team = await Team.findById(teamId);
+        let { teamId, teamApiId } = req.body;
+        let team = null;
+
+        if (teamId) {
+            team = await Team.findById(teamId);
+        } else if (teamApiId) {
+            team = await Team.findOne({ apiId: String(teamApiId) });
+            if (team) {
+                teamId = team._id.toString();
+            }
+        }
         if (!team) {
             return res.status(404).json({ error: 'Team not found' });
         }
@@ -158,6 +165,38 @@ router.delete('/leagues/:leagueId', auth, async (req, res) => {
         
         await req.user.save();
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Add favorite venue
+router.post('/venues', auth, async (req, res) => {
+    try {
+        const { venueId } = req.body;
+        if (!venueId) {
+            return res.status(400).json({ error: 'venueId is required' });
+        }
+
+        const exists = req.user.preferences.favoriteVenues.some(v => v.venueId === String(venueId));
+        if (!exists) {
+            req.user.preferences.favoriteVenues.push({ venueId: String(venueId) });
+            await req.user.save();
+        }
+
+        res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Remove favorite venue
+router.delete('/venues/:venueId', auth, async (req, res) => {
+    try {
+        const { venueId } = req.params;
+        req.user.preferences.favoriteVenues = req.user.preferences.favoriteVenues.filter(v => v.venueId !== String(venueId));
+        await req.user.save();
+        res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }

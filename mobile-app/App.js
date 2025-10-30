@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Alert, Text } from 'react-native';
 
@@ -64,6 +65,9 @@ const AccountScreen = ({ navigation }) => {
           titleStyle={styles.attendedMatchesButtonTitle}
           icon={<MaterialIcons name="memory" size={20} color="#fff" />}
         />
+        {/* Favorites placeholder - will render in a dedicated profile screen later */}
+        <Text style={{ marginTop: 16, marginBottom: 8, fontWeight: '700', color: '#333' }}>Favorites</Text>
+        <Text style={{ color: '#666' }}>Leagues, Teams and Venues you star will appear here.</Text>
         <Button
           title="Logout"
           onPress={handleLogout}
@@ -243,6 +247,9 @@ function AppContent() {
                     case 'SearchTab':
                       iconName = 'search';
                       break;
+                case 'UnifiedSearchTab':
+                  iconName = 'manage-search';
+                  break;
                     case 'MemoriesTab':
                       iconName = 'memory';
                       break;
@@ -263,6 +270,7 @@ function AppContent() {
               })}
             >
               <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
+              <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
               <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
               <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
               <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />

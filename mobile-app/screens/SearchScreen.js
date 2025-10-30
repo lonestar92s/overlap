@@ -610,8 +610,11 @@ const SearchScreen = ({ navigation }) => {
       {/* Trip Countdown Widget */}
       <TripCountdownWidget 
         onTripPress={(trip) => {
-          // Navigate to trip details or trip overview
-          navigation.navigate('TripOverview', { itineraryId: trip.id || trip._id });
+          // Navigate to TripOverview nested inside TripsTab stack
+          navigation.navigate('TripsTab', {
+            screen: 'TripOverview',
+            params: { itineraryId: trip.id || trip._id }
+          });
         }}
       />
 

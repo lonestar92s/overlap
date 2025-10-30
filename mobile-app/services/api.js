@@ -360,6 +360,116 @@ class ApiService {
     }
   }
 
+  // Unified search across leagues, teams, and venues (MongoDB only)
+  async searchUnified(query) {
+    try {
+      if (!query || query.trim().length < 2) {
+        return { success: false, results: { leagues: [], teams: [], venues: [] }, counts: { leagues: 0, teams: 0, venues: 0, total: 0 } };
+      }
+
+      const params = new URLSearchParams();
+      params.append('query', query.trim());
+
+      const response = await this.fetchWithTimeout(`${this.baseURL}/search/unified?${params.toString()}`, { method: 'GET' }, 15000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to search');
+      }
+
+      return data; // { success, results: { leagues, teams, venues }, counts }
+    } catch (error) {
+      console.error('Error in searchUnified:', error);
+      return { success: false, results: { leagues: [], teams: [], venues: [] }, counts: { leagues: 0, teams: 0, venues: 0, total: 0 } };
+    }
+  }
+
+  // Preferences API
+  async getPreferences() {
+    try {
+      const token = await getAuthToken();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/preferences`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      }, 15000);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to load preferences');
+      return data.preferences || {};
+    } catch (e) {
+      console.error('getPreferences error:', e);
+      throw e;
+    }
+  }
+
+  // Favorite teams (accept teamApiId for convenience)
+  async addFavoriteTeamByApiId(teamApiId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/teams`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamApiId: String(teamApiId) })
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to favorite team');
+    return data;
+  }
+  async removeFavoriteTeamByMongoId(teamMongoId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/teams/${teamMongoId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to unfavorite team');
+    return data;
+  }
+
+  // Favorite leagues
+  async addFavoriteLeague(leagueApiId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/leagues`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leagueId: String(leagueApiId) })
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to favorite league');
+    return data;
+  }
+  async removeFavoriteLeague(leagueApiId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/leagues/${leagueApiId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to unfavorite league');
+    return data;
+  }
+
+  // Favorite venues
+  async addFavoriteVenue(venueId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/venues`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venueId: String(venueId) })
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to favorite venue');
+    return data;
+  }
+  async removeFavoriteVenue(venueId) {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/venues/${venueId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to unfavorite venue');
+    return data;
+  }
+
   // Trip/Itinerary API methods
   async getTrips() {
     try {

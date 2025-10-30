@@ -91,6 +91,16 @@ const userSchema = new mongoose.Schema({
             }
         }],
         favoriteLeagues: [String],
+        favoriteVenues: [{
+            venueId: {
+                type: String,
+                required: true
+            },
+            addedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
         defaultSearchRadius: {
             type: Number,
             default: 100
