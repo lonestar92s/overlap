@@ -3,6 +3,7 @@ const https = require('https');
 const subscriptionService = require('./subscriptionService');
 const venueService = require('./venueService');
 const teamService = require('./teamService');
+const weights = require('../config/recommendationWeights');
 
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
@@ -152,17 +153,25 @@ class RecommendationService {
                 return null;
             }
 
+            // Extract user preferences for scoring
+            const userPreferences = {
+                favoriteTeams: user.preferences?.favoriteTeams || [],
+                favoriteLeagues: user.preferences?.favoriteLeagues || [],
+                favoriteVenues: user.preferences?.favoriteVenues || [],
+                preferenceStrength: user.preferences?.preferenceStrength || 'standard'
+            };
+
             // Score and rank matches
             const scoredMatches = conflictFreeMatches.map(match => ({
                 match,
-                score: this.scoreMatch(match, savedMatchVenues, day, trip)
+                score: this.scoreMatch(match, savedMatchVenues, day, trip, userPreferences)
             }));
 
             // Sort by score and get the best match
             scoredMatches.sort((a, b) => b.score - a.score);
             const bestMatch = scoredMatches[0];
 
-            if (bestMatch.score < 30) { // Minimum score threshold
+            if (bestMatch.score < weights.baseScore.minThreshold) {
                 return null;
             }
 
@@ -389,20 +398,20 @@ class RecommendationService {
     }
 
     /**
-     * Score a match based on various factors
+     * Score a match based on various factors including user preferences
      */
-    scoreMatch(match, savedVenues, targetDate, trip) {
-        let score = 0;
+    scoreMatch(match, savedVenues, targetDate, trip, userPreferences = {}) {
+        let score = weights.baseScore.default;
 
         // Proximity score (0-40 points)
         if (match._proximityData) {
             const distance = match._proximityData.closestDistance;
-            if (distance <= 10) score += 40;
-            else if (distance <= 25) score += 35;
-            else if (distance <= 50) score += 30;
-            else if (distance <= 100) score += 25;
-            else if (distance <= 200) score += 20;
-            else score += 15;
+            if (distance <= 10) score += weights.context.proximity.within10miles;
+            else if (distance <= 25) score += weights.context.proximity.within25miles;
+            else if (distance <= 50) score += weights.context.proximity.within50miles;
+            else if (distance <= 100) score += weights.context.proximity.within100miles;
+            else if (distance <= 200) score += weights.context.proximity.within200miles;
+            else score += weights.context.proximity.beyond;
         }
 
         // Temporal score (0-30 points)
@@ -410,24 +419,63 @@ class RecommendationService {
         const targetDateObj = new Date(targetDate);
         const dayDiff = Math.abs((matchDate - targetDateObj) / (1000 * 60 * 60 * 24));
         
-        if (dayDiff === 0) score += 30; // Exact date
-        else if (dayDiff === 1) score += 25; // ±1 day
-        else if (dayDiff === 2) score += 20; // ±2 days
-        else score += 10; // Further away
+        if (dayDiff === 0) score += weights.context.temporal.exactDate;
+        else if (dayDiff === 1) score += weights.context.temporal.within1day;
+        else if (dayDiff === 2) score += weights.context.temporal.within2days;
+        else score += weights.context.temporal.beyond;
 
         // League quality score (0-20 points)
-        const leagueId = match.league.id;
-        if (['39', '140', '135', '61', '78'].includes(leagueId)) { // Top leagues
-            score += 20;
-        } else if (['40', '41', '135', '61', '78'].includes(leagueId)) { // Good leagues
-            score += 15;
+        const leagueId = String(match.league.id);
+        if (weights.topLeagues.tier1.includes(leagueId)) {
+            score += weights.context.leagueQuality.topTier;
+        } else if (weights.topLeagues.tier2.includes(leagueId)) {
+            score += weights.context.leagueQuality.secondTier;
         } else {
-            score += 10; // Other leagues
+            score += weights.context.leagueQuality.other;
         }
 
-        // Venue popularity score (0-10 points)
-        // This could be enhanced with actual venue data
-        score += 5; // Base score for now
+        // Preference-based scoring
+        const strengthMult = weights.preferenceStrength[userPreferences.preferenceStrength || 'standard'];
+
+        // Favorite Teams scoring
+        if (userPreferences.favoriteTeams && userPreferences.favoriteTeams.length > 0) {
+            const homeTeamId = String(match.teams?.home?.id);
+            const awayTeamId = String(match.teams?.away?.id);
+            
+            for (const favTeam of userPreferences.favoriteTeams) {
+                // Handle both populated and unpopulated team references
+                const favTeamId = favTeam.teamId?.apiId || favTeam.apiId || String(favTeam.teamId);
+                if (homeTeamId === favTeamId || awayTeamId === favTeamId) {
+                    score += weights.preferences.favoriteTeam.playing * strengthMult.favoriteTeam;
+                    break; // Only count once per match
+                }
+            }
+        }
+
+        // Favorite Leagues scoring
+        if (userPreferences.favoriteLeagues && userPreferences.favoriteLeagues.length > 0) {
+            const matchLeagueId = String(match.league?.id);
+            if (userPreferences.favoriteLeagues.includes(matchLeagueId)) {
+                let leagueBoost = weights.preferences.favoriteLeague.directMatch * strengthMult.favoriteLeague;
+                // Add tier bonus if applicable
+                if (weights.topLeagues.tier1.includes(matchLeagueId)) {
+                    leagueBoost += weights.preferences.favoriteLeague.tier.tier1 * strengthMult.favoriteLeague;
+                }
+                score += leagueBoost;
+            }
+        }
+
+        // Favorite Venues scoring
+        if (userPreferences.favoriteVenues && userPreferences.favoriteVenues.length > 0 && match.fixture?.venue?.id) {
+            const matchVenueId = String(match.fixture.venue.id);
+            for (const favVenue of userPreferences.favoriteVenues) {
+                const favVenueId = String(favVenue.venueId);
+                if (matchVenueId === favVenueId) {
+                    score += weights.preferences.favoriteVenue.directMatch * strengthMult.favoriteVenue;
+                    break;
+                }
+            }
+        }
 
         return score;
     }

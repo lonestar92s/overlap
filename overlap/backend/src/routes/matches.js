@@ -1042,6 +1042,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         const userPreferences = {
             favoriteLeagues: user.preferences?.favoriteLeagues || [],
             favoriteTeams: user.preferences?.favoriteTeams || [],
+            favoriteVenues: user.preferences?.favoriteVenues || [],
             defaultLocation: user.preferences?.defaultLocation,
             recommendationRadius: user.preferences?.recommendationRadius || 400,
             defaultSearchRadius: user.preferences?.defaultSearchRadius || 100
@@ -1157,6 +1158,18 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             if (userPreferences.favoriteLeagues.includes(match.league?.id?.toString())) {
                 score += 30;
                 reasons.push(`From your favorite league: ${match.league?.name}`);
+            }
+
+            // Favorite venues bonus
+            if (userPreferences.favoriteVenues.length > 0 && match.venue?.id) {
+                const matchVenueId = match.venue.id.toString();
+                const isFavoriteVenue = userPreferences.favoriteVenues.some(favVenue => 
+                    String(favVenue.venueId) === matchVenueId
+                );
+                if (isFavoriteVenue) {
+                    score += 40;
+                    reasons.push(`At your favorite venue: ${match.venue?.name}`);
+                }
             }
 
             // Location-based scoring

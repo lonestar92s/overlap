@@ -1726,7 +1726,7 @@ router.get('/unified', async (req, res) => {
                     { aliases: { $regex: query, $options: 'i' } }
                 ]
             })
-            .select('apiId name country city logo code')
+            .select('apiId name country city logo code venue')
             .limit(10)
             .lean(),
             
@@ -1762,7 +1762,12 @@ router.get('/unified', async (req, res) => {
             country: team.country,
             city: team.city || '',
             badge: team.logo || `https://media.api-sports.io/football/teams/${team.apiId}.png`,
-            code: team.code || null
+            code: team.code || null,
+            relatedVenue: team.venue && team.venue.name ? {
+                name: team.venue.name,
+                city: team.city || null,
+                country: team.country || null
+            } : null
         }));
 
         const formattedVenues = venues.map(venue => ({
