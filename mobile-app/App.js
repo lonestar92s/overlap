@@ -79,12 +79,15 @@ const AccountScreen = ({ navigation }) => {
     return (
       <>
         {renderSectionHeader('Favorite Leagues')}
-        {prefs.favoriteLeagues.length === 0 ? (
+        {(prefs.favoriteLeaguesExpanded || prefs.favoriteLeagues || []).length === 0 ? (
           <Text style={{ color: '#666' }}>No favorite leagues yet</Text>
         ) : (
-          prefs.favoriteLeagues.map((id) => (
-            <View key={`fav-league-${id}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-              <Text style={{ color: '#333' }}>League ID: {id}</Text>
+          (prefs.favoriteLeaguesExpanded || []).map((l) => (
+            <View key={`fav-league-${l.id}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#333' }}>{l.name || `League ${l.id}`}{l.country ? ` (${l.country})` : ''}</Text>
+              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
+                try { await ApiService.removeFavoriteLeague(l.id); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
+              }} />
             </View>
           ))
         )}
@@ -96,12 +99,16 @@ const AccountScreen = ({ navigation }) => {
     return (
       <>
         {renderSectionHeader('Favorite Teams')}
-        {prefs.favoriteTeams.length === 0 ? (
+        {(prefs.favoriteTeams || []).length === 0 ? (
           <Text style={{ color: '#666' }}>No favorite teams yet</Text>
         ) : (
-          prefs.favoriteTeams.map((ft) => (
-            <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-              <Text style={{ color: '#333' }}>{ft.teamId?.name || `Team ID: ${ft.teamId}`}</Text>
+          (prefs.favoriteTeams || []).map((ft) => (
+            <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#333' }}>{ft.teamId?.name || `Team ${ft.teamId}`}</Text>
+              {/* Remove by Mongo teamId */}
+              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
+                try { const mongoId = ft.teamId?._id || ft.teamId; await ApiService.removeFavoriteTeamByMongoId(String(mongoId)); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
+              }} />
             </View>
           ))
         )}
@@ -113,12 +120,15 @@ const AccountScreen = ({ navigation }) => {
     return (
       <>
         {renderSectionHeader('Favorite Venues')}
-        {prefs.favoriteVenues.length === 0 ? (
+        {(prefs.favoriteVenuesExpanded || prefs.favoriteVenues || []).length === 0 ? (
           <Text style={{ color: '#666' }}>No favorite venues yet</Text>
         ) : (
-          prefs.favoriteVenues.map((v) => (
-            <View key={`fav-venue-${v.venueId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-              <Text style={{ color: '#333' }}>Venue ID: {v.venueId}</Text>
+          (prefs.favoriteVenuesExpanded || []).map((v) => (
+            <View key={`fav-venue-${v.venueId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#333' }}>{v.name || `Venue ${v.venueId}`}{v.city || v.country ? ` (${[v.city, v.country].filter(Boolean).join(', ')})` : ''}</Text>
+              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
+                try { await ApiService.removeFavoriteVenue(v.venueId); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
+              }} />
             </View>
           ))
         )}

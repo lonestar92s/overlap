@@ -2,6 +2,8 @@ const express = require('express');
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
 const Team = require('../models/Team');
+const League = require('../models/League');
+const Venue = require('../models/Venue');
 
 const router = express.Router();
 
@@ -10,10 +12,25 @@ router.get('/', auth, async (req, res) => {
     try {
         // Populate favorite teams with full team data
         await req.user.populate('preferences.favoriteTeams.teamId');
-        
+        // Build expanded leagues and venues for display
+        const leagueIds = (req.user.preferences.favoriteLeagues || []).map(id => String(id));
+        const leagues = await League.find({ apiId: { $in: leagueIds } }).select('apiId name country emblem').lean();
+        const leagueMap = new Map(leagues.map(l => [l.apiId, l]));
+
+        const venueIds = (req.user.preferences.favoriteVenues || []).map(v => String(v.venueId));
+        const venues = await Venue.find({ venueId: { $in: venueIds } }).select('venueId name city country').lean();
+        const venueMap = new Map(venues.map(v => [String(v.venueId), v]));
+
+        const favoriteLeaguesExpanded = leagueIds.map(id => ({ id, name: leagueMap.get(id)?.name || null, country: leagueMap.get(id)?.country || null, emblem: leagueMap.get(id)?.emblem || null }));
+        const favoriteVenuesExpanded = (req.user.preferences.favoriteVenues || []).map(v => ({ venueId: v.venueId, name: venueMap.get(String(v.venueId))?.name || null, city: venueMap.get(String(v.venueId))?.city || null, country: venueMap.get(String(v.venueId))?.country || null, addedAt: v.addedAt }));
+
         res.json({ 
             profile: req.user.profile,
-            preferences: req.user.preferences 
+            preferences: {
+                ...req.user.preferences.toObject ? req.user.preferences.toObject() : req.user.preferences,
+                favoriteLeaguesExpanded,
+                favoriteVenuesExpanded
+            }
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
