@@ -10,7 +10,7 @@ const UnifiedSearchScreen = () => {
   const [error, setError] = useState('');
   const [results, setResults] = useState({ leagues: [], teams: [], venues: [] });
   const [favLeagues, setFavLeagues] = useState(new Set());
-  const [favTeamsMongoIds, setFavTeamsMongoIds] = useState(new Set());
+  const [favTeamApiIds, setFavTeamApiIds] = useState(new Set());
   const [favVenues, setFavVenues] = useState(new Set());
 
   const performSearch = useCallback(
@@ -50,10 +50,16 @@ const UnifiedSearchScreen = () => {
       try {
         const prefs = await ApiService.getPreferences();
         const leagues = new Set((prefs.favoriteLeagues || []).map(String));
-        const teams = new Set((prefs.favoriteTeams || []).map(ft => ft.teamId)); // Mongo ObjectIds
+        // favoriteTeams is populated in backend; map to external apiId if available
+        const teams = new Set(
+          (prefs.favoriteTeams || [])
+            .map(ft => ft.teamId && (ft.teamId.apiId || ft.teamId))
+            .filter(Boolean)
+            .map(String)
+        );
         const venues = new Set((prefs.favoriteVenues || []).map(v => String(v.venueId)));
         setFavLeagues(leagues);
-        setFavTeamsMongoIds(teams);
+        setFavTeamApiIds(teams);
         setFavVenues(venues);
       } catch (e) {
         // Ignore; user might be unauthenticated
@@ -65,7 +71,7 @@ const UnifiedSearchScreen = () => {
   const isLeagueFav = (league) => favLeagues.has(String(league.id));
   const isVenueFav = (venue) => favVenues.has(String(venue.id));
   // For teams, unified search returns external id; we only know Mongo id set. Star best-effort after first add
-  const isTeamFav = () => false;
+  const isTeamFav = (team) => favTeamApiIds.has(String(team.id));
 
   const toggleLeague = async (league) => {
     const id = String(league.id);
@@ -85,12 +91,23 @@ const UnifiedSearchScreen = () => {
   };
 
   const toggleTeam = async (team) => {
-    // We only have team external id; use addFavoriteTeamByApiId for add. For removal, we need mongo id; skip remove until fetched
-    try {
-      await ApiService.addFavoriteTeamByApiId(team.id);
-      // We can’t instantly map mongo id; simply no-op star persistence until refresh
-    } catch (e) {
-      // ignore
+    const id = String(team.id);
+    const currently = favTeamApiIds.has(id);
+    // Optimistic add/remove of visual state; server only supports add via apiId for now
+    const next = new Set(favTeamApiIds);
+    if (currently) {
+      // We don't have an API to remove by apiId yet; just keep it selected and return
+      return;
+    } else {
+      next.add(id);
+      setFavTeamApiIds(next);
+      try {
+        await ApiService.addFavoriteTeamByApiId(id);
+      } catch (e) {
+        // Revert on error
+        const revert = new Set(favTeamApiIds);
+        setFavTeamApiIds(revert);
+      }
     }
   };
 
@@ -148,15 +165,17 @@ const UnifiedSearchScreen = () => {
         </Text>
       </View>
       <TouchableOpacity onPress={() => toggleTeam(item)}>
-        <MaterialIcons name={isTeamFav(item) ? 'star' : 'star-border'} size={22} color={'#888'} />
+        <MaterialIcons name={isTeamFav(item) ? 'star' : 'star-border'} size={22} color={isTeamFav(item) ? '#FFD54F' : '#888'} />
       </TouchableOpacity>
     </View>
   );
 
   const renderVenueItem = ({ item }) => (
     <View style={styles.resultRow}>
-      {/* No image for venues as requested */}
-      <View style={styles.badgePlaceholder} />
+      {/* Stadium icon for venues (no images) */}
+      <View style={[styles.badgePlaceholder, { alignItems: 'center', justifyContent: 'center' }]}>
+        <MaterialIcons name="stadium" size={20} color="#757575" />
+      </View>
       <View style={styles.resultContent}>
         <Text style={styles.resultTitle}>{item.name}</Text>
         <Text style={styles.resultSubtitle}>

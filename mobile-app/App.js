@@ -8,6 +8,7 @@ import { View, ActivityIndicator, StyleSheet, Alert, Text } from 'react-native';
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { Button } from 'react-native-elements';
+import ApiService from './services/api';
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -33,6 +34,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // Account screen with logout functionality
 const AccountScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const [loadingPrefs, setLoadingPrefs] = React.useState(true);
+  const [prefs, setPrefs] = React.useState({ favoriteLeagues: [], favoriteTeams: [], favoriteVenues: [] });
   
   const handleLogout = () => {
     Alert.alert(
@@ -47,6 +50,80 @@ const AccountScreen = ({ navigation }) => {
 
   const handleViewAttendedMatches = () => {
     navigation.navigate('MemoriesTab');
+  };
+
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const p = await ApiService.getPreferences();
+        if (mounted) setPrefs({
+          favoriteLeagues: p.favoriteLeagues || [],
+          favoriteTeams: p.favoriteTeams || [],
+          favoriteVenues: p.favoriteVenues || []
+        });
+      } catch (e) {
+        // ignore
+      } finally {
+        if (mounted) setLoadingPrefs(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const renderSectionHeader = (title) => (
+    <Text style={{ fontSize: 16, fontWeight: '700', color: '#333', marginTop: 24, marginBottom: 8 }}>{title}</Text>
+  );
+
+  const renderFavoriteLeagues = () => {
+    return (
+      <>
+        {renderSectionHeader('Favorite Leagues')}
+        {prefs.favoriteLeagues.length === 0 ? (
+          <Text style={{ color: '#666' }}>No favorite leagues yet</Text>
+        ) : (
+          prefs.favoriteLeagues.map((id) => (
+            <View key={`fav-league-${id}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+              <Text style={{ color: '#333' }}>League ID: {id}</Text>
+            </View>
+          ))
+        )}
+      </>
+    );
+  };
+
+  const renderFavoriteTeams = () => {
+    return (
+      <>
+        {renderSectionHeader('Favorite Teams')}
+        {prefs.favoriteTeams.length === 0 ? (
+          <Text style={{ color: '#666' }}>No favorite teams yet</Text>
+        ) : (
+          prefs.favoriteTeams.map((ft) => (
+            <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+              <Text style={{ color: '#333' }}>{ft.teamId?.name || `Team ID: ${ft.teamId}`}</Text>
+            </View>
+          ))
+        )}
+      </>
+    );
+  };
+
+  const renderFavoriteVenues = () => {
+    return (
+      <>
+        {renderSectionHeader('Favorite Venues')}
+        {prefs.favoriteVenues.length === 0 ? (
+          <Text style={{ color: '#666' }}>No favorite venues yet</Text>
+        ) : (
+          prefs.favoriteVenues.map((v) => (
+            <View key={`fav-venue-${v.venueId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+              <Text style={{ color: '#333' }}>Venue ID: {v.venueId}</Text>
+            </View>
+          ))
+        )}
+      </>
+    );
   };
 
   return (
@@ -65,9 +142,18 @@ const AccountScreen = ({ navigation }) => {
           titleStyle={styles.attendedMatchesButtonTitle}
           icon={<MaterialIcons name="memory" size={20} color="#fff" />}
         />
-        {/* Favorites placeholder - will render in a dedicated profile screen later */}
-        <Text style={{ marginTop: 16, marginBottom: 8, fontWeight: '700', color: '#333' }}>Favorites</Text>
-        <Text style={{ color: '#666' }}>Leagues, Teams and Venues you star will appear here.</Text>
+        {/* Favorites */}
+        {loadingPrefs ? (
+          <View style={{ paddingVertical: 12 }}>
+            <ActivityIndicator size="small" color="#1976d2" />
+          </View>
+        ) : (
+          <>
+            {renderFavoriteLeagues()}
+            {renderFavoriteTeams()}
+            {renderFavoriteVenues()}
+          </>
+        )}
         <Button
           title="Logout"
           onPress={handleLogout}
