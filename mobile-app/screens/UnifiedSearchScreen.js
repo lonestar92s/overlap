@@ -9,6 +9,7 @@ const UnifiedSearchScreen = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState({ leagues: [], teams: [], venues: [] });
+  const [relatedVenues, setRelatedVenues] = useState([]);
   const [favLeagues, setFavLeagues] = useState(new Set());
   const [favTeamApiIds, setFavTeamApiIds] = useState(new Set());
   const [favVenues, setFavVenues] = useState(new Set());
@@ -26,12 +27,27 @@ const UnifiedSearchScreen = () => {
         const data = await ApiService.searchUnified(text.trim());
         if (data && data.success) {
           setResults(data.results || { leagues: [], teams: [], venues: [] });
+          // Compute related venues for strong team match
+          const q = text.trim().toLowerCase();
+          const exactTeam = (data.results?.teams || []).find(t => (t.name || '').toLowerCase() === q);
+          if (exactTeam && exactTeam.relatedVenue && exactTeam.relatedVenue.name) {
+            const alreadyListed = (data.results?.venues || []).some(v => (v.name || '').toLowerCase() === exactTeam.relatedVenue.name.toLowerCase());
+            if (!alreadyListed) {
+              setRelatedVenues([{ name: exactTeam.relatedVenue.name, city: exactTeam.relatedVenue.city, country: exactTeam.relatedVenue.country }]);
+            } else {
+              setRelatedVenues([]);
+            }
+          } else {
+            setRelatedVenues([]);
+          }
         } else {
           setResults({ leagues: [], teams: [], venues: [] });
+          setRelatedVenues([]);
         }
       } catch (e) {
         setError('Search failed');
         setResults({ leagues: [], teams: [], venues: [] });
+        setRelatedVenues([]);
       } finally {
         setLoading(false);
       }
@@ -228,6 +244,28 @@ const UnifiedSearchScreen = () => {
               renderItem={renderLeagueItem}
               ListEmptyComponent={results.leagues.length === 0 ? null : undefined}
             />
+            {relatedVenues.length > 0 && (
+              <>
+                {renderSectionHeader('Related venues')}
+                <FlatList
+                  data={relatedVenues}
+                  keyExtractor={(item, idx) => `related-venue-${idx}`}
+                  renderItem={({ item }) => (
+                    <View style={styles.resultRow}>
+                      <View style={[styles.badgePlaceholder, { alignItems: 'center', justifyContent: 'center' }]}>
+                        <MaterialIcons name="stadium" size={20} color="#757575" />
+                      </View>
+                      <View style={styles.resultContent}>
+                        <Text style={styles.resultTitle}>{item.name}</Text>
+                        <Text style={styles.resultSubtitle}>
+                          {item.city ? `${item.city}, ` : ''}{item.country || ''}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                />
+              </>
+            )}
             {renderSectionHeader('Teams')}
             <FlatList
               data={results.teams}
