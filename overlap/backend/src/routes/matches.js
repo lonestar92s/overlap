@@ -11,6 +11,7 @@ const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const Team = require('../models/Team');
+const League = require('../models/League');
 const { matchesCache, popularMatchesCache } = require('../utils/cache');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
@@ -1066,19 +1067,53 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         let targetLeagues = [];
         
         if (userPreferences.favoriteLeagues.length > 0) {
-            // Use user's favorite leagues
-            targetLeagues = userPreferences.favoriteLeagues;
+            // Use user's favorite leagues (these should already be IDs)
+            targetLeagues = userPreferences.favoriteLeagues.map(id => String(id));
         } else if (activeTrips.length > 0) {
-            // Extract leagues from active trips
-            const tripLeagues = new Set();
+            // Extract leagues from active trips - need to convert names to IDs
+            const tripLeagueNames = new Set();
             activeTrips.forEach(trip => {
                 trip.matches.forEach(match => {
                     if (match.league) {
-                        tripLeagues.add(match.league);
+                        // match.league can be either a name (string) or an ID (string/number)
+                        tripLeagueNames.add(String(match.league));
                     }
                 });
             });
-            targetLeagues = Array.from(tripLeagues);
+            
+            // Map league names to IDs by querying the League model
+            const leagueNamesArray = Array.from(tripLeagueNames);
+            const leaguesFromDb = await League.find({ 
+                $or: [
+                    { name: { $in: leagueNamesArray } },
+                    { apiId: { $in: leagueNamesArray } }
+                ]
+            }).select('apiId name').lean();
+            
+            // Create a map of name -> apiId and apiId -> apiId
+            const leagueNameToIdMap = new Map();
+            leaguesFromDb.forEach(league => {
+                leagueNameToIdMap.set(league.name.toLowerCase(), String(league.apiId));
+                leagueNameToIdMap.set(String(league.apiId), String(league.apiId));
+            });
+            
+            // Convert league names/IDs to API IDs
+            const extractedLeagueIds = leagueNamesArray
+                .map(leagueNameOrId => {
+                    // Try exact match first
+                    if (leagueNameToIdMap.has(String(leagueNameOrId))) {
+                        return leagueNameToIdMap.get(String(leagueNameOrId));
+                    }
+                    // Try case-insensitive name match
+                    const lowerName = String(leagueNameOrId).toLowerCase();
+                    if (leagueNameToIdMap.has(lowerName)) {
+                        return leagueNameToIdMap.get(lowerName);
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            
+            targetLeagues = extractedLeagueIds.length > 0 ? extractedLeagueIds : ['39', '140', '135', '78', '61', '94', '97', '88'];
         } else {
             // Fallback to popular leagues
             targetLeagues = ['39', '140', '135', '78', '61', '94', '97', '88'];
@@ -1116,11 +1151,20 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         });
 
         const results = await Promise.allSettled(apiPromises);
-        results.forEach((result) => {
-            if (result.status === 'fulfilled' && result.value.length > 0) {
-                allMatches.push(...result.value);
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                if (Array.isArray(result.value) && result.value.length > 0) {
+                    allMatches.push(...result.value);
+                    console.log(`✅ Aggregated ${result.value.length} matches from league ${targetLeagues[index]}`);
+                } else {
+                    console.log(`⚠️ League ${targetLeagues[index]} returned no matches or invalid data:`, typeof result.value, Array.isArray(result.value) ? `length: ${result.value.length}` : 'not an array');
+                }
+            } else {
+                console.log(`❌ League ${targetLeagues[index]} promise rejected:`, result.reason?.message || result.reason);
             }
         });
+        
+        console.log(`📊 Total matches aggregated: ${allMatches.length}`);
 
         if (allMatches.length === 0) {
             console.log('⚠️ No matches found from any league, returning empty response');
