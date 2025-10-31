@@ -116,12 +116,21 @@ const SearchScreen = ({ navigation }) => {
             console.log('📋 Recommended matches array:', JSON.stringify(recommendedMatchesData, null, 2));
             console.log('📋 First recommended match:', JSON.stringify(recommendedMatchesData[0], null, 2));
             recommendedMatchesData.forEach((match, index) => {
+              // Extract venue from multiple possible locations
+              const venueName = match?.fixture?.venue?.name || 
+                              match?.venue?.name || 
+                              match?.fixture?.venue || 
+                              match?.venue ||
+                              'Unknown Venue';
+              const venueCity = match?.fixture?.venue?.city || match?.venue?.city || null;
+              const venueFull = venueCity ? `${venueName} • ${venueCity}` : venueName;
+              
               console.log(`📋 Match ${index + 1}:`, {
                 id: match?.id || match?.fixture?.id,
                 homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
                 awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
-                league: match?.league?.name,
-                venue: match?.fixture?.venue?.name || match?.venue?.name,
+                league: match?.league?.name || match?.league,
+                venue: venueFull,
                 date: match?.fixture?.date || match?.date,
                 score: match?.recommendationScore
               });
@@ -170,12 +179,21 @@ const SearchScreen = ({ navigation }) => {
         console.log('📊 All matches array:', JSON.stringify(matchesData, null, 2));
         console.log('📊 First match:', JSON.stringify(matchesData[0], null, 2));
         matchesData.forEach((match, index) => {
+          // Extract venue from multiple possible locations
+          const venueName = match?.fixture?.venue?.name || 
+                          match?.venue?.name || 
+                          match?.fixture?.venue || 
+                          match?.venue ||
+                          'Unknown Venue';
+          const venueCity = match?.fixture?.venue?.city || match?.venue?.city || null;
+          const venueFull = venueCity ? `${venueName} • ${venueCity}` : venueName;
+          
           console.log(`📊 Match ${index + 1}:`, {
             id: match?.id || match?.fixture?.id,
             homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
             awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
-            league: match?.league?.name,
-            venue: match?.fixture?.venue?.name || match?.venue?.name,
+            league: match?.league?.name || match?.league,
+            venue: venueFull,
             date: match?.fixture?.date || match?.date
           });
         });

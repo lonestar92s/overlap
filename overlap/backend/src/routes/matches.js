@@ -1558,21 +1558,31 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         const transformedMatches = [];
         for (const match of sortedMatches) {
             try {
-                const venueData = await venueService.getVenueByApiId(match.venue?.id);
+                // Venue can be in match.venue OR match.fixture.venue (check both)
+                const venueId = match.venue?.id || match.fixture?.venue?.id;
+                const venueData = venueId ? await venueService.getVenueByApiId(venueId) : null;
                 
                 // Extract venue data - getVenueByApiId returns Venue model or null
                 // Use multiple fallbacks to ensure we always have venue info
-                const venueName = match.venue?.name || venueData?.name || 'Unknown Venue';
-                const venueCity = venueData?.city || match.venue?.city || venueData?.name || match.venue?.name || null;
-                const venueCountry = venueData?.country || match.venue?.country || 'Unknown';
+                // Check fixture.venue first (API-Sports format), then match.venue (transformed format)
+                const apiVenueName = match.fixture?.venue?.name || match.venue?.name;
+                const apiVenueCity = match.fixture?.venue?.city || match.venue?.city;
+                const apiVenueCountry = match.fixture?.venue?.country || match.venue?.country;
+                
+                const venueName = apiVenueName || venueData?.name || 'Unknown Venue';
+                const venueCity = venueData?.city || apiVenueCity || venueData?.name || apiVenueName || null;
+                const venueCountry = venueData?.country || apiVenueCountry || 'Unknown';
                 const venueCoordinates = venueData?.coordinates || 
                                         venueData?.location?.coordinates || 
                                         (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null) ||
+                                        match.fixture?.venue?.coordinates ||
                                         match.venue?.coordinates;
                 
                 // Debug logging for venue data
-                if (!venueData && match.venue?.id) {
-                    console.log(`⚠️ No venue data found for venue ID: ${match.venue.id}, using API data: ${match.venue.name}`);
+                if (!venueData && venueId) {
+                    console.log(`⚠️ No venue data found for venue ID: ${venueId}, using API data: ${apiVenueName || 'N/A'}`);
+                } else if (!apiVenueName && !venueData) {
+                    console.log(`⚠️ No venue name available for match ${match.fixture?.id}, setting to 'Unknown Venue'`);
                 }
                 
                 // Transform to API-Sports format that MatchCard component expects
@@ -1583,7 +1593,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         date: match.fixture?.date,
                         status: match.fixture?.status || {},
                         venue: {
-                            id: match.venue?.id,
+                            id: venueId || match.venue?.id || match.fixture?.venue?.id || null,
                             name: venueName,
                             city: venueCity,
                             country: venueCountry,
@@ -1614,8 +1624,13 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             } catch (error) {
                 console.log(`⚠️ Error processing match ${match.fixture?.id}: ${error.message}`);
                 // Still include the match but with basic venue info - transform to API-Sports format
-                const fallbackVenueName = match.venue?.name || 'Unknown Venue';
-                const fallbackVenueCity = match.venue?.city || match.venue?.name || null;
+                // Check both fixture.venue and match.venue
+                const fallbackVenueId = match.venue?.id || match.fixture?.venue?.id;
+                const fallbackVenueName = match.fixture?.venue?.name || match.venue?.name || 'Unknown Venue';
+                const fallbackVenueCity = match.fixture?.venue?.city || match.venue?.city || match.venue?.name || null;
+                const fallbackVenueCountry = match.fixture?.venue?.country || match.venue?.country || 'Unknown';
+                const fallbackVenueCoords = match.fixture?.venue?.coordinates || match.venue?.coordinates || null;
+                
                 transformedMatches.push({
                     id: match.fixture?.id,
                     fixture: {
@@ -1623,11 +1638,11 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         date: match.fixture?.date,
                         status: match.fixture?.status || {},
                         venue: {
-                            id: match.venue?.id,
+                            id: fallbackVenueId,
                             name: fallbackVenueName,
                             city: fallbackVenueCity,
-                            country: match.venue?.country || 'Unknown',
-                            coordinates: match.venue?.coordinates || null
+                            country: fallbackVenueCountry,
+                            coordinates: fallbackVenueCoords
                         }
                     },
                     teams: {

@@ -42,65 +42,66 @@ Centralized configuration file defining all scoring weights and multipliers. Thi
 
 ## Scoring Algorithm
 
-Matches are scored on a point-based system. Higher scores indicate better recommendations.
+Matches are scored on a point-based system. Higher scores indicate better recommendations. Only matches with positive scores are shown.
 
 ### Base Score
-- **Default**: 10 points
-- **Minimum Threshold**: 30 points (below this, match is not recommended)
-
-### Context-Based Scoring (Trip Recommendations)
-
-#### Proximity Score (0-40 points)
-Matches closer to existing trip venues score higher:
-- Within 10 miles: 40 points
-- Within 25 miles: 35 points
-- Within 50 miles: 30 points
-- Within 100 miles: 25 points
-- Within 200 miles: 20 points
-- Beyond 200 miles: 15 points
-
-#### Temporal Score (0-30 points)
-Matches on the target date score highest:
-- Exact date: 30 points
-- ±1 day: 25 points
-- ±2 days: 20 points
-- Beyond ±2 days: 10 points
-
-#### League Quality Score (0-20 points)
-Top-tier leagues score higher:
-- Tier 1 (Premier League, La Liga, Serie A, Bundesliga, Ligue 1): 20 points
-- Tier 2 (Championship, La Liga 2, etc.): 15 points
-- Other leagues: 10 points
+- **Default**: +10 points (every match starts with this)
+- **Minimum Threshold**: 0 (matches with score > 0 are shown)
 
 ### Preference-Based Scoring
 
-User preferences significantly boost match scores. All preference scores are multiplied by a "preference strength" factor (light: 0.5x, standard: 1.0x, strong: 1.5x).
+#### Favorite Teams (+50 points)
+- Highest individual bonus factor
+- Awarded when one of the playing teams matches a user's favorite team
+- Multiple favorite teams can contribute (each adds +50)
 
-#### Favorite Teams (0-75 points with strong preference)
-- **Direct Match**: 50 points × preference strength
-  - Awarded when one of the playing teams is in user's favorites
-- **Same City**: 10 points × preference strength (future enhancement)
-- **Same Country**: 5 points × preference strength (future enhancement)
-- **Same League**: 15 points × preference strength (future enhancement)
+#### Favorite Leagues (+30 points)
+- Awarded when the match is in one of the user's favorite leagues
+- If user has favorite leagues, those leagues are prioritized in search, plus popular leagues are included for diversity
 
-#### Favorite Leagues (0-40 points with strong preference)
-- **Direct Match**: 30 points × preference strength
-  - Awarded when match is in a favorite league
-- **Tier Bonus**: Additional 10 points for tier 1 favorite leagues
+#### Favorite Venues (+40 points)
+- Awarded when the match is at one of the user's favorite venues
 
-#### Favorite Venues (0-60 points with strong preference)
-- **Direct Match**: 40 points × preference strength
-  - Awarded when match is at a favorite venue
-- **Proximity Bonus**: Additional points for matches near favorite venues (future enhancement)
+### Location-Based Scoring
+
+#### Default Location Proximity (up to +40 points)
+- Based on distance from user's default location (if set)
+- Formula: `max(0, 40 - (distance / 10))`
+- Only applies if within user's recommendation radius (default: 400 miles)
+- Closer matches score higher (e.g., 0 miles = 40 points, 10 miles = 30 points, 40+ miles = 0 points)
+
+### Trip-Based Scoring
+
+For users with active trips (trips with matches that haven't ended yet):
+
+#### Proximity to Trip Venues (0-40 points)
+Matches closer to venues in active trips score higher:
+- Within 10 miles: +40 points
+- Within 25 miles: +35 points
+- Within 50 miles: +30 points
+- Within 100 miles: +25 points
+- Within 200 miles: +20 points
+- Beyond 200 miles: +15 points
+- Uses the closest venue from any active trip
+
+#### Temporal Alignment with Trip Dates (0-30 points)
+Matches that align with trip dates score higher:
+- Match within trip date range: +30 points
+- Matches exact trip start/end date: +30 points
+- Within 1 day of trip: +25 points
+- Within 2 days of trip: +20 points
+- Within 3 days of trip: +15 points
+- Uses the best alignment from any active trip (no double-counting)
+
+#### Time Conflict Penalty (-50 points)
+- Applied if the match overlaps with an existing trip match
+- Overlap defined as: same day and within 3 hours of an existing trip match
 
 ### Bonuses
 
 Additional points for special match characteristics:
 - **Weekend Match**: +15 points (Saturday or Sunday)
-- **High-Profile Match**: +25 points (big teams, derbies)
-- **Derby Match**: +30 points
-- **Cup Final**: +35 points
-- **Near Default Location**: +40 points (if user has set default location)
+- **High-Profile Match**: +25 points (big teams: Manchester United, Manchester City, Liverpool, Arsenal, Chelsea, Tottenham, Real Madrid, Barcelona, Atletico Madrid, Bayern Munich, Borussia Dortmund, Juventus, AC Milan, Inter Milan, PSG, Ajax, PSV)
 
 ### Penalties
 
@@ -108,7 +109,16 @@ Negative scores that reduce recommendation quality:
 - **Already Saved**: -100 points (heavily penalized to avoid duplicates)
 - **Recently Dismissed**: -30 points (user dismissed within last 7 days)
 - **Recently Visited Venue**: -20 points (user recently visited this stadium)
-- **Time Conflict**: -50 points (overlaps with existing trip match)
+- **Time Conflict**: -50 points (overlaps with existing trip match - same day, within 3 hours)
+
+### League Diversity
+
+To ensure diverse results across multiple leagues, the system:
+1. **First Pass**: Distributes matches across leagues (1-2 top matches per league)
+2. **Second Pass**: Fills remaining slots with highest scoring matches regardless of league
+3. **Final Sort**: Sorts all matches by score while maintaining diversity
+
+This prevents a single league (e.g., if it's the only favorite) from dominating all recommendations.
 
 ## Recommendation Flow
 
@@ -142,45 +152,116 @@ Negative scores that reduce recommendation quality:
 
 ### General Recommendations
 
-1. **Get User Preferences**
+1. **Get User Preferences & Context**
    - Favorite teams, leagues, venues
-   - Default location
-   - Recommendation radius
+   - Default location and recommendation radius
+   - Active trips (trips with matches that haven't ended)
+   - Recently saved matches
+   - Recently visited stadiums
+   - Recently dismissed recommendations
 
 2. **League Selection**
-   - Use favorite leagues if available
-   - Fallback to leagues from active trips
-   - Final fallback to popular leagues
+   - If user has favorite leagues:
+     - Convert MongoDB IDs to API IDs via League collection lookup
+     - **Always include popular leagues** for diversity (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Primeira Liga, etc.)
+     - Deduplicate league IDs
+   - Else if user has active trips:
+     - Extract leagues from trip matches
+     - Convert league names/IDs to API IDs via League collection lookup
+     - Fallback to popular leagues if lookup fails
+   - Else:
+     - Use popular leagues as default
 
 3. **Match Fetching**
-   - Fetch matches from selected leagues for next N days
+   - Fetch matches from selected leagues for next N days (default: 30)
    - Use API-Sports.io fixtures endpoint
+   - Aggregate matches from all leagues in parallel
+   - Filter out invalid or empty responses
 
 4. **Scoring & Ranking**
-   - Score each match including preference bonuses
-   - Apply penalties for saved/dismissed matches
-   - Sort by score
-   - Return top N matches
+   - For each match, calculate score including:
+     - Base score (+10)
+     - Favorite teams bonus (+50 per match)
+     - Favorite leagues bonus (+30)
+     - Favorite venues bonus (+40)
+     - Default location proximity (0-40 points)
+     - **Trip proximity** (0-40 points) - if active trips exist
+     - **Trip temporal alignment** (0-30 points) - if active trips exist
+     - Weekend bonus (+15)
+     - High-profile match bonus (+25)
+   - Apply penalties:
+     - Recently visited stadium (-20)
+     - Already saved (-100)
+     - Recently dismissed (-30)
+     - **Time conflict** (-50) - if overlaps with trip match
+   - Filter matches with score > 0
+   - Apply league diversity algorithm to ensure results from multiple leagues
+   - Sort by score (descending)
+   - Return top N matches (default: 10)
 
-## Preference Strength
+5. **Result Transformation**
+   - Transform matches to API-Sports format expected by frontend:
+     - `fixture.venue` structure with name, city, country, coordinates
+     - `teams.home` and `teams.away` structure
+     - Include recommendation score and reasons
+   - Handle venue data with multiple fallbacks:
+     - Primary: Database venue lookup by API ID
+     - Secondary: API match data (fixture.venue or match.venue)
+     - Fallback: "Unknown Venue" if all lookups fail
 
-Users can adjust how strongly preferences influence recommendations:
+## Current Implementation Status
 
-- **Light (0.5x multiplier)**: Preferences have minimal impact, more diverse results
-- **Standard (1.0x multiplier)**: Default setting, balanced personalization
-- **Strong (1.5x multiplier)**: Preferences heavily weighted, very focused results
+### Implemented Features ✅
+- Base scoring system
+- Favorite teams, leagues, and venues scoring
+- Default location proximity scoring (formula-based)
+- **Trip proximity scoring** (matches near trip venues)
+- **Trip temporal alignment** (matches aligned with trip dates)
+- **Time conflict detection** (penalizes overlapping matches)
+- Weekend and high-profile match bonuses
+- Penalties for saved, dismissed, and recently visited matches
+- League diversity algorithm (ensures results from multiple leagues)
+- Venue data transformation with multiple fallbacks
+- Comprehensive logging for debugging
 
-This setting is stored in `user.preferences.preferenceStrength` (default: 'standard').
+### Future Enhancements 🚧
+1. **Preference Strength Multiplier**
+   - Currently: Fixed point values
+   - Planned: Configurable multiplier (light: 0.5x, standard: 1.0x, strong: 1.5x)
+   - Will allow users to adjust how strongly preferences influence recommendations
+
+2. **Advanced Venue Proximity**
+   - Score matches near favorite venues (even if not exact match)
+   - Consider travel time and accessibility
+
+3. **Team Context Scoring**
+   - Boost matches in same city/country as favorite teams
+   - Consider rivalries and historic matchups
+
+4. **League Quality/Tier Scoring**
+   - Currently: Not implemented
+   - Planned: Bonus points for tier 1 leagues (Premier League, La Liga, etc.)
+
+5. **Derby/Cup Final Detection**
+   - Currently: Only detects high-profile teams
+   - Planned: Specific bonuses for derbies and cup finals
 
 ## Data Sources
 
 ### User Preferences
 Stored in MongoDB User collection:
-- `preferences.favoriteTeams`: Array of team references
+- `preferences.favoriteTeams`: Array of team references (MongoDB ObjectIds)
 - `preferences.favoriteLeagues`: Array of league API IDs (strings)
-- `preferences.favoriteVenues`: Array of venue objects with `venueId`
-- `preferences.preferenceStrength`: 'light' | 'standard' | 'strong'
+- `preferences.favoriteVenues`: Array of venue objects with `venueId` (strings)
+- `preferences.defaultLocation`: Object with `city`, `country`, and `coordinates` [lng, lat]
 - `preferences.recommendationRadius`: Maximum distance in miles (default: 400)
+- `preferences.defaultSearchRadius`: Default search radius in miles (default: 100)
+
+### Active Trips
+Stored in `user.trips` array:
+- Each trip contains `name`, `description`, `matches` array
+- Each match in trip contains: `matchId`, `homeTeam`, `awayTeam`, `league`, `venue`, `venueData`, `date`
+- Active trips are those where the last match date is in the future
 
 ### Match Data
 Fetched from API-Sports.io:
@@ -207,56 +288,53 @@ Fetched from API-Sports.io:
 
 ## Example Scores
 
-### High-Scoring Match (Favorite Team + Favorite League)
+### High-Scoring Match (Favorite Team + Trip Alignment)
 ```
-Base Score:              10
-Favorite Team Playing:   50 × 1.0 (standard) = 50
-Favorite League:         30 × 1.0 (standard) = 30
-Tier 1 League Bonus:     +10
-Weekend Bonus:           +15
-Total:                   115 points ✅ (well above threshold)
+Base Score:                      +10
+Favorite Team Playing:           +50
+Trip Temporal (within range):    +30
+Trip Proximity (12 miles):       +35
+Weekend Bonus:                   +15
+Total:                           140 points ✅
 ```
 
-### Medium-Scoring Match (Proximity Only)
+### High-Scoring Match (Favorite Team + Favorite League + Location)
 ```
-Base Score:              10
-Proximity (25 miles):    35
-Temporal (exact date):   30
-League Quality (Tier 1): 20
-Total:                   95 points ✅
+Base Score:                      +10
+Favorite Team Playing:           +50
+Favorite League:                 +30
+Default Location (5 miles):      +35
+High-Profile Match:              +25
+Weekend Bonus:                   +15
+Total:                           165 points ✅
+```
+
+### Medium-Scoring Match (Trip Proximity + Temporal)
+```
+Base Score:                      +10
+Trip Proximity (50 miles):       +30
+Trip Temporal (within 1 day):    +25
+Weekend Bonus:                   +15
+Total:                           80 points ✅
 ```
 
 ### Low-Scoring Match (Penalized)
 ```
-Base Score:              10
-Proximity:               20
-Temporal:                25
-League Quality:          15
-Already Saved:           -100
-Total:                   -30 points ❌ (below threshold, not recommended)
+Base Score:                      +10
+Default Location (30 miles):     +10
+Already Saved:                   -100
+Total:                           -80 points ❌ (filtered out)
 ```
 
-## Future Enhancements
+### Match with Time Conflict
+```
+Base Score:                      +10
+Favorite League:                 +30
+Trip Temporal (within range):    +30
+Time Conflict:                   -50
+Total:                           20 points ✅ (still shown, but penalized)
+```
 
-1. **Machine Learning Integration**
-   - Learn from user interactions to optimize weights
-   - Predict match interest scores using historical data
-
-2. **Advanced Venue Proximity**
-   - Score matches near favorite venues (even if not exact match)
-   - Consider travel time and accessibility
-
-3. **Team Context Scoring**
-   - Boost matches in same city/country as favorite teams
-   - Consider rivalries and historic matchups
-
-4. **Dynamic Preference Learning**
-   - Automatically adjust preference strength based on user engagement
-   - Suggest new favorite teams/leagues based on behavior
-
-5. **Temporal Patterns**
-   - Learn user's preferred match days/times
-   - Adjust weekend/weekday bonuses per user
 
 ## Testing & Tuning
 
@@ -297,11 +375,36 @@ A/B testing different weight configurations can help optimize the system.
   "matches": [
     {
       "id": "12345",
-      "homeTeam": { "id": "33", "name": "Manchester United", "logo": "..." },
-      "awayTeam": { "id": "50", "name": "Manchester City", "logo": "..." },
-      "league": { "id": "39", "name": "Premier League", "logo": "..." },
-      "venue": { "id": "556", "name": "Old Trafford", "city": "Manchester", ... },
-      "date": "2025-06-15T15:00:00Z",
+      "fixture": {
+        "id": "12345",
+        "date": "2025-06-15T15:00:00Z",
+        "status": {},
+        "venue": {
+          "id": "556",
+          "name": "Old Trafford",
+          "city": "Manchester",
+          "country": "England",
+          "coordinates": [-2.2914, 53.4631]
+        }
+      },
+      "teams": {
+        "home": {
+          "id": "33",
+          "name": "Manchester United",
+          "logo": "..."
+        },
+        "away": {
+          "id": "50",
+          "name": "Manchester City",
+          "logo": "..."
+        }
+      },
+      "league": {
+        "id": "39",
+        "name": "Premier League",
+        "logo": "..."
+      },
+      "score": {},
       "recommendationScore": 115,
       "recommendationReasons": [
         "Your favorite team Manchester United is playing",
@@ -314,7 +417,8 @@ A/B testing different weight configurations can help optimize the system.
   "personalized": true,
   "dateRange": { "from": "2025-01-15", "to": "2025-02-14" },
   "leagues": ["39", "140", "135"],
-  "fromCache": false
+  "fromCache": false,
+  "cachedAt": "2025-01-15T10:30:00Z"
 }
 ```
 
