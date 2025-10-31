@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import ApiService from '../services/api';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const AttendanceModal = ({ 
   visible, 
@@ -105,6 +106,8 @@ const AttendanceModal = ({
               style={[styles.button, styles.skipButton]}
               onPress={handleSkip}
               disabled={loading}
+              accessibilityLabel="Skip attendance confirmation"
+              accessibilityRole="button"
             >
               <Text style={styles.skipButtonText}>Skip</Text>
             </TouchableOpacity>
@@ -113,9 +116,11 @@ const AttendanceModal = ({
               style={[styles.button, styles.confirmButton]}
               onPress={handleConfirmAttendance}
               disabled={loading}
+              accessibilityLabel="Confirm attendance"
+              accessibilityRole="button"
             >
               {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color={colors.card} size="small" />
               ) : (
                 <Text style={styles.confirmButtonText}>Yes, I Attended</Text>
               )}
@@ -133,54 +138,54 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
   modal: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
   },
   header: {
-    padding: 20,
+    padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.borderLight,
     alignItems: 'center',
   },
   title: {
-    fontSize: 20,
+    ...typography.h2,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
   },
   matchInfo: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#1976d2',
-    marginBottom: 4,
+    color: colors.primary,
+    marginBottom: spacing.xs,
   },
   venue: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   content: {
-    padding: 20,
+    padding: spacing.lg,
   },
   label: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.sm,
+    ...typography.body,
+    backgroundColor: colors.cardGrey,
   },
   textArea: {
     height: 80,
@@ -188,33 +193,31 @@ const styles = StyleSheet.create({
   },
   buttons: {
     flexDirection: 'row',
-    padding: 20,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   skipButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
   },
   skipButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.text.secondary,
+    ...typography.button,
   },
   confirmButton: {
-    backgroundColor: '#1976d2',
+    backgroundColor: colors.primary,
   },
   confirmButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.card,
+    ...typography.button,
   },
 });
 

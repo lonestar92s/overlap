@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import ItineraryModal from './ItineraryModal';
+import { colors, borderRadius } from '../styles/designTokens';
 
 const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
   const { isMatchInItinerary, removeMatchFromItinerary, getItinerariesForMatch } = useItineraries();
@@ -65,11 +66,13 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
         ]}
         onPress={handlePress}
         activeOpacity={0.7}
+        accessibilityLabel={isSaved ? 'Remove match from itinerary' : 'Save match to itinerary'}
+        accessibilityRole="button"
       >
         <Icon
           name={isSaved ? 'favorite' : 'favorite-border'}
           size={size * 0.8}
-          color={isSaved ? '#FF385C' : '#999'}
+          color={isSaved ? colors.secondary : colors.text.light}
           style={styles.heartIcon}
         />
       </TouchableOpacity>
@@ -88,7 +91,7 @@ const styles = StyleSheet.create({
   heartButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
   },
   heartIcon: {
     textAlign: 'center',

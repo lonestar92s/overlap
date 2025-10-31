@@ -1,0 +1,10 @@
+Production Readiness Checklist
+[ ] Secure env keys (no secrets in repo)
+[ ] OTA updates configured
+[ ] Crash/error reporting set
+[ ] Offline & retry strategies
+[ ] Accessibility audit passed
+[ ] e2e smoke tests green
+[ ] Bundle < ~30MB, TTFB < 2.5s
+[ ] No unhandled rejections
+[ ] Strict Typescript on critical paths

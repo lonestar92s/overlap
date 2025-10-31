@@ -14,6 +14,7 @@ import { Button, Overlay } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from './LocationAutocomplete';
 import { formatDateToLocalString, createDateRange } from '../utils/dateUtils';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const SearchModal = ({ 
   visible, 
@@ -150,11 +151,21 @@ const SearchModal = ({
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity 
+            onPress={onClose} 
+            style={styles.closeButton}
+            accessibilityLabel="Close search modal"
+            accessibilityRole="button"
+          >
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Search</Text>
-          <TouchableOpacity onPress={clearAll} style={styles.clearButton}>
+          <TouchableOpacity 
+            onPress={clearAll} 
+            style={styles.clearButton}
+            accessibilityLabel="Clear all search filters"
+            accessibilityRole="button"
+          >
             <Text style={styles.clearButtonText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -187,6 +198,10 @@ const SearchModal = ({
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowCalendar(!showCalendar)}
+                accessibilityLabel={dateFrom && dateTo 
+                  ? `Selected dates: ${formatDisplayDate(dateFrom)} to ${formatDisplayDate(dateTo)}`
+                  : 'Select travel dates'}
+                accessibilityRole="button"
               >
                 <Text style={styles.dateButtonText}>
                   {dateFrom && dateTo 
@@ -245,43 +260,43 @@ const SearchModal = ({
 
 const styles = StyleSheet.create({
   overlayStyle: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
     padding: 0,
-    margin: 20,
+    margin: spacing.lg,
     width: '90%',
     maxHeight: '80%',
   },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border,
   },
   closeButton: {
     padding: 5,
   },
   closeButtonText: {
     fontSize: 20,
-    color: '#007AFF',
+    color: colors.primary,
   },
   headerTitle: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: '600',
   },
   clearButton: {
     padding: 5,
   },
   clearButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
+    ...typography.body,
+    color: colors.primary,
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -291,51 +306,46 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
-    padding: 20,
+    padding: spacing.lg,
   },
   section: {
-    marginBottom: 25,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    marginBottom: 10,
-    color: '#333',
+    marginBottom: spacing.sm,
+    color: colors.text.primary,
   },
   dateButton: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 15,
-    backgroundColor: '#f8f8f8',
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
+    backgroundColor: colors.cardGrey,
   },
   dateButtonText: {
-    fontSize: 16,
-    color: '#333',
+    ...typography.body,
+    color: colors.text.primary,
   },
   calendarContainer: {
-    marginTop: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginTop: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    ...shadows.small,
   },
   buttonContainer: {
-    padding: 20,
+    padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.border,
   },
   searchButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm,
   },
   searchButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
   },
 });
 

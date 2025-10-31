@@ -13,6 +13,7 @@ import ErrorBoundary from './ErrorBoundary';
 import AttendanceModal from './AttendanceModal';
 import { getMatchStatus, getMatchResult, formatMatchDate, isMatchPast } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const MatchCard = ({ 
   match, 
@@ -112,10 +113,12 @@ const MatchCard = ({
         style={[styles.card, isOverlay && styles.overlayCard, style]} 
         onPress={handlePress}
         activeOpacity={0.7}
+        accessibilityLabel={`Match: ${teams.home?.name || 'Home Team'} vs ${teams.away?.name || 'Away Team'}`}
+        accessibilityRole="button"
       >
       <View style={styles.header}>
         <View style={styles.dateTimeContainer}>
-          <Icon name="access-time" size={16} color="#666" />
+          <Icon name="access-time" size={16} color={colors.text.secondary} />
           <View style={styles.dateTimeText}>
             <Text style={[styles.dateText, isOverlay && styles.overlayDateText]}>{date || 'TBD'}</Text>
             <Text style={[styles.timeText, isOverlay && styles.overlayTimeText]}>{time || 'TBD'}</Text>
@@ -226,21 +229,21 @@ const MatchCard = ({
             {/* Show match in progress indicator */}
             {matchStatus.type === 'live' && (
               <View style={styles.liveIndicator}>
-                <Icon name="radio-button-on" size={16} color="#ff5722" />
+                <Icon name="radio-button-on" size={16} color={colors.error} />
                 <Text style={styles.liveText}>Match in Progress</Text>
               </View>
             )}
             {/* Show attendance prompt indicator for completed matches */}
             {shouldShowAttendancePrompt && (
               <View style={styles.attendancePrompt}>
-                <Icon name="check-circle" size={16} color="#1976d2" />
+                <Icon name="check-circle" size={16} color={colors.primary} />
                 <Text style={styles.attendancePromptText}>Tap to confirm attendance</Text>
               </View>
             )}
             {/* Show attended indicator */}
             {match.userAttended && (
               <View style={styles.attendedIndicator}>
-                <Icon name="check-circle" size={16} color="#4caf50" />
+                <Icon name="check-circle" size={16} color={colors.success} />
                 <Text style={styles.attendedText}>Attended</Text>
               </View>
             )}
@@ -279,7 +282,7 @@ const MatchCard = ({
       </View>
 
       <View style={styles.venueContainer}>
-        <Icon name="location-on" size={14} color="#666" />
+        <Icon name="location-on" size={14} color={colors.text.secondary} />
         <Text style={styles.venueText} numberOfLines={1}>
           {(() => {
             if (typeof venue === 'string') {
@@ -299,7 +302,7 @@ const MatchCard = ({
       {/* Recommendation reasons - only show for recommended matches */}
       {match.recommendationReasons && match.recommendationReasons.length > 0 && (
         <View style={styles.recommendationContainer}>
-          <Icon name="star" size={14} color="#ff9800" />
+          <Icon name="star" size={14} color={colors.warning} />
           <Text style={styles.recommendationText} numberOfLines={2}>
             {match.recommendationReasons.slice(0, 2).join(' • ')}
           </Text>
@@ -328,20 +331,16 @@ const MatchCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: colors.border,
+    ...shadows.small,
   },
   overlayCard: {
-    padding: 12,
+    padding: spacing.sm,
     marginBottom: 0,
     shadowOpacity: 0.15,
     elevation: 5,
@@ -350,7 +349,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   dateTimeContainer: {
     flexDirection: 'row',
@@ -358,19 +357,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dateTimeText: {
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   dateText: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text.primary,
   },
   overlayDateText: {
     fontSize: 13,
   },
   timeText: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     marginTop: 2,
   },
   overlayTimeText: {
@@ -378,7 +377,7 @@ const styles = StyleSheet.create({
   },
   relativeTimeText: {
     fontSize: 10,
-    color: '#999',
+    color: colors.text.light,
     marginTop: 2,
     fontStyle: 'italic',
   },
@@ -389,12 +388,12 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.xs,
     minWidth: 70,
     alignItems: 'center',
   },
@@ -405,27 +404,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff3cd',
   },
   statusText: {
-    fontSize: 10,
+    ...typography.caption,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
   statusTextCompleted: {
-    color: '#2e7d32',
+    color: colors.success,
   },
   statusTextLive: {
-    color: '#f57c00',
+    color: colors.warning,
   },
   leagueBadge: {
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.cardGrey,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.xs,
     flexDirection: 'row',
     alignItems: 'center',
   },
   leagueText: {
-    fontSize: 11,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   leagueLogoSmall: {
@@ -434,12 +433,12 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   heartButton: {
-    marginLeft: 4,
+    marginLeft: spacing.xs,
   },
   teamsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   teamContainer: {
     flex: 1,
@@ -449,11 +448,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   teamName: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text.primary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
     maxWidth: '100%',
   },
   overlayTeamName: {
@@ -464,11 +463,11 @@ const styles = StyleSheet.create({
     height: 32,
   },
   vsContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   vsText: {
-    fontSize: 14,
-    color: '#999',
+    ...typography.bodySmall,
+    color: colors.text.light,
     fontWeight: '500',
   },
   overlayVsText: {
@@ -481,42 +480,42 @@ const styles = StyleSheet.create({
   resultScore: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
   resultText: {
-    fontSize: 11,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     fontWeight: '500',
     textAlign: 'center',
   },
   venueContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: colors.borderLight,
   },
   venueText: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     marginLeft: 6,
     flex: 1,
   },
   recommendationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 8,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     backgroundColor: '#fff8e1',
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#ff9800',
+    borderLeftColor: colors.warning,
   },
   recommendationText: {
-    fontSize: 11,
-    color: '#f57c00',
+    ...typography.caption,
+    color: colors.warning,
     marginLeft: 6,
     flex: 1,
     fontWeight: '500',
@@ -528,46 +527,46 @@ const styles = StyleSheet.create({
   attendancePrompt: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     backgroundColor: '#e3f2fd',
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
   },
   attendancePromptText: {
     fontSize: 10,
-    color: '#1976d2',
-    marginLeft: 4,
+    color: colors.primary,
+    marginLeft: spacing.xs,
     fontWeight: '500',
   },
   attendedIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     backgroundColor: '#e8f5e8',
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
   },
   attendedText: {
     fontSize: 10,
-    color: '#4caf50',
-    marginLeft: 4,
+    color: colors.success,
+    marginLeft: spacing.xs,
     fontWeight: '500',
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     backgroundColor: '#fff3e0',
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
   },
   liveText: {
     fontSize: 10,
-    color: '#ff5722',
-    marginLeft: 4,
+    color: colors.error,
+    marginLeft: spacing.xs,
     fontWeight: '500',
   },
 });
