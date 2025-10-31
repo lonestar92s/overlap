@@ -1067,14 +1067,13 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         let targetLeagues = [];
         
         if (userPreferences.favoriteLeagues.length > 0) {
-            // Use user's favorite leagues (these should already be API IDs)
-            // Convert to API IDs by looking up in League collection to ensure we have valid IDs
+            // Use user's favorite leagues (these are stored as API ID strings, not MongoDB ObjectIds)
+            // Look up in League collection to verify they're valid API IDs and get their names
             const favoriteLeagueIds = userPreferences.favoriteLeagues.map(id => String(id));
+            
+            // Only query by apiId since favoriteLeagues are stored as API IDs (strings), not ObjectIds
             const leaguesFromDb = await League.find({ 
-                $or: [
-                    { apiId: { $in: favoriteLeagueIds } },
-                    { _id: { $in: favoriteLeagueIds } } // Also check MongoDB IDs as fallback
-                ]
+                apiId: { $in: favoriteLeagueIds }
             }).select('apiId name').lean();
             
             const foundApiIds = leaguesFromDb.map(l => String(l.apiId));
@@ -1082,7 +1081,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 targetLeagues = foundApiIds;
                 console.log(`✅ Found ${foundApiIds.length} favorite leagues: ${targetLeagues.join(', ')}`);
             } else {
-                // If lookup failed, try using the IDs directly (they might already be API IDs)
+                // If lookup failed, try using the IDs directly (they might already be valid API IDs)
                 targetLeagues = favoriteLeagueIds;
                 console.log(`⚠️ League lookup failed, using IDs directly: ${targetLeagues.join(', ')}`);
             }
@@ -1686,11 +1685,19 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         clearTimeout(timeout);
-        console.error('Error getting recommended matches:', error);
+        console.error('❌ Error getting recommended matches:', error);
+        console.error('❌ Error stack:', error.stack);
+        console.error('❌ Error details:', {
+            name: error.name,
+            message: error.message,
+            code: error.code,
+            userId: req.user?.id
+        });
         res.status(500).json({ 
             success: false, 
             message: 'Failed to fetch recommended matches', 
-            error: error.message 
+            error: error.message,
+            errorType: error.name
         });
     }
 });

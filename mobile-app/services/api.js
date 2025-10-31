@@ -1123,16 +1123,28 @@ class ApiService {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch recommended matches');
+        const errorMessage = data.message || data.error || `Server returned ${response.status}: ${response.statusText}`;
+        console.error(`❌ Recommended matches API error (${response.status}):`, errorMessage);
+        console.error('❌ Full error response:', JSON.stringify(data, null, 2));
+        throw new Error(errorMessage);
       }
       
       return data;
     } catch (error) {
-      console.error('Error fetching recommended matches:', error);
+      console.error('❌ Error fetching recommended matches:', error);
+      console.error('❌ Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       if (error.name === 'AbortError') {
         throw new Error('Request timed out - please try again');
       }
-      throw error;
+      // Re-throw with the original message if it's already an Error with a message
+      if (error.message) {
+        throw error;
+      }
+      throw new Error(error.message || 'Failed to fetch recommended matches');
     }
   }
 

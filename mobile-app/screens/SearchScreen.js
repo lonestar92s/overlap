@@ -82,13 +82,10 @@ const SearchScreen = ({ navigation }) => {
             hasUser: !!user 
           });
           response = await ApiService.getRecommendedMatches();
-          console.log('✅ Recommended matches response:', JSON.stringify(response, null, 2));
-          console.log('📋 Response details:', {
+          console.log('✅ Recommended matches response:', {
             success: response.success,
             matchesCount: response.matches?.length || 0,
-            message: response.message,
-            hasRecommendations: !!response.recommendations,
-            recommendationsCount: response.recommendations?.length || 0
+            message: response.message
           });
           
           // Handle different response structures for recommended matches
@@ -112,52 +109,33 @@ const SearchScreen = ({ navigation }) => {
           }
           
           console.log('📋 Processed recommended matches data:', recommendedMatchesData.length, 'matches');
-          if (recommendedMatchesData.length > 0) {
-            console.log('📋 Recommended matches array:', JSON.stringify(recommendedMatchesData, null, 2));
-            console.log('📋 First recommended match:', JSON.stringify(recommendedMatchesData[0], null, 2));
-            recommendedMatchesData.forEach((match, index) => {
-              // Extract venue from multiple possible locations
-              const venueName = match?.fixture?.venue?.name || 
-                              match?.venue?.name || 
-                              match?.fixture?.venue || 
-                              match?.venue ||
-                              'Unknown Venue';
-              const venueCity = match?.fixture?.venue?.city || match?.venue?.city || null;
-              const venueFull = venueCity ? `${venueName} • ${venueCity}` : venueName;
-              
-              console.log(`📋 Match ${index + 1}:`, {
-                id: match?.id || match?.fixture?.id,
-                homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
-                awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
-                league: match?.league?.name || match?.league,
-                venue: venueFull,
-                date: match?.fixture?.date || match?.date,
-                score: match?.recommendationScore
-              });
-            });
-          }
           
           // If recommended matches are empty, fall back to popular matches
           if (recommendedMatchesData.length === 0) {
             console.log('⚠️ No recommended matches found, falling back to popular matches');
             response = await ApiService.getPopularMatches();
-            console.log('📊 Popular matches fallback response:', JSON.stringify(response, null, 2));
           } else {
             // Use recommended matches if we have them
             setRecommendedMatches(recommendedMatchesData);
             return;
           }
         } catch (authError) {
-          console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
+          console.error('❌ Failed to fetch recommended matches:', authError);
+          console.error('❌ Error message:', authError.message);
+          console.error('❌ Error stack:', authError.stack);
+          console.log('⚠️ Falling back to popular matches...');
           // Fall back to popular matches if recommended fails
-          response = await ApiService.getPopularMatches();
-          console.log('📊 Popular matches fallback response:', JSON.stringify(response, null, 2));
+          try {
+            response = await ApiService.getPopularMatches();
+          } catch (popularError) {
+            console.error('❌ Failed to fetch popular matches as fallback:', popularError);
+            throw popularError;
+          }
         }
       } else {
         // Use popular matches for non-authenticated users
         console.log('👤 User not authenticated, fetching popular matches...');
         response = await ApiService.getPopularMatches();
-        console.log('📊 Popular matches response:', JSON.stringify(response, null, 2));
       }
       
       // Handle different response structures for popular matches
@@ -175,35 +153,13 @@ const SearchScreen = ({ navigation }) => {
       }
       
       console.log('📊 Processed matches data:', matchesData.length, 'matches');
-      if (matchesData.length > 0) {
-        console.log('📊 All matches array:', JSON.stringify(matchesData, null, 2));
-        console.log('📊 First match:', JSON.stringify(matchesData[0], null, 2));
-        matchesData.forEach((match, index) => {
-          // Extract venue from multiple possible locations
-          const venueName = match?.fixture?.venue?.name || 
-                          match?.venue?.name || 
-                          match?.fixture?.venue || 
-                          match?.venue ||
-                          'Unknown Venue';
-          const venueCity = match?.fixture?.venue?.city || match?.venue?.city || null;
-          const venueFull = venueCity ? `${venueName} • ${venueCity}` : venueName;
-          
-          console.log(`📊 Match ${index + 1}:`, {
-            id: match?.id || match?.fixture?.id,
-            homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
-            awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
-            league: match?.league?.name || match?.league,
-            venue: venueFull,
-            date: match?.fixture?.date || match?.date
-          });
-        });
-      } else {
-        console.log('⚠️ No matches found in response');
-      }
       
       setRecommendedMatches(matchesData);
     } catch (error) {
-      console.error('Error fetching recommended matches:', error);
+      console.error('❌ Error fetching recommended matches:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
       
       // Retry once if it's a timeout error
       if (error.message.includes('timeout') && retryCount < 1) {
@@ -212,7 +168,7 @@ const SearchScreen = ({ navigation }) => {
         return;
       }
       
-      console.error('Failed to load recommended matches');
+      console.error('❌ Failed to load recommended matches. Setting empty array.');
       setRecommendedMatches([]);
     } finally {
       setRecommendedMatchesLoading(false);
