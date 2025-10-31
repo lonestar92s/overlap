@@ -1322,65 +1322,76 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                                         venueData?.location?.coordinates || 
                                         (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null);
                 
+                // Transform to API-Sports format that MatchCard component expects
                 transformedMatches.push({
                     id: match.fixture?.id,
-                    homeTeam: {
-                        id: match.teams?.home?.id,
-                        name: match.teams?.home?.name,
-                        logo: match.teams?.home?.logo
+                    fixture: {
+                        id: match.fixture?.id,
+                        date: match.fixture?.date,
+                        status: match.fixture?.status || {},
+                        venue: {
+                            id: match.venue?.id,
+                            name: match.venue?.name,
+                            city: venueCity,
+                            country: venueCountry,
+                            coordinates: venueCoordinates
+                        }
                     },
-                    awayTeam: {
-                        id: match.teams?.away?.id,
-                        name: match.teams?.away?.name,
-                        logo: match.teams?.away?.logo
+                    teams: {
+                        home: {
+                            id: match.teams?.home?.id,
+                            name: match.teams?.home?.name,
+                            logo: match.teams?.home?.logo
+                        },
+                        away: {
+                            id: match.teams?.away?.id,
+                            name: match.teams?.away?.name,
+                            logo: match.teams?.away?.logo
+                        }
                     },
                     league: {
                         id: match.league?.id,
                         name: match.league?.name,
                         logo: match.league?.logo
                     },
-                    venue: {
-                        id: match.venue?.id,
-                        name: match.venue?.name,
-                        city: venueCity,
-                        country: venueCountry,
-                        coordinates: venueCoordinates
-                    },
-                    date: match.fixture?.date,
-                    status: match.fixture?.status?.short,
                     score: match.score || {},
                     recommendationScore: match.recommendationScore,
                     recommendationReasons: match.recommendationReasons
                 });
             } catch (error) {
                 console.log(`⚠️ Error processing match ${match.fixture?.id}: ${error.message}`);
-                // Still include the match but with basic venue info
+                // Still include the match but with basic venue info - transform to API-Sports format
                 transformedMatches.push({
                     id: match.fixture?.id,
-                    homeTeam: {
-                        id: match.teams?.home?.id,
-                        name: match.teams?.home?.name,
-                        logo: match.teams?.home?.logo
+                    fixture: {
+                        id: match.fixture?.id,
+                        date: match.fixture?.date,
+                        status: match.fixture?.status || {},
+                        venue: {
+                            id: match.venue?.id,
+                            name: match.venue?.name,
+                            city: match.venue?.city || match.venue?.name || 'Unknown',
+                            country: match.venue?.country || 'Unknown',
+                            coordinates: null
+                        }
                     },
-                    awayTeam: {
-                        id: match.teams?.away?.id,
-                        name: match.teams?.away?.name,
-                        logo: match.teams?.away?.logo
+                    teams: {
+                        home: {
+                            id: match.teams?.home?.id,
+                            name: match.teams?.home?.name,
+                            logo: match.teams?.home?.logo
+                        },
+                        away: {
+                            id: match.teams?.away?.id,
+                            name: match.teams?.away?.name,
+                            logo: match.teams?.away?.logo
+                        }
                     },
                     league: {
                         id: match.league?.id,
                         name: match.league?.name,
                         logo: match.league?.logo
                     },
-                    venue: {
-                        id: match.venue?.id,
-                        name: match.venue?.name,
-                        city: match.venue?.name,
-                        country: 'Unknown',
-                        coordinates: null
-                    },
-                    date: match.fixture?.date,
-                    status: match.fixture?.status?.short,
                     score: match.score || {},
                     recommendationScore: match.recommendationScore,
                     recommendationReasons: match.recommendationReasons
