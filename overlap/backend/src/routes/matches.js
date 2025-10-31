@@ -1219,13 +1219,17 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             // Location-based scoring
             if (userPreferences.defaultLocation?.coordinates && match.venue?.id) {
                 try {
-                    const venueData = await venueService.getVenueById(match.venue.id);
-                    if (venueData && venueData.coordinates) {
+                    const venueData = await venueService.getVenueByApiId(match.venue.id);
+                    // Venue data can have coordinates in different formats
+                    const venueCoords = venueData?.coordinates || 
+                                       venueData?.location?.coordinates ||
+                                       (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null);
+                    if (venueCoords && Array.isArray(venueCoords) && venueCoords.length === 2) {
                         const distance = recommendationService.calculateDistance(
                             userPreferences.defaultLocation.coordinates[1], // lat
                             userPreferences.defaultLocation.coordinates[0], // lng
-                            venueData.coordinates[1],
-                            venueData.coordinates[0]
+                            venueCoords[1], // lat
+                            venueCoords[0] // lng
                         );
                         
                         if (distance <= userPreferences.recommendationRadius) {
@@ -1309,7 +1313,14 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         const transformedMatches = [];
         for (const match of sortedMatches) {
             try {
-                const venueData = await venueService.getVenueById(match.venue?.id);
+                const venueData = await venueService.getVenueByApiId(match.venue?.id);
+                
+                // Extract venue data - getVenueByApiId returns Venue model or null
+                const venueCity = venueData?.city || match.venue?.city || match.venue?.name;
+                const venueCountry = venueData?.country || match.venue?.country || 'Unknown';
+                const venueCoordinates = venueData?.coordinates || 
+                                        venueData?.location?.coordinates || 
+                                        (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null);
                 
                 transformedMatches.push({
                     id: match.fixture?.id,
@@ -1331,9 +1342,9 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     venue: {
                         id: match.venue?.id,
                         name: match.venue?.name,
-                        city: venueData?.city || match.venue?.name,
-                        country: venueData?.country || 'Unknown',
-                        coordinates: venueData?.coordinates || null
+                        city: venueCity,
+                        country: venueCountry,
+                        coordinates: venueCoordinates
                     },
                     date: match.fixture?.date,
                     status: match.fixture?.status?.short,
