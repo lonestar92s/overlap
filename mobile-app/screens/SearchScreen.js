@@ -82,7 +82,7 @@ const SearchScreen = ({ navigation }) => {
             hasUser: !!user 
           });
           response = await ApiService.getRecommendedMatches();
-          console.log('✅ Recommended matches response:', response);
+          console.log('✅ Recommended matches response:', JSON.stringify(response, null, 2));
           console.log('📋 Response details:', {
             success: response.success,
             matchesCount: response.matches?.length || 0,
@@ -111,11 +111,28 @@ const SearchScreen = ({ navigation }) => {
             recommendedMatchesData = response;
           }
           
+          console.log('📋 Processed recommended matches data:', recommendedMatchesData.length, 'matches');
+          if (recommendedMatchesData.length > 0) {
+            console.log('📋 Recommended matches array:', JSON.stringify(recommendedMatchesData, null, 2));
+            console.log('📋 First recommended match:', JSON.stringify(recommendedMatchesData[0], null, 2));
+            recommendedMatchesData.forEach((match, index) => {
+              console.log(`📋 Match ${index + 1}:`, {
+                id: match?.id || match?.fixture?.id,
+                homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
+                awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
+                league: match?.league?.name,
+                venue: match?.fixture?.venue?.name || match?.venue?.name,
+                date: match?.fixture?.date || match?.date,
+                score: match?.recommendationScore
+              });
+            });
+          }
+          
           // If recommended matches are empty, fall back to popular matches
           if (recommendedMatchesData.length === 0) {
             console.log('⚠️ No recommended matches found, falling back to popular matches');
             response = await ApiService.getPopularMatches();
-            console.log('📊 Popular matches fallback response:', response);
+            console.log('📊 Popular matches fallback response:', JSON.stringify(response, null, 2));
           } else {
             // Use recommended matches if we have them
             setRecommendedMatches(recommendedMatchesData);
@@ -125,13 +142,13 @@ const SearchScreen = ({ navigation }) => {
           console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
           // Fall back to popular matches if recommended fails
           response = await ApiService.getPopularMatches();
-          console.log('📊 Popular matches fallback response:', response);
+          console.log('📊 Popular matches fallback response:', JSON.stringify(response, null, 2));
         }
       } else {
         // Use popular matches for non-authenticated users
         console.log('👤 User not authenticated, fetching popular matches...');
         response = await ApiService.getPopularMatches();
-        console.log('📊 Popular matches response:', response);
+        console.log('📊 Popular matches response:', JSON.stringify(response, null, 2));
       }
       
       // Handle different response structures for popular matches
@@ -150,7 +167,18 @@ const SearchScreen = ({ navigation }) => {
       
       console.log('📊 Processed matches data:', matchesData.length, 'matches');
       if (matchesData.length > 0) {
-        console.log('📊 First match:', matchesData[0]);
+        console.log('📊 All matches array:', JSON.stringify(matchesData, null, 2));
+        console.log('📊 First match:', JSON.stringify(matchesData[0], null, 2));
+        matchesData.forEach((match, index) => {
+          console.log(`📊 Match ${index + 1}:`, {
+            id: match?.id || match?.fixture?.id,
+            homeTeam: match?.teams?.home?.name || match?.homeTeam?.name,
+            awayTeam: match?.teams?.away?.name || match?.awayTeam?.name,
+            league: match?.league?.name,
+            venue: match?.fixture?.venue?.name || match?.venue?.name,
+            date: match?.fixture?.date || match?.date
+          });
+        });
       } else {
         console.log('⚠️ No matches found in response');
       }

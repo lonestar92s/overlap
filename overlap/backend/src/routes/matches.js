@@ -1067,8 +1067,30 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         let targetLeagues = [];
         
         if (userPreferences.favoriteLeagues.length > 0) {
-            // Use user's favorite leagues (these should already be IDs)
-            targetLeagues = userPreferences.favoriteLeagues.map(id => String(id));
+            // Use user's favorite leagues (these should already be API IDs)
+            // Convert to API IDs by looking up in League collection to ensure we have valid IDs
+            const favoriteLeagueIds = userPreferences.favoriteLeagues.map(id => String(id));
+            const leaguesFromDb = await League.find({ 
+                $or: [
+                    { apiId: { $in: favoriteLeagueIds } },
+                    { _id: { $in: favoriteLeagueIds } } // Also check MongoDB IDs as fallback
+                ]
+            }).select('apiId name').lean();
+            
+            const foundApiIds = leaguesFromDb.map(l => String(l.apiId));
+            if (foundApiIds.length > 0) {
+                targetLeagues = foundApiIds;
+                console.log(`✅ Found ${foundApiIds.length} favorite leagues: ${targetLeagues.join(', ')}`);
+            } else {
+                // If lookup failed, try using the IDs directly (they might already be API IDs)
+                targetLeagues = favoriteLeagueIds;
+                console.log(`⚠️ League lookup failed, using IDs directly: ${targetLeagues.join(', ')}`);
+            }
+            
+            // Always include popular leagues as well to ensure diverse results
+            const popularLeagues = ['39', '140', '135', '78', '61', '94', '97', '88'];
+            targetLeagues = [...new Set([...targetLeagues, ...popularLeagues])]; // Combine and deduplicate
+            console.log(`🔍 Expanded to include popular leagues: ${targetLeagues.join(', ')}`);
         } else if (activeTrips.length > 0) {
             // Extract leagues from active trips - need to convert names to IDs
             const tripLeagueNames = new Set();
@@ -1216,7 +1238,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 }
             }
 
-            // Location-based scoring
+            // Location-based scoring (default location)
             if (userPreferences.defaultLocation?.coordinates && match.venue?.id) {
                 try {
                     const venueData = await venueService.getVenueByApiId(match.venue.id);
@@ -1240,6 +1262,183 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     }
                 } catch (error) {
                     console.log(`⚠️ Error getting venue data for ${match.venue.id}: ${error.message}`);
+                }
+            }
+
+            // Trip-based scoring (proximity to trip venues, temporal alignment, time conflicts)
+            if (activeTrips.length > 0 && match.venue?.id && match.fixture?.date) {
+                try {
+                    const matchDate = new Date(match.fixture.date);
+                    const matchVenueData = await venueService.getVenueByApiId(match.venue.id);
+                    const matchVenueCoords = matchVenueData?.coordinates || 
+                                           matchVenueData?.location?.coordinates ||
+                                           (matchVenueData?.location?.type === 'Point' ? matchVenueData.location.coordinates : null);
+                    
+                    if (matchVenueCoords && Array.isArray(matchVenueCoords) && matchVenueCoords.length === 2) {
+                        let bestTripProximity = Infinity;
+                        let bestTripMatch = null;
+                        let bestTemporalScore = 0;
+                        let bestTemporalTrip = null;
+                        let hasTimeConflict = false;
+                        const matchTime = matchDate.getTime();
+                        
+                        // Check each active trip
+                        for (const trip of activeTrips) {
+                            // Extract trip date range
+                            const tripMatches = trip.matches || [];
+                            if (tripMatches.length === 0) continue;
+                            
+                            const tripDates = tripMatches.map(m => new Date(m.date)).filter(d => !isNaN(d.getTime()));
+                            if (tripDates.length === 0) continue;
+                            
+                            const tripStart = new Date(Math.min(...tripDates));
+                            const tripEnd = new Date(Math.max(...tripDates));
+                            const tripStartTime = tripStart.getTime();
+                            const tripEndTime = tripEnd.getTime();
+                            
+                            // Temporal alignment (0-30 points) - calculate best score
+                            let temporalScore = 0;
+                            if (matchTime >= tripStartTime && matchTime <= tripEndTime) {
+                                // Match is within trip date range - highest bonus!
+                                temporalScore = 30;
+                            } else {
+                                // Calculate days difference from trip boundaries
+                                const daysFromStart = Math.abs((matchTime - tripStartTime) / (1000 * 60 * 60 * 24));
+                                const daysFromEnd = Math.abs((matchTime - tripEndTime) / (1000 * 60 * 60 * 24));
+                                const minDaysDiff = Math.min(daysFromStart, daysFromEnd);
+                                
+                                if (minDaysDiff === 0) {
+                                    temporalScore = 30;
+                                } else if (minDaysDiff <= 1) {
+                                    temporalScore = 25;
+                                } else if (minDaysDiff <= 2) {
+                                    temporalScore = 20;
+                                } else if (minDaysDiff <= 3) {
+                                    temporalScore = 15;
+                                }
+                            }
+                            
+                            // Keep track of best temporal score
+                            if (temporalScore > bestTemporalScore) {
+                                bestTemporalScore = temporalScore;
+                                bestTemporalTrip = trip;
+                            }
+                            
+                            // Check for time conflicts with trip matches
+                            for (const tripMatch of tripMatches) {
+                                if (!tripMatch.date) continue;
+                                const tripMatchDate = new Date(tripMatch.date);
+                                const timeDiff = Math.abs(matchDate.getTime() - tripMatchDate.getTime());
+                                
+                                // If matches are on same day and within 3 hours, it's a conflict
+                                if (timeDiff < (3 * 60 * 60 * 1000) && Math.abs((matchTime - tripMatchDate.getTime()) / (1000 * 60 * 60 * 24)) < 1) {
+                                    hasTimeConflict = true;
+                                    score -= 50;
+                                    reasons.push(`Time conflict with match in trip "${trip.name}"`);
+                                    break;
+                                }
+                            }
+                            
+                            // Proximity to trip venues (0-40 points)
+                            for (const tripMatch of tripMatches) {
+                                let tripVenueCoords = null;
+                                
+                                // Try to get coordinates from venueData
+                                if (tripMatch.venueData && tripMatch.venueData.coordinates) {
+                                    tripVenueCoords = tripMatch.venueData.coordinates;
+                                } else if (tripMatch.venueData && tripMatch.venueData.location?.coordinates) {
+                                    tripVenueCoords = tripMatch.venueData.location.coordinates;
+                                } else if (tripMatch.venue) {
+                                    // Lookup venue by name/ID
+                                    try {
+                                        const tripVenue = await venueService.getVenueByApiId(tripMatch.venue);
+                                        if (tripVenue) {
+                                            tripVenueCoords = tripVenue.coordinates || 
+                                                            tripVenue.location?.coordinates ||
+                                                            (tripVenue.location?.type === 'Point' ? tripVenue.location.coordinates : null);
+                                        }
+                                    } catch (err) {
+                                        // Try finding by venue name (fallback)
+                                        try {
+                                            const Venue = require('../models/Venue');
+                                            const venueByName = await Venue.findOne({ 
+                                                name: { $regex: String(tripMatch.venue), $options: 'i' } 
+                                            }).lean();
+                                            if (venueByName) {
+                                                tripVenueCoords = venueByName.coordinates || 
+                                                                venueByName.location?.coordinates;
+                                            }
+                                        } catch (lookupErr) {
+                                            // Venue lookup failed, skip this trip match
+                                        }
+                                    }
+                                }
+                                
+                                if (tripVenueCoords && Array.isArray(tripVenueCoords) && tripVenueCoords.length === 2) {
+                                    const distance = recommendationService.calculateDistance(
+                                        matchVenueCoords[1], // lat
+                                        matchVenueCoords[0], // lng
+                                        tripVenueCoords[1], // lat
+                                        tripVenueCoords[0] // lng
+                                    );
+                                    
+                                    if (distance < bestTripProximity) {
+                                        bestTripProximity = distance;
+                                        bestTripMatch = trip;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Apply best temporal score (from closest trip in time)
+                        if (bestTemporalScore > 0 && bestTemporalTrip) {
+                            score += bestTemporalScore;
+                            if (matchTime >= new Date(Math.min(...bestTemporalTrip.matches.map(m => new Date(m.date)).filter(d => !isNaN(d.getTime())))).getTime() &&
+                                matchTime <= new Date(Math.max(...bestTemporalTrip.matches.map(m => new Date(m.date)).filter(d => !isNaN(d.getTime())))).getTime()) {
+                                reasons.push(`Perfect for your trip "${bestTemporalTrip.name}" (within date range)`);
+                            } else {
+                                const tripDates = bestTemporalTrip.matches.map(m => new Date(m.date)).filter(d => !isNaN(d.getTime()));
+                                const tripStart = new Date(Math.min(...tripDates));
+                                const tripEnd = new Date(Math.max(...tripDates));
+                                const daysFromStart = Math.abs((matchTime - tripStart.getTime()) / (1000 * 60 * 60 * 24));
+                                const daysFromEnd = Math.abs((matchTime - tripEnd.getTime()) / (1000 * 60 * 60 * 24));
+                                const minDaysDiff = Math.min(daysFromStart, daysFromEnd);
+                                
+                                if (minDaysDiff === 0) {
+                                    reasons.push(`Matches your trip "${bestTemporalTrip.name}" date`);
+                                } else if (minDaysDiff <= 1) {
+                                    reasons.push(`Within 1 day of your trip "${bestTemporalTrip.name}"`);
+                                } else if (minDaysDiff <= 2) {
+                                    reasons.push(`Within 2 days of your trip "${bestTemporalTrip.name}"`);
+                                } else if (minDaysDiff <= 3) {
+                                    reasons.push(`Within 3 days of your trip "${bestTemporalTrip.name}"`);
+                                }
+                            }
+                        }
+                        
+                        // Apply proximity score based on closest trip venue
+                        if (bestTripProximity !== Infinity && bestTripMatch) {
+                            let proximityScore = 0;
+                            if (bestTripProximity <= 10) {
+                                proximityScore = 40;
+                            } else if (bestTripProximity <= 25) {
+                                proximityScore = 35;
+                            } else if (bestTripProximity <= 50) {
+                                proximityScore = 30;
+                            } else if (bestTripProximity <= 100) {
+                                proximityScore = 25;
+                            } else if (bestTripProximity <= 200) {
+                                proximityScore = 20;
+                            } else {
+                                proximityScore = 15;
+                            }
+                            
+                            score += proximityScore;
+                            reasons.push(`Within ${Math.round(bestTripProximity)} miles of your trip "${bestTripMatch.name}" venue`);
+                        }
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Error processing trip-based scoring for match ${match.fixture?.id}: ${error.message}`);
                 }
             }
 
@@ -1303,11 +1502,57 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             };
         }));
 
-        // Sort by score and take top matches
-        const sortedMatches = scoredMatches
-            .filter(match => match.recommendationScore > 0) // Only show positive scores
-            .sort((a, b) => b.recommendationScore - a.recommendationScore)
-            .slice(0, parseInt(limit));
+        // Sort by score and ensure league diversity
+        const positiveMatches = scoredMatches.filter(match => match.recommendationScore > 0);
+        
+        // Group matches by league for diversity
+        const matchesByLeague = new Map();
+        positiveMatches.forEach(match => {
+            const leagueId = match.league?.id?.toString() || 'unknown';
+            if (!matchesByLeague.has(leagueId)) {
+                matchesByLeague.set(leagueId, []);
+            }
+            matchesByLeague.get(leagueId).push(match);
+        });
+        
+        // Sort matches within each league by score
+        matchesByLeague.forEach((matches, leagueId) => {
+            matches.sort((a, b) => b.recommendationScore - a.recommendationScore);
+        });
+        
+        // Distribute matches across leagues to ensure diversity
+        // Try to get at least 1-2 matches per league, then fill remaining slots with top scores
+        const sortedMatches = [];
+        const maxPerLeague = Math.max(2, Math.floor(parseInt(limit) / matchesByLeague.size));
+        const leagues = Array.from(matchesByLeague.keys());
+        
+        // First pass: take top matches from each league
+        for (let i = 0; i < maxPerLeague && sortedMatches.length < parseInt(limit); i++) {
+            for (const leagueId of leagues) {
+                if (sortedMatches.length >= parseInt(limit)) break;
+                const leagueMatches = matchesByLeague.get(leagueId);
+                if (leagueMatches.length > i) {
+                    sortedMatches.push(leagueMatches[i]);
+                }
+            }
+        }
+        
+        // Second pass: fill remaining slots with highest scoring matches regardless of league
+        if (sortedMatches.length < parseInt(limit)) {
+            const remaining = positiveMatches
+                .filter(match => !sortedMatches.includes(match))
+                .sort((a, b) => b.recommendationScore - a.recommendationScore)
+                .slice(0, parseInt(limit) - sortedMatches.length);
+            sortedMatches.push(...remaining);
+        }
+        
+        // Final sort by score to maintain ranking
+        sortedMatches.sort((a, b) => b.recommendationScore - a.recommendationScore);
+        
+        console.log(`📊 League distribution: ${Array.from(matchesByLeague.keys()).map(leagueId => {
+            const count = sortedMatches.filter(m => (m.league?.id?.toString() || 'unknown') === leagueId).length;
+            return `${leagueId}:${count}`;
+        }).join(', ')}`);
 
         // Transform matches to match the expected format
         const transformedMatches = [];
@@ -1316,11 +1561,19 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 const venueData = await venueService.getVenueByApiId(match.venue?.id);
                 
                 // Extract venue data - getVenueByApiId returns Venue model or null
-                const venueCity = venueData?.city || match.venue?.city || match.venue?.name;
+                // Use multiple fallbacks to ensure we always have venue info
+                const venueName = match.venue?.name || venueData?.name || 'Unknown Venue';
+                const venueCity = venueData?.city || match.venue?.city || venueData?.name || match.venue?.name || null;
                 const venueCountry = venueData?.country || match.venue?.country || 'Unknown';
                 const venueCoordinates = venueData?.coordinates || 
                                         venueData?.location?.coordinates || 
-                                        (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null);
+                                        (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null) ||
+                                        match.venue?.coordinates;
+                
+                // Debug logging for venue data
+                if (!venueData && match.venue?.id) {
+                    console.log(`⚠️ No venue data found for venue ID: ${match.venue.id}, using API data: ${match.venue.name}`);
+                }
                 
                 // Transform to API-Sports format that MatchCard component expects
                 transformedMatches.push({
@@ -1331,7 +1584,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         status: match.fixture?.status || {},
                         venue: {
                             id: match.venue?.id,
-                            name: match.venue?.name,
+                            name: venueName,
                             city: venueCity,
                             country: venueCountry,
                             coordinates: venueCoordinates
@@ -1361,6 +1614,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             } catch (error) {
                 console.log(`⚠️ Error processing match ${match.fixture?.id}: ${error.message}`);
                 // Still include the match but with basic venue info - transform to API-Sports format
+                const fallbackVenueName = match.venue?.name || 'Unknown Venue';
+                const fallbackVenueCity = match.venue?.city || match.venue?.name || null;
                 transformedMatches.push({
                     id: match.fixture?.id,
                     fixture: {
@@ -1369,10 +1624,10 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         status: match.fixture?.status || {},
                         venue: {
                             id: match.venue?.id,
-                            name: match.venue?.name,
-                            city: match.venue?.city || match.venue?.name || 'Unknown',
+                            name: fallbackVenueName,
+                            city: fallbackVenueCity,
                             country: match.venue?.country || 'Unknown',
-                            coordinates: null
+                            coordinates: match.venue?.coordinates || null
                         }
                     },
                     teams: {
