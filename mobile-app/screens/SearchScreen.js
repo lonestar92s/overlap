@@ -72,14 +72,6 @@ const SearchScreen = ({ navigation }) => {
 
       console.log('🔍 Fetching matches - User authenticated:', !!user);
 
-      // TEMPORARY: Always use popular matches until backend is deployed
-      // TODO: Re-enable recommended matches after backend deployment
-      console.log('🔧 TEMPORARY: Using popular matches (backend not deployed yet)');
-      response = await ApiService.getPopularMatches();
-      console.log('📊 Popular matches response:', response);
-      
-      // TODO: Uncomment this when backend is deployed
-      /*
       // Try to fetch recommended matches if user is authenticated
       if (user) {
         try {
@@ -98,7 +90,6 @@ const SearchScreen = ({ navigation }) => {
         response = await ApiService.getPopularMatches();
         console.log('📊 Popular matches response:', response);
       }
-      */
       
       // Handle different response structures
       let matchesData = [];

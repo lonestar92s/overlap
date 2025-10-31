@@ -4,11 +4,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Alert, Text } from 'react-native';
-
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Button } from 'react-native-elements';
-import ApiService from './services/api';
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -27,153 +24,10 @@ import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import WorkOSLoginScreen from './screens/WorkOSLoginScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
+import AccountScreen from './screens/AccountScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-
-// Account screen with logout functionality
-const AccountScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
-  const [loadingPrefs, setLoadingPrefs] = React.useState(true);
-  const [prefs, setPrefs] = React.useState({ favoriteLeagues: [], favoriteTeams: [], favoriteVenues: [] });
-  
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout }
-      ]
-    );
-  };
-
-  const handleViewAttendedMatches = () => {
-    navigation.navigate('MemoriesTab');
-  };
-
-  React.useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const p = await ApiService.getPreferences();
-        if (mounted) setPrefs({
-          favoriteLeagues: p.favoriteLeagues || [],
-          favoriteTeams: p.favoriteTeams || [],
-          favoriteVenues: p.favoriteVenues || []
-        });
-      } catch (e) {
-        // ignore
-      } finally {
-        if (mounted) setLoadingPrefs(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const renderSectionHeader = (title) => (
-    <Text style={{ fontSize: 16, fontWeight: '700', color: '#333', marginTop: 24, marginBottom: 8 }}>{title}</Text>
-  );
-
-  const renderFavoriteLeagues = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Leagues')}
-        {(prefs.favoriteLeaguesExpanded || prefs.favoriteLeagues || []).length === 0 ? (
-          <Text style={{ color: '#666' }}>No favorite leagues yet</Text>
-        ) : (
-          (prefs.favoriteLeaguesExpanded || []).map((l) => (
-            <View key={`fav-league-${l.id}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#333' }}>{l.name || `League ${l.id}`}{l.country ? ` (${l.country})` : ''}</Text>
-              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
-                try { await ApiService.removeFavoriteLeague(l.id); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
-              }} />
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  const renderFavoriteTeams = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Teams')}
-        {(prefs.favoriteTeams || []).length === 0 ? (
-          <Text style={{ color: '#666' }}>No favorite teams yet</Text>
-        ) : (
-          (prefs.favoriteTeams || []).map((ft) => (
-            <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#333' }}>{ft.teamId?.name || `Team ${ft.teamId}`}</Text>
-              {/* Remove by Mongo teamId */}
-              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
-                try { const mongoId = ft.teamId?._id || ft.teamId; await ApiService.removeFavoriteTeamByMongoId(String(mongoId)); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
-              }} />
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  const renderFavoriteVenues = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Venues')}
-        {(prefs.favoriteVenuesExpanded || prefs.favoriteVenues || []).length === 0 ? (
-          <Text style={{ color: '#666' }}>No favorite venues yet</Text>
-        ) : (
-          (prefs.favoriteVenuesExpanded || []).map((v) => (
-            <View key={`fav-venue-${v.venueId}`} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#333' }}>{v.name || `Venue ${v.venueId}`}{v.city || v.country ? ` (${[v.city, v.country].filter(Boolean).join(', ')})` : ''}</Text>
-              <Button title="Remove" type="clear" titleStyle={{ color: '#c00' }} onPress={async () => {
-                try { await ApiService.removeFavoriteVenue(v.venueId); const p = await ApiService.getPreferences(); setPrefs({ favoriteLeagues: p.favoriteLeagues||[], favoriteLeaguesExpanded: p.favoriteLeaguesExpanded||[], favoriteTeams: p.favoriteTeams||[], favoriteVenues: p.favoriteVenues||[], favoriteVenuesExpanded: p.favoriteVenuesExpanded||[] }); } catch(e) {}
-              }} />
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  return (
-    <View style={styles.accountContainer}>
-      <View style={styles.accountHeader}>
-        <MaterialIcons name="account-circle" size={80} color="#1976d2" />
-        <Text style={styles.accountTitle}>Profile</Text>
-        <Text style={styles.accountEmail}>{user?.email}</Text>
-      </View>
-      
-      <View style={styles.accountActions}>
-        <Button
-          title="View Match Memories"
-          onPress={handleViewAttendedMatches}
-          buttonStyle={styles.attendedMatchesButton}
-          titleStyle={styles.attendedMatchesButtonTitle}
-          icon={<MaterialIcons name="memory" size={20} color="#fff" />}
-        />
-        {/* Favorites */}
-        {loadingPrefs ? (
-          <View style={{ paddingVertical: 12 }}>
-            <ActivityIndicator size="small" color="#1976d2" />
-          </View>
-        ) : (
-          <>
-            {renderFavoriteLeagues()}
-            {renderFavoriteTeams()}
-            {renderFavoriteVenues()}
-          </>
-        )}
-        <Button
-          title="Logout"
-          onPress={handleLogout}
-          buttonStyle={styles.logoutButton}
-          titleStyle={styles.logoutButtonTitle}
-        />
-      </View>
-    </View>
-  );
-};
 
 // Loading screen component
 const LoadingScreen = () => (
@@ -387,53 +241,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
-  },
-  accountContainer: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 20,
-  },
-  accountHeader: {
-    alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 40,
-  },
-  accountTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  accountEmail: {
-    fontSize: 16,
-    color: '#666',
-  },
-  accountActions: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  attendedMatchesButton: {
-    backgroundColor: '#1976d2',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    marginBottom: 16,
-  },
-  attendedMatchesButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  logoutButton: {
-    backgroundColor: '#f44336',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-  },
-  logoutButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 

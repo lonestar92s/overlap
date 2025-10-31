@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ApiService from '../services/api';
+import { normalizeId, normalizeIds, idsEqual, getDocumentId } from '../utils/idNormalizer';
 
 const ItineraryContext = createContext();
 
@@ -26,7 +27,9 @@ export const ItineraryProvider = ({ children }) => {
       setLoading(true);
       const response = await ApiService.getTrips();
       if (response.success && response.trips) {
-        setItineraries(response.trips);
+        // Normalize all trip IDs when loading
+        const normalizedTrips = normalizeIds(response.trips);
+        setItineraries(normalizedTrips);
       }
     } catch (error) {
       console.error('Error loading itineraries from API:', error);
@@ -45,15 +48,8 @@ export const ItineraryProvider = ({ children }) => {
       console.log('🆕 API response:', response);
       
       if (response.success && response.trip) {
-        const newItinerary = response.trip;
-        console.log('🆕 New itinerary before ID mapping:', { id: newItinerary.id, _id: newItinerary._id });
-        
-        // Ensure we have the correct ID field (MongoDB uses _id for subdocuments)
-        if (!newItinerary.id && newItinerary._id) {
-          newItinerary.id = newItinerary._id;
-        }
-        
-        console.log('🆕 New itinerary after ID mapping:', { id: newItinerary.id, _id: newItinerary._id });
+        const newItinerary = normalizeId(response.trip);
+        console.log('🆕 New itinerary normalized:', { id: newItinerary.id, _id: newItinerary._id });
         setItineraries(prev => [...prev, newItinerary]);
         return newItinerary;
       } else {
@@ -78,21 +74,14 @@ export const ItineraryProvider = ({ children }) => {
       console.log('➕ API response:', response);
       
       if (response.success && response.trip) {
-        // Ensure the updated trip has the correct ID field
-        const updatedTrip = response.trip;
-        console.log('➕ Updated trip before ID mapping:', { id: updatedTrip.id, _id: updatedTrip._id });
-        
-        if (!updatedTrip.id && updatedTrip._id) {
-          updatedTrip.id = updatedTrip._id;
-        }
-        
-        console.log('➕ Updated trip after ID mapping:', { id: updatedTrip.id, _id: updatedTrip._id });
+        const updatedTrip = normalizeId(response.trip);
+        console.log('➕ Updated trip normalized:', { id: updatedTrip.id, _id: updatedTrip._id });
         console.log('➕ Updated trip matches:', updatedTrip.matches.map(m => ({ matchId: m.matchId, fixtureId: m.fixtureId })));
         
         // Update local state with the updated trip from API
         setItineraries(prev => {
           const updated = prev.map(itinerary => 
-            (itinerary.id === itineraryId || itinerary._id === itineraryId) ? updatedTrip : itinerary
+            idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
           );
           console.log('➕ Local state updated, new itineraries count:', updated.length);
           return updated;
@@ -115,12 +104,12 @@ export const ItineraryProvider = ({ children }) => {
       console.log('📋 Planning update response:', response);
       
       if (response.success && response.data.trip) {
-        const updatedTrip = response.data.trip;
+        const updatedTrip = normalizeId(response.data.trip);
         console.log('📋 Updated trip from API:', updatedTrip);
         
         // Update local state with the updated trip from API
         setItineraries(prev => prev.map(itinerary => 
-          (itinerary.id === itineraryId || itinerary._id === itineraryId) ? updatedTrip : itinerary
+          idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
         ));
         
         return updatedTrip;
@@ -142,12 +131,14 @@ export const ItineraryProvider = ({ children }) => {
         if (response.success) {
           // Update local state with the updated trip from API
           setItineraries(prev => prev.map(itinerary => {
-            if (itinerary.id === itineraryId || itinerary._id === itineraryId) {
+            if (idsEqual(itinerary.id || itinerary._id, itineraryId)) {
               return {
                 ...itinerary,
-                matches: itinerary.matches.filter(match => 
-                  match.matchId !== matchId && match.id !== matchId
-                ),
+                matches: itinerary.matches.filter(match => {
+                  const matchIdStr = String(matchId);
+                  return !idsEqual(match.matchId, matchIdStr) && 
+                         !idsEqual(match.id, matchIdStr);
+                }),
                 updatedAt: new Date().toISOString()
               };
             }
@@ -161,12 +152,14 @@ export const ItineraryProvider = ({ children }) => {
       
       // Fallback to local state update if API fails
       setItineraries(prev => prev.map(itinerary => {
-        if (itinerary.id === itineraryId || itinerary._id === itineraryId) {
+        if (idsEqual(itinerary.id || itinerary._id, itineraryId)) {
           return {
             ...itinerary,
-            matches: itinerary.matches.filter(match => 
-              match.matchId !== matchId && match.id !== matchId
-            ),
+            matches: itinerary.matches.filter(match => {
+              const matchIdStr = String(matchId);
+              return !idsEqual(match.matchId, matchIdStr) && 
+                     !idsEqual(match.id, matchIdStr);
+            }),
             updatedAt: new Date().toISOString()
           };
         }
@@ -187,12 +180,12 @@ export const ItineraryProvider = ({ children }) => {
       console.log('🔄 API response:', response);
       
       if (response.success && response.trip) {
-        const updatedTrip = response.trip;
+        const updatedTrip = normalizeId(response.trip);
         console.log('🔄 Updated trip from API:', updatedTrip);
         
         // Update local state with the updated trip from API
         setItineraries(prev => prev.map(itinerary => 
-          (itinerary.id === itineraryId || itinerary._id === itineraryId) ? updatedTrip : itinerary
+          idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
         ));
         
         return updatedTrip;
@@ -218,7 +211,7 @@ export const ItineraryProvider = ({ children }) => {
         if (response.success) {
           // Remove from local state
           setItineraries(prev => prev.filter(itinerary => 
-            itinerary.id !== itineraryId && itinerary._id !== itineraryId
+            !idsEqual(itinerary.id || itinerary._id, itineraryId)
           ));
           console.log('✅ Itinerary deleted successfully via API');
           return;
@@ -231,7 +224,7 @@ export const ItineraryProvider = ({ children }) => {
       
       // Fallback to local state update if API fails
       setItineraries(prev => prev.filter(itinerary => 
-        itinerary.id !== itineraryId && itinerary._id !== itineraryId
+        !idsEqual(itinerary.id || itinerary._id, itineraryId)
       ));
       console.log('✅ Itinerary deleted from local state (backend API unavailable)');
       
@@ -244,24 +237,21 @@ export const ItineraryProvider = ({ children }) => {
   // Get itinerary by ID
   const getItineraryById = (itineraryId) => {
     return itineraries.find(itinerary => 
-      itinerary.id === itineraryId || itinerary._id === itineraryId
+      idsEqual(itinerary.id || itinerary._id, itineraryId)
     );
   };
 
   // Check if a match is in any itinerary
   const isMatchInItinerary = (matchId) => {
-    // Normalize matchId to string for consistent comparison
     const normalizedMatchId = String(matchId);
-
     
     const result = itineraries.some(itinerary => {
       const hasMatch = itinerary.matches.some(match => {
         // Check multiple possible ID fields to handle different data sources
-        // Normalize all IDs to strings for comparison
-        const matchFound = String(match.matchId) === normalizedMatchId || 
-                          String(match.fixtureId) === normalizedMatchId || 
-                          String(match.id) === normalizedMatchId ||
-                          String(match.fixture?.id) === normalizedMatchId;
+        const matchFound = idsEqual(match.matchId, normalizedMatchId) || 
+                          idsEqual(match.fixtureId, normalizedMatchId) || 
+                          idsEqual(match.id, normalizedMatchId) ||
+                          idsEqual(match.fixture?.id, normalizedMatchId);
         
         if (matchFound) {
           console.log('✅ Match found in itinerary:', { 
@@ -283,15 +273,14 @@ export const ItineraryProvider = ({ children }) => {
 
   // Get all itineraries containing a specific match
   const getItinerariesForMatch = (matchId) => {
-    // Normalize matchId to string for consistent comparison
     const normalizedMatchId = String(matchId);
     
     return itineraries.filter(itinerary => 
       itinerary.matches.some(match => 
-        String(match.matchId) === normalizedMatchId || 
-        String(match.fixtureId) === normalizedMatchId || 
-        String(match.id) === normalizedMatchId ||
-        String(match.fixture?.id) === normalizedMatchId
+        idsEqual(match.matchId, normalizedMatchId) || 
+        idsEqual(match.fixtureId, normalizedMatchId) || 
+        idsEqual(match.id, normalizedMatchId) ||
+        idsEqual(match.fixture?.id, normalizedMatchId)
       )
     );
   };

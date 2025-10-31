@@ -8,12 +8,17 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from 'react-native';
 import ApiService from '../services/api';
 import HeartButton from './HeartButton';
 import MatchCard from './MatchCard';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = SCREEN_WIDTH * 0.85; // 85% of screen width for horizontal cards
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
@@ -112,19 +117,21 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   };
 
   const renderMatchCard = ({ item }) => (
-    <MatchCard
-      match={item}
-      onPress={() => onMatchPress(item)}
-      variant="default"
-      showHeart={true}
-      style={styles.popularMatchCard}
-    />
+    <View style={styles.cardWrapper}>
+      <MatchCard
+        match={item}
+        onPress={() => onMatchPress(item)}
+        variant="default"
+        showHeart={true}
+        style={styles.popularMatchCard}
+      />
+    </View>
   );
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1976d2" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>
           {isRecommended ? 'Loading recommended matches...' : 'Loading popular matches...'}
         </Text>
@@ -138,7 +145,12 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         <Text style={styles.emptyText}>
           {isRecommended ? 'No recommended matches available' : 'No popular matches available'}
         </Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+        <TouchableOpacity 
+          style={styles.refreshButton} 
+          onPress={onRefresh}
+          accessibilityLabel="Refresh matches"
+          accessibilityRole="button"
+        >
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
       </View>
@@ -159,6 +171,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         contentContainerStyle={styles.listContainer}
         refreshing={refreshing}
         onRefresh={onRefresh}
+        snapToInterval={CARD_WIDTH + spacing.md * 2}
+        decelerationRate="fast"
+        snapToAlignment="start"
       />
     </View>
   );
@@ -166,36 +181,33 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 16,
+    marginVertical: spacing.md,
   },
   sectionTitle: {
-    fontSize: 20,
+    ...typography.h2,
     fontWeight: '600',
-    marginBottom: 12,
-    marginLeft: 16,
-    color: '#1a1a1a',
+    marginBottom: spacing.sm,
+    marginLeft: spacing.md,
+    color: colors.text.primary,
   },
   listContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
+    paddingRight: spacing.lg, // Extra padding on right for last card
+  },
+  cardWrapper: {
+    width: CARD_WIDTH,
+    marginRight: spacing.md,
   },
   matchCard: {
     width: 300,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginRight: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    marginRight: spacing.md,
   },
   venueImageContainer: {
     height: 120,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    borderTopLeftRadius: borderRadius.md,
+    borderTopRightRadius: borderRadius.md,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -206,7 +218,7 @@ const styles = StyleSheet.create({
   venueImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.cardGrey,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -214,78 +226,78 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   matchInfo: {
-    padding: 16,
+    padding: spacing.md,
   },
   matchHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   matchTeams: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.text.primary,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.sm,
   },
   matchTime: {
-    fontSize: 14,
-    color: '#1976d2',
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   venueName: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
     marginBottom: 2,
   },
   venueLocation: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
+    ...typography.caption,
+    color: colors.text.light,
+    marginBottom: spacing.sm,
   },
   leagueName: {
-    fontSize: 12,
-    color: '#1976d2',
+    ...typography.caption,
+    color: colors.primary,
     fontWeight: '500',
   },
   heartButton: {
     backgroundColor: 'transparent',
     padding: 2,
-    marginLeft: 4,
+    marginLeft: spacing.xs,
   },
   popularMatchCard: {
-    marginHorizontal: 8,
-    marginVertical: 4,
+    width: '100%',
+    marginVertical: spacing.xs,
   },
   loadingContainer: {
-    padding: 40,
+    padding: spacing.xl,
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    marginTop: spacing.sm,
+    ...typography.body,
+    color: colors.text.secondary,
   },
   emptyContainer: {
-    padding: 40,
+    padding: spacing.xl,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.md,
   },
   refreshButton: {
-    backgroundColor: '#1976d2',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
   },
   refreshButtonText: {
-    color: '#fff',
-    fontSize: 14,
+    color: colors.card,
+    ...typography.bodySmall,
     fontWeight: '500',
   },
 });
