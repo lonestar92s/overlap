@@ -76,8 +76,51 @@ const SearchScreen = ({ navigation }) => {
       if (user) {
         try {
           console.log('🎯 Attempting to fetch recommended matches...');
+          console.log('👤 User data:', { 
+            userId: user?.id, 
+            email: user?.email,
+            hasUser: !!user 
+          });
           response = await ApiService.getRecommendedMatches();
           console.log('✅ Recommended matches response:', response);
+          console.log('📋 Response details:', {
+            success: response.success,
+            matchesCount: response.matches?.length || 0,
+            message: response.message,
+            hasRecommendations: !!response.recommendations,
+            recommendationsCount: response.recommendations?.length || 0
+          });
+          
+          // Handle different response structures for recommended matches
+          let recommendedMatchesData = [];
+          if (response.success && response.matches) {
+            recommendedMatchesData = response.matches;
+          } else if (response.success && response.recommendations) {
+            recommendedMatchesData = response.recommendations;
+          } else if (response.matches) {
+            recommendedMatchesData = response.matches;
+          } else if (response.recommendations) {
+            recommendedMatchesData = response.recommendations;
+          } else if (response.data && Array.isArray(response.data)) {
+            recommendedMatchesData = response.data;
+          } else if (response.data && response.data.recommendations) {
+            recommendedMatchesData = response.data.recommendations;
+          } else if (response.data && response.data.matches) {
+            recommendedMatchesData = response.data.matches;
+          } else if (Array.isArray(response)) {
+            recommendedMatchesData = response;
+          }
+          
+          // If recommended matches are empty, fall back to popular matches
+          if (recommendedMatchesData.length === 0) {
+            console.log('⚠️ No recommended matches found, falling back to popular matches');
+            response = await ApiService.getPopularMatches();
+            console.log('📊 Popular matches fallback response:', response);
+          } else {
+            // Use recommended matches if we have them
+            setRecommendedMatches(recommendedMatchesData);
+            return;
+          }
         } catch (authError) {
           console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
           // Fall back to popular matches if recommended fails
@@ -91,7 +134,7 @@ const SearchScreen = ({ navigation }) => {
         console.log('📊 Popular matches response:', response);
       }
       
-      // Handle different response structures
+      // Handle different response structures for popular matches
       let matchesData = [];
       if (response.success && response.matches) {
         matchesData = response.matches;
@@ -101,10 +144,16 @@ const SearchScreen = ({ navigation }) => {
         matchesData = response;
       } else if (response.data && Array.isArray(response.data)) {
         matchesData = response.data;
+      } else if (response.data && response.data.matches) {
+        matchesData = response.data.matches;
       }
       
       console.log('📊 Processed matches data:', matchesData.length, 'matches');
-      console.log('📊 First match:', matchesData[0]);
+      if (matchesData.length > 0) {
+        console.log('📊 First match:', matchesData[0]);
+      } else {
+        console.log('⚠️ No matches found in response');
+      }
       
       setRecommendedMatches(matchesData);
     } catch (error) {
