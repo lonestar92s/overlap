@@ -2,6 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { GluestackUIProvider } from '@gluestack-ui/themed';
+import { config } from './styles/gluestackTheme';
 import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -246,9 +248,11 @@ const styles = StyleSheet.create({
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <GluestackUIProvider config={config}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </GluestackUIProvider>
   );
 }
 

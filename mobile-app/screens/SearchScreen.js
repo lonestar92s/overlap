@@ -175,19 +175,6 @@ const SearchScreen = ({ navigation }) => {
     }
   };
 
-  // Local leagues data for search
-  const getAllLeagues = () => [
-    { id: 39, name: 'Premier League', country: 'England' },
-    { id: 140, name: 'La Liga', country: 'Spain' },
-    { id: 135, name: 'Serie A', country: 'Italy' },
-    { id: 78, name: 'Bundesliga', country: 'Germany' },
-    { id: 61, name: 'Ligue 1', country: 'France' },
-    { id: 88, name: 'Eredivisie', country: 'Netherlands' },
-    { id: 94, name: 'Primeira Liga', country: 'Portugal' },
-    { id: 119, name: 'Super Lig', country: 'Turkey' },
-    { id: 2, name: 'UEFA Champions League', country: 'Europe' },
-    { id: 3, name: 'UEFA Europa League', country: 'Europe' },
-  ];
 
   // Combined data for the main FlatList
   const sections = [
@@ -975,13 +962,22 @@ const SearchScreen = ({ navigation }) => {
 
     setIsSearchingLeagues(true);
     try {
-      // Search through the local leagues data
-      const results = getAllLeagues().filter(league => 
-        league.name.toLowerCase().includes(query.toLowerCase()) ||
-        league.country.toLowerCase().includes(query.toLowerCase())
-      );
-      console.log('League search results:', results);
-      setLeagueSearchResults(results);
+      // Search leagues via API
+      const response = await ApiService.searchLeagues(query);
+      
+      if (response.success && response.results) {
+        // Transform API response to match expected format
+        const transformedResults = response.results.map(league => ({
+          id: league.id,
+          name: league.name,
+          country: league.country || 'Unknown Country',
+          countryCode: league.countryCode
+        }));
+        console.log('League search results:', transformedResults);
+        setLeagueSearchResults(transformedResults);
+      } else {
+        setLeagueSearchResults([]);
+      }
     } catch (error) {
       console.error('Error searching leagues:', error);
       setLeagueSearchResults([]);

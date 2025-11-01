@@ -13,6 +13,7 @@ const router = express.Router();
 const Team = require('../models/Team');
 const League = require('../models/League');
 const { matchesCache, popularMatchesCache } = require('../utils/cache');
+const { shouldFilterMatch } = require('../utils/matchStatus');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
 const httpsAgent = new https.Agent({
@@ -1197,8 +1198,22 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             });
         }
 
+        // Filter out matches that are in progress or completed
+        const upcomingMatches = allMatches.filter(match => !shouldFilterMatch(match));
+        console.log(`🔍 Filtered ${allMatches.length - upcomingMatches.length} matches (in progress or completed), ${upcomingMatches.length} upcoming matches remaining`);
+        
+        if (upcomingMatches.length === 0) {
+            console.log('⚠️ No upcoming matches found after filtering, returning empty response');
+            clearTimeout(timeout);
+            return res.json({ 
+                success: true, 
+                matches: [], 
+                message: 'No upcoming matches found' 
+            });
+        }
+
         // Score and rank matches based on user preferences
-        const scoredMatches = await Promise.all(allMatches.map(async (match) => {
+        const scoredMatches = await Promise.all(upcomingMatches.map(async (match) => {
             let score = 0;
             const reasons = [];
 
@@ -1676,7 +1691,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         res.json({ 
             success: true, 
             matches: transformedMatches, 
-            totalFound: allMatches.length,
+            totalFound: upcomingMatches.length,
+            totalBeforeFilter: allMatches.length,
             personalized: true,
             dateRange: { from: dateFrom, to: dateTo }, 
             leagues: targetLeagues,

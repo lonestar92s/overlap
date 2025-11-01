@@ -15,10 +15,6 @@ prepare_react_native_project!
 
 target 'mobileapp' do
   use_expo_modules!
-  
-  # Google Maps
-  pod 'GoogleMaps'
-  pod 'Google-Maps-iOS-Utils'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];

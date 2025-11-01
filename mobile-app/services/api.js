@@ -729,6 +729,29 @@ class ApiService {
     }
   }
 
+  async searchLeagues(query) {
+    try {
+      if (!query || query.trim().length < 2) {
+        return { success: true, results: [], count: 0 };
+      }
+
+      const params = new URLSearchParams();
+      params.append('query', query.trim());
+
+      const response = await fetch(`${this.baseURL}/leagues/search?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to search leagues');
+      }
+
+      return data; // { success, results, count }
+    } catch (error) {
+      console.error('Error searching leagues:', error);
+      return { success: false, results: [], count: 0 };
+    }
+  }
+
   async searchMatchesByLocation(competitionId, { dateFrom, dateTo, userLat, userLon }) {
     try {
       const params = new URLSearchParams();

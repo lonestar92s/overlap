@@ -4,6 +4,7 @@ const subscriptionService = require('./subscriptionService');
 const venueService = require('./venueService');
 const teamService = require('./teamService');
 const weights = require('../config/recommendationWeights');
+const { shouldFilterMatch } = require('../utils/matchStatus');
 
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
@@ -234,7 +235,10 @@ class RecommendationService {
             }
 
             // Transform matches to our format
-            return await this.transformMatches(fixtures);
+            const transformed = await this.transformMatches(fixtures);
+            
+            // Filter out matches that are in progress or completed
+            return transformed.filter(match => !shouldFilterMatch(match));
 
         } catch (error) {
             console.error(`❌ Error searching matches for ${date}:`, error);
