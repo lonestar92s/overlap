@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   FlatList,
   Keyboard,
-  Dimensions,
 } from 'react-native';
 import Autocomplete from 'react-native-autocomplete-input';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -17,7 +16,8 @@ import { debounce } from 'lodash';
 import * as Location from 'expo-location';
 
 // LocationIQ API configuration
-const LOCATIONIQ_API_KEY = 'pk.6e3ab00541755300772780a4b02cdfe6';
+// Use environment variable for API key - set EXPO_PUBLIC_LOCATIONIQ_API_KEY in .env or app.json
+const LOCATIONIQ_API_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || null;
 const LOCATIONIQ_BASE_URL = 'https://api.locationiq.com/v1/autocomplete';
 
 // Mock data for testing when API key is not available
@@ -41,7 +41,6 @@ const LocationAutocomplete = ({
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [lastRequestTime, setLastRequestTime] = useState(0);
   const [userLocation, setUserLocation] = useState(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [dropdownMaxHeight, setDropdownMaxHeight] = useState(180); // Fixed height for 3 items
@@ -53,7 +52,9 @@ const LocationAutocomplete = ({
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.log('Location permission denied');
+        if (__DEV__) {
+          console.log('Location permission denied');
+        }
         return null;
       }
 
@@ -69,7 +70,9 @@ const LocationAutocomplete = ({
       setUserLocation(userLoc);
       return userLoc;
     } catch (error) {
-      console.log('Error getting location:', error);
+      if (__DEV__) {
+        console.log('Error getting location:', error);
+      }
       return null;
     }
   };
@@ -129,7 +132,10 @@ const LocationAutocomplete = ({
     return `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}`;
   };
 
-  const fetchSuggestions = async (query) => {
+  // Use ref for lastRequestTime to avoid recreating debounced function
+  const lastRequestTimeRef = useRef(0);
+  
+  const fetchSuggestions = useCallback(async (query) => {
     if (!query || query.length < 3) {
       setOptions([]);
       return;
@@ -137,7 +143,7 @@ const LocationAutocomplete = ({
     setLoading(true);
     setError(null);
     try {
-      if (LOCATIONIQ_API_KEY === 'pk.test.key' || !LOCATIONIQ_API_KEY) {
+      if (!LOCATIONIQ_API_KEY || LOCATIONIQ_API_KEY === 'pk.test.key') {
         await new Promise(resolve => setTimeout(resolve, 500));
         const filteredMockData = MOCK_LOCATIONS.filter(location =>
           location.city.toLowerCase().includes(query.toLowerCase()) ||
@@ -147,11 +153,11 @@ const LocationAutocomplete = ({
         return;
       }
       const now = Date.now();
-      const timeSinceLastRequest = now - lastRequestTime;
+      const timeSinceLastRequest = now - lastRequestTimeRef.current;
       if (timeSinceLastRequest < 1000) {
         await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLastRequest));
       }
-      setLastRequestTime(Date.now());
+      lastRequestTimeRef.current = Date.now();
       const response = await axios.get(LOCATIONIQ_BASE_URL, {
         params: { key: LOCATIONIQ_API_KEY, q: query, limit: 3, dedupe: 1, 'accept-language': 'en' }
       });
@@ -172,7 +178,9 @@ const LocationAutocomplete = ({
       setOptions(uniqueSuggestions);
       if (onOptionsChange) onOptionsChange(uniqueSuggestions.length > 0);
     } catch (error) {
-      console.error('Error fetching location suggestions:', error);
+      if (__DEV__) {
+        console.error('Error fetching location suggestions:', error);
+      }
       if (error.response?.status === 429) {
         setError('Please type more slowly...');
       } else if (error.response?.status === 401) {
@@ -191,15 +199,28 @@ const LocationAutocomplete = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [onOptionsChange]);
 
-  const debouncedFetchSuggestions = useMemo(() => debounce(fetchSuggestions, 500), []);
-
+  // Use useRef to persist debounced function and ensure proper cleanup
+  const debouncedFetchSuggestionsRef = useRef(null);
+  
+  // Create debounced function once and recreate when fetchSuggestions changes
   useEffect(() => {
+    // Cancel previous debounced function if it exists
+    if (debouncedFetchSuggestionsRef.current) {
+      debouncedFetchSuggestionsRef.current.cancel();
+    }
+    
+    // Create new debounced function with current fetchSuggestions
+    debouncedFetchSuggestionsRef.current = debounce(fetchSuggestions, 500);
+    
+    // Cleanup on unmount or when fetchSuggestions changes
     return () => {
-      debouncedFetchSuggestions.cancel();
+      if (debouncedFetchSuggestionsRef.current) {
+        debouncedFetchSuggestionsRef.current.cancel();
+      }
     };
-  }, [debouncedFetchSuggestions]);
+  }, [fetchSuggestions]);
 
   const handleInputChange = (text) => {
     setInputValue(text);
@@ -225,7 +246,7 @@ const LocationAutocomplete = ({
       onSelect(null);
     } else {
       if (onOptionsChange) onOptionsChange(true); // Notify parent that we're fetching options
-      debouncedFetchSuggestions(text);
+      debouncedFetchSuggestionsRef.current(text);
     }
   };
 
@@ -252,6 +273,8 @@ const LocationAutocomplete = ({
       ]} 
       onPress={() => handleSelectLocation(item)} 
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Select location: ${item.city}, ${item.country}`}
     >
       <View style={styles.locationIcon}>
         <Icon name="location-on" size={20} color="#1976d2" />
@@ -297,8 +320,8 @@ const LocationAutocomplete = ({
       </View>
       {loading && (<ActivityIndicator size="small" color="#007AFF" style={styles.loadingIndicator} />)}
       {error && (<Text style={styles.errorText}>{error}</Text>)}
-      {(LOCATIONIQ_API_KEY === 'pk.test.key' || !LOCATIONIQ_API_KEY) && (
-        <Text style={styles.infoText}>Using mock data. Get a free API key from locationiq.com for real location search.</Text>
+      {(!LOCATIONIQ_API_KEY || LOCATIONIQ_API_KEY === 'pk.test.key') && (
+        <Text style={styles.infoText}>Using mock data. Set EXPO_PUBLIC_LOCATIONIQ_API_KEY environment variable for real location search.</Text>
       )}
     </View>
   );

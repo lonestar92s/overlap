@@ -45,7 +45,9 @@ const AttendanceModal = ({
         Alert.alert('Error', response.message || 'Failed to mark match as attended');
       }
     } catch (error) {
-      console.error('Error marking match as attended:', error);
+      if (__DEV__) {
+        console.error('Error marking match as attended:', error);
+      }
       Alert.alert('Error', 'Failed to mark match as attended. Please try again.');
     } finally {
       setLoading(false);

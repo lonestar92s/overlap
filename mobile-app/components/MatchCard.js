@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ const MatchCard = ({
   style = {},
 }) => {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [localUserAttended, setLocalUserAttended] = useState(match?.userAttended || false);
   
   // Extract data from the API response format with defensive programming
   const fixture = match?.fixture || {};
@@ -57,37 +58,45 @@ const MatchCard = ({
         return { date: 'TBD', time: formattedTime };
       }
     } catch (error) {
-      console.warn('Error formatting date with timezone:', dateString, error);
+      if (__DEV__) {
+        console.warn('Error formatting date with timezone:', dateString, error);
+      }
       return { date: 'TBD', time: 'TBD' };
     }
   };
 
-  const { date, time } = formatMatchDateTime(fixture.date, fixture);
+  // Memoize expensive calculations
+  const { date, time } = useMemo(() => 
+    formatMatchDateTime(fixture.date, fixture),
+    [fixture.date, fixture]
+  );
 
   // Get relative time for better UX
-  const relativeTime = getRelativeMatchTime(fixture.date, fixture);
+  const relativeTime = useMemo(() => 
+    getRelativeMatchTime(fixture.date, fixture),
+    [fixture.date, fixture]
+  );
 
   // Get match status and result
-  const matchStatus = getMatchStatus(match);
-  const matchResult = getMatchResult(match);
-  const formattedDate = formatMatchDate(fixture.date, matchStatus.isPast);
-  
-  // Temporary debug to see what data we have
-  if (match?.id === '1451061' || match?.fixture?.id === '1451061') {
-    console.log('🔍 Arsenal match debug:', {
-      match,
-      status: match?.status,
-      fixtureStatus: fixture?.status,
-      matchStatus,
-      isLive: matchStatus.type === 'live'
-    });
-  }
-  
+  const matchStatus = useMemo(() => getMatchStatus(match), [match]);
+  const matchResult = useMemo(() => getMatchResult(match), [match]);
+  const formattedDate = useMemo(() => 
+    formatMatchDate(fixture.date, matchStatus.isPast),
+    [fixture.date, matchStatus.isPast]
+  );
+
+  // Update local state when match prop changes
+  useEffect(() => {
+    if (match?.userAttended !== undefined) {
+      setLocalUserAttended(match.userAttended);
+    }
+  }, [match?.userAttended]);
 
   // Check if match is completed and should show attendance prompt
   const isPast = isMatchPast(fixture.date);
   const isCompleted = matchStatus.type === 'completed';
-  const shouldShowAttendancePrompt = showAttendancePrompt && isPast && isCompleted && !match.userAttended;
+  const userAttended = localUserAttended || match?.userAttended || false;
+  const shouldShowAttendancePrompt = showAttendancePrompt && isPast && isCompleted && !userAttended;
 
   const handlePress = () => {
     if (shouldShowAttendancePrompt) {
@@ -98,14 +107,78 @@ const MatchCard = ({
   };
 
   const handleAttendanceConfirmed = () => {
-    // Update the match to show it was attended
-    if (match) {
-      match.userAttended = true;
-    }
+    // Update local state to reflect attendance
+    setLocalUserAttended(true);
     setShowAttendanceModal(false);
+    
+    // Note: The parent component should handle the actual API call and state update
+    // This local state is just for UI feedback until parent re-renders with updated data
   };
 
   const isOverlay = variant === 'overlay' || variant === 'compact';
+
+  // Extract team data to avoid inline functions
+  const homeTeamName = useMemo(() => {
+    const homeTeam = teams.home;
+    if (typeof homeTeam === 'string') {
+      return homeTeam;
+    } else if (homeTeam?.name) {
+      return homeTeam.name;
+    }
+    return 'TBD';
+  }, [teams.home]);
+
+  const awayTeamName = useMemo(() => {
+    const awayTeam = teams.away;
+    if (typeof awayTeam === 'string') {
+      return awayTeam;
+    } else if (awayTeam?.name) {
+      return awayTeam.name;
+    }
+    return 'TBD';
+  }, [teams.away]);
+
+  const homeTeamLogo = useMemo(() => {
+    const homeTeam = teams.home;
+    if (homeTeam?.logo && typeof homeTeam.logo === 'string' && homeTeam.logo.trim() !== '') {
+      return homeTeam.logo;
+    }
+    return null;
+  }, [teams.home]);
+
+  const awayTeamLogo = useMemo(() => {
+    const awayTeam = teams.away;
+    if (awayTeam?.logo && typeof awayTeam.logo === 'string' && awayTeam.logo.trim() !== '') {
+      return awayTeam.logo;
+    }
+    return null;
+  }, [teams.away]);
+
+  const venueText = useMemo(() => {
+    if (typeof venue === 'string') {
+      return venue;
+    } else if (venue?.name && venue?.city) {
+      return `${venue.name} • ${venue.city}`;
+    } else if (venue?.name) {
+      return venue.name;
+    } else if (venue?.city) {
+      return venue.city;
+    }
+    return 'Unknown Venue';
+  }, [venue]);
+
+  // Image error handlers
+  const handleHomeLogoError = () => {
+    // Silently fail - logo is optional
+  };
+
+  const handleAwayLogoError = () => {
+    // Silently fail - logo is optional
+  };
+
+  const handleLeagueLogoError = () => {
+    // Silently fail - logo is optional
+  };
 
   return (
     <ErrorBoundary>
@@ -149,7 +222,7 @@ const MatchCard = ({
           )}
 
           {/* League Badge */}
-          {(() => {
+          {useMemo(() => {
             const shouldShowBadge = !!(league?.name || (typeof league === 'string' && league));
             
             if (shouldShowBadge) {
@@ -159,7 +232,8 @@ const MatchCard = ({
                     <Image 
                       source={{ uri: league.logo || league.emblem }} 
                       style={styles.leagueLogoSmall} 
-                      resizeMode="contain" 
+                      resizeMode="contain"
+                      onError={handleLeagueLogoError}
                     />
                   ) : null}
                   <Text style={styles.leagueText}>
@@ -169,7 +243,7 @@ const MatchCard = ({
               );
             }
             return null;
-          })()}
+          }, [league])}
           
           {showHeart && matchId !== 'unknown' && (
             <HeartButton
@@ -187,29 +261,16 @@ const MatchCard = ({
         <View style={styles.teamContainer}>
           <View style={styles.teamInfo}>
             <Text style={[styles.teamName, isOverlay && styles.overlayTeamName]} numberOfLines={1}>
-              {(() => {
-                const homeTeam = teams.home;
-                if (typeof homeTeam === 'string') {
-                  return homeTeam;
-                } else if (homeTeam?.name) {
-                  return homeTeam.name;
-                }
-                return 'TBD';
-              })()}
+              {homeTeamName}
             </Text>
-            {(() => {
-              const homeTeam = teams.home;
-              if (homeTeam?.logo && typeof homeTeam.logo === 'string' && homeTeam.logo.trim() !== '') {
-                return (
-                  <Image 
-                    source={{ uri: homeTeam.logo }} 
-                    style={styles.teamLogo}
-                    resizeMode="contain"
-                  />
-                );
-              }
-              return null;
-            })()}
+            {homeTeamLogo && (
+              <Image 
+                source={{ uri: homeTeamLogo }} 
+                style={styles.teamLogo}
+                resizeMode="contain"
+                onError={handleHomeLogoError}
+              />
+            )}
           </View>
         </View>
 
@@ -241,7 +302,7 @@ const MatchCard = ({
               </View>
             )}
             {/* Show attended indicator */}
-            {match.userAttended && (
+            {userAttended && (
               <View style={styles.attendedIndicator}>
                 <Icon name="check-circle" size={16} color={colors.success} />
                 <Text style={styles.attendedText}>Attended</Text>
@@ -254,29 +315,16 @@ const MatchCard = ({
         <View style={styles.teamContainer}>
           <View style={styles.teamInfo}>
             <Text style={styles.teamName} numberOfLines={1}>
-              {(() => {
-                const awayTeam = teams.away;
-                if (typeof awayTeam === 'string') {
-                  return awayTeam;
-                } else if (awayTeam?.name) {
-                  return awayTeam.name;
-                }
-                return 'TBD';
-              })()}
+              {awayTeamName}
             </Text>
-            {(() => {
-              const awayTeam = teams.away;
-              if (awayTeam?.logo && typeof awayTeam.logo === 'string' && awayTeam.logo.trim() !== '') {
-                return (
-                  <Image 
-                    source={{ uri: awayTeam.logo }} 
-                    style={styles.teamLogo}
-                    resizeMode="contain"
-                  />
-                );
-              }
-              return null;
-            })()}
+            {awayTeamLogo && (
+              <Image 
+                source={{ uri: awayTeamLogo }} 
+                style={styles.teamLogo}
+                resizeMode="contain"
+                onError={handleAwayLogoError}
+              />
+            )}
           </View>
         </View>
       </View>
@@ -284,18 +332,7 @@ const MatchCard = ({
       <View style={styles.venueContainer}>
         <Icon name="location-on" size={14} color={colors.text.secondary} />
         <Text style={styles.venueText} numberOfLines={1}>
-          {(() => {
-            if (typeof venue === 'string') {
-              return venue;
-            } else if (venue?.name && venue?.city) {
-              return `${venue.name} • ${venue.city}`;
-            } else if (venue?.name) {
-              return venue.name;
-            } else if (venue?.city) {
-              return venue.city;
-            }
-            return 'Unknown Venue';
-          })()}
+          {venueText}
         </Text>
       </View>
 
@@ -398,10 +435,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusCompleted: {
-    backgroundColor: '#e8f5e8',
+    backgroundColor: colors.status.completedBg,
   },
   statusLive: {
-    backgroundColor: '#fff3cd',
+    backgroundColor: colors.status.liveBg,
   },
   statusText: {
     ...typography.caption,
@@ -508,7 +545,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
-    backgroundColor: '#fff8e1',
+    backgroundColor: colors.status.recommendationBg,
     borderRadius: borderRadius.sm,
     borderLeftWidth: 3,
     borderLeftColor: colors.warning,
@@ -530,7 +567,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: '#e3f2fd',
+    backgroundColor: colors.status.attendancePromptBg,
     borderRadius: borderRadius.md,
   },
   attendancePromptText: {
@@ -545,7 +582,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: '#e8f5e8',
+    backgroundColor: colors.status.attendedBg,
     borderRadius: borderRadius.md,
   },
   attendedText: {
@@ -560,7 +597,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: '#fff3e0',
+    backgroundColor: colors.status.liveIndicatorBg,
     borderRadius: borderRadius.md,
   },
   liveText: {

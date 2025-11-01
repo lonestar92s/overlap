@@ -15,6 +15,7 @@ import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
 import apiService from '../services/api';
+import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -358,7 +359,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         {/* Show loading indicator for score fetching */}
         {scoresLoading && isPast && !hasScore && (
           <View style={styles.scoreLoadingContainer}>
-            <ActivityIndicator size="small" color="#1976d2" />
+            <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.scoreLoadingText}>Fetching score...</Text>
           </View>
         )}
@@ -426,7 +427,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Icon name="sports-soccer" size={64} color="#ccc" />
+      <Icon name="sports-soccer" size={64} color={colors.text.light} />
       <Text style={styles.emptyStateTitle}>No matches in this itinerary</Text>
       <Text style={styles.emptyStateSubtitle}>
         Start adding matches to build your football trip!
@@ -435,7 +436,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         style={styles.addMatchesButton}
         onPress={() => navigation.navigate('SearchTab')}
       >
-        <Icon name="search" size={20} color="white" />
+        <Icon name="search" size={20} color={colors.onPrimary} />
         <Text style={styles.addMatchesButtonText}>Search for matches</Text>
       </TouchableOpacity>
     </View>
@@ -444,7 +445,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1976d2" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading itinerary...</Text>
       </View>
     );
@@ -453,7 +454,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   if (!itinerary) {
     return (
       <View style={styles.errorContainer}>
-        <Icon name="error" size={64} color="#ff4444" />
+        <Icon name="error" size={64} color={colors.error} />
         <Text style={styles.errorTitle}>Itinerary not found</Text>
         <Text style={styles.errorSubtitle}>
           The itinerary you're looking for doesn't exist or has been deleted.
@@ -469,7 +470,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -492,7 +493,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
           style={styles.moreButton}
           onPress={() => setModalVisible(true)}
         >
-          <Icon name="more-vert" size={24} color="#666" />
+          <Icon name="more-vert" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -512,7 +513,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
             } else if (item.type === 'recommendations-header') {
               return (
                 <View style={styles.recommendationsHeader}>
-                  <Icon name="recommend" size={20} color="#FF385C" />
+                  <Icon name="recommend" size={20} color={colors.secondary} />
                   <Text style={styles.recommendationsHeaderText}>
                     Recommended Matches to Check Out on Your Trip
                   </Text>
@@ -549,7 +550,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         onPress={() => navigation.navigate('ItineraryMap', { itineraryId: itinerary.id || itinerary._id })}
         activeOpacity={0.8}
       >
-        <Icon name="map" size={20} color="#fff" style={styles.mapButtonIcon} />
+        <Icon name="map" size={20} color={colors.card} style={styles.mapButtonIcon} />
         <Text style={styles.mapButtonText}>Map</Text>
       </TouchableOpacity>
 
@@ -567,41 +568,41 @@ const TripOverviewScreen = ({ navigation, route }) => {
                 style={styles.modalCloseButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Icon name="close" size={24} color="#666" />
+                <Icon name="close" size={24} color={colors.text.secondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.modalContent}>
               <TouchableOpacity style={styles.modalOption}>
                 <View style={styles.modalOptionLeft}>
-                  <Icon name="share" size={20} color="#666" />
+                  <Icon name="share" size={20} color={colors.text.secondary} />
                   <Text style={styles.modalOptionText}>Share Itinerary</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.modalOption}>
                 <View style={styles.modalOptionLeft}>
-                  <Icon name="edit" size={20} color="#666" />
+                  <Icon name="edit" size={20} color={colors.text.secondary} />
                   <Text style={styles.modalOptionText}>Rename</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.modalOption}>
                 <View style={styles.modalOptionLeft}>
-                  <Icon name="home" size={20} color="#666" />
+                  <Icon name="home" size={20} color={colors.text.secondary} />
                   <Text style={styles.modalOptionText}>Homebase</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.modalOption}>
                 <View style={styles.modalOptionLeft}>
-                  <Icon name="delete" size={20} color="#666" />
+                  <Icon name="delete" size={20} color={colors.text.secondary} />
                   <Text style={styles.modalOptionText}>Delete</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
             </View>
           </View>
@@ -623,21 +624,17 @@ const TripOverviewScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 40,
-    backgroundColor: 'white',
+    padding: spacing.lg,
+    paddingTop: spacing.lg, // SafeAreaView handles safe area, this is additional spacing
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
+    borderBottomColor: colors.border,
+    ...shadows.small,
   },
   backButton: {
     padding: 8,
@@ -648,31 +645,31 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: '#000',
+    color: colors.text.primary,
     fontWeight: '600',
   },
   headerInfo: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   headerTitle: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#000',
-    marginBottom: 2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs / 2,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   listContainer: {
-    padding: 16,
+    padding: spacing.md,
   },
   matchCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   matchCardStyle: {
     flex: 1,
@@ -681,36 +678,35 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: spacing.xl * 1.25,
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.h3,
+    color: colors.text.secondary,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   emptyStateSubtitle: {
-    fontSize: 16,
-    color: '#999',
+    ...typography.body,
+    color: colors.text.light,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: spacing.lg,
   },
   addMatchesButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1976d2',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + spacing.xs,
+    borderRadius: borderRadius.sm,
   },
   addMatchesButtonText: {
-    color: 'white',
-    fontSize: 16,
+    color: colors.onPrimary,
+    ...typography.body,
     fontWeight: '500',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   loadingContainer: {
     flex: 1,
@@ -718,40 +714,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: spacing.md,
+    ...typography.body,
+    color: colors.text.secondary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: spacing.xl * 1.25,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#ff4444',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.h3,
+    color: colors.error,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   errorSubtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: spacing.lg,
   },
   backButton: {
-    backgroundColor: '#1976d2',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + spacing.xs,
+    borderRadius: borderRadius.sm,
   },
   backButtonText: {
-    color: 'white',
-    fontSize: 16,
+    color: colors.onPrimary,
+    ...typography.body,
     fontWeight: '500',
   },
   mapButton: {
@@ -759,50 +754,46 @@ const styles = StyleSheet.create({
     bottom: 30,
     left: '50%',
     transform: [{ translateX: -50 }],
-    backgroundColor: '#000',
+    backgroundColor: colors.text.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.xs,
+    ...shadows.small,
     // Make button even smaller and perfectly centered like Airbnb
     width: 'auto',
     minWidth: 80,
     maxWidth: 140,
   },
   mapButtonIcon: {
-    marginRight: 4,
+    marginRight: spacing.xs,
     fontSize: 14,
   },
   mapButtonText: {
-    color: '#fff',
+    color: colors.card,
     fontSize: 12,
     fontWeight: '600',
   },
   dateHeader: {
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginBottom: 8,
-    marginTop: 8,
-    borderRadius: 8,
+    paddingVertical: spacing.sm + spacing.xs,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: 'transparent',
     minHeight: 44, // Ensure minimum touch target size
   },
   dateHeaderText: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text.primary,
     textTransform: 'capitalize',
   },
   moreButton: {
-    padding: 8,
+    padding: spacing.sm,
     minWidth: 40,
     alignItems: 'center',
     justifyContent: 'center',
@@ -815,106 +806,102 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
-    zIndex: 1000, // High z-index to be above map button
+    zIndex: zIndex.modal, // High z-index to be above map button
   },
   modalContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    padding: spacing.lg,
     maxHeight: '70%', // Adjust as needed
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 10,
+    ...shadows.large,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: spacing.md + spacing.xs,
   },
   modalTitle: {
-    fontSize: 20,
+    ...typography.h2,
     fontWeight: '700',
-    color: '#333',
+    color: colors.text.primary,
   },
   modalCloseButton: {
-    padding: 5,
+    padding: spacing.xs + spacing.xs / 2,
   },
   modalContent: {
-    marginTop: 10,
+    marginTop: spacing.sm + spacing.xs,
   },
   modalText: {
-    fontSize: 16,
-    color: '#555',
-    marginBottom: 10,
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.sm + spacing.xs,
     lineHeight: 22,
   },
   modalOption: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: spacing.sm + spacing.xs,
+    paddingHorizontal: spacing.sm + spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.borderLight,
   },
   modalOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   modalOptionText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
+    marginLeft: spacing.sm + spacing.xs,
+    ...typography.body,
+    color: colors.text.primary,
   },
   // Recommendation styles
   recommendationsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
     flexWrap: 'wrap',
   },
   recommendationsHeaderText: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#000',
-    marginLeft: 8,
+    color: colors.text.primary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   recommendationsCountChip: {
-    backgroundColor: '#FF385C',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.pill,
+    marginLeft: spacing.sm,
   },
   recommendationsCountText: {
-    fontSize: 12,
-    color: 'white',
+    ...typography.caption,
+    color: colors.onSecondary,
     fontWeight: '600',
   },
   recommendationItem: {
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   recommendationInfo: {
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.card,
+    padding: spacing.sm + spacing.xs,
+    borderRadius: borderRadius.sm,
+    marginTop: spacing.sm,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: colors.borderLight,
   },
   recommendationReason: {
-    marginBottom: 12,
+    marginBottom: spacing.sm + spacing.xs,
   },
   recommendationReasonText: {
-    fontSize: 14,
-    color: '#FF385C',
+    ...typography.bodySmall,
+    color: colors.secondary,
     fontStyle: 'italic',
   },
   recommendationActions: {
@@ -922,32 +909,32 @@ const styles = StyleSheet.create({
   },
   dismissRecommendationButton: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.xs,
   },
   dismissRecommendationButtonText: {
-    color: '#666',
-    fontSize: 14,
+    color: colors.text.secondary,
+    ...typography.bodySmall,
     fontWeight: '500',
   },
   scoreLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 6,
-    marginTop: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm + spacing.xs,
+    backgroundColor: colors.status.attendancePromptBg,
+    borderRadius: borderRadius.xs,
+    marginTop: spacing.sm,
   },
   scoreLoadingText: {
-    fontSize: 12,
-    color: '#1976d2',
-    marginLeft: 8,
+    ...typography.caption,
+    color: colors.primary,
+    marginLeft: spacing.sm,
     fontWeight: '500',
   },
 });

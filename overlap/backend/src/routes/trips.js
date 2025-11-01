@@ -2,6 +2,7 @@ const express = require('express');
 const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const axios = require('axios');
+const { isTripCompleted } = require('../utils/tripUtils');
 
 const router = express.Router();
 
@@ -10,6 +11,7 @@ const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
 
 // Get all trips for the authenticated user (or empty array if not authenticated)
+// Supports query parameter: ?status=active|completed (optional)
 router.get('/', authenticateToken, async (req, res) => {
     try {
         if (!req.user) {
@@ -21,13 +23,36 @@ router.get('/', authenticateToken, async (req, res) => {
         }
         
         const user = await User.findById(req.user.id).select('trips');
+        let trips = user.trips;
+        
+        // Filter by completion status if requested
+        const statusFilter = req.query.status; // 'active' | 'completed'
+        
+        if (statusFilter === 'completed') {
+            // Return only completed trips (all matches finished)
+            trips = trips.filter(trip => isTripCompleted(trip));
+        } else if (statusFilter === 'active') {
+            // Return only active trips (has uncompleted matches)
+            trips = trips.filter(trip => !isTripCompleted(trip));
+        }
+        // No filter = return all trips (backward compatible)
         
         // Sort trips by creation date (most recent first)
-        const sortedTrips = user.trips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        trips = trips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        // Add computed isCompleted field for frontend convenience
+        // Convert to plain objects to add the computed field
+        trips = trips.map(trip => {
+            const tripObj = trip.toObject ? trip.toObject() : trip;
+            return {
+                ...tripObj,
+                isCompleted: isTripCompleted(trip)
+            };
+        });
         
         res.json({
             success: true,
-            trips: sortedTrips
+            trips: trips
         });
     } catch (error) {
         console.error('Error fetching trips:', error);
@@ -51,9 +76,16 @@ router.get('/:id', auth, async (req, res) => {
             });
         }
         
+        // Add computed isCompleted field for frontend convenience
+        const tripObj = trip.toObject ? trip.toObject() : trip;
+        const tripWithStatus = {
+            ...tripObj,
+            isCompleted: isTripCompleted(trip)
+        };
+        
         res.json({
             success: true,
-            trip: trip
+            trip: tripWithStatus
         });
     } catch (error) {
         console.error('Error fetching trip:', error);

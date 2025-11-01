@@ -21,11 +21,12 @@ export const ItineraryProvider = ({ children }) => {
     loadItinerariesFromAPI();
   }, []);
 
-  // Load itineraries from backend API
+  // Load itineraries from backend API (only active trips for the trips list)
   const loadItinerariesFromAPI = async () => {
     try {
       setLoading(true);
-      const response = await ApiService.getTrips();
+      // Fetch only active trips (excludes completed trips)
+      const response = await ApiService.getTrips('active');
       if (response.success && response.trips) {
         // Normalize all trip IDs when loading
         const normalizedTrips = normalizeIds(response.trips);

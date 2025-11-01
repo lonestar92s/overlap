@@ -40,9 +40,13 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
           response = await ApiService.getRecommendedMatches();
           isRecommendedData = true;
           setIsRecommended(true);
-          console.log('🎯 Using recommended matches for authenticated user');
+          if (__DEV__) {
+            console.log('🎯 Using recommended matches for authenticated user');
+          }
         } catch (authError) {
-          console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
+          if (__DEV__) {
+            console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);
+          }
           // Fall back to popular matches if recommended fails
           response = await ApiService.getPopularMatches();
           setIsRecommended(false);
@@ -81,7 +85,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       
       // Retry once if it's a timeout error
       if (error.message.includes('timeout') && retryCount < 1) {
-        console.log('🔄 Retrying matches request...');
+        if (__DEV__) {
+          console.log('🔄 Retrying matches request...');
+        }
         setTimeout(() => fetchMatches(retryCount + 1), 2000);
         return;
       }

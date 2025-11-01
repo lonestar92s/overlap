@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { width, height } = Dimensions.get('window');
+import ErrorBoundary from './ErrorBoundary';
 
 const FilterModal = ({ 
   visible, 
@@ -215,7 +214,7 @@ const FilterModal = ({
     return total;
   };
 
-  const renderCheckbox = (checked, onPress, disabled = false) => (
+  const renderCheckbox = (checked, onPress, disabled = false, label = '') => (
     <TouchableOpacity
       style={[
         styles.checkbox,
@@ -224,6 +223,9 @@ const FilterModal = ({
       ]}
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked, disabled }}
+      accessibilityLabel={label || (checked ? 'Selected' : 'Unselected')}
     >
       {checked && (
         <Ionicons 
@@ -264,10 +266,15 @@ const FilterModal = ({
                 <TouchableOpacity
                   style={styles.filterItemContentLeft}
                   onPress={() => handleCountryChange(country.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${country.name} filter`}
+                  accessibilityState={{ checked: isSelected }}
                 >
                   {renderCheckbox(
                     isSelected,
-                    () => handleCountryChange(country.id)
+                    () => handleCountryChange(country.id),
+                    false,
+                    `Select ${country.name}`
                   )}
                   <Text style={styles.filterItemText}>{country.name}</Text>
                 </TouchableOpacity>
@@ -306,10 +313,15 @@ const FilterModal = ({
                             <TouchableOpacity
                               style={styles.filterItemContentLeft}
                               onPress={() => handleLeagueChange(league.id)}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${league.name} league filter`}
+                              accessibilityState={{ checked: isLeagueSelected }}
                             >
                               {renderCheckbox(
                                 isLeagueSelected,
-                                () => handleLeagueChange(league.id)
+                                () => handleLeagueChange(league.id),
+                                false,
+                                `Select ${league.name}`
                               )}
                               <Text style={styles.filterItemText}>{league.name}</Text>
                             </TouchableOpacity>
@@ -340,10 +352,15 @@ const FilterModal = ({
                                     <TouchableOpacity
                                       style={styles.filterItemContent}
                                       onPress={() => handleTeamChange(team.id)}
+                                      accessibilityRole="button"
+                                      accessibilityLabel={`${team.name} team filter`}
+                                      accessibilityState={{ checked: localFilters.teams.includes(team.id) }}
                                     >
                                       {renderCheckbox(
                                         localFilters.teams.includes(team.id),
-                                        () => handleTeamChange(team.id)
+                                        () => handleTeamChange(team.id),
+                                        false,
+                                        `Select ${team.name}`
                                       )}
                                       <Text style={styles.filterItemText}>{team.name}</Text>
                                       <View style={styles.countChip}>
@@ -367,14 +384,15 @@ const FilterModal = ({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
+    <ErrorBoundary>
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={onClose}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Filter Matches</Text>
@@ -466,7 +484,8 @@ const FilterModal = ({
           </View>
         </View>
       </View>
-    </Modal>
+      </Modal>
+    </ErrorBoundary>
   );
 };
 

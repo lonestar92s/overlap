@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Avatar, Card, Overlay } from 'react-native-elements';
 import HeartButton from './HeartButton';
+import ErrorBoundary from './ErrorBoundary';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange }) => {
@@ -53,13 +54,14 @@ const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange })
   const canNavigate = totalMatches > 1;
 
   return (
-    <Overlay
-      isVisible={visible}
-      onBackdropPress={handleClose}
-      overlayStyle={styles.overlayStyle}
-      animationType="fade"
-    >
-      <View style={styles.modalContainer}>
+    <ErrorBoundary>
+      <Overlay
+        isVisible={visible}
+        onBackdropPress={handleClose}
+        overlayStyle={styles.overlayStyle}
+        animationType="fade"
+      >
+        <View style={styles.modalContainer}>
         {/* Handle bar */}
         <View style={styles.handleBar} />
         
@@ -185,7 +187,8 @@ const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange })
           </View>
         </View>
       </View>
-    </Overlay>
+      </Overlay>
+    </ErrorBoundary>
   );
 };
 

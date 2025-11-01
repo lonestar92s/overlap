@@ -17,9 +17,6 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
   
   
   const handlePress = async () => {
-    console.log('💖 Heart button pressed for match:', { matchId, reliableMatchId, isSaved });
-    console.log('💖 COMPLETE MATCH DATA in HeartButton:', JSON.stringify(matchData, null, 2));
-    
     // Light haptic feedback for button press
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -36,11 +33,11 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
           
           // Success haptic feedback for removal
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          
-          console.log('🗑️ Match removed from itinerary');
         }
       } catch (error) {
-        console.error('Error removing match from itinerary:', error);
+        if (__DEV__) {
+          console.error('Error removing match from itinerary:', error);
+        }
         
         // Error haptic feedback
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -53,7 +50,7 @@ const HeartButton = ({ matchId, fixtureId, matchData, size = 24, style }) => {
 
   const handleSave = () => {
     // This will be called when a match is successfully saved to an itinerary
-    console.log('✅ Match saved to itinerary');
+    // No-op: success is already indicated by modal closing and haptic feedback
   };
 
   return (

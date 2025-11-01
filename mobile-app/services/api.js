@@ -471,9 +471,15 @@ class ApiService {
   }
 
   // Trip/Itinerary API methods
-  async getTrips() {
+  async getTrips(status = null) {
     try {
-      const response = await fetch(`${this.baseURL}/trips`, {
+      // Build URL with optional status query parameter
+      let url = `${this.baseURL}/trips`;
+      if (status === 'active' || status === 'completed') {
+        url += `?status=${status}`;
+      }
+      
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'

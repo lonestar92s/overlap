@@ -13,6 +13,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
+import ErrorBoundary from './ErrorBoundary';
 
 const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const { itineraries, createItinerary, addMatchToItinerary } = useItineraries();
@@ -24,10 +25,6 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const handleSaveToExisting = async (itineraryId) => {
     try {
       const matchInfo = formatMatchInfo();
-      console.log('💾 Saving match to itinerary:', {
-        itineraryId,
-        matchInfo: JSON.stringify(matchInfo, null, 2)
-      });
       await addMatchToItinerary(itineraryId, matchInfo);
       
       // Trigger success haptic feedback
@@ -37,7 +34,9 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       onSave();
       onClose();
     } catch (error) {
-      console.error('Error adding match to itinerary:', error);
+      if (__DEV__) {
+        console.error('Error adding match to itinerary:', error);
+      }
       
       // Trigger error haptic feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -71,7 +70,9 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       setNewItineraryName('');
       setShowCreateForm(false);
     } catch (error) {
-      console.error('Error creating itinerary:', error);
+      if (__DEV__) {
+        console.error('Error creating itinerary:', error);
+      }
       
       // Trigger error haptic feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -135,13 +136,14 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const matchInfo = formatMatchInfo();
   
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
+    <ErrorBoundary>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
+      >
+        <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Save to Itinerary</Text>
@@ -236,7 +238,8 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
           </View>
         </ScrollView>
       </View>
-    </Modal>
+      </Modal>
+    </ErrorBoundary>
   );
 };
 

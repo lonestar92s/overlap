@@ -11,9 +11,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const TripsListScreen = ({ navigation }) => {
   const { itineraries, deleteItinerary, updateItinerary, loading, refreshItineraries } = useItineraries();
@@ -126,7 +128,7 @@ const TripsListScreen = ({ navigation }) => {
           </View>
           <View style={styles.itineraryStats}>
             <Text style={styles.matchCount}>{item.matches?.length || 0} matches</Text>
-            <Icon name="chevron-right" size={24} color="#999" />
+            <Icon name="chevron-right" size={24} color={colors.text.light} />
           </View>
         </View>
         
@@ -156,14 +158,14 @@ const TripsListScreen = ({ navigation }) => {
         onPress={() => handleSettingsPress(item)}
         activeOpacity={0.7}
       >
-        <Icon name="more-vert" size={20} color="#666" />
+        <Icon name="more-vert" size={20} color={colors.text.secondary} />
       </TouchableOpacity>
     </View>
   );
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Icon name="flight" size={64} color="#ccc" />
+      <Icon name="flight" size={64} color={colors.text.light} />
       <Text style={styles.emptyStateTitle}>No trips planned yet</Text>
       <Text style={styles.emptyStateSubtitle}>
         Start planning your football adventures by saving matches to new itineraries
@@ -172,7 +174,7 @@ const TripsListScreen = ({ navigation }) => {
         style={styles.createTripButton}
         onPress={() => navigation.navigate('SearchTab')}
       >
-        <Icon name="search" size={20} color="white" />
+        <Icon name="search" size={20} color={colors.onPrimary} />
         <Text style={styles.createTripButtonText}>Search for matches</Text>
       </TouchableOpacity>
     </View>
@@ -181,14 +183,14 @@ const TripsListScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1976d2" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading your trips...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Trips</Text>
         <Text style={styles.headerSubtitle}>
@@ -231,10 +233,10 @@ const TripsListScreen = ({ navigation }) => {
                 onPress={handleRenamePress}
               >
                 <View style={styles.settingsOptionLeft}>
-                  <Icon name="edit" size={20} color="#1976d2" />
+                  <Icon name="edit" size={20} color={colors.primary} />
                   <Text style={styles.settingsOptionText}>Rename Trip</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -242,10 +244,10 @@ const TripsListScreen = ({ navigation }) => {
                 onPress={handleDeletePress}
               >
                 <View style={styles.settingsOptionLeft}>
-                  <Icon name="delete" size={20} color="#ff4444" />
+                  <Icon name="delete" size={20} color={colors.error} />
                   <Text style={[styles.settingsOptionText, styles.deleteOptionText]}>Delete Trip</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#ccc" />
+                <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -307,7 +309,7 @@ const TripsListScreen = ({ navigation }) => {
                   disabled={!newTripName.trim() || isUpdating}
                 >
                   {isUpdating ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
                   ) : (
                     <Text style={styles.saveButtonText}>Save</Text>
                   )}
@@ -317,162 +319,156 @@ const TripsListScreen = ({ navigation }) => {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
   header: {
-    padding: 20,
-    paddingTop: 40,
-    backgroundColor: 'white',
+    padding: spacing.lg,
+    paddingTop: spacing.lg, // SafeAreaView handles safe area, this is additional spacing
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    ...typography.h1Large,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#444',
-    marginBottom: 4,
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
   },
   headerNote: {
-    fontSize: 12,
-    color: '#999',
+    ...typography.caption,
+    color: colors.text.light,
     fontStyle: 'italic',
-    marginBottom: 2,
+    marginBottom: spacing.xs / 2,
   },
   headerTip: {
     fontSize: 11,
-    color: '#666',
+    color: colors.text.secondary,
     fontStyle: 'italic',
   },
   listContainer: {
-    padding: 16,
+    padding: spacing.md,
   },
   itineraryCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+    ...shadows.small,
     flexDirection: 'row',
     alignItems: 'stretch',
   },
   itineraryContent: {
     flex: 1,
-    padding: 16,
+    padding: spacing.md,
   },
   settingsButton: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.cardGrey,
     borderLeftWidth: 1,
-    borderLeftColor: '#e9ecef',
-    paddingHorizontal: 16,
+    borderLeftColor: colors.border,
+    paddingHorizontal: spacing.md,
     justifyContent: 'center',
     alignItems: 'center',
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
+    borderTopRightRadius: borderRadius.md,
+    borderBottomRightRadius: borderRadius.md,
   },
   itineraryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.sm + spacing.xs,
   },
   itineraryInfo: {
     flex: 1,
-    marginRight: 16,
+    marginRight: spacing.md,
   },
   itineraryName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
   itineraryDestination: {
-    fontSize: 14,
-    color: '#444',
-    marginBottom: 2,
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs / 2,
   },
   itineraryDates: {
-    fontSize: 14,
-    color: '#444',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   itineraryStats: {
     alignItems: 'center',
   },
   matchCount: {
-    fontSize: 14,
-    color: '#1976d2',
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   matchesPreview: {
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 12,
+    borderTopColor: colors.borderLight,
+    paddingTop: spacing.sm + spacing.xs,
   },
   matchesPreviewTitle: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '500',
-    color: '#444',
-    marginBottom: 8,
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
   },
   matchPreview: {
     fontSize: 13,
-    color: '#444',
-    marginBottom: 4,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
   },
   moreMatches: {
     fontSize: 13,
-    color: '#666',
+    color: colors.text.secondary,
     fontStyle: 'italic',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: spacing.xl * 1.25,
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#444',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.h3,
+    color: colors.text.secondary,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   emptyStateSubtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: spacing.lg,
   },
   createTripButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1976d2',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + spacing.xs,
+    borderRadius: borderRadius.sm,
   },
   createTripButtonText: {
-    color: 'white',
-    fontSize: 16,
+    color: colors.onPrimary,
+    ...typography.body,
     fontWeight: '500',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   loadingContainer: {
     flex: 1,
@@ -480,9 +476,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#444',
+    marginTop: spacing.md,
+    ...typography.body,
+    color: colors.text.secondary,
   },
   // Modal styles
   modalOverlay: {
@@ -490,7 +486,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
   // Settings modal styles
   settingsModalContainer: {
@@ -498,26 +494,22 @@ const styles = StyleSheet.create({
     maxWidth: 350,
   },
   settingsModalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    ...shadows.large,
   },
   settingsModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    ...typography.h3,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   settingsModalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -525,10 +517,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 4,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.borderLight,
   },
   settingsOptionLeft: {
     flexDirection: 'row',
@@ -536,97 +528,93 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingsOptionText: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
+    ...typography.body,
+    color: colors.text.primary,
+    marginLeft: spacing.sm + spacing.xs,
     fontWeight: '500',
   },
   deleteOptionText: {
-    color: '#ff4444',
+    color: colors.error,
   },
   settingsCancelButton: {
-    marginTop: 8,
-    paddingVertical: 12,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm + spacing.xs,
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    backgroundColor: colors.cardGrey,
+    borderRadius: borderRadius.sm,
   },
   settingsCancelButtonText: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '500',
-    color: '#666',
+    color: colors.text.secondary,
   },
   modalContainer: {
     width: '100%',
     maxWidth: 400,
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    ...shadows.large,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    ...typography.h2,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
     textAlign: 'center',
     lineHeight: 20,
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    marginBottom: 24,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + spacing.xs,
+    ...typography.body,
+    backgroundColor: colors.cardGrey,
+    marginBottom: spacing.lg,
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.sm + spacing.xs,
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingVertical: spacing.sm + spacing.xs,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.cardGrey,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
   },
   cancelButtonText: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '500',
-    color: '#666',
+    color: colors.text.secondary,
   },
   saveButton: {
-    backgroundColor: '#1976d2',
+    backgroundColor: colors.primary,
   },
   saveButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.interactive.disabled,
   },
   saveButtonText: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: 'white',
+    color: colors.onPrimary,
   },
 });
 
