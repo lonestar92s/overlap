@@ -478,19 +478,24 @@ const SearchScreen = ({ navigation }) => {
 
         // Add optional bounds if location is provided
         if (hasLocation) {
-          // Use dynamic bounds based on map viewport instead of fixed bounds
-          // This ensures all matches in the current map view are shown
-          const viewportSpan = 0.5; // Reasonable default span for initial search
+          // Use exact viewport bounds (no buffer) - matches initialRegion exactly
+          const viewportDelta = 0.5; // Default viewport size
           apiParams.bounds = {
-            northeast: { lat: location.lat + viewportSpan, lng: location.lon + viewportSpan },
-            southwest: { lat: location.lat - viewportSpan, lng: location.lon - viewportSpan }
+            northeast: { 
+              lat: location.lat + (viewportDelta / 2), 
+              lng: location.lon + (viewportDelta / 2) 
+            },
+            southwest: { 
+              lat: location.lat - (viewportDelta / 2), 
+              lng: location.lon - (viewportDelta / 2) 
+            }
           };
-          // Set initial region for map centering
+          // Set initial region for map centering (matches bounds exactly)
           initialRegion = {
             latitude: location.lat,
             longitude: location.lon,
-            latitudeDelta: 0.5,
-            longitudeDelta: 0.5,
+            latitudeDelta: viewportDelta,
+            longitudeDelta: viewportDelta,
           };
         }
 
@@ -503,11 +508,17 @@ const SearchScreen = ({ navigation }) => {
         autoFitKey = Date.now(); // trigger map to auto-fit
       } else {
         // Traditional bounds-based search (requires both location and dates)
-        // Use dynamic bounds based on map viewport instead of fixed bounds
-        const viewportSpan = 0.5; // Reasonable default span for initial search
+        // Use exact viewport bounds (no buffer) - matches initialRegion exactly
+        const viewportDelta = 0.5; // Default viewport size
         const bounds = {
-          northeast: { lat: location.lat + viewportSpan, lng: location.lon + viewportSpan },
-          southwest: { lat: location.lat - viewportSpan, lng: location.lon - viewportSpan }
+          northeast: { 
+            lat: location.lat + (viewportDelta / 2), 
+            lng: location.lon + (viewportDelta / 2) 
+          },
+          southwest: { 
+            lat: location.lat - (viewportDelta / 2), 
+            lng: location.lon - (viewportDelta / 2) 
+          }
         };
         const response = await ApiService.searchMatchesByBounds({
           bounds,
@@ -516,12 +527,12 @@ const SearchScreen = ({ navigation }) => {
         });
         matches = response.data || [];
         
-        // Set initial region for bounds-based search
+        // Set initial region for bounds-based search (matches bounds exactly)
         initialRegion = {
           latitude: location.lat,
           longitude: location.lon,
-          latitudeDelta: 0.5,
-          longitudeDelta: 0.5,
+          latitudeDelta: viewportDelta,
+          longitudeDelta: viewportDelta,
         };
       }
       

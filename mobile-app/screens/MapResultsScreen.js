@@ -434,13 +434,19 @@ const MapResultsScreen = ({ navigation, route }) => {
       const viewportLatSpan = region.latitudeDelta;
       const viewportLngSpan = region.longitudeDelta;
       
-      // Use adaptive search bounds calculation for better match coverage
-      // Small buffer (1.1x) to catch matches near edges, but client-side filtering
-      // will ensure only visible matches are displayed
-      const bounds = calculateSearchBounds(region, {
-        bufferMultiplier: 1.1, // 10% buffer around viewport (reduced since we filter client-side)
-        maxSpan: 10.0,
-      });
+      // Use exact viewport bounds for search (no buffer)
+      // Client-side viewport filtering will ensure only visible matches are displayed
+      // This ensures search bounds match what the user sees
+      const bounds = {
+        northeast: {
+          lat: region.latitude + (region.latitudeDelta / 2),
+          lng: region.longitude + (region.longitudeDelta / 2),
+        },
+        southwest: {
+          lat: region.latitude - (region.latitudeDelta / 2),
+          lng: region.longitude - (region.longitudeDelta / 2),
+        },
+      };
       
       console.log('🔍 Viewport-only search (RESPONSIVE):', {
         center: { lat: region.latitude, lng: region.longitude },
@@ -490,10 +496,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Update matches efficiently (render markers first)
         updateMatchesEfficiently(response.data);
         
-        // Then smoothly center map on new markers (after a small delay to ensure rendering)
-        setTimeout(() => {
-          centerMapOnMarkers(response.data);
-        }, 200); // Small delay to ensure markers are rendered
+        // Center map on new markers and update mapRegion immediately
+        // This ensures viewport filtering uses the correct bounds
+        centerMapOnMarkers(response.data);
         
         // No need for complex position preservation - user keeps their view
       } else {
@@ -525,7 +530,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     setMatches(newMatches);
   };
 
-  // Center map on markers without changing zoom level
+  // Center map on markers and update mapRegion state immediately
   const centerMapOnMarkers = (markers) => {
     if (!markers || markers.length === 0) {
       console.log('No markers to center on');
@@ -559,22 +564,36 @@ const MapResultsScreen = ({ navigation, route }) => {
     const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
     
+    // Calculate bounds to fit all markers with padding
+    const latSpan = Math.max(...lats) - Math.min(...lats);
+    const lngSpan = Math.max(...lngs) - Math.min(...lngs);
+    const padding = 0.1; // 10% padding
+    const newLatDelta = Math.max(latSpan * (1 + padding), 0.1); // Minimum 0.1 degree
+    const newLngDelta = Math.max(lngSpan * (1 + padding), 0.1); // Minimum 0.1 degree
+    
+    const newRegion = {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: newLatDelta,
+      longitudeDelta: newLngDelta,
+    };
+    
     console.log('🎯 Centering map on markers:', {
       markerCount: validMarkers.length,
       center: { lat: centerLat, lng: centerLng },
-      currentZoom: mapRegion?.latitudeDelta || 0.5
+      newRegion,
+      previousZoom: mapRegion?.latitudeDelta || 0.5
     });
     
-    // Move map center to markers, but use more generous zoom level
-    const currentZoom = mapRegion?.latitudeDelta || 0.5;
-    // Use more generous bounds to ensure all matches are visible
-    const generousZoom = Math.max(currentZoom, 0.8); // Minimum 0.8 degree span
-    mapRef.current.animateToRegion({
-      latitude: centerLat,
-      longitude: centerLng,
-      latitudeDelta: generousZoom,    // More generous zoom
-      longitudeDelta: generousZoom    // More generous zoom
-    }, 1000); // 1 second smooth animation
+    // Update mapRegion state IMMEDIATELY so viewport filtering uses correct bounds
+    setMapRegion(newRegion);
+    
+    // Also update debouncedMapRegion immediately (don't wait for debounce)
+    // This ensures viewport filtering works correctly right away
+    setDebouncedMapRegion(newRegion);
+    
+    // Animate map to new region
+    mapRef.current.animateToRegion(newRegion, 1000); // 1 second smooth animation
   };
 
 
@@ -893,15 +912,63 @@ const MapResultsScreen = ({ navigation, route }) => {
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
   
-  // Get filtered matches for display
+  // Get filtered matches for bottom drawer (NO viewport filtering - shows all matches from search)
   const displayFilteredMatches = useMemo(() => {
-    // Start with date-filtered matches
-    let final = finalFilteredMatches || [];
+    // Bottom drawer shows all matches from the search (filtered by user filters and date only)
+    // Does NOT filter by viewport - remains constant until new search
+    const final = finalFilteredMatches || [];
     
-    // Apply viewport filtering if map region is available
-    // This ensures only matches within the current visible viewport are shown
-    if (mapRegion && mapRegion.latitude && mapRegion.longitude) {
-      final = final.filter(match => {
+    // Debug: Log the filtering results
+    console.log('MapResultsScreen: displayFilteredMatches (bottom drawer) updated:', {
+      totalMatches: matches?.length || 0,
+      filterFiltered: filteredMatches?.length || 0,
+      dateFiltered: finalFilteredMatches?.length || 0,
+      bottomDrawerMatches: final.length,
+      hasDateHeader: !!selectedDateHeader,
+      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none'
+    });
+    
+    return final;
+  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader]);
+
+  // Track if we have initial matches from search (so we don't filter them out on first load)
+  const [hasInitialMatches, setHasInitialMatches] = useState(!!initialMatches);
+  
+  // Debounced map region state - only updates after user stops panning/zooming
+  // Initialize with initialRegion if available, otherwise use mapRegion
+  const [debouncedMapRegion, setDebouncedMapRegion] = useState(initialRegion || mapRegion);
+  
+  // Debounce map region updates to prevent marker blinking during pan/zoom
+  // But don't debounce on initial load if we have initialMatches (they should all be visible)
+  useEffect(() => {
+    if (!mapRegion) return;
+    
+    // On initial load with matches, immediately set debouncedMapRegion to match mapRegion
+    // This ensures viewport filtering works correctly from the start
+    if (hasInitialMatches && debouncedMapRegion === (initialRegion || null)) {
+      setDebouncedMapRegion(mapRegion);
+      setHasInitialMatches(false); // Mark that we've handled initial matches
+      return;
+    }
+    
+    // For subsequent map movements, debounce the update
+    const timer = setTimeout(() => {
+      setDebouncedMapRegion(mapRegion);
+    }, 300); // 300ms delay - update after user stops moving map
+    
+    return () => clearTimeout(timer);
+  }, [mapRegion, hasInitialMatches, initialRegion, debouncedMapRegion]);
+
+  // Get viewport-filtered matches for map markers only
+  // Uses debounced map region to prevent blinking during pan/zoom
+  const mapMarkersMatches = useMemo(() => {
+    // Map markers are filtered by viewport - only show markers within current visible area
+    let viewportFiltered = displayFilteredMatches || [];
+    
+    // Only apply viewport filtering if we have a valid map region
+    // On initial load, if debouncedMapRegion isn't set yet, show all matches
+    if (debouncedMapRegion && debouncedMapRegion.latitude && debouncedMapRegion.longitude) {
+      viewportFiltered = displayFilteredMatches.filter(match => {
         const venue = match.fixture?.venue;
         const coordinates = venue?.coordinates;
         
@@ -909,26 +976,23 @@ const MapResultsScreen = ({ navigation, route }) => {
           return false; // Hide matches without valid coordinates
         }
         
-        return isWithinViewport(coordinates, mapRegion);
+        return isWithinViewport(coordinates, debouncedMapRegion);
       });
     }
+    // If no debouncedMapRegion yet, show all matches (handles initial load case)
     
-    // Debug: Log the filtering results
-    console.log('MapResultsScreen: displayFilteredMatches updated:', {
-      totalMatches: matches?.length || 0,
-      filterFiltered: filteredMatches?.length || 0,
-      dateFiltered: finalFilteredMatches?.length || 0,
-      viewportFiltered: final.length,
-      hasDateHeader: !!selectedDateHeader,
-      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none',
-      mapRegion: mapRegion ? {
-        center: { lat: mapRegion.latitude, lng: mapRegion.longitude },
-        delta: { lat: mapRegion.latitudeDelta, lng: mapRegion.longitudeDelta }
+    console.log('MapResultsScreen: mapMarkersMatches (viewport-filtered) updated:', {
+      totalDrawerMatches: displayFilteredMatches?.length || 0,
+      viewportFiltered: viewportFiltered.length,
+      hasDebouncedRegion: !!debouncedMapRegion,
+      mapRegion: debouncedMapRegion ? {
+        center: { lat: debouncedMapRegion.latitude, lng: debouncedMapRegion.longitude },
+        delta: { lat: debouncedMapRegion.latitudeDelta, lng: debouncedMapRegion.longitudeDelta }
       } : null
     });
     
-    return final;
-  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader, mapRegion]);
+    return viewportFiltered;
+  }, [displayFilteredMatches, debouncedMapRegion]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
@@ -1297,7 +1361,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
-        matches={displayFilteredMatches}
+        matches={mapMarkersMatches}
         initialRegion={mapRegion || getInitialRegion()}
 
         onRegionChange={handleMapRegionChange}

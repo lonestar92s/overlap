@@ -645,6 +645,7 @@ router.get('/search', async (req, res) => {
             const leagueDocs = await League.find({ apiId: { $in: majorLeagueIds.map(id => id.toString()) } }).select('apiId name country').lean();
             const leagueInfo = leagueDocs.map(l => `${l.name} (${l.apiId}, ${l.country})`).join(', ');
             console.log(`🔍 Location-only search: League names being searched: ${leagueInfo}`);
+            console.log(`🔍 Location-only search: Date range: ${dateFrom} to ${dateTo}, Season: ${season}`);
             
             const requests = [];
             for (const leagueId of majorLeagueIds) {
@@ -654,21 +655,35 @@ router.get('/search', async (req, res) => {
                         headers: { 'x-apisports-key': API_SPORTS_KEY },
                         httpsAgent,
                         timeout: 10000
-                    }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
-                      .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
+                    }).then(r => {
+                        console.log(`✅ League ${leagueId} API call successful: ${r.data?.response?.length || 0} fixtures`);
+                        return { type: 'league', id: leagueId, data: r.data };
+                    })
+                      .catch((error) => {
+                        console.error(`❌ League ${leagueId} API call failed:`, error.message || error.response?.status || 'Unknown error');
+                        return { type: 'league', id: leagueId, data: { response: [] } };
+                      })
                 );
             }
 
             const settled = await Promise.allSettled(requests);
             const fixtures = [];
+            const leagueStats = {};
             for (const s of settled) {
                 if (s.status === 'fulfilled') {
                     const payload = s.value;
-                    if (payload?.data?.response?.length) {
+                    const fixtureCount = payload?.data?.response?.length || 0;
+                    leagueStats[payload.id] = fixtureCount;
+                    if (fixtureCount > 0) {
                         fixtures.push(...payload.data.response);
+                        console.log(`📊 League ${payload.id}: ${fixtureCount} fixtures added`);
                     }
+                } else {
+                    console.error(`❌ League request failed:`, s.reason);
                 }
             }
+            console.log(`📊 Location-only search API results by league:`, leagueStats);
+            console.log(`📊 Total fixtures collected: ${fixtures.length}`);
 
             // Dedupe by fixture id
             const seen = new Set();
