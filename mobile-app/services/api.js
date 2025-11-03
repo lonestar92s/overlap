@@ -907,6 +907,35 @@ class ApiService {
   // NEW: Bounds-based search for map integration
   async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [] }) {
     try {
+      // If no competitions or teams specified, use the location-only search endpoint
+      if (competitions.length === 0 && teams.length === 0 && bounds && dateFrom && dateTo) {
+        console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');
+        const params = new URLSearchParams();
+        params.append('dateFrom', dateFrom);
+        params.append('dateTo', dateTo);
+        if (bounds?.northeast && bounds?.southwest) {
+          params.append('neLat', bounds.northeast.lat);
+          params.append('neLng', bounds.northeast.lng);
+          params.append('swLat', bounds.southwest.lat);
+          params.append('swLng', bounds.southwest.lng);
+        }
+        
+        const url = `${this.baseURL}/matches/search?${params.toString()}`;
+        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data?.message || 'Failed to search matches');
+        }
+        
+        return {
+          success: true,
+          data: data.data || [],
+          searchParams: { bounds, dateFrom, dateTo, competitions, teams }
+        };
+      }
+
+      // Otherwise, use the legacy approach with competitions endpoint
       // Use specified competitions or geographically filter leagues
       const targetLeagues = competitions.length > 0 
         ? AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id))
