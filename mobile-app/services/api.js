@@ -10,8 +10,10 @@ const getApiBaseUrl = () => {
   }
   
   // Development fallback for local testing
+  // NOTE: localhost only works with Expo Dev Client on emulator/simulator
+  // For Expo Go or physical devices, use your machine's IP address or production URL
   return process.env.EXPO_PUBLIC_API_URL || 
-    (__DEV__ ? 'http://localhost:3001/api' : '');
+    (__DEV__ ? 'https://friendly-gratitude-production-3f31.up.railway.app/api' : '');
 };
 
 const API_BASE_URL = getApiBaseUrl();

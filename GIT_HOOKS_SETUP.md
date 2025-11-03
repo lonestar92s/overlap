@@ -4,11 +4,13 @@
 
 Pre-commit hooks have been set up to automatically run tests before each commit. This ensures that broken code doesn't get committed to the repository.
 
+**✅ The pre-commit hook has been installed at `.git/hooks/pre-commit`**
+
 ## Setup Instructions
 
 ### 1. Install Dependencies
 
-First, install Husky in both projects:
+First, install dependencies (including test dependencies) in both projects:
 
 ```bash
 # Backend
@@ -20,38 +22,27 @@ cd flight-match-finder/mobile-app
 npm install
 ```
 
-### 2. Initialize Husky
+**Note**: The hook will automatically skip tests if `node_modules` is not installed, so make sure to run `npm install` in both directories.
 
-Husky will automatically install when you run `npm install` (via the `prepare` script), but you can also manually initialize it:
+### 2. Verify Hook is Executable
+
+The hook should already be executable, but you can verify:
 
 ```bash
-# Backend
-cd flight-match-finder/overlap/backend
-npx husky install
-
-# Mobile App
-cd flight-match-finder/mobile-app
-npx husky install
+ls -la .git/hooks/pre-commit
+# Should show: -rwxr-xr-x ... pre-commit
 ```
 
-### 3. Make Hooks Executable
-
-Make sure the pre-commit hooks are executable:
-
+If it's not executable, run:
 ```bash
-# Root level hook (recommended)
-chmod +x flight-match-finder/.husky/pre-commit
-
-# Or if using project-level hooks:
-chmod +x flight-match-finder/overlap/backend/.husky/pre-commit
-chmod +x flight-match-finder/mobile-app/.husky/pre-commit
+chmod +x .git/hooks/pre-commit
 ```
 
 ## How It Works
 
-### Root-Level Hook (Recommended)
+### Git Pre-Commit Hook
 
-The root-level hook at `.husky/pre-commit` checks which files have changed and runs tests accordingly:
+The pre-commit hook at `.git/hooks/pre-commit` checks which files have changed and runs tests accordingly:
 
 - **Backend changes** (`overlap/backend/src` or `overlap/backend/tests`): Runs backend tests
 - **Mobile app changes** (`mobile-app/` JS/JSX/TS/TSX files): Runs mobile app tests
@@ -86,18 +77,19 @@ To temporarily disable hooks:
 
 ```bash
 # Remove executable permission
-chmod -x flight-match-finder/.husky/pre-commit
+chmod -x .git/hooks/pre-commit
 
-# Or uninstall husky
-cd overlap/backend && npx husky uninstall
-cd mobile-app && npx husky uninstall
+# Or rename the hook
+mv .git/hooks/pre-commit .git/hooks/pre-commit.disabled
 ```
 
 To re-enable:
 
 ```bash
-chmod +x flight-match-finder/.husky/pre-commit
-# Re-run npm install to restore husky
+chmod +x .git/hooks/pre-commit
+# Or restore from disabled
+mv .git/hooks/pre-commit.disabled .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
 ```
 
 ## Troubleshooting
@@ -106,18 +98,18 @@ chmod +x flight-match-finder/.husky/pre-commit
 
 1. **Check if hook exists**:
    ```bash
-   ls -la flight-match-finder/.husky/pre-commit
+   ls -la .git/hooks/pre-commit
    ```
 
 2. **Check if it's executable**:
    ```bash
-   chmod +x flight-match-finder/.husky/pre-commit
+   chmod +x .git/hooks/pre-commit
    ```
 
-3. **Reinstall husky**:
+3. **Verify git hooks directory**:
    ```bash
-   cd overlap/backend && npx husky install
-   cd mobile-app && npx husky install
+   ls -la .git/hooks/
+   # Should see pre-commit file
    ```
 
 ### Tests Taking Too Long
