@@ -435,8 +435,10 @@ const MapResultsScreen = ({ navigation, route }) => {
       const viewportLngSpan = region.longitudeDelta;
       
       // Use adaptive search bounds calculation for better match coverage
+      // Small buffer (1.1x) to catch matches near edges, but client-side filtering
+      // will ensure only visible matches are displayed
       const bounds = calculateSearchBounds(region, {
-        bufferMultiplier: 1.3, // 30% buffer around viewport
+        bufferMultiplier: 1.1, // 10% buffer around viewport (reduced since we filter client-side)
         maxSpan: 10.0,
       });
       
@@ -575,6 +577,37 @@ const MapResultsScreen = ({ navigation, route }) => {
     }, 1000); // 1 second smooth animation
   };
 
+
+  // Helper function to check if coordinates are within the current viewport
+  const isWithinViewport = (coordinates, region) => {
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+      return false;
+    }
+    if (!region || !region.latitude || !region.longitude || !region.latitudeDelta || !region.longitudeDelta) {
+      return true; // If no region, show all matches (fallback)
+    }
+    
+    const [lon, lat] = coordinates; // GeoJSON format: [longitude, latitude]
+    
+    // Calculate viewport bounds
+    const halfLatDelta = region.latitudeDelta / 2;
+    const halfLngDelta = region.longitudeDelta / 2;
+    
+    const northeast = {
+      lat: region.latitude + halfLatDelta,
+      lng: region.longitude + halfLngDelta
+    };
+    const southwest = {
+      lat: region.latitude - halfLatDelta,
+      lng: region.longitude - halfLngDelta
+    };
+    
+    // Check if coordinates are within viewport bounds
+    const withinBounds = lat >= southwest.lat && lat <= northeast.lat &&
+                         lon >= southwest.lng && lon <= northeast.lng;
+    
+    return withinBounds;
+  };
 
   // Handle map region change (when user pans/zooms)
   const handleMapRegionChange = (region, bounds) => {
@@ -862,20 +895,40 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Get filtered matches for display
   const displayFilteredMatches = useMemo(() => {
-    // FIXED: Now uses the date-filtered results from finalFilteredMatches
-    // This ensures both map markers and bottom sheet use the same filtered data
+    // Start with date-filtered matches
+    let final = finalFilteredMatches || [];
+    
+    // Apply viewport filtering if map region is available
+    // This ensures only matches within the current visible viewport are shown
+    if (mapRegion && mapRegion.latitude && mapRegion.longitude) {
+      final = final.filter(match => {
+        const venue = match.fixture?.venue;
+        const coordinates = venue?.coordinates;
+        
+        if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+          return false; // Hide matches without valid coordinates
+        }
+        
+        return isWithinViewport(coordinates, mapRegion);
+      });
+    }
     
     // Debug: Log the filtering results
     console.log('MapResultsScreen: displayFilteredMatches updated:', {
       totalMatches: matches?.length || 0,
       filterFiltered: filteredMatches?.length || 0,
       dateFiltered: finalFilteredMatches?.length || 0,
+      viewportFiltered: final.length,
       hasDateHeader: !!selectedDateHeader,
-      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none'
+      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none',
+      mapRegion: mapRegion ? {
+        center: { lat: mapRegion.latitude, lng: mapRegion.longitude },
+        delta: { lat: mapRegion.latitudeDelta, lng: mapRegion.longitudeDelta }
+      } : null
     });
     
-    return finalFilteredMatches;
-  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader]);
+    return final;
+  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader, mapRegion]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
