@@ -782,55 +782,32 @@ router.get('/search', async (req, res) => {
                     }
                 };
 
-                // Filter by bounds - include matches with coordinates that are within bounds
-                // Also include matches without coordinates if city/country suggests they're in the area
+                // Filter by bounds - STRICT: Only include matches with valid coordinates within bounds
+                // Every match should have a venue with coordinates - no fallback logic
                 let shouldInclude = false;
                 
-                if (venueInfo.coordinates && isWithinBounds(venueInfo.coordinates, bounds)) {
-                    shouldInclude = true;
-                } else if (!venueInfo.coordinates) {
-                    matchesWithoutCoords++;
-                    // Fallback: If no coordinates available, check if the league country matches the bounds area
-                    // This is necessary because some lower-league venues don't have coordinates in the API
-                    const countryLower = (venueInfo.country || match.league?.country || '').toLowerCase();
-                    const leagueCountryLower = (match.league?.country || '').toLowerCase();
-                    
-                    // Calculate approximate center of bounds
-                    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-                    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-                    
-                    // If searching English leagues and bounds are in England, include English matches without coordinates
-                    // This is a reasonable fallback - we're already filtering by relevant leagues geographically
-                    const isEngland = countryLower === 'england' || leagueCountryLower === 'england';
-                    const isInEnglandBounds = centerLat > 49 && centerLat < 56 && centerLng > -8 && centerLng < 2;
-                    
-                    if (isEngland && isInEnglandBounds) {
-                        shouldInclude = true;
-                        console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
-                    } else {
-                        // For other countries, be much more restrictive - only include if:
-                        // 1. The league country matches the bounds country more specifically
-                        // 2. We're not just including all European leagues
-                        
-                        // Determine which country the bounds are in
-                        const isInEngland = centerLat > 49 && centerLat < 56 && centerLng > -8 && centerLng < 2;
-                        const isInSpain = centerLat > 35 && centerLat < 44 && centerLng > -10 && centerLng < 5;
-                        const isInGermany = centerLat > 47 && centerLat < 55 && centerLng > 5 && centerLng < 15;
-                        const isInItaly = centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19;
-                        const isInFrance = centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8;
-                        
-                        // Only include matches from the same country as the search bounds
-                        if ((isInEngland && leagueCountryLower === 'england') ||
-                            (isInSpain && leagueCountryLower === 'spain') ||
-                            (isInGermany && leagueCountryLower === 'germany') ||
-                            (isInItaly && leagueCountryLower === 'italy') ||
-                            (isInFrance && leagueCountryLower === 'france')) {
+                if (venueInfo.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
+                    // Validate coordinates are numbers
+                    const [lon, lat] = venueInfo.coordinates;
+                    if (typeof lon === 'number' && typeof lat === 'number' && 
+                        !isNaN(lon) && !isNaN(lat) &&
+                        lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                        // Check if coordinates are within bounds
+                        if (isWithinBounds(venueInfo.coordinates, bounds)) {
                             shouldInclude = true;
-                            console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name}) - country match`);
+                        } else {
+                            matchesFilteredOut++;
+                            // Log why match was filtered (for debugging)
+                            console.log(`📍 Match filtered (outside bounds): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}]`);
                         }
+                    } else {
+                        matchesWithoutCoords++;
+                        console.log(`⚠️ Match excluded (invalid coordinates): ${venueInfo.name}, ${venueInfo.city} - Coords: ${JSON.stringify(venueInfo.coordinates)}`);
                     }
                 } else {
-                    matchesFilteredOut++;
+                    matchesWithoutCoords++;
+                    // Strict: Exclude matches without coordinates - they can't be displayed on map
+                    console.log(`⚠️ Match excluded (no coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
                 }
                 
                 if (shouldInclude) {

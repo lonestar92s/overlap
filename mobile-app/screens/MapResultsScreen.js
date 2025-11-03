@@ -120,6 +120,12 @@ const MapResultsScreen = ({ navigation, route }) => {
             countryName = match.area.name;
           }
           
+          // Fallback: try to extract from league.country (backend returns this)
+          if (!countryId && match.league && match.league.country) {
+            countryId = match.league.country;
+            countryName = match.league.country;
+          }
+          
           // Fallback: try to extract from venue or other fields
           if (!countryId && match.venue && match.venue.country) {
             if (typeof match.venue.country === 'string') {
