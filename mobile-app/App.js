@@ -30,6 +30,21 @@ import AccountScreen from './screens/AccountScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { validateEnvironmentVariables } from './utils/envValidation';
+
+// Validate environment variables on app startup
+try {
+  validateEnvironmentVariables();
+} catch (error) {
+  // In development, log warning but don't crash
+  if (__DEV__) {
+    console.warn('⚠️ Environment validation warning:', error.message);
+  } else {
+    // In production, this should fail fast
+    console.error('🚨 CRITICAL: Environment validation failed', error);
+    throw error;
+  }
+}
 
 // Loading screen component
 const LoadingScreen = () => (

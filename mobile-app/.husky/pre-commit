@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/../..//overlap/backend/.husky/_/husky.sh" || . "$(dirname -- "$0")/_/husky.sh"
+
+# Run mobile app tests before commit
+# Only run tests if we're in the mobile-app directory or if mobile app files changed
+cd "$(dirname -- "$0")/../.."
+
+# Check if any mobile app source files changed
+if git diff --cached --name-only | grep -E '^(mobile-app/.*\.js|mobile-app/.*\.jsx|mobile-app/.*\.ts|mobile-app/.*\.tsx|mobile-app/__tests__)' > /dev/null; then
+  echo "🔍 Mobile app files changed, running tests..."
+  cd mobile-app
+  npm test -- --passWithNoTests
+  TEST_EXIT_CODE=$?
+  
+  if [ $TEST_EXIT_CODE -ne 0 ]; then
+    echo "❌ Mobile app tests failed. Commit aborted."
+    exit 1
+  fi
+  
+  echo "✅ Mobile app tests passed!"
+else
+  echo "⏭️  No mobile app files changed, skipping tests"
+fi
+

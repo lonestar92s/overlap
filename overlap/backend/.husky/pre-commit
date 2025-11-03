@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run backend tests before commit
+# Only run tests if we're in the backend directory or if backend files changed
+cd "$(dirname -- "$0")/../.."
+
+# Check if any backend source files changed
+if git diff --cached --name-only | grep -E '^(overlap/backend/src|overlap/backend/tests)' > /dev/null; then
+  echo "🔍 Backend files changed, running tests..."
+  cd overlap/backend
+  npm test -- --passWithNoTests
+  TEST_EXIT_CODE=$?
+  
+  if [ $TEST_EXIT_CODE -ne 0 ]; then
+    echo "❌ Backend tests failed. Commit aborted."
+    exit 1
+  fi
+  
+  echo "✅ Backend tests passed!"
+else
+  echo "⏭️  No backend files changed, skipping tests"
+fi
+

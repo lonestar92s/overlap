@@ -4,7 +4,8 @@ export const MAP_PROVIDER = 'google'; // Back to Google Maps
 
 // Mapbox configuration
 export const MAPBOX_CONFIG = {
-  accessToken: 'pk.eyJ1IjoibG9uZXN0YXI5MnMiLCJhIjoiY202ZTB4dm5qMDBkaTJrcHFkeGZpdjlnYiJ9.UZyXT21en4sTzQSOmV5Maw',
+  // SECURITY: Token loaded from environment variable to prevent exposure
+  accessToken: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '',
   styleURL: 'mapbox://styles/mapbox/streets-v11', // Default style
 };
 

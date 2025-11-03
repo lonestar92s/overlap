@@ -1,0 +1,64 @@
+#!/usr/bin/env sh
+
+# Root-level pre-commit hook that coordinates tests for both backend and mobile app
+# This script runs tests based on which files have changed
+
+echo "🔍 Checking for changed files..."
+
+# Get the root of the repository
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Track if any tests failed
+TESTS_FAILED=0
+
+# Check for backend changes
+BACKEND_CHANGED=$(git diff --cached --name-only | grep -E '^(overlap/backend/src|overlap/backend/tests)' | wc -l)
+if [ "$BACKEND_CHANGED" -gt 0 ]; then
+  echo "📦 Backend files changed, running backend tests..."
+  if [ -d "overlap/backend" ]; then
+    cd overlap/backend
+    npm test -- --passWithNoTests 2>/dev/null || {
+      echo "❌ Backend tests failed!"
+      TESTS_FAILED=1
+    }
+    cd "$REPO_ROOT"
+  else
+    echo "⚠️  Backend directory not found, skipping backend tests"
+  fi
+fi
+
+# Check for mobile app changes
+MOBILE_CHANGED=$(git diff --cached --name-only | grep -E '^(mobile-app/.*\.(js|jsx|ts|tsx)|mobile-app/__tests__)' | wc -l)
+if [ "$MOBILE_CHANGED" -gt 0 ]; then
+  echo "📱 Mobile app files changed, running mobile app tests..."
+  if [ -d "mobile-app" ]; then
+    cd mobile-app
+    npm test -- --passWithNoTests 2>/dev/null || {
+      echo "❌ Mobile app tests failed!"
+      TESTS_FAILED=1
+    }
+    cd "$REPO_ROOT"
+  else
+    echo "⚠️  Mobile app directory not found, skipping mobile app tests"
+  fi
+fi
+
+# If no relevant files changed, skip tests
+if [ "$BACKEND_CHANGED" -eq 0 ] && [ "$MOBILE_CHANGED" -eq 0 ]; then
+  echo "⏭️  No testable files changed, skipping tests"
+  exit 0
+fi
+
+# Exit with error if any tests failed
+if [ $TESTS_FAILED -eq 1 ]; then
+  echo ""
+  echo "❌ Some tests failed. Please fix the issues before committing."
+  echo "💡 Tip: Run 'npm test' in the relevant directory to see details"
+  exit 1
+fi
+
+echo ""
+echo "✅ All tests passed! Proceeding with commit..."
+exit 0
+

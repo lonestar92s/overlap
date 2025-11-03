@@ -1,7 +1,20 @@
-// Backend API base URL - Use Railway production backend
-// Override with EXPO_PUBLIC_API_URL environment variable if needed for local testing
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
-  'https://friendly-gratitude-production-3f31.up.railway.app/api';
+// Backend API base URL - Loaded from environment variable
+// SECURITY: Never hardcode production URLs - use environment variables
+const getApiBaseUrl = () => {
+  // In production, EXPO_PUBLIC_API_URL must be set
+  if (!__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
+    if (__DEV__) {
+      console.error('ERROR: EXPO_PUBLIC_API_URL environment variable is required in production');
+    }
+    throw new Error('Missing required environment variable: EXPO_PUBLIC_API_URL');
+  }
+  
+  // Development fallback for local testing
+  return process.env.EXPO_PUBLIC_API_URL || 
+    (__DEV__ ? 'http://localhost:3001/api' : '');
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -936,10 +949,30 @@ class ApiService {
       }
 
       // Otherwise, use the legacy approach with competitions endpoint
-      // Use specified competitions or geographically filter leagues
-      const targetLeagues = competitions.length > 0 
-        ? AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id))
-        : this.getRelevantLeagues(bounds);
+      // Use specified competitions or fetch relevant leagues from backend
+      let targetLeagues;
+      if (competitions.length > 0) {
+        // Use specified competitions (map to AVAILABLE_LEAGUES format for now)
+        targetLeagues = AVAILABLE_LEAGUES.filter(league => competitions.includes(league.id));
+      } else {
+        // Fetch relevant leagues from backend based on bounds
+        try {
+          const relevantLeaguesFromBackend = await this.getRelevantLeaguesFromBackend(bounds);
+          // Transform backend response to match expected format
+          targetLeagues = relevantLeaguesFromBackend.map(league => ({
+            id: league.id,
+            name: league.name,
+            country: league.country || 'Unknown',
+            coords: null, // Coordinates not needed when using backend filtering
+            isInternational: league.country === 'International' || league.country === 'Europe'
+          }));
+          console.log('🔍 searchMatchesByBounds: Using leagues from backend:', targetLeagues.map(l => `${l.name} (${l.id})`));
+        } catch (error) {
+          console.warn('⚠️ Failed to fetch leagues from backend, using local fallback:', error);
+          // Fallback to local getRelevantLeagues
+          targetLeagues = this.getRelevantLeagues(bounds);
+        }
+      }
 
       console.log('🔍 searchMatchesByBounds: Target leagues:', targetLeagues.map(l => `${l.name} (${l.id})`));
       
@@ -969,7 +1002,7 @@ class ApiService {
             // Include team filter if specified
             ...(teams.length > 0 && { teams: teams.join(',') })
           });
-          const url = `${API_BASE_URL}/matches/competitions/${league.id}?${params}`;
+          const url = `${this.baseURL}/matches/competitions/${league.id}?${params}`;
           try {
             const headers = { 'Content-Type': 'application/json' };
             const token = await getAuthToken();
@@ -1604,6 +1637,45 @@ class ApiService {
   clearAllCache() {
     recommendationCache.clear();
     console.log('🗑️ API Service - Cleared all cache');
+  }
+
+  // Get relevant leagues based on geographic bounds
+  async getRelevantLeaguesFromBackend(bounds) {
+    try {
+      if (!bounds || !bounds.northeast || !bounds.southwest) {
+        // If no bounds, fetch all active leagues
+        const response = await this.fetchWithTimeout(
+          `${this.baseURL}/leagues/relevant`,
+          { method: 'GET' },
+          10000
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || 'Failed to fetch leagues');
+        }
+        return data.leagues || [];
+      }
+
+      const params = new URLSearchParams();
+      params.append('neLat', bounds.northeast.lat);
+      params.append('neLng', bounds.northeast.lng);
+      params.append('swLat', bounds.southwest.lat);
+      params.append('swLng', bounds.southwest.lng);
+
+      const url = `${this.baseURL}/leagues/relevant?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 10000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to fetch relevant leagues');
+      }
+
+      return data.leagues || [];
+    } catch (error) {
+      console.error('Error fetching relevant leagues from backend:', error);
+      // Fallback to local getRelevantLeagues if backend fails
+      return this.getRelevantLeagues(bounds);
+    }
   }
 
   // Location autocomplete - uses backend endpoint which proxies LocationIQ
