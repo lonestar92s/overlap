@@ -732,6 +732,25 @@ router.get('/search', async (req, res) => {
                         }
                     }
                 }
+                
+                // Fallback: If venue lookup by ID failed, try name-based lookup (handles duplicate venues)
+                // This is important because API-Sports might assign different venueIds to the same stadium for different teams
+                if (!venueInfo || (!venueInfo.coordinates && venue?.name)) {
+                    const byName = await venueService.getVenueByName(venue?.name, venue?.city);
+                    if (byName && byName.coordinates) {
+                        // Found venue by name with coordinates - use it (this handles duplicate venue records)
+                        venueInfo = {
+                            id: venue?.id || venueInfo?.id || null,
+                            name: byName.name || venue?.name,
+                            city: byName.city || venue?.city,
+                            country: byName.country || venue?.country || match.league?.country,
+                            coordinates: byName.coordinates,
+                            image: venueInfo?.image || null
+                        };
+                        console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
+                    }
+                }
+                
                 if (!venueInfo) {
                     const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
                     const team = await Team.findOne({
