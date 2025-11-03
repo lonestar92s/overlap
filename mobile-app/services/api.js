@@ -1605,6 +1605,32 @@ class ApiService {
     recommendationCache.clear();
     console.log('🗑️ API Service - Cleared all cache');
   }
+
+  // Location autocomplete - uses backend endpoint which proxies LocationIQ
+  async searchLocations(query, limit = 5) {
+    try {
+      if (!query || query.trim().length < 2) {
+        return { success: true, suggestions: [] };
+      }
+
+      const params = new URLSearchParams();
+      params.append('q', query.trim());
+      if (limit) params.append('limit', limit.toString());
+
+      const url = `${this.baseURL}/search/locations?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 10000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to search locations');
+      }
+
+      return data; // { success, suggestions: [...] }
+    } catch (error) {
+      console.error('Error in searchLocations:', error);
+      throw error;
+    }
+  }
 }
 
 // Create API service instance

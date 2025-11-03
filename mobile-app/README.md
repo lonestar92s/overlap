@@ -26,17 +26,32 @@ A React Native mobile app for searching football matches by date range and team.
    npm install
    ```
 
-2. **Start the backend server**:
+2. **Set up LocationIQ API Key (for location search)**:
+   - Get a free API key from [LocationIQ](https://locationiq.com/)
+     - Sign up at https://locationiq.com/
+     - Navigate to your dashboard to get your API key
+   - Create a `.env` file in the `mobile-app` directory:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` and add your LocationIQ API key:
+     ```
+     EXPO_PUBLIC_LOCATIONIQ_API_KEY=pk.your_actual_api_key_here
+     ```
+   - **Note**: Without this key, the app will use mock location data (limited to 5 cities)
+
+3. **Start the backend server**:
    Make sure your backend is running on port 3001. From the backend directory:
    ```bash
    cd ../backend
    npm start
    ```
 
-3. **Start the mobile app**:
+4. **Start the mobile app**:
    ```bash
    npm start
    ```
+   - **Important**: Restart the Expo development server after adding the API key to `.env` for changes to take effect.
 
 ## Running the App
 

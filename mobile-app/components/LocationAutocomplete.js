@@ -11,14 +11,9 @@ import {
 } from 'react-native';
 import Autocomplete from 'react-native-autocomplete-input';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import axios from 'axios';
 import { debounce } from 'lodash';
 import * as Location from 'expo-location';
-
-// LocationIQ API configuration
-// Use environment variable for API key - set EXPO_PUBLIC_LOCATIONIQ_API_KEY in .env or app.json
-const LOCATIONIQ_API_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || null;
-const LOCATIONIQ_BASE_URL = 'https://api.locationiq.com/v1/autocomplete';
+import ApiService from '../services/api';
 
 // Mock data for testing when API key is not available
 const MOCK_LOCATIONS = [
@@ -136,55 +131,44 @@ const LocationAutocomplete = ({
   const lastRequestTimeRef = useRef(0);
   
   const fetchSuggestions = useCallback(async (query) => {
-    if (!query || query.length < 3) {
+    if (!query || query.length < 2) {
       setOptions([]);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      if (!LOCATIONIQ_API_KEY || LOCATIONIQ_API_KEY === 'pk.test.key') {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Rate limiting - wait at least 500ms between requests
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTimeRef.current;
+      if (timeSinceLastRequest < 500) {
+        await new Promise(resolve => setTimeout(resolve, 500 - timeSinceLastRequest));
+      }
+      lastRequestTimeRef.current = Date.now();
+
+      // Use backend endpoint which proxies LocationIQ
+      const response = await ApiService.searchLocations(query, 5);
+      
+      if (response.success && response.suggestions) {
+        setOptions(response.suggestions);
+        if (onOptionsChange) onOptionsChange(response.suggestions.length > 0);
+      } else {
+        // Fallback to mock data if backend fails
+        await new Promise(resolve => setTimeout(resolve, 300));
         const filteredMockData = MOCK_LOCATIONS.filter(location =>
           location.city.toLowerCase().includes(query.toLowerCase()) ||
           location.country.toLowerCase().includes(query.toLowerCase())
         );
         setOptions(filteredMockData);
-        return;
       }
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastRequestTimeRef.current;
-      if (timeSinceLastRequest < 1000) {
-        await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLastRequest));
-      }
-      lastRequestTimeRef.current = Date.now();
-      const response = await axios.get(LOCATIONIQ_BASE_URL, {
-        params: { key: LOCATIONIQ_API_KEY, q: query, limit: 3, dedupe: 1, 'accept-language': 'en' }
-      });
-      const suggestions = response.data.map(item => {
-        const nameParts = item.display_name.split(', ');
-        const city = nameParts[0];
-        const country = nameParts[nameParts.length - 1];
-        const region = nameParts.slice(1, -1).join(', ');
-        const uniqueId = `${item.place_id}-${item.lat}-${item.lon}-${city}-${region}-${country}`;
-        return { place_id: uniqueId, description: `${city}${region ? `, ${region}` : ''}, ${country}`, lat: parseFloat(item.lat), lon: parseFloat(item.lon), city, region, country };
-      });
-      const uniqueSuggestions = suggestions.filter((suggestion, index, self) =>
-        index === self.findIndex((s) => (
-          s.lat === suggestion.lat && s.lon === suggestion.lon && s.city === suggestion.city && s.region === suggestion.region && s.country === suggestion.country
-        ))
-      );
-      
-      setOptions(uniqueSuggestions);
-      if (onOptionsChange) onOptionsChange(uniqueSuggestions.length > 0);
     } catch (error) {
       if (__DEV__) {
         console.error('Error fetching location suggestions:', error);
       }
-      if (error.response?.status === 429) {
+      
+      // On error, fallback to mock data
+      if (error.message?.includes('Rate limit') || error.response?.status === 429) {
         setError('Please type more slowly...');
-      } else if (error.response?.status === 401) {
-        setError('Invalid API key - using mock data');
         const filteredMockData = MOCK_LOCATIONS.filter(location =>
           location.city.toLowerCase().includes(query.toLowerCase()) ||
           location.country.toLowerCase().includes(query.toLowerCase())
@@ -320,9 +304,6 @@ const LocationAutocomplete = ({
       </View>
       {loading && (<ActivityIndicator size="small" color="#007AFF" style={styles.loadingIndicator} />)}
       {error && (<Text style={styles.errorText}>{error}</Text>)}
-      {(!LOCATIONIQ_API_KEY || LOCATIONIQ_API_KEY === 'pk.test.key') && (
-        <Text style={styles.infoText}>Using mock data. Set EXPO_PUBLIC_LOCATIONIQ_API_KEY environment variable for real location search.</Text>
-      )}
     </View>
   );
 };

@@ -15,6 +15,10 @@ const router = express.Router();
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 
+// LocationIQ configuration for autocomplete
+const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
+const LOCATIONIQ_AUTOCOMPLETE_URL = 'https://api.locationiq.com/v1/autocomplete';
+
 // Create HTTPS agent for search
 const searchHttpsAgent = new https.Agent({
     rejectUnauthorized: false
@@ -1687,6 +1691,111 @@ const buildSearchParameters = (parsed) => {
 
     return params;
 };
+
+/**
+ * GET /api/search/locations
+ * Location autocomplete endpoint - proxies LocationIQ autocomplete API
+ * Uses backend's LOCATIONIQ_API_KEY to keep API key secure
+ */
+router.get('/locations', async (req, res) => {
+    try {
+        const { q, limit = 5 } = req.query;
+        
+        if (!q || q.length < 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query must be at least 2 characters'
+            });
+        }
+
+        if (!LOCATIONIQ_API_KEY) {
+            return res.status(503).json({
+                success: false,
+                message: 'LocationIQ API key not configured on server'
+            });
+        }
+
+        try {
+            const response = await axios.get(LOCATIONIQ_AUTOCOMPLETE_URL, {
+                params: {
+                    key: LOCATIONIQ_API_KEY,
+                    q: q,
+                    limit: parseInt(limit),
+                    dedupe: 1,
+                    'accept-language': 'en'
+                },
+                httpsAgent: searchHttpsAgent,
+                timeout: 10000
+            });
+
+            // Transform LocationIQ response to match mobile app expectations
+            const suggestions = response.data.map(item => {
+                const nameParts = item.display_name.split(', ');
+                const city = nameParts[0];
+                const country = nameParts[nameParts.length - 1];
+                const region = nameParts.slice(1, -1).join(', ');
+                const uniqueId = `${item.place_id}-${item.lat}-${item.lon}-${city}-${region}-${country}`;
+                
+                return {
+                    place_id: uniqueId,
+                    description: `${city}${region ? `, ${region}` : ''}, ${country}`,
+                    lat: parseFloat(item.lat),
+                    lon: parseFloat(item.lon),
+                    city,
+                    region,
+                    country
+                };
+            });
+
+            // Deduplicate suggestions
+            const uniqueSuggestions = suggestions.filter((suggestion, index, self) =>
+                index === self.findIndex((s) => (
+                    s.lat === suggestion.lat && 
+                    s.lon === suggestion.lon && 
+                    s.city === suggestion.city && 
+                    s.region === suggestion.region && 
+                    s.country === suggestion.country
+                ))
+            );
+
+            return res.json({
+                success: true,
+                suggestions: uniqueSuggestions
+            });
+
+        } catch (error) {
+            console.error('LocationIQ autocomplete error:', error.message);
+            
+            if (error.response?.status === 429) {
+                return res.status(429).json({
+                    success: false,
+                    message: 'Rate limit exceeded. Please try again later.'
+                });
+            }
+            
+            if (error.response?.status === 401) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Invalid LocationIQ API key on server'
+                });
+            }
+
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to fetch location suggestions',
+                error: error.message
+            });
+        }
+
+    } catch (error) {
+        console.error('Location autocomplete endpoint error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+});
 
 // Debug endpoint to check database connection
 /**
