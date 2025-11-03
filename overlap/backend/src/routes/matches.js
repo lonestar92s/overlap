@@ -432,9 +432,10 @@ async function getRelevantLeagueIds(bounds) {
                 );
 
                 // Smart distance thresholds based on region
+                // Made more restrictive to avoid including irrelevant leagues (e.g., Serie A for Manchester searches)
                 let maxDistance;
                 if (isInEurope) {
-                    maxDistance = 2500; // Europe is densely packed
+                    maxDistance = 800; // Europe: more restrictive - only include nearby countries
                 } else if (isInNorthAmerica || isInSouthAmerica) {
                     maxDistance = 3000; // Large countries, be more inclusive
                 } else {
@@ -687,25 +688,46 @@ router.get('/search', async (req, res) => {
                 let venueInfo = null;
                 if (venue?.id) {
                     const localVenue = await venueService.getVenueByApiId(venue.id);
-                    if (localVenue) {
+                    const localCoords = localVenue?.coordinates || localVenue?.location?.coordinates;
+                    
+                    if (localVenue && localCoords) {
+                        // MongoDB has venue with coordinates - use it
                         venueInfo = {
                             id: venue.id,
                             name: localVenue.name,
                             city: localVenue.city,
                             country: localVenue.country,
-                            coordinates: localVenue.coordinates || localVenue.location?.coordinates,
+                            coordinates: localCoords,
                             image: localVenue.image || null
                         };
                     } else {
+                        // MongoDB doesn't have venue OR doesn't have coordinates - try API-Sports
                         const v = await getVenueFromApiFootball(venue.id);
                         if (v) {
+                            // API-Sports venue data - check for coordinates in multiple places
+                            const apiCoords = v.coordinates || 
+                                             (Array.isArray(v.location) ? v.location : null) ||
+                                             (v.lat && v.lng ? [v.lng, v.lat] : null) ||
+                                             venue?.coordinates || null;
+                            
                             venueInfo = {
                                 id: venue.id,
-                                name: v.name,
-                                city: v.city,
-                                country: v.country,
-                                coordinates: venue?.coordinates || null, // Try API response coordinates first
-                                image: v.image || null
+                                name: v.name || localVenue?.name || venue?.name,
+                                city: v.city || localVenue?.city || venue?.city,
+                                country: v.country || localVenue?.country || venue?.country,
+                                coordinates: apiCoords,
+                                image: v.image || localVenue?.image || null
+                            };
+                        } else if (localVenue) {
+                            // MongoDB has venue but no coordinates, and API-Sports also failed - use MongoDB data without coords
+                            // This will trigger the fallback logic to include based on country matching
+                            venueInfo = {
+                                id: venue.id,
+                                name: localVenue.name,
+                                city: localVenue.city,
+                                country: localVenue.country,
+                                coordinates: null, // No coordinates available
+                                image: localVenue.image || null
                             };
                         }
                     }
@@ -786,14 +808,25 @@ router.get('/search', async (req, res) => {
                         shouldInclude = true;
                         console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
                     } else {
-                        // For other countries, use a similar approach - include if league country matches bounds region
-                        const isInEuropeBounds = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
-                        const isInNorthAmericaBounds = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
+                        // For other countries, be much more restrictive - only include if:
+                        // 1. The league country matches the bounds country more specifically
+                        // 2. We're not just including all European leagues
                         
-                        if (isInEuropeBounds && (countryLower === 'spain' || countryLower === 'germany' || countryLower === 'italy' || countryLower === 'france')) {
-                            // Include European matches when bounds are in Europe
+                        // Determine which country the bounds are in
+                        const isInEngland = centerLat > 49 && centerLat < 56 && centerLng > -8 && centerLng < 2;
+                        const isInSpain = centerLat > 35 && centerLat < 44 && centerLng > -10 && centerLng < 5;
+                        const isInGermany = centerLat > 47 && centerLat < 55 && centerLng > 5 && centerLng < 15;
+                        const isInItaly = centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19;
+                        const isInFrance = centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8;
+                        
+                        // Only include matches from the same country as the search bounds
+                        if ((isInEngland && leagueCountryLower === 'england') ||
+                            (isInSpain && leagueCountryLower === 'spain') ||
+                            (isInGermany && leagueCountryLower === 'germany') ||
+                            (isInItaly && leagueCountryLower === 'italy') ||
+                            (isInFrance && leagueCountryLower === 'france')) {
                             shouldInclude = true;
-                            console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
+                            console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name}) - country match`);
                         }
                     }
                 } else {
