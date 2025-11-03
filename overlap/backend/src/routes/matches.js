@@ -638,6 +638,12 @@ router.get('/search', async (req, res) => {
             }
             
             console.log(`🔍 Location-only search: Using ${majorLeagueIds.length} geographically-relevant leagues (filtered from all active leagues)`);
+            console.log(`🔍 Location-only search: League IDs being searched:`, majorLeagueIds);
+            
+            // Get league names for detailed logging
+            const leagueDocs = await League.find({ apiId: { $in: majorLeagueIds.map(id => id.toString()) } }).select('apiId name country').lean();
+            const leagueInfo = leagueDocs.map(l => `${l.name} (${l.apiId}, ${l.country})`).join(', ');
+            console.log(`🔍 Location-only search: League names being searched: ${leagueInfo}`);
             
             const requests = [];
             for (const leagueId of majorLeagueIds) {
@@ -674,6 +680,8 @@ router.get('/search', async (req, res) => {
 
             // Transform and filter by bounds
             const transformedMatches = [];
+            let matchesWithoutCoords = 0;
+            let matchesFilteredOut = 0;
             for (const match of uniqueFixtures) {
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
@@ -696,7 +704,7 @@ router.get('/search', async (req, res) => {
                                 name: v.name,
                                 city: v.city,
                                 country: v.country,
-                                coordinates: null,
+                                coordinates: venue?.coordinates || null, // Try API response coordinates first
                                 image: v.image || null
                             };
                         }
@@ -752,11 +760,52 @@ router.get('/search', async (req, res) => {
                     }
                 };
 
-                // Filter by bounds - only include matches within the location bounds
+                // Filter by bounds - include matches with coordinates that are within bounds
+                // Also include matches without coordinates if city/country suggests they're in the area
+                let shouldInclude = false;
+                
                 if (venueInfo.coordinates && isWithinBounds(venueInfo.coordinates, bounds)) {
+                    shouldInclude = true;
+                } else if (!venueInfo.coordinates) {
+                    matchesWithoutCoords++;
+                    // Fallback: If no coordinates available, check if the league country matches the bounds area
+                    // This is necessary because some lower-league venues don't have coordinates in the API
+                    const countryLower = (venueInfo.country || match.league?.country || '').toLowerCase();
+                    const leagueCountryLower = (match.league?.country || '').toLowerCase();
+                    
+                    // Calculate approximate center of bounds
+                    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
+                    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+                    
+                    // If searching English leagues and bounds are in England, include English matches without coordinates
+                    // This is a reasonable fallback - we're already filtering by relevant leagues geographically
+                    const isEngland = countryLower === 'england' || leagueCountryLower === 'england';
+                    const isInEnglandBounds = centerLat > 49 && centerLat < 56 && centerLng > -8 && centerLng < 2;
+                    
+                    if (isEngland && isInEnglandBounds) {
+                        shouldInclude = true;
+                        console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
+                    } else {
+                        // For other countries, use a similar approach - include if league country matches bounds region
+                        const isInEuropeBounds = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
+                        const isInNorthAmericaBounds = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
+                        
+                        if (isInEuropeBounds && (countryLower === 'spain' || countryLower === 'germany' || countryLower === 'italy' || countryLower === 'france')) {
+                            // Include European matches when bounds are in Europe
+                            shouldInclude = true;
+                            console.log(`📍 Including match without coordinates: ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
+                        }
+                    }
+                } else {
+                    matchesFilteredOut++;
+                }
+                
+                if (shouldInclude) {
                     transformedMatches.push(transformed);
                 }
             }
+            
+            console.log(`📊 Location-only search filtering stats: ${transformedMatches.length} included, ${matchesWithoutCoords} without coordinates, ${matchesFilteredOut} filtered out (outside bounds)`);
 
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));

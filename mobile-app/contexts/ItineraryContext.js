@@ -255,14 +255,7 @@ export const ItineraryProvider = ({ children }) => {
                           idsEqual(match.fixture?.id, normalizedMatchId);
         
         if (matchFound) {
-          console.log('✅ Match found in itinerary:', { 
-            itineraryName: itinerary.name, 
-            matchId: match.matchId, 
-            fixtureId: match.fixtureId,
-            matchIdFromMatch: match.id,
-            fixtureIdFromFixture: match.fixture?.id,
-            normalizedMatchId
-          });
+     ;
         }
         return matchFound;
       });
