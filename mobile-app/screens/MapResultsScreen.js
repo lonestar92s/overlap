@@ -483,6 +483,8 @@ const MapResultsScreen = ({ navigation, route }) => {
         bounds,
         dateFrom,
         dateTo,
+        competitions: [], // Explicitly no filters - search all matches
+        teams: [],        // Explicitly no filters - search all matches
       });
 
       // More intelligent response handling: accept responses that are recent enough
@@ -490,6 +492,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       const isSignificantlyStale = requestId < (currentRequestId - 1);
       
       if (isSignificantlyStale) {
+        console.log('⏭️ Skipping stale request:', requestId, 'current:', currentRequestId);
         return;
       }
 
@@ -497,12 +500,44 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
         
+        // Ensure response.data is an array (defensive check)
+        const newMatches = Array.isArray(response.data) ? response.data : [];
+        
+        console.log('🔍 Search results received:', {
+          matchCount: newMatches.length,
+          bounds: {
+            northeast: bounds.northeast,
+            southwest: bounds.southwest,
+            span: {
+              lat: bounds.northeast.lat - bounds.southwest.lat,
+              lng: bounds.northeast.lng - bounds.southwest.lng
+            }
+          },
+          dateFrom,
+          dateTo,
+          previousMatchCount: matches.length,
+          region: {
+            center: { lat: region.latitude, lng: region.longitude },
+            delta: { lat: region.latitudeDelta, lng: region.longitudeDelta }
+          }
+        });
+        
         // Update matches efficiently - all markers will be displayed
-        updateMatchesEfficiently(response.data);
+        updateMatchesEfficiently(newMatches);
         
         // Don't auto-zoom after search - preserve user's current view
         // The markers will appear on the map at their current zoom level
         // Native map library handles rendering off-screen markers efficiently
+        
+        // Show user feedback if no results
+        if (newMatches.length === 0) {
+          console.warn('⚠️ Search returned 0 results:', {
+            bounds,
+            dateRange: { from: dateFrom, to: dateTo },
+            region,
+            previousMatches: matches.length
+          });
+        }
       } else {
         console.error('❌ API returned error:', response.error);
         Alert.alert('Search Error', response.error || 'Failed to search matches');
@@ -754,7 +789,10 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Format date for display
   const formatDisplayDate = (dateString) => {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
+    // Parse the date string safely without timezone conversion
+    // This prevents the off-by-one-day issue when dates are interpreted as UTC
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -1255,18 +1293,31 @@ const MapResultsScreen = ({ navigation, route }) => {
   const handleSearchThisArea = async () => {
     if (!dateFrom || !dateTo) return;
     
-    // Use the current map region from state (which should be updated via onRegionChange)
-    const currentRegion = mapRegion;
+    // Get the current map region - prefer debouncedMapRegion (most recent stable region)
+    // then mapRegion (current state), then fallback to initialRegion
+    let currentRegion = debouncedMapRegion || mapRegion || initialRegion;
     
     console.log('🔍 Search this area clicked:', {
       currentRegion,
-      hasCurrentRegion: !!currentRegion,
+      source: debouncedMapRegion ? 'debounced' : mapRegion ? 'state' : 'initial',
       coordinates: currentRegion ? `${currentRegion.latitude}, ${currentRegion.longitude}` : 'none',
-      deltas: currentRegion ? `${currentRegion.latitudeDelta}, ${currentRegion.longitudeDelta}` : 'none'
+      deltas: currentRegion ? `${currentRegion.latitudeDelta}, ${currentRegion.longitudeDelta}` : 'none',
+      initialRegion: initialRegion ? {
+        lat: initialRegion.latitude,
+        lng: initialRegion.longitude,
+        delta: initialRegion.latitudeDelta
+      } : null,
+      comparison: currentRegion && initialRegion ? {
+        latDiff: Math.abs(currentRegion.latitude - initialRegion.latitude),
+        lngDiff: Math.abs(currentRegion.longitude - initialRegion.longitude),
+        deltaLatDiff: Math.abs(currentRegion.latitudeDelta - initialRegion.latitudeDelta),
+        deltaLngDiff: Math.abs(currentRegion.longitudeDelta - initialRegion.longitudeDelta)
+      } : null
     });
     
     if (!currentRegion) {
       console.error('❌ No current region available for search');
+      Alert.alert('Error', 'Unable to determine current map location. Please try again.');
       return;
     }
     
