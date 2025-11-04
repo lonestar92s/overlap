@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { View, StyleSheet, Alert, TouchableOpacity, Text, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -6,7 +6,7 @@ import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
 
-const MatchMapView = ({
+const MatchMapView = forwardRef(({
   matches = [],
   initialRegion = null,
   onRegionChange = () => {},
@@ -15,7 +15,7 @@ const MatchMapView = ({
   style = {},
   showLocationButton = true,
   onMapPress = () => {},
-}) => {
+}, ref) => {
   const mapRef = useRef();
   
   const defaultRegion = {
@@ -79,20 +79,9 @@ const MatchMapView = ({
   const handleRegionChangeComplete = (newRegion) => {
     setRegion(newRegion);
     
-    // Also update immediately for critical operations (like search this area)
-    // This ensures the region is always current
-    onRegionChange(newRegion, {
-      northeast: {
-        lat: newRegion.latitude + (newRegion.latitudeDelta / 2),
-        lng: newRegion.longitude + (newRegion.longitudeDelta / 2),
-      },
-      southwest: {
-        lat: newRegion.latitude - (newRegion.latitudeDelta / 2),
-        lng: newRegion.longitude - (newRegion.longitudeDelta / 2),
-      }
-    });
-    
-    // Keep the debounced version for performance optimization
+    // Use debounced callback to prevent excessive API calls
+    // The debounce delay (100ms) is short enough for responsive updates
+    // while preventing rapid-fire requests during pan/zoom gestures
     debouncedRegionChange(newRegion);
   };
 
@@ -159,6 +148,24 @@ const MatchMapView = ({
     
     mapRef.current.animateToRegion(adaptiveRegion, 600);
   };
+
+  // Expose methods via ref for parent components
+  useImperativeHandle(ref, () => ({
+    centerMap,
+    fitToMatches,
+    getMapRef: () => mapRef.current,
+    // Pass-through methods for direct MapView access
+    animateToRegion: (region, duration) => {
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(region, duration);
+      }
+    },
+    setRegion: (region) => {
+      if (mapRef.current) {
+        mapRef.current.setRegion(region);
+      }
+    },
+  }));
 
   // Render match markers with memoization
   const markers = useMemo(() => {
@@ -276,7 +283,9 @@ const MatchMapView = ({
       )}
     </View>
   );
-};
+});
+
+MatchMapView.displayName = 'MatchMapView';
 
 const styles = StyleSheet.create({
   container: {
@@ -308,19 +317,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
 });
-
-// Export methods for parent components to control map
-MatchMapView.centerMap = (ref, latitude, longitude, animated = true) => {
-  if (ref?.current) {
-    ref.current.centerMap(latitude, longitude, animated);
-  }
-};
-
-MatchMapView.fitToMatches = (ref) => {
-  if (ref?.current) {
-    ref.current.fitToMatches();
-  }
-};
 
 export default MatchMapView;
  

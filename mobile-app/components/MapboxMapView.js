@@ -4,9 +4,12 @@ import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MAPBOX_CONFIG } from '../utils/mapConfig';
 
-// Set your Mapbox access token here
-Mapbox.setAccessToken('pk.eyJ1IjoibG9uZXN0YXI5MnMiLCJhIjoiY202ZTB4dm5qMDBkaTJrcHFkeGZpdjlnYiJ9.UZyXT21en4sTzQSOmV5Maw');
+// Set Mapbox access token from environment variable
+if (MAPBOX_CONFIG.accessToken) {
+  Mapbox.setAccessToken(MAPBOX_CONFIG.accessToken);
+}
 
 const MapboxMapView = ({
   matches = [],
@@ -127,11 +130,12 @@ useEffect(() => {
   const fitToMatches = () => {
     if (!matches || matches.length === 0 || !mapRef.current) return;
 
+    // GeoJSON format: [longitude, latitude]
     const coordinates = matches
       .filter(match => match.fixture?.venue?.coordinates)
       .map(match => [
-        match.fixture.venue.coordinates[1], // longitude
-        match.fixture.venue.coordinates[0]  // latitude
+        match.fixture.venue.coordinates[0], // longitude (GeoJSON index 0)
+        match.fixture.venue.coordinates[1]  // latitude (GeoJSON index 1)
       ]);
 
     if (coordinates.length > 0) {
@@ -168,7 +172,8 @@ useEffect(() => {
         {matches.map((match) => {
           if (!match.fixture?.venue?.coordinates) return null;
 
-          const [latitude, longitude] = match.fixture.venue.coordinates;
+          // GeoJSON format: [longitude, latitude]
+          const [longitude, latitude] = match.fixture.venue.coordinates;
           const isSelected = String(selectedMatchId) === String(match.fixture?.id);
 
           return (

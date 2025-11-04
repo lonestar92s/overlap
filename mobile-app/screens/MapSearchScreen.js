@@ -117,9 +117,10 @@ const MapSearchScreen = ({ navigation }) => {
     // Center map on venue
     const venue = match.fixture?.venue;
     if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
+      // GeoJSON format: [longitude, latitude]
       mapRef.current.animateToRegion({
-        latitude: venue.coordinates[0],
-        longitude: venue.coordinates[1],
+        latitude: venue.coordinates[1],  // GeoJSON: lat is index 1
+        longitude: venue.coordinates[0], // GeoJSON: lon is index 0
         latitudeDelta: mapRegion?.latitudeDelta || 0.1,
         longitudeDelta: mapRegion?.longitudeDelta || 0.1,
       }, 1000);
