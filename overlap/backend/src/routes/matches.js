@@ -694,11 +694,21 @@ router.get('/search', async (req, res) => {
                 return true;
             });
 
+            console.log(`📊 After deduplication: ${uniqueFixtures.length} unique fixtures`);
+            console.log(`📊 Unique fixture IDs:`, uniqueFixtures.map(f => f.fixture?.id).slice(0, 20).join(', '));
+
             // Transform and filter by bounds
             const transformedMatches = [];
             let matchesWithoutCoords = 0;
             let matchesFilteredOut = 0;
+            let matchesByLeague = {}; // Track matches by league for logging
+            
             for (const match of uniqueFixtures) {
+                const leagueId = match.league?.id;
+                if (!matchesByLeague[leagueId]) {
+                    matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
+                }
+                matchesByLeague[leagueId].total++;
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
                 if (venue?.id) {
@@ -831,25 +841,32 @@ router.get('/search', async (req, res) => {
                             shouldInclude = true;
                         } else {
                             matchesFilteredOut++;
+                            matchesByLeague[leagueId].filteredOut++;
                             // Log why match was filtered (for debugging)
-                            console.log(`📍 Match filtered (outside bounds): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}]`);
+                            console.log(`📍 Match filtered (outside bounds): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
                         }
                     } else {
                         matchesWithoutCoords++;
-                        console.log(`⚠️ Match excluded (invalid coordinates): ${venueInfo.name}, ${venueInfo.city} - Coords: ${JSON.stringify(venueInfo.coordinates)}`);
+                        matchesByLeague[leagueId].noCoords++;
+                        console.log(`⚠️ Match excluded (invalid coordinates): ${venueInfo.name}, ${venueInfo.city} - Coords: ${JSON.stringify(venueInfo.coordinates)} (League: ${match.league.name}, ID: ${match.fixture.id})`);
                     }
                 } else {
                     matchesWithoutCoords++;
+                    matchesByLeague[leagueId].noCoords++;
                     // Strict: Exclude matches without coordinates - they can't be displayed on map
-                    console.log(`⚠️ Match excluded (no coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name})`);
+                    console.log(`⚠️ Match excluded (no coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name}, ID: ${match.fixture.id})`);
                 }
                 
                 if (shouldInclude) {
                     transformedMatches.push(transformed);
+                    matchesByLeague[leagueId].transformed++;
                 }
             }
             
             console.log(`📊 Location-only search filtering stats: ${transformedMatches.length} included, ${matchesWithoutCoords} without coordinates, ${matchesFilteredOut} filtered out (outside bounds)`);
+            console.log(`📊 Matches by league breakdown:`, JSON.stringify(matchesByLeague, null, 2));
+            console.log(`📊 Final transformed matches count: ${transformedMatches.length}`);
+            console.log(`📊 Final transformed match IDs:`, transformedMatches.map(m => m.id).slice(0, 20).join(', '));
 
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
