@@ -75,7 +75,19 @@ const TripsListScreen = ({ navigation }) => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteItinerary(itinerary.id || itinerary._id)
+          onPress: async () => {
+            try {
+              await deleteItinerary(itinerary.id || itinerary._id);
+              // Success - trip is removed from state automatically
+            } catch (error) {
+              console.error('Error deleting trip:', error);
+              Alert.alert(
+                'Delete Failed',
+                `Failed to delete "${itinerary.name}". Please try again.`,
+                [{ text: 'OK' }]
+              );
+            }
+          }
         }
       ]
     );
@@ -174,51 +186,32 @@ const TripsListScreen = ({ navigation }) => {
 
   // Get stadium image from first match in itinerary
   // Checks both API format (fixture.venue.image) and stored format (venueData.image)
-  const getStadiumImage = (matches, tripName) => {
+  const getStadiumImage = (matches) => {
     if (!matches || matches.length === 0) {
-      console.log(`🏟️ [${tripName}] No matches found`);
       return null;
     }
     
     // Get the first match
     const firstMatch = matches[0];
-    console.log(`🏟️ [${tripName}] Checking first match for stadium image:`);
-    console.log(`   - Match ID: ${firstMatch.matchId || 'N/A'}`);
     
     // Check 1: API format - match.fixture.venue.image (like PopularMatches/MatchCard)
     const fixtureVenue = firstMatch.fixture?.venue;
     if (fixtureVenue?.image) {
-      console.log(`   ✅ Found stadium image (fixture.venue.image): ${fixtureVenue.image}`);
       return fixtureVenue.image;
-    }
-    console.log(`   - fixture.venue exists: ${!!fixtureVenue}`);
-    if (fixtureVenue) {
-      console.log(`   - fixture.venue.image: ${fixtureVenue.image || 'NOT FOUND'}`);
     }
     
     // Check 2: Stored format - match.venueData.image (itinerary stored format)
-    console.log(`   - VenueData exists: ${!!firstMatch.venueData}`);
-    console.log(`   - VenueData type: ${typeof firstMatch.venueData}`);
-    
     if (firstMatch.venueData) {
-      if (typeof firstMatch.venueData === 'object') {
-        console.log(`   - VenueData keys: ${Object.keys(firstMatch.venueData).join(', ')}`);
-        console.log(`   - VenueData.image: ${firstMatch.venueData.image || 'NOT FOUND'}`);
-        
-        if (firstMatch.venueData.image) {
-          console.log(`   ✅ Found stadium image (venueData.image): ${firstMatch.venueData.image}`);
-          return firstMatch.venueData.image;
-        }
+      if (typeof firstMatch.venueData === 'object' && firstMatch.venueData.image) {
+        return firstMatch.venueData.image;
       }
     }
     
     // Check 3: Direct venue property (fallback)
     if (firstMatch.venue?.image) {
-      console.log(`   ✅ Found stadium image (venue.image): ${firstMatch.venue.image}`);
       return firstMatch.venue.image;
     }
     
-    console.log(`   ❌ No stadium image found for trip: ${tripName}`);
     return null;
   };
 
@@ -226,9 +219,7 @@ const TripsListScreen = ({ navigation }) => {
     const matchCount = item.matches?.length || 0;
     const savedCount = countSavedMatches(item.matches);
     const dateRange = formatDateRange(item.matches);
-    const stadiumImage = getStadiumImage(item.matches, item.name);
-    
-    console.log(`📋 Trip: "${item.name}" - Stadium Image: ${stadiumImage || 'NONE (using gradient)'}`);
+    const stadiumImage = getStadiumImage(item.matches);
     
     return (
       <TouchableOpacity

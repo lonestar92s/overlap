@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,13 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Image,
+  TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import LocationAutocomplete from './LocationAutocomplete';
+import { debounce } from 'lodash';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
@@ -30,7 +29,11 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   const [dateTo, setDateTo] = useState(null);
   const [selectedDates, setSelectedDates] = useState({});
   const [loading, setLoading] = useState(false);
-  const [showLocationSearch, setShowLocationSearch] = useState(false);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  
+  // Location search results
+  const [locationResults, setLocationResults] = useState([]);
+  const [locationSearchLoading, setLocationSearchLoading] = useState(false);
   
   // Collapsible states
   const [whereExpanded, setWhereExpanded] = useState(true);
@@ -40,19 +43,13 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   // Recent searches
   const [recentSearches, setRecentSearches] = useState([]);
   
-  // Suggested teams
-  const [suggestedTeams, setSuggestedTeams] = useState([]);
-  
   // Tab state
   const [activeTab, setActiveTab] = useState('Matches');
-  
-  const { user } = useAuth();
 
-  // Load recent searches and suggested teams
+  // Load recent searches
   useEffect(() => {
     if (visible) {
       loadRecentSearches();
-      loadSuggestedTeams();
     }
   }, [visible]);
 
@@ -67,8 +64,22 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     }
   };
 
-  const saveRecentSearch = async (locationData) => {
+  const saveRecentSearch = async (locationData, dateFrom, dateTo) => {
     try {
+      const formatDateRange = (dateFrom, dateTo) => {
+        if (!dateFrom && !dateTo) return 'Add Dates';
+        if (dateFrom && !dateTo) {
+          const date = new Date(dateFrom);
+          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        if (dateFrom && dateTo) {
+          const start = new Date(dateFrom);
+          const end = new Date(dateTo);
+          return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        }
+        return 'Add Dates';
+      };
+
       const newSearch = {
         id: Date.now().toString(),
         location: locationData.city || locationData.name || 'Unknown',
@@ -76,9 +87,17 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
         country: locationData.country,
         lat: locationData.lat,
         lon: locationData.lon,
+        dateFrom,
+        dateTo,
+        dateRange: formatDateRange(dateFrom, dateTo),
       };
       
-      const updated = [newSearch, ...recentSearches.filter(s => s.id !== newSearch.id)].slice(0, MAX_RECENT_SEARCHES);
+      const updated = [newSearch, ...recentSearches.filter(s => 
+        s.city !== newSearch.city || 
+        s.country !== newSearch.country || 
+        s.dateFrom !== newSearch.dateFrom || 
+        s.dateTo !== newSearch.dateTo
+      )].slice(0, MAX_RECENT_SEARCHES);
       setRecentSearches(updated);
       await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
     } catch (error) {
@@ -95,36 +114,49 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     }
   };
 
-  const loadSuggestedTeams = async () => {
-    try {
-      if (user) {
-        const prefs = await ApiService.getPreferences();
-        const teams = [];
-        
-        // Add favorite teams (limit to 3)
-        if (prefs.favoriteTeams && prefs.favoriteTeams.length > 0) {
-          const favoriteTeams = prefs.favoriteTeams.slice(0, 3).map(ft => ({
-            id: ft.teamId?.apiId || ft.teamId?._id || ft.teamId,
-            name: ft.teamId?.name || 'Team',
-            country: ft.teamId?.country || '',
-            badge: ft.teamId?.badge,
-          }));
-          teams.push(...favoriteTeams);
-        }
-        
-        setSuggestedTeams(teams);
+  // Debounced location search
+  const performLocationSearch = useCallback(
+    debounce(async (query) => {
+      if (!query || query.trim().length < 2) {
+        setLocationResults([]);
+        setLocationSearchLoading(false);
+        return;
       }
-    } catch (error) {
-      // Ignore if user is not authenticated or preferences not available
-      console.log('Could not load suggested teams:', error);
-      setSuggestedTeams([]);
+      setLocationSearchLoading(true);
+      try {
+        const response = await ApiService.searchLocations(query.trim(), 5);
+        if (response.success && response.suggestions) {
+          setLocationResults(response.suggestions);
+        } else {
+          setLocationResults([]);
+        }
+      } catch (error) {
+        console.error('Error searching locations:', error);
+        setLocationResults([]);
+      } finally {
+        setLocationSearchLoading(false);
+      }
+    }, 350),
+    []
+  );
+
+  useEffect(() => {
+    if (isSearchingLocation && locationSearchQuery.trim().length >= 2) {
+      setLocationSearchLoading(true);
+      performLocationSearch(locationSearchQuery);
+    } else {
+      setLocationResults([]);
+      setLocationSearchLoading(false);
     }
-  };
+  }, [locationSearchQuery, isSearchingLocation, performLocationSearch]);
 
   const handleLocationSelect = (selectedLocation) => {
     setLocation(selectedLocation);
-    setLocationSearchQuery(selectedLocation.city || selectedLocation.name || '');
-    saveRecentSearch(selectedLocation);
+    const displayText = `${selectedLocation.city}${selectedLocation.region ? `, ${selectedLocation.region}` : ''}, ${selectedLocation.country}`;
+    setLocationSearchQuery(displayText);
+    setIsSearchingLocation(false);
+    setLocationResults([]);
+    // Don't save to recent searches here - only save after successful search with dates
   };
 
   const handleRecentSearchSelect = (search) => {
@@ -137,6 +169,35 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     };
     setLocation(locationData);
     setLocationSearchQuery(search.location);
+    
+    // Restore dates if they exist
+    if (search.dateFrom) {
+      setDateFrom(search.dateFrom);
+    }
+    if (search.dateTo) {
+      setDateTo(search.dateTo);
+      
+      // Restore selected dates for calendar display
+      if (search.dateFrom && search.dateTo) {
+        const range = {};
+        const start = new Date(search.dateFrom);
+        const end = new Date(search.dateTo);
+        const current = new Date(start);
+        
+        while (current <= end) {
+          const dateStr = current.toISOString().split('T')[0];
+          if (dateStr === search.dateFrom) {
+            range[dateStr] = { selected: true, startingDay: true, color: colors.primary, textColor: colors.onPrimary };
+          } else if (dateStr === search.dateTo) {
+            range[dateStr] = { selected: true, endingDay: true, color: colors.primary, textColor: colors.onPrimary };
+          } else {
+            range[dateStr] = { selected: true, color: colors.primary + '40', textColor: colors.text.primary };
+          }
+          current.setDate(current.getDate() + 1);
+        }
+        setSelectedDates(range);
+      }
+    }
   };
 
   const formatDateRange = () => {
@@ -241,6 +302,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       });
 
       if (response.success) {
+        // Save to recent searches after successful search
+        await saveRecentSearch(location, dateFrom, dateTo);
+        
         onClose(); // Close modal before navigating
         navigation.navigate('MapResults', {
           searchParams: {
@@ -328,35 +392,74 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
             {whereExpanded && (
               <View style={styles.cardContent}>
                 {/* Location Search Input */}
-                <TouchableOpacity
-                  style={styles.searchInputContainer}
-                  onPress={() => {
-                    setShowLocationSearch(true);
-                  }}
-                  activeOpacity={0.7}
-                >
+                <View style={styles.searchInputContainer}>
                   <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
-                  <Text style={styles.searchPlaceholder}>
-                    {locationSearchQuery || 'Search by location'}
-                  </Text>
-                </TouchableOpacity>
-                
-                {/* Location Autocomplete - shown when searching */}
-                {showLocationSearch && (
-                  <View style={styles.locationAutocompleteContainer}>
-                    <LocationAutocomplete
-                      value=""
-                      onSelect={(selectedLocation) => {
-                        handleLocationSelect(selectedLocation);
-                        setShowLocationSearch(false);
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search by location"
+                    placeholderTextColor="rgba(0, 0, 0, 0.5)"
+                    value={locationSearchQuery}
+                    onChangeText={(text) => {
+                      setLocationSearchQuery(text);
+                      setIsSearchingLocation(text.trim().length > 0);
+                    }}
+                    onFocus={() => setIsSearchingLocation(true)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {locationSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setLocationSearchQuery('');
+                        setIsSearchingLocation(false);
+                        setLocationResults([]);
+                        setLocation(null);
                       }}
-                      placeholder="Search by location"
-                    />
+                      style={styles.clearSearchButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialIcons name="close" size={20} color="rgba(0, 0, 0, 0.5)" />
+                    </TouchableOpacity>
+                  )}
+                  {locationSearchLoading && locationSearchQuery.length === 0 && (
+                    <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" style={styles.searchLoadingIndicator} />
+                  )}
+                </View>
+                
+                {/* Location Search Results */}
+                {isSearchingLocation && locationSearchQuery.trim().length >= 2 && (
+                  <View style={styles.locationResultsContainer}>
+                    {locationSearchLoading && locationResults.length === 0 && (
+                      <View style={styles.locationLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      </View>
+                    )}
+                    {!locationSearchLoading && locationResults.length === 0 && locationSearchQuery.trim().length >= 2 && (
+                      <View style={styles.locationEmptyContainer}>
+                        <Text style={styles.locationEmptyText}>No locations found</Text>
+                      </View>
+                    )}
+                    {locationResults.map((result) => (
+                      <TouchableOpacity
+                        key={result.place_id}
+                        style={styles.locationResultItem}
+                        onPress={() => handleLocationSelect(result)}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="location-on" size={40} color={colors.text.primary} />
+                        <View style={styles.locationResultText}>
+                          <Text style={styles.locationResultTitle}>{result.city}</Text>
+                          <Text style={styles.locationResultSubtitle}>
+                            {`${result.region ? `${result.region}, ` : ''}${result.country}`}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
 
-                {/* Recent Searches */}
-                {recentSearches.length > 0 && (
+                {/* Recent Searches - Only show when not searching */}
+                {!isSearchingLocation && recentSearches.length > 0 && (
                   <View style={styles.recentSection}>
                     <Text style={styles.sectionLabel}>Recent searches</Text>
                     {recentSearches.map((search) => (
@@ -368,35 +471,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                         <MaterialIcons name="location-on" size={40} color={colors.text.primary} />
                         <View style={styles.recentItemText}>
                           <Text style={styles.recentItemTitle}>{search.location}</Text>
-                          <Text style={styles.recentItemSubtitle}>Matches happening near you</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {/* Suggested Teams */}
-                {suggestedTeams.length > 0 && (
-                  <View style={styles.suggestedSection}>
-                    <Text style={styles.sectionLabel}>Suggested Teams</Text>
-                    {suggestedTeams.map((team) => (
-                      <TouchableOpacity
-                        key={team.id}
-                        style={styles.suggestedItem}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.teamIcon}>
-                          {team.badge ? (
-                            <Image source={{ uri: team.badge }} style={styles.teamBadge} />
-                          ) : (
-                            <View style={styles.teamIconCircle}>
-                              <Text style={styles.teamIconText}>{team.name?.[0] || 'T'}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.suggestedItemText}>
-                          <Text style={styles.suggestedItemTitle}>{team.name}</Text>
-                          <Text style={styles.suggestedItemSubtitle}>{team.country || 'Spain'}</Text>
+                          <Text style={styles.recentItemSubtitle}>{search.dateRange || 'Add Dates'}</Text>
                         </View>
                       </TouchableOpacity>
                     ))}
@@ -493,7 +568,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
             {loading ? (
               <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" />
             ) : (
-              <Text style={styles.enterButtonText}>Enter</Text>
+              <Text style={styles.enterButtonText}>Search</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -607,14 +682,58 @@ const styles = StyleSheet.create({
     height: 49,
     gap: spacing.sm,
   },
-  searchPlaceholder: {
+  searchInput: {
     flex: 1,
     ...typography.body,
-    color: 'rgba(0, 0, 0, 0.5)',
+    color: colors.text.primary,
+    padding: 0,
+    margin: 0,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
-  locationAutocompleteContainer: {
+  clearSearchButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.xs,
+  },
+  searchLoadingIndicator: {
+    marginLeft: spacing.xs,
+  },
+  locationResultsContainer: {
     marginTop: spacing.sm,
-    zIndex: 1000,
+    maxHeight: 200,
+  },
+  locationLoadingContainer: {
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  locationEmptyContainer: {
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  locationEmptyText: {
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  locationResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.card,
+    gap: spacing.xl + spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  locationResultText: {
+    flex: 1,
+    gap: 7,
+  },
+  locationResultTitle: {
+    ...typography.caption,
+    color: colors.text.primary,
+  },
+  locationResultSubtitle: {
+    ...typography.caption,
+    color: 'rgba(0, 0, 0, 0.5)',
   },
   recentSection: {
     gap: spacing.sm + spacing.xs + 3,
@@ -640,53 +759,6 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
   recentItemSubtitle: {
-    ...typography.caption,
-    color: 'rgba(0, 0, 0, 0.5)',
-  },
-  suggestedSection: {
-    gap: spacing.sm + spacing.xs + 3,
-  },
-  suggestedItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.card,
-    gap: spacing.xl + spacing.sm, // 36px gap from Figma
-  },
-  teamIcon: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  teamIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.cardGrey,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  teamIconText: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  teamBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  suggestedItemText: {
-    flex: 1,
-    gap: 7, // 7px gap from Figma
-  },
-  suggestedItemTitle: {
-    ...typography.caption,
-    color: colors.text.primary,
-  },
-  suggestedItemSubtitle: {
     ...typography.caption,
     color: 'rgba(0, 0, 0, 0.5)',
   },

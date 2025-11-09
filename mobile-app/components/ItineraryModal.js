@@ -114,15 +114,6 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       };
     }
     
-    // Log venue image for debugging
-    if (__DEV__) {
-      console.log('🏟️ ItineraryModal - Venue image check:', {
-        hasImage: !!venueData.image,
-        imageUrl: venueData.image,
-        venueName: venueData.name
-      });
-    }
-    
 
     
     // Return the format expected by the backend API

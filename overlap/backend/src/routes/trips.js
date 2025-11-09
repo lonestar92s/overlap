@@ -208,7 +208,9 @@ router.delete('/:id', auth, async (req, res) => {
             });
         }
 
-        trip.deleteOne();
+        // Use pull() to properly remove subdocument from array
+        // This is the correct way to remove subdocuments in Mongoose
+        user.trips.pull(req.params.id);
         await user.save();
 
         res.json({

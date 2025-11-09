@@ -204,33 +204,33 @@ export const ItineraryProvider = ({ children }) => {
     try {
       console.log('🗑️ Attempting to delete itinerary:', itineraryId);
       
-      // Try to use the backend API first
-      try {
-        const response = await ApiService.deleteTrip(itineraryId);
-        console.log('🗑️ Backend delete response:', response);
-        
-        if (response.success) {
-          // Remove from local state
-          setItineraries(prev => prev.filter(itinerary => 
-            !idsEqual(itinerary.id || itinerary._id, itineraryId)
-          ));
-          console.log('✅ Itinerary deleted successfully via API');
-          return;
-        } else {
-          throw new Error('Failed to delete trip via API');
-        }
-      } catch (apiError) {
-        console.log('🔄 Backend API failed, using local state update:', apiError.message);
+      // Find the itinerary to get the correct ID format
+      const itinerary = itineraries.find(it => 
+        idsEqual(it.id || it._id, itineraryId)
+      );
+      
+      // Prefer _id for backend calls (MongoDB format), fallback to id
+      const tripIdForApi = itinerary?._id || itinerary?.id || itineraryId;
+      console.log('🗑️ Using trip ID for API:', tripIdForApi, 'from itinerary:', itinerary?.name);
+      
+      // Use the backend API - don't allow local-only deletion
+      const response = await ApiService.deleteTrip(tripIdForApi);
+      console.log('🗑️ Backend delete response:', response);
+      
+      if (response.success) {
+        // Only remove from local state if API deletion succeeded
+        setItineraries(prev => prev.filter(it => 
+          !idsEqual(it.id || it._id, itineraryId)
+        ));
+        console.log('✅ Itinerary deleted successfully via API');
+        return;
+      } else {
+        throw new Error('Failed to delete trip via API');
       }
-      
-      // Fallback to local state update if API fails
-      setItineraries(prev => prev.filter(itinerary => 
-        !idsEqual(itinerary.id || itinerary._id, itineraryId)
-      ));
-      console.log('✅ Itinerary deleted from local state (backend API unavailable)');
-      
     } catch (error) {
       console.error('Error deleting itinerary:', error);
+      // Re-throw the error so the UI can show an error message
+      // Don't remove from local state if deletion failed
       throw error;
     }
   };
