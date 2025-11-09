@@ -15,6 +15,7 @@ import {
   Dimensions,
   Image,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
@@ -315,6 +316,7 @@ const TripsListScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="dark" />
       {/* Header - Centered "Trips" Title */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trips</Text>
@@ -449,7 +451,7 @@ const TripsListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card, // White background to match header
   },
   header: {
     paddingTop: spacing.lg + spacing.xs, // ~86.5px from top (accounting for status bar)

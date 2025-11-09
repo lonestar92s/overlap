@@ -42,9 +42,6 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   
   // Recent searches
   const [recentSearches, setRecentSearches] = useState([]);
-  
-  // Tab state
-  const [activeTab, setActiveTab] = useState('Matches');
 
   // Load recent searches
   useEffect(() => {
@@ -69,12 +66,17 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       const formatDateRange = (dateFrom, dateTo) => {
         if (!dateFrom && !dateTo) return 'Add Dates';
         if (dateFrom && !dateTo) {
-          const date = new Date(dateFrom);
+          // Parse date string as local date (YYYY-MM-DD format)
+          const [year, month, day] = dateFrom.split('-').map(Number);
+          const date = new Date(year, month - 1, day);
           return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
         if (dateFrom && dateTo) {
-          const start = new Date(dateFrom);
-          const end = new Date(dateTo);
+          // Parse date strings as local dates (YYYY-MM-DD format)
+          const [startYear, startMonth, startDay] = dateFrom.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateTo.split('-').map(Number);
+          const start = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
           return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
         }
         return 'Add Dates';
@@ -203,12 +205,17 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   const formatDateRange = () => {
     if (!dateFrom && !dateTo) return 'Add Dates';
     if (dateFrom && !dateTo) {
-      const date = new Date(dateFrom);
+      // Parse date string as local date (YYYY-MM-DD format)
+      const [year, month, day] = dateFrom.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
     if (dateFrom && dateTo) {
-      const start = new Date(dateFrom);
-      const end = new Date(dateTo);
+      // Parse date strings as local dates (YYYY-MM-DD format)
+      const [startYear, startMonth, startDay] = dateFrom.split('-').map(Number);
+      const [endYear, endMonth, endDay] = dateTo.split('-').map(Number);
+      const start = new Date(startYear, startMonth - 1, startDay);
+      const end = new Date(endYear, endMonth - 1, endDay);
       return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     }
     return 'Add Dates';
@@ -340,27 +347,8 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Header with tabs and close button */}
+        {/* Header with close button */}
         <View style={styles.header}>
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'Matches' && styles.tabActive]}
-              onPress={() => setActiveTab('Matches')}
-            >
-              <Text style={[styles.tabText, activeTab === 'Matches' && styles.tabTextActive]}>
-                Matches
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'League' && styles.tabActive]}
-              onPress={() => setActiveTab('League')}
-            >
-              <Text style={[styles.tabText, activeTab === 'League' && styles.tabTextActive]}>
-                League
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}
@@ -584,39 +572,11 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    gap: spacing.sm + spacing.xs,
-    position: 'absolute',
-    left: '50%',
-    transform: [{ translateX: -96 }], // Center the tabs (96px total width)
-  },
-  tab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    backgroundColor: '#DAF2E6', // Light green from Figma
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.25)',
-    width: 96,
-    alignItems: 'center',
-  },
-  tabActive: {
-    backgroundColor: '#05A85A', // Green from Figma
-    borderColor: '#05A85A',
-  },
-  tabText: {
-    ...typography.caption,
-    color: colors.text.primary,
-  },
-  tabTextActive: {
-    color: '#EBEDF0', // Light text on green background
   },
   closeButton: {
     padding: spacing.xs,
@@ -624,7 +584,6 @@ const styles = StyleSheet.create({
     height: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 'auto',
   },
   scrollView: {
     flex: 1,

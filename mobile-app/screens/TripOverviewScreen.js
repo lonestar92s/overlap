@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   ScrollView,
   TextInput,
-  Image
+  Image,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -51,6 +53,10 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [notesText, setNotesText] = useState('');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const scrollViewRef = useRef(null);
+  const notesInputRef = useRef(null);
+  const notesSectionRef = useRef(null);
+  const [notesSectionY, setNotesSectionY] = useState(0);
 
   useEffect(() => {
     if (itineraryId) {
@@ -545,11 +551,18 @@ const TripOverviewScreen = ({ navigation, route }) => {
       </View>
 
       {/* Scrollable Content */}
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Trip Info Card */}
         <View style={styles.tripInfoCard}>
           <View style={styles.tripInfoHeader}>
@@ -648,10 +661,34 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </View>
 
         {/* Notes Section - Collapsible */}
-        <View style={styles.sectionCard}>
+        <View 
+          ref={notesSectionRef} 
+          style={styles.sectionCard}
+          onLayout={(event) => {
+            const { y } = event.nativeEvent.layout;
+            setNotesSectionY(y);
+          }}
+        >
           <TouchableOpacity
             style={styles.sectionHeader}
-            onPress={() => setNotesExpanded(!notesExpanded)}
+            onPress={() => {
+              const newExpanded = !notesExpanded;
+              setNotesExpanded(newExpanded);
+              // Scroll to notes section when expanding
+              if (newExpanded && notesSectionY > 0) {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({
+                    y: notesSectionY - 50, // Small offset to show some space above
+                    animated: true,
+                  });
+                }, 100);
+              } else if (newExpanded) {
+                // Fallback: scroll to end if position not yet measured
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+              }
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.sectionTitle}>Notes</Text>
@@ -667,6 +704,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
               {isEditingNotes ? (
                 <View>
                   <TextInput
+                    ref={notesInputRef}
                     style={styles.notesInput}
                     multiline
                     value={notesText}
@@ -674,6 +712,21 @@ const TripOverviewScreen = ({ navigation, route }) => {
                     placeholder="Add notes about your trip..."
                     placeholderTextColor={colors.text.light}
                     autoFocus
+                    onFocus={() => {
+                      // Scroll to input after a short delay to ensure it's rendered
+                      // Use the notes section position + estimated input offset
+                      setTimeout(() => {
+                        if (notesSectionY > 0) {
+                          scrollViewRef.current?.scrollTo({
+                            y: notesSectionY + 100, // Approximate position of input within section
+                            animated: true,
+                          });
+                        } else {
+                          // Fallback: scroll to end if position not yet measured
+                          scrollViewRef.current?.scrollToEnd({ animated: true });
+                        }
+                      }, 100);
+                    }}
                   />
                   <View style={styles.notesActions}>
                     <TouchableOpacity
@@ -714,7 +767,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
           )}
         </View>
       </ScrollView>
-
+      </KeyboardAvoidingView>
 
       {/* Map Button - Floating at bottom */}
       <TouchableOpacity
@@ -1157,6 +1210,9 @@ const styles = StyleSheet.create({
     height: 25,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
