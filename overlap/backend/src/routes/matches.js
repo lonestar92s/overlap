@@ -935,6 +935,21 @@ router.get('/search', async (req, res) => {
             const transformedMatches = [];
             for (const match of uniqueFixtures) {
                 const venue = match.fixture?.venue;
+                
+                // DEBUG: Log fixture venue structure to see what's included
+                if (transformedMatches.length === 0) { // Only log first match to avoid spam
+                    console.log('🔍 DEBUG - Fixture venue structure:', JSON.stringify({
+                        hasVenue: !!venue,
+                        venueId: venue?.id,
+                        venueName: venue?.name,
+                        venueCity: venue?.city,
+                        venueCountry: venue?.country,
+                        venueImage: venue?.image,
+                        venueKeys: venue ? Object.keys(venue) : [],
+                        fullVenue: venue
+                    }, null, 2));
+                }
+                
                 let venueInfo = null;
                 if (venue?.id) {
                     const localVenue = await venueService.getVenueByApiId(venue.id);
