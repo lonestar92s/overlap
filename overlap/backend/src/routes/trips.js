@@ -99,7 +99,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create a new trip (works without authentication)
 router.post('/', authenticateToken, async (req, res) => {
     try {
-        const { name, description, matches } = req.body;
+        const { name, description, notes, matches } = req.body;
         
         if (!name || !name.trim()) {
             return res.status(400).json({
@@ -115,6 +115,7 @@ router.post('/', authenticateToken, async (req, res) => {
                 _id: `temp_${Date.now()}`,
                 name: name.trim(),
                 description: description || '',
+                notes: notes || '',
                 matches: matches || [],
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -134,6 +135,7 @@ router.post('/', authenticateToken, async (req, res) => {
         const newTrip = {
             name: name.trim(),
             description: description || '',
+            notes: notes || '',
             matches: matches || [],
             createdAt: new Date(),
             updatedAt: new Date()
@@ -162,7 +164,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update a trip
 router.put('/:id', auth, async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, notes } = req.body;
         
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
@@ -177,6 +179,7 @@ router.put('/:id', auth, async (req, res) => {
         // Update allowed fields
         if (name !== undefined) trip.name = name.trim();
         if (description !== undefined) trip.description = description;
+        if (notes !== undefined) trip.notes = notes;
         trip.updatedAt = new Date();
 
         await user.save();

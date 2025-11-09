@@ -248,6 +248,10 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: ''
         },
+        notes: {
+            type: String,
+            default: ''
+        },
         matches: [{
             matchId: String,
             homeTeam: {

@@ -50,11 +50,15 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [descriptionText, setDescriptionText] = useState('');
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const scrollViewRef = useRef(null);
   const notesInputRef = useRef(null);
+  const descriptionInputRef = useRef(null);
   const notesSectionRef = useRef(null);
   const [notesSectionY, setNotesSectionY] = useState(0);
 
@@ -63,7 +67,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
       const foundItinerary = getItineraryById(itineraryId);
       if (foundItinerary) {
         setItinerary(foundItinerary);
-        setNotesText(foundItinerary.description || '');
+        // Separate description (for trip info card) and notes (for notes dropdown)
+        setDescriptionText(foundItinerary.description || '');
+        setNotesText(foundItinerary.notes || '');
         // Fetch recommendations if trip has matches
         if (foundItinerary.matches && foundItinerary.matches.length > 0) {
           fetchRecommendations(foundItinerary.id || foundItinerary._id);
@@ -75,19 +81,43 @@ const TripOverviewScreen = ({ navigation, route }) => {
     }
   }, [itineraryId, getItineraryById]);
 
-  // Save notes/description to trip
+  // Save description (trip info card text)
+  const handleSaveDescription = async () => {
+    if (!itinerary) return;
+    
+    setIsSavingDescription(true);
+    try {
+      const tripId = itinerary.id || itinerary._id;
+      await apiService.updateTrip(tripId, { description: descriptionText });
+      
+      // Update local state
+      setItinerary(prev => ({
+        ...prev,
+        description: descriptionText
+      }));
+      
+      setIsEditingDescription(false);
+    } catch (error) {
+      console.error('Error saving description:', error);
+      Alert.alert('Error', 'Failed to save description. Please try again.');
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
+
+  // Save notes (notes dropdown)
   const handleSaveNotes = async () => {
     if (!itinerary) return;
     
     setIsSavingNotes(true);
     try {
       const tripId = itinerary.id || itinerary._id;
-      await apiService.updateTrip(tripId, { description: notesText });
+      await apiService.updateTrip(tripId, { notes: notesText });
       
       // Update local state
       setItinerary(prev => ({
         ...prev,
-        description: notesText
+        notes: notesText
       }));
       
       setIsEditingNotes(false);
@@ -588,11 +618,53 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
           
-          {/* Description/Notes preview */}
-          {itinerary.description && (
-            <Text style={styles.tripDescription} numberOfLines={3}>
-              {itinerary.description}
-            </Text>
+          {/* Description - Editable inline */}
+          {isEditingDescription ? (
+            <View>
+              <TextInput
+                ref={descriptionInputRef}
+                style={styles.descriptionInput}
+                multiline
+                value={descriptionText}
+                onChangeText={setDescriptionText}
+                placeholder="Describe your trip..."
+                placeholderTextColor={colors.text.light}
+                autoFocus
+              />
+              <View style={styles.descriptionActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setDescriptionText(itinerary.description || '');
+                    setIsEditingDescription(false);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSaveDescription}
+                  disabled={isSavingDescription}
+                >
+                  {isSavingDescription ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setIsEditingDescription(true)}
+              activeOpacity={0.7}
+            >
+              {descriptionText ? (
+                <Text style={styles.tripDescription}>{descriptionText}</Text>
+              ) : (
+                <Text style={styles.descriptionPlaceholder}>Tap to add a description...</Text>
+              )}
+            </TouchableOpacity>
           )}
         </View>
 
@@ -732,7 +804,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
                     <TouchableOpacity
                       style={styles.cancelButton}
                       onPress={() => {
-                        setNotesText(itinerary.description || '');
+                        setNotesText(itinerary.notes || '');
                         setIsEditingNotes(false);
                       }}
                     >
@@ -1296,6 +1368,29 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.text.primary,
     marginTop: spacing.sm,
+  },
+  descriptionInput: {
+    ...typography.caption,
+    color: colors.text.primary,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  descriptionPlaceholder: {
+    ...typography.caption,
+    color: colors.text.light,
+    marginTop: spacing.sm,
+    fontStyle: 'italic',
+  },
+  descriptionActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
   sectionCard: {
     backgroundColor: colors.card,

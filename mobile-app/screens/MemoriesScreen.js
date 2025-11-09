@@ -19,7 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_ITEM_SIZE = SCREEN_WIDTH / 3;
@@ -130,31 +130,13 @@ const MemoriesScreen = () => {
     navigation.navigate('MemoriesMap');
   }, [navigation]);
 
-  // Get user initials for avatar
-  const getUserInitials = useCallback(() => {
-    if (!user) return 'U';
-    
-    // Prefer profile firstName and lastName
-    if (user.profile?.firstName && user.profile?.lastName) {
-      return `${user.profile.firstName.charAt(0)}${user.profile.lastName.charAt(0)}`.toUpperCase();
-    }
-    
-    // If only firstName, use first two letters
-    if (user.profile?.firstName) {
-      const name = user.profile.firstName;
-      return name.length >= 2 ? name.substring(0, 2).toUpperCase() : name.charAt(0).toUpperCase();
-    }
-    
-    // Fallback to username (first two characters)
-    if (user.username) {
-      const username = user.username;
-      return username.length >= 2 ? username.substring(0, 2).toUpperCase() : username.charAt(0).toUpperCase();
-    }
-    
-    // Last resort: email
-    const emailPrefix = user.email?.split('@')[0] || '';
-    return emailPrefix.length >= 2 ? emailPrefix.substring(0, 2).toUpperCase() : emailPrefix.charAt(0)?.toUpperCase() || 'U';
-  }, [user]);
+  // Handle edit avatar
+  const handleEditAvatar = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // TODO: Implement avatar editing functionality
+    Alert.alert('Edit Profile Picture', 'Avatar editing coming soon!');
+  }, []);
+
 
   // Get display name
   const getDisplayName = useCallback(() => {
@@ -249,17 +231,24 @@ const MemoriesScreen = () => {
 
   // Render profile header
   const renderProfileHeader = useCallback(() => {
-    const initials = getUserInitials();
     const displayName = getDisplayName();
     const subtitle = getUserSubtitle();
 
     return (
       <View style={styles.profileHeader}>
-        <View style={styles.avatarContainer}>
+        <TouchableOpacity 
+          style={styles.avatarContainer}
+          onPress={handleEditAvatar}
+          accessibilityLabel="Edit profile picture"
+          accessibilityRole="button"
+        >
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <MaterialIcons name="account-circle" size={100} color={colors.text.light} />
           </View>
-        </View>
+          <View style={styles.editIconContainer}>
+            <MaterialIcons name="edit" size={iconSizes.sm} color={colors.text.primary} />
+          </View>
+        </TouchableOpacity>
         <View style={styles.userInfo}>
           <Text style={styles.userName}>{displayName}</Text>
           <View style={{ height: spacing.xs }} />
@@ -267,7 +256,7 @@ const MemoriesScreen = () => {
         </View>
       </View>
     );
-  }, [getUserInitials, getDisplayName, getUserSubtitle]);
+  }, [getDisplayName, getUserSubtitle, handleEditAvatar]);
 
   // Render stats section
   const renderStats = useCallback(() => {
@@ -457,20 +446,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   avatarContainer: {
+    position: 'relative',
     marginBottom: spacing.sm,
   },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: borderRadius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.cardGrey,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  avatarText: {
-    ...typography.h1,
-    fontSize: 48,
-    color: colors.onPrimary,
+  editIconContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   userInfo: {
     alignItems: 'center',
