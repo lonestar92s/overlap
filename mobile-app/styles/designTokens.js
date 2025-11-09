@@ -32,6 +32,11 @@ export const colors = {
   warning: '#FF9800',
   error: '#F44336',
   
+  // Design-specific colors from Figma
+  inviteBlue: '#B0D0E4', // Light blue for invite text
+  primaryGreen: '#008648', // Green for "Start a new lap" button
+  darkerBlue: '#00243B', // Darker blue from detail view
+  
   // Border colors
   border: '#E0E0E0',
   borderLight: '#F0F0F0',
@@ -78,10 +83,11 @@ export const typography = {
   button: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
   // Additional variants
   h1Large: { fontSize: 28, fontWeight: '700', lineHeight: 36 },
+  h1XLarge: { fontSize: 32, fontWeight: '700', lineHeight: 40 }, // For "Trips" title
   overline: { fontSize: 10, fontWeight: '600', lineHeight: 14, textTransform: 'uppercase' },
 };
 
-export const borderRadius = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, pill: 20 };
+export const borderRadius = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, pill: 20, card: 14 }; // card: 14px for trip cards
 
 export const shadows = {
   small: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },

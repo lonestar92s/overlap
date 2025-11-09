@@ -979,15 +979,28 @@ router.get('/search', async (req, res) => {
                             name: team.venue.name || venue?.name || 'Unknown Venue',
                             city: team.city || venue?.city || 'Unknown City',
                             country: team.country || match.league?.country || 'Unknown Country',
-                            coordinates: team.venue.coordinates
+                            coordinates: team.venue.coordinates,
+                            image: team.venue?.image || venue?.image || null  // Include venue image
                         };
                     } else {
+                        // Try to get venue image from API-Football if we have venue ID
+                        let venueImage = null;
+                        if (venue?.id) {
+                            try {
+                                const v = await getVenueFromApiFootball(venue.id);
+                                venueImage = v?.image || null;
+                            } catch (error) {
+                                // Silently fail - image is optional
+                            }
+                        }
+                        
                         venueInfo = {
                             id: venue?.id || null,
                             name: venue?.name || 'Unknown Venue',
                             city: venue?.city || 'Unknown City',
                             country: match.league?.country || 'Unknown Country',
-                            coordinates: venue?.coordinates || null  // Use API coordinates if available
+                            coordinates: venue?.coordinates || null,  // Use API coordinates if available
+                            image: venueImage || venue?.image || null  // Include venue image
                         };
                     }
                 }

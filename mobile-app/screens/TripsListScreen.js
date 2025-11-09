@@ -12,10 +12,32 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  Dimensions,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+
+// Use solid color background instead of gradient
+// Gradient requires native rebuild - using solid color for immediate functionality
+// To enable gradient later: rebuild native app with `npx expo prebuild --clean && npx expo run:ios`
+const GradientCard = ({ colors, style, children, start, end, ...props }) => {
+  // Use a nice blue color that matches the gradient design intent
+  // Using the first gradient color as solid background
+  const backgroundColor = colors && colors[0] ? colors[0] : '#4A90E2';
+  return (
+    <View style={[{ backgroundColor }, style]} {...props}>
+      {children}
+    </View>
+  );
+};
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Card width from Figma: 392px, but we need padding from edges
+// Using 24px padding on each side (as per Figma design spacing)
+const CARD_WIDTH = Math.min(392, SCREEN_WIDTH - 48); // 24px padding on each side
+const CARD_PADDING = 24; // Fixed 24px padding as per Figma
 
 const TripsListScreen = ({ navigation }) => {
   const { itineraries, deleteItinerary, updateItinerary, loading, refreshItineraries } = useItineraries();
@@ -115,53 +137,164 @@ const TripsListScreen = ({ navigation }) => {
     setSelectedTrip(null);
   };
 
-  const renderItineraryItem = ({ item }) => (
-    <View style={styles.itineraryCard}>
+  // Format date range for trip
+  const formatDateRange = (matches) => {
+    if (!matches || matches.length === 0) return null;
+    
+    const dates = matches
+      .map(m => new Date(m.date))
+      .filter(d => !isNaN(d.getTime()))
+      .sort((a, b) => a - b);
+    
+    if (dates.length === 0) return null;
+    
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+    
+    const formatDate = (date) => {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+    };
+    
+    return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  };
+
+  // Count saved matches (matches with planning status)
+  const countSavedMatches = (matches) => {
+    if (!matches) return 0;
+    return matches.filter(m => 
+      m.planning && (
+        m.planning.ticketsAcquired === 'yes' || 
+        m.planning.flight === 'yes' || 
+        m.planning.accommodation === 'yes'
+      )
+    ).length;
+  };
+
+  // Get stadium image from first match in itinerary
+  // Checks both API format (fixture.venue.image) and stored format (venueData.image)
+  const getStadiumImage = (matches, tripName) => {
+    if (!matches || matches.length === 0) {
+      console.log(`🏟️ [${tripName}] No matches found`);
+      return null;
+    }
+    
+    // Get the first match
+    const firstMatch = matches[0];
+    console.log(`🏟️ [${tripName}] Checking first match for stadium image:`);
+    console.log(`   - Match ID: ${firstMatch.matchId || 'N/A'}`);
+    
+    // Check 1: API format - match.fixture.venue.image (like PopularMatches/MatchCard)
+    const fixtureVenue = firstMatch.fixture?.venue;
+    if (fixtureVenue?.image) {
+      console.log(`   ✅ Found stadium image (fixture.venue.image): ${fixtureVenue.image}`);
+      return fixtureVenue.image;
+    }
+    console.log(`   - fixture.venue exists: ${!!fixtureVenue}`);
+    if (fixtureVenue) {
+      console.log(`   - fixture.venue.image: ${fixtureVenue.image || 'NOT FOUND'}`);
+    }
+    
+    // Check 2: Stored format - match.venueData.image (itinerary stored format)
+    console.log(`   - VenueData exists: ${!!firstMatch.venueData}`);
+    console.log(`   - VenueData type: ${typeof firstMatch.venueData}`);
+    
+    if (firstMatch.venueData) {
+      if (typeof firstMatch.venueData === 'object') {
+        console.log(`   - VenueData keys: ${Object.keys(firstMatch.venueData).join(', ')}`);
+        console.log(`   - VenueData.image: ${firstMatch.venueData.image || 'NOT FOUND'}`);
+        
+        if (firstMatch.venueData.image) {
+          console.log(`   ✅ Found stadium image (venueData.image): ${firstMatch.venueData.image}`);
+          return firstMatch.venueData.image;
+        }
+      }
+    }
+    
+    // Check 3: Direct venue property (fallback)
+    if (firstMatch.venue?.image) {
+      console.log(`   ✅ Found stadium image (venue.image): ${firstMatch.venue.image}`);
+      return firstMatch.venue.image;
+    }
+    
+    console.log(`   ❌ No stadium image found for trip: ${tripName}`);
+    return null;
+  };
+
+  const renderItineraryItem = ({ item }) => {
+    const matchCount = item.matches?.length || 0;
+    const savedCount = countSavedMatches(item.matches);
+    const dateRange = formatDateRange(item.matches);
+    const stadiumImage = getStadiumImage(item.matches, item.name);
+    
+    console.log(`📋 Trip: "${item.name}" - Stadium Image: ${stadiumImage || 'NONE (using gradient)'}`);
+    
+    return (
       <TouchableOpacity
-        style={styles.itineraryContent}
+        style={styles.tripCard}
         onPress={() => handleItineraryPress(item)}
-        activeOpacity={0.7}
+        activeOpacity={0.9}
       >
-        <View style={styles.itineraryHeader}>
-          <View style={styles.itineraryInfo}>
-            <Text style={styles.itineraryName}>{item.name}</Text>
+        {/* Stadium Image or Gradient Background */}
+        {stadiumImage ? (
+          <View style={styles.cardGradient}>
+            <Image
+              source={{ uri: stadiumImage }}
+              style={styles.cardBackgroundImage}
+              resizeMode="cover"
+            />
+            <View style={styles.cardImageOverlay} />
           </View>
-          <View style={styles.itineraryStats}>
-            <Text style={styles.matchCount}>{item.matches?.length || 0} matches</Text>
-            <Icon name="chevron-right" size={24} color={colors.text.light} />
+        ) : (
+          <GradientCard
+            colors={['#4A90E2', '#357ABD', '#2E5C8A']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          />
+        )}
+        
+        {/* Card Content */}
+        <View style={styles.cardContent}>
+          {/* Invite Section - Top Right */}
+          <View style={styles.inviteSection}>
+            <Text style={styles.inviteText}>Invite</Text>
+            {/* Placeholder profile circles for future collaborators */}
+            <View style={styles.profileIconsContainer}>
+              {/* Show 4 placeholder circles when collaborators feature is added */}
+              {/* For now, empty - will be populated with actual user avatars */}
+            </View>
+          </View>
+
+          {/* Bottom Overlay with Trip Info - Positioned at bottom */}
+          <View style={styles.tripInfoOverlay}>
+            <Text style={styles.tripCardTitle} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {dateRange && (
+              <Text style={styles.tripCardDate} numberOfLines={1}>
+                {dateRange}
+              </Text>
+            )}
+            <View style={styles.tripCardStats}>
+              <Text style={styles.tripCardMatchCount}>
+                {matchCount} match{matchCount !== 1 ? 'es' : ''}
+              </Text>
+              {savedCount > 0 && (
+                <>
+                  <View style={styles.statsSpacer} />
+                  <Text style={styles.tripCardSavedCount}>
+                    {savedCount} Saved
+                  </Text>
+                </>
+              )}
+            </View>
           </View>
         </View>
-        
-        {item.matches && item.matches.length > 0 && (
-          <View style={styles.matchesPreview}>
-            <Text style={styles.matchesPreviewTitle}>Upcoming matches:</Text>
-            {item.matches.slice(0, 3).map((match, index) => {
-              const homeTeam = match.homeTeam?.name || match.teams?.home?.name || 'Unknown';
-              const awayTeam = match.awayTeam?.name || match.teams?.away?.name || 'Unknown';
-              const date = match.date;
-              return (
-                <Text key={match.matchId || `match-${index}`} style={styles.matchPreview}>
-                  {homeTeam} vs {awayTeam} - {date ? new Date(date).toLocaleDateString() : 'TBD'}
-                </Text>
-              );
-            })}
-            {item.matches.length > 3 && (
-              <Text style={styles.moreMatches}>+{item.matches.length - 3} more</Text>
-            )}
-          </View>
-        )}
       </TouchableOpacity>
-      
-      {/* Settings Button */}
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => handleSettingsPress(item)}
-        activeOpacity={0.7}
-      >
-        <Icon name="more-vert" size={20} color={colors.text.secondary} />
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -191,24 +324,35 @@ const TripsListScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header - Centered "Trips" Title */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Trips</Text>
-        <Text style={styles.headerSubtitle}>
-          {itineraries.length} {itineraries.length === 1 ? 'itinerary' : 'itineraries'}
-        </Text>
-        <Text style={styles.headerNote}>Shows all your planned trips and saved matches</Text>
+        <Text style={styles.headerTitle}>Trips</Text>
       </View>
 
       {itineraries.length > 0 ? (
-        <FlatList
-          data={itineraries}
-          renderItem={renderItineraryItem}
-          keyExtractor={(item) => item.id || item._id}
-          contentContainerStyle={styles.listContainer}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={styles.contentContainer}>
+          <FlatList
+            data={itineraries}
+            renderItem={renderItineraryItem}
+            keyExtractor={(item) => item.id || item._id}
+            contentContainerStyle={styles.listContainer}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            showsVerticalScrollIndicator={false}
+            ListFooterComponent={
+              <TouchableOpacity
+                style={styles.startNewLapButton}
+                onPress={() => {
+                  // Placeholder - functionality to be determined
+                  Alert.alert('Coming Soon', 'Start a new lap functionality coming soon');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.startNewLapButtonText}>Start a new lap</Text>
+              </TouchableOpacity>
+            }
+          />
+        </View>
       ) : (
         renderEmptyState()
       )}
@@ -329,112 +473,155 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    padding: spacing.lg,
-    paddingTop: spacing.lg, // SafeAreaView handles safe area, this is additional spacing
+    paddingTop: spacing.lg + spacing.xs, // ~86.5px from top (accounting for status bar)
+    paddingBottom: spacing.md,
+    paddingHorizontal: CARD_PADDING, // 24px padding to match card padding
+    alignItems: 'flex-start', // Left align
+    justifyContent: 'flex-start',
     backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    position: 'relative',
   },
   headerTitle: {
-    ...typography.h1Large,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '700', // Bold
+    lineHeight: 32,
     color: colors.text.primary,
-    marginBottom: spacing.xs,
+    textAlign: 'left', // Left aligned as per Figma
   },
-  headerSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  headerNote: {
-    ...typography.caption,
-    color: colors.text.light,
-    fontStyle: 'italic',
-    marginBottom: spacing.xs / 2,
-  },
-  headerTip: {
-    fontSize: 11,
-    color: colors.text.secondary,
-    fontStyle: 'italic',
+  contentContainer: {
+    flex: 1,
   },
   listContainer: {
-    padding: spacing.md,
+    paddingHorizontal: CARD_PADDING, // 24px padding on each side
+    paddingTop: spacing.lg + spacing.xs, // ~130px from top (accounting for header)
+    paddingBottom: spacing.xl,
   },
-  itineraryCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.md,
-    ...shadows.small,
-    flexDirection: 'row',
-    alignItems: 'stretch',
+  tripCard: {
+    width: '100%', // Full width minus padding
+    maxWidth: 392, // Max width from Figma
+    height: 356,
+    borderRadius: borderRadius.card,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+    ...shadows.medium,
+    alignSelf: 'stretch', // Stretch to fill container width
   },
-  itineraryContent: {
+  cardGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  cardBackgroundImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  cardImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // Subtle dark overlay for better text readability
+  },
+  cardContent: {
     flex: 1,
-    padding: spacing.md,
+    position: 'relative',
+    zIndex: 1,
+    padding: 0, // We'll position elements absolutely
   },
-  settingsButton: {
-    backgroundColor: colors.cardGrey,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.border,
-    paddingHorizontal: spacing.md,
-    justifyContent: 'center',
+  inviteSection: {
+    position: 'absolute',
+    top: spacing.md + spacing.xs, // 24px from top
+    right: spacing.md, // 16px from right
+    flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 10,
+  },
+  inviteText: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: '400',
+    color: colors.inviteBlue, // #B0D0E4
+    marginRight: spacing.sm + spacing.xs, // 13px gap as per Figma
+  },
+  profileIconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 30,
+    width: 84, // Width for 4 overlapping circles
+    // Placeholder for future collaborators - will show overlapping profile circles
+  },
+  tripInfoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.67)', // 67% white opacity
+    borderTopLeftRadius: borderRadius.md, // Only top corners rounded (12px)
     borderTopRightRadius: borderRadius.md,
-    borderBottomRightRadius: borderRadius.md,
+    paddingHorizontal: spacing.md, // 16px horizontal
+    paddingTop: 9, // 9px top padding (py-[9px])
+    paddingBottom: spacing.md, // Match bottom padding
+    height: 116, // Fixed height as per Figma
+    justifyContent: 'flex-start',
   },
-  itineraryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm + spacing.xs,
-  },
-  itineraryInfo: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  itineraryName: {
-    ...typography.h3,
+  tripCardTitle: {
+    fontSize: 24,
+    fontWeight: '700', // Bold
+    lineHeight: 24,
     color: colors.text.primary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm, // 8px gap
   },
-  itineraryDestination: {
-    ...typography.bodySmall,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs / 2,
+  tripCardDate: {
+    fontSize: 16,
+    fontWeight: '400', // Regular
+    lineHeight: 19, // Height 19px as per Figma
+    color: colors.text.primary,
+    marginBottom: spacing.sm, // 8px gap
   },
-  itineraryDates: {
-    ...typography.bodySmall,
-    color: colors.text.secondary,
-  },
-  itineraryStats: {
+  tripCardStats: {
+    flexDirection: 'row',
     alignItems: 'center',
+    height: 19, // Height 19px as per Figma
   },
-  matchCount: {
-    ...typography.bodySmall,
-    color: colors.primary,
+  statsSpacer: {
+    width: 4, // 4px gap between "matches" and "Saved"
+  },
+  tripCardMatchCount: {
+    fontSize: 16,
+    fontWeight: '400', // Regular
+    lineHeight: 19,
+    color: 'rgba(0, 0, 0, 0.75)', // 75% opacity black
+  },
+  tripCardSavedCount: {
+    fontSize: 16,
+    fontWeight: '400', // Regular
+    lineHeight: 19,
+    color: 'rgba(0, 0, 0, 0.75)', // 75% opacity black
+  },
+  startNewLapButton: {
+    backgroundColor: colors.primaryGreen,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md - spacing.xs,
+    paddingHorizontal: spacing.xl + spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl,
+    ...shadows.small,
+  },
+  startNewLapButtonText: {
+    ...typography.body,
     fontWeight: '500',
-    marginBottom: spacing.xs,
-  },
-  matchesPreview: {
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    paddingTop: spacing.sm + spacing.xs,
-  },
-  matchesPreviewTitle: {
-    ...typography.bodySmall,
-    fontWeight: '500',
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
-  },
-  matchPreview: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  moreMatches: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    fontStyle: 'italic',
+    color: colors.onPrimary,
   },
   emptyState: {
     flex: 1,

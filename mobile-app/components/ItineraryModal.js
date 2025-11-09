@@ -100,15 +100,26 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
     let venueData = matchData.fixture?.venue || matchData.venue || {};
     
     // Ensure venue data has the required structure for maps and recommendations
+    // IMPORTANT: Preserve the image property when recreating venueData
     if (!venueData.coordinates && venueData.name && venueData.city) {
       // If coordinates are missing but we have name/city, create a proper venue object
+      // Spread venueData first to preserve all properties (including image), then override specific fields
       venueData = {
+        ...venueData, // Keep all original properties including image, id, capacity, surface, address, etc.
         name: venueData.name,
         city: venueData.city,
         country: venueData.country || matchData.league?.country || 'Unknown Country',
         coordinates: null, // Will be geocoded by the backend when needed
-        ...venueData // Keep any other properties
       };
+    }
+    
+    // Log venue image for debugging
+    if (__DEV__) {
+      console.log('🏟️ ItineraryModal - Venue image check:', {
+        hasImage: !!venueData.image,
+        imageUrl: venueData.image,
+        venueName: venueData.name
+      });
     }
     
 

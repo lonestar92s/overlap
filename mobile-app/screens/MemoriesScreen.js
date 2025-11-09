@@ -12,24 +12,27 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import ApiService from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_ITEM_SIZE = SCREEN_WIDTH / 3;
 
 const MemoriesScreen = () => {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [memories, setMemories] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState(null);
+  const [activeTab, setActiveTab] = useState('memories');
 
   // Fetch memories and stats
   const fetchMemories = useCallback(async () => {
@@ -127,6 +130,61 @@ const MemoriesScreen = () => {
     navigation.navigate('MemoriesMap');
   }, [navigation]);
 
+  // Get user initials for avatar
+  const getUserInitials = useCallback(() => {
+    if (!user) return 'U';
+    
+    // Prefer profile firstName and lastName
+    if (user.profile?.firstName && user.profile?.lastName) {
+      return `${user.profile.firstName.charAt(0)}${user.profile.lastName.charAt(0)}`.toUpperCase();
+    }
+    
+    // If only firstName, use first two letters
+    if (user.profile?.firstName) {
+      const name = user.profile.firstName;
+      return name.length >= 2 ? name.substring(0, 2).toUpperCase() : name.charAt(0).toUpperCase();
+    }
+    
+    // Fallback to username (first two characters)
+    if (user.username) {
+      const username = user.username;
+      return username.length >= 2 ? username.substring(0, 2).toUpperCase() : username.charAt(0).toUpperCase();
+    }
+    
+    // Last resort: email
+    const emailPrefix = user.email?.split('@')[0] || '';
+    return emailPrefix.length >= 2 ? emailPrefix.substring(0, 2).toUpperCase() : emailPrefix.charAt(0)?.toUpperCase() || 'U';
+  }, [user]);
+
+  // Get display name
+  const getDisplayName = useCallback(() => {
+    if (!user) return 'User';
+    
+    // Prefer full name from profile
+    if (user.profile?.firstName && user.profile?.lastName) {
+      return `${user.profile.firstName} ${user.profile.lastName}`;
+    }
+    
+    // Use firstName if available
+    if (user.profile?.firstName) {
+      return user.profile.firstName;
+    }
+    
+    // Fallback to username (capitalize first letter)
+    if (user.username) {
+      return user.username.charAt(0).toUpperCase() + user.username.slice(1);
+    }
+    
+    // Last resort: email prefix
+    return user.email?.split('@')[0] || 'User';
+  }, [user]);
+
+  // Get user subtitle/bio
+  const getUserSubtitle = useCallback(() => {
+    // You can customize this based on user preferences or profile data
+    return 'Football Enthusiast';
+  }, []);
+
   // Get the best available image URL
   const getImageUrl = useCallback((photo) => {
     if (!photo) return null;
@@ -155,28 +213,33 @@ const MemoriesScreen = () => {
     const firstPhoto = hasPhotos ? memory.photos[0] : null;
     const imageUrl = getImageUrl(firstPhoto);
     const hasMultiplePhotos = memory.photos && memory.photos.length > 1;
+    const memoryTitle = memory.matchTitle || memory.teams || 'Memory';
     
     return (
       <TouchableOpacity
         style={styles.memoryGridItem}
         onPress={() => handleMemoryPress(memory)}
         activeOpacity={0.8}
+        accessibilityLabel={`Memory: ${memoryTitle}`}
+        accessibilityRole="button"
+        accessibilityHint="Tap to view memory details"
       >
         {imageUrl ? (
           <Image
             source={{ uri: imageUrl }}
             style={styles.memoryGridImage}
             resizeMode="cover"
+            accessibilityLabel={`Photo for ${memoryTitle}`}
           />
         ) : (
           <View style={styles.memoryGridPlaceholder}>
-            <MaterialIcons name="photo" size={40} color="#ccc" />
+            <MaterialIcons name="photo" size={40} color={colors.text.light} />
           </View>
         )}
         
         {/* Multi-photo indicator */}
         {hasMultiplePhotos && (
-          <View style={styles.multiPhotoIndicator}>
+          <View style={styles.multiPhotoIndicator} accessibilityLabel="Multiple photos">
             <MaterialIcons name="collections" size={16} color="white" />
           </View>
         )}
@@ -184,34 +247,93 @@ const MemoriesScreen = () => {
     );
   }, [getImageUrl, handleMemoryPress]);
 
+  // Render profile header
+  const renderProfileHeader = useCallback(() => {
+    const initials = getUserInitials();
+    const displayName = getDisplayName();
+    const subtitle = getUserSubtitle();
+
+    return (
+      <View style={styles.profileHeader}>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{displayName}</Text>
+          <View style={{ height: spacing.xs }} />
+          <Text style={styles.userSubtitle}>{subtitle}</Text>
+        </View>
+      </View>
+    );
+  }, [getUserInitials, getDisplayName, getUserSubtitle]);
+
   // Render stats section
   const renderStats = useCallback(() => {
     if (!stats) return null;
 
     return (
       <View style={styles.statsContainer}>
-        <Text style={styles.statsTitle}>Your Football Journey</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.totalMemories}</Text>
-            <Text style={styles.statLabel}>Matches</Text>
+            <Text style={styles.statNumber}>{stats.totalMemories || 0}</Text>
+            <View style={{ height: spacing.xs + 2 }} />
+            <Text style={styles.statLabel} numberOfLines={1}>Matches</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.totalPhotos}</Text>
-            <Text style={styles.statLabel}>Photos</Text>
+            <Text style={styles.statNumber}>{stats.uniqueStadiumsCount || 0}</Text>
+            <View style={{ height: spacing.xs + 2 }} />
+            <Text style={styles.statLabel} numberOfLines={1}>Stadiums</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.uniqueStadiumsCount}</Text>
-            <Text style={styles.statLabel}>Stadiums</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.uniqueCountriesCount}</Text>
-            <Text style={styles.statLabel}>Countries</Text>
+            <Text style={styles.statNumber}>{memories.length || 0}</Text>
+            <View style={{ height: spacing.xs + 2 }} />
+            <Text style={styles.statLabel} numberOfLines={1}>Memories</Text>
           </View>
         </View>
       </View>
     );
-  }, [stats]);
+  }, [stats, memories.length]);
+
+  // Render tab navigation
+  const renderTabs = useCallback(() => {
+    const tabs = [
+      { id: 'memories', label: 'Memories' },
+      { id: 'savedStadiums', label: 'Saved Stadiums' },
+      { id: 'previousMatches', label: 'Previous Matches' },
+    ];
+
+    return (
+      <View style={styles.tabsContainer}>
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            style={[
+              styles.tabButton,
+              activeTab === tab.id && styles.tabButtonActive,
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab(tab.id);
+            }}
+            accessibilityLabel={tab.label}
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeTab === tab.id }}
+          >
+            <Text
+              style={[
+                styles.tabButtonText,
+                activeTab === tab.id && styles.tabButtonTextActive,
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -225,69 +347,90 @@ const MemoriesScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Memories</Text>
-          <Text style={styles.subtitle}>Your football adventures</Text>
+        {/* Profile Header */}
+        <View style={styles.profileSection}>
+          {renderProfileHeader()}
+          {renderStats()}
         </View>
 
-        {/* Stats Section */}
-        {renderStats()}
+        {/* Tab Navigation */}
+        {renderTabs()}
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          <Button
-            title="Add Memory"
-            icon={
-              <MaterialIcons name="add-a-photo" size={20} color="white" style={{ marginRight: 8 }} />
-            }
+        {/* Add New Memory Button */}
+        <View style={styles.addButtonContainer}>
+          <TouchableOpacity
+            style={styles.addButton}
             onPress={handleAddMemory}
-            buttonStyle={styles.addButton}
-            titleStyle={styles.buttonTitle}
-          />
-          
-          <Button
-            title="Map View"
-            icon={
-              <MaterialIcons name="map" size={20} color="white" style={{ marginRight: 8 }} />
-            }
-            onPress={handleMemoriesMap}
-            buttonStyle={styles.mapButton}
-            titleStyle={styles.buttonTitle}
-          />
+            accessibilityLabel="Add New Memory"
+            accessibilityRole="button"
+            accessibilityHint="Opens the screen to add a new memory"
+          >
+            <MaterialIcons name="add" size={20} color={colors.text.primary} style={{ marginRight: spacing.sm }} />
+            <Text style={styles.addButtonText}>Add New Memory</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Memories Grid */}
-        {memories.length > 0 ? (
-          <View style={styles.memoriesGridContainer}>
-            <FlatList
-              data={memories}
-              renderItem={renderMemoryItem}
-              keyExtractor={(item) => item._id || item.matchId || String(Math.random())}
-              numColumns={3}
-              scrollEnabled={false}
-            />
-          </View>
-        ) : (
+        {activeTab === 'memories' && (
+          <>
+            {memories.length > 0 ? (
+              <View style={styles.memoriesGridContainer}>
+                <FlatList
+                  data={memories}
+                  renderItem={renderMemoryItem}
+                  keyExtractor={(item) => item._id || item.matchId || String(Math.random())}
+                  numColumns={3}
+                  scrollEnabled={false}
+                  columnWrapperStyle={styles.gridRow}
+                />
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <MaterialIcons name="photo-library" size={80} color={colors.text.light} />
+                <Text style={styles.emptyTitle}>No Memories Yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Start building your football journey by adding your first memory
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyStateButton}
+                  onPress={handleAddMemory}
+                  accessibilityLabel="Add Your First Memory"
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptyStateButtonTitle}>Add Your First Memory</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Saved Stadiums Tab Content */}
+        {activeTab === 'savedStadiums' && (
           <View style={styles.emptyState}>
-            <MaterialIcons name="photo-library" size={80} color="#ccc" />
-            <Text style={styles.emptyTitle}>No Memories Yet</Text>
+            <MaterialIcons name="stadium" size={80} color={colors.text.light} />
+            <Text style={styles.emptyTitle}>No Saved Stadiums</Text>
             <Text style={styles.emptySubtitle}>
-              Start building your football journey by adding your first memory
+              Save stadiums to see them here
             </Text>
-            <Button
-              title="Add Your First Memory"
-              onPress={handleAddMemory}
-              buttonStyle={styles.emptyStateButton}
-              titleStyle={styles.emptyStateButtonTitle}
-            />
+          </View>
+        )}
+
+        {/* Previous Matches Tab Content */}
+        {activeTab === 'previousMatches' && (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="sports-soccer" size={80} color={colors.text.light} />
+            <Text style={styles.emptyTitle}>No Previous Matches</Text>
+            <Text style={styles.emptySubtitle}>
+              Your previous matches will appear here
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -298,84 +441,132 @@ const MemoriesScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.card,
   },
   scrollView: {
     flex: 1,
   },
-  header: {
-    padding: 20,
-    paddingTop: 10,
+  profileSection: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+  avatarContainer: {
+    marginBottom: spacing.sm,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: borderRadius.pill,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    ...typography.h1,
+    fontSize: 48,
+    color: colors.onPrimary,
+  },
+  userInfo: {
+    alignItems: 'center',
+  },
+  userName: {
+    ...typography.h1,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  userSubtitle: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   statsContainer: {
-    margin: 20,
-    marginTop: 0,
-  },
-  statsTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 16,
+    width: '100%',
+    marginTop: spacing.md,
   },
   statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
   statItem: {
     alignItems: 'center',
     flex: 1,
+    marginHorizontal: spacing.lg, // Reduced margin to give more space for text
+    minWidth: 70, // Increased minimum width to prevent wrapping
+    maxWidth: 120, // Maximum width to prevent items from being too wide
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 4,
+    ...typography.h2,
+    color: colors.text.primary,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
-  actionButtons: {
+  tabsContainer: {
     flexDirection: 'row',
-    padding: 20,
-    paddingTop: 0,
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  tabButtonActive: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.text.primary,
+  },
+  tabButtonText: {
+    ...typography.caption,
+    color: colors.text.primary,
+  },
+  tabButtonTextActive: {
+    fontWeight: '600',
+  },
+  addButtonContainer: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
   addButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 12,
-    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9', // Light green background for better contrast
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.xl * 2.25, // ~72px to match 8pt grid
+    paddingVertical: spacing.md,
   },
-  mapButton: {
-    backgroundColor: '#34C759',
-    borderRadius: 12,
-    paddingVertical: 12,
-    flex: 1,
-  },
-  buttonTitle: {
-    fontSize: 16,
+  addButtonText: {
+    ...typography.button,
+    fontSize: typography.bodySmall.fontSize, // 14px as per design
+    color: colors.text.primary,
     fontWeight: '600',
   },
   memoriesGridContainer: {
-    paddingBottom: 20,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
   memoryGridItem: {
-    width: GRID_ITEM_SIZE,
-    height: GRID_ITEM_SIZE,
+    width: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3, // Account for padding and gaps
+    height: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3,
     position: 'relative',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.borderLight,
+    borderRadius: borderRadius.xs,
+    overflow: 'hidden',
   },
   memoryGridImage: {
     width: '100%',
@@ -384,124 +575,44 @@ const styles = StyleSheet.create({
   memoryGridPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   multiPhotoIndicator: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: spacing.sm,
+    right: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 4,
-    padding: 4,
-  },
-  photoContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  noPhotoContainer: {
-    width: '100%',
-    minHeight: 150,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  noPhotoText: {
-    color: '#999',
-    marginTop: 8,
-    fontSize: 14,
-  },
-  photoErrorText: {
-    color: '#ff6b6b',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  photoCountBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  photoCountText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  memoryInfo: {
-    padding: 16,
-  },
-  teamsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  venueText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  dateText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  scoreText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  competitionText: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    borderRadius: borderRadius.xs,
+    padding: spacing.xs,
   },
   emptyState: {
     alignItems: 'center',
-    padding: 40,
-    marginTop: 40,
+    padding: spacing.xxl,
+    marginTop: spacing.xl,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.h2,
+    color: colors.text.primary,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: spacing.lg,
   },
   emptyStateButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   emptyStateButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
+    color: colors.onPrimary,
   },
   loadingContainer: {
     flex: 1,
@@ -509,26 +620,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  deleteButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255, 59, 48, 0.9)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    marginTop: spacing.md,
+    ...typography.body,
+    color: colors.text.secondary,
   },
 });
 
