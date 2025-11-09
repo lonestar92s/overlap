@@ -4,17 +4,12 @@ const express = require('express');
 const axios = require('axios');
 const https = require('https');
 const router = express.Router();
+const transportationService = require('../services/transportationService');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-
-
-
-// Cache for Amadeus token
-let amadeusToken = null;
-let tokenExpiration = null;
 
 // Add common configuration for Google API requests
 const googleApiConfig = {
@@ -24,32 +19,7 @@ const googleApiConfig = {
     httpsAgent
 };
 
-// Get Amadeus token
-const getAmadeusToken = async () => {
-    if (amadeusToken && tokenExpiration && new Date() < tokenExpiration) {
-        return amadeusToken;
-    }
-
-    try {
-        const response = await axios.post(
-            'https://test.api.amadeus.com/v1/security/oauth2/token',
-            `grant_type=client_credentials&client_id=${process.env.AMADEUS_CLIENT_ID}&client_secret=${process.env.AMADEUS_CLIENT_SECRET}`,
-            {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                httpsAgent
-            }
-        );
-
-        amadeusToken = response.data.access_token;
-        tokenExpiration = new Date(Date.now() + response.data.expires_in * 1000);
-        return amadeusToken;
-    } catch (error) {
-
-        throw error;
-    }
-};
+// Note: Amadeus token management is now handled by the AmadeusProvider class
 
 // Verify Google API key on startup
 const verifyGoogleApiKey = () => {
@@ -252,12 +222,46 @@ router.get('/directions/rail', async (req, res) => {
     }
 });
 
+// Search airports by keyword
+router.get('/airports/search', async (req, res) => {
+    try {
+        const { query, limit = 10 } = req.query;
+
+        if (!query) {
+            return res.status(400).json({
+                error: 'Missing required parameter',
+                message: 'query parameter is required'
+            });
+        }
+
+        const airports = await transportationService.searchAirports(query, Number(limit));
+
+        res.json({
+            success: true,
+            data: airports,
+            count: airports.length
+        });
+    } catch (error) {
+        console.error('Error searching airports:', error);
+        res.status(500).json({ 
+            error: 'Failed to search airports',
+            message: error.message
+        });
+    }
+});
+
 // Get nearest airport
 router.get('/airports/nearest', async (req, res) => {
     try {
         const { latitude, longitude, radius = 100, limit = 3 } = req.query;
-        const token = await getAmadeusToken();
-        
+
+        if (!latitude || !longitude) {
+            return res.status(400).json({
+                error: 'Missing required parameters',
+                message: 'latitude and longitude are required'
+            });
+        }
+
         console.log('Searching for airports:', {
             latitude,
             longitude,
@@ -265,43 +269,34 @@ router.get('/airports/nearest', async (req, res) => {
             limit
         });
 
-        const response = await axios.get(
-            'https://test.api.amadeus.com/v1/reference-data/locations/airports',
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                },
-                params: {
-                    latitude,
-                    longitude,
-                    radius: Number(radius),
-                    'page[limit]': Number(limit),
-                    sort: 'distance'
-                },
-                httpsAgent
-            }
+        const airports = await transportationService.getNearestAirports(
+            Number(latitude),
+            Number(longitude),
+            Number(radius),
+            Number(limit)
         );
 
         // Log found airports
-        if (response.data.data) {
-            console.log('Found airports:', response.data.data.map(airport => ({
-                iataCode: airport.iataCode,
+        if (airports.length > 0) {
+            console.log('Found airports:', airports.map(airport => ({
+                code: airport.code,
                 name: airport.name,
-                distance: airport.distance?.value
+                distance: airport.distance
             })));
         }
 
-        res.json(response.data);
+        res.json({
+            success: true,
+            data: airports,
+            count: airports.length
+        });
     } catch (error) {
         console.error('Error fetching nearest airports:', {
-            error: error.message,
-            response: error.response?.data,
-            status: error.response?.status
+            error: error.message
         });
         res.status(500).json({ 
             error: 'Failed to fetch nearest airports',
-            message: error.message,
-            details: error.response?.data
+            message: error.message
         });
     }
 });
@@ -309,78 +304,119 @@ router.get('/airports/nearest', async (req, res) => {
 // Search flights
 router.get('/flights/search', async (req, res) => {
     try {
-        const { originCode, destinationCode, date, adults = 1, max = 1 } = req.query;
+        const { 
+            origin, 
+            destination, 
+            departureDate, 
+            returnDate,
+            adults = 1, 
+            max = 10,
+            currency = 'USD',
+            nonStop = false
+        } = req.query;
 
         // Validate parameters
-        if (!originCode || !destinationCode || !date) {
+        if (!origin || !destination || !departureDate) {
             return res.status(400).json({
                 error: 'Missing required parameters',
-                message: 'originCode, destinationCode, and date are required'
+                message: 'origin, destination, and departureDate are required'
             });
         }
 
         // Validate that origin and destination are different
-        if (originCode === destinationCode) {
+        if (origin === destination) {
             return res.status(400).json({
                 error: 'Invalid route',
                 message: 'Origin and destination airports must be different'
             });
         }
 
-        // Get fresh token
-        const token = await getAmadeusToken();
-        
         console.log('Searching flights with params:', {
-            originCode,
-            destinationCode,
-            date,
+            origin,
+            destination,
+            departureDate,
+            returnDate,
             adults: Number(adults),
-            max: Number(max)
+            max: Number(max),
+            currency,
+            nonStop: nonStop === 'true' || nonStop === true
         });
 
-        const response = await axios.get(
-            'https://test.api.amadeus.com/v2/shopping/flight-offers',
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                },
-                params: {
-                    originLocationCode: originCode,
-                    destinationLocationCode: destinationCode,
-                    departureDate: date,
-                    adults: Number(adults),
-                    max: Number(max),
-                    currencyCode: 'USD'
-                },
-                httpsAgent
-            }
-        );
+        // Use transportation service
+        const result = await transportationService.searchFlights({
+            origin,
+            destination,
+            departureDate,
+            returnDate,
+            adults: Number(adults),
+            max: Number(max),
+            currency,
+            nonStop: nonStop === 'true' || nonStop === true
+        });
 
-        // If no flights found, return empty array instead of error
-        if (!response.data.data || response.data.data.length === 0) {
-            return res.json({ data: [] });
-        }
-
-        res.json(response.data);
+        res.json({
+            success: true,
+            provider: result.provider,
+            data: result.results,
+            count: result.count
+        });
     } catch (error) {
         console.error('Error searching flights:', {
             error: error.message,
-            response: error.response?.data,
-            status: error.response?.status,
             params: req.query
         });
 
-        // Handle specific Amadeus API errors
-        if (error.response?.data?.errors) {
-            return res.status(error.response.status).json({
-                error: 'Amadeus API Error',
-                message: error.response.data.errors[0]?.detail || 'Unknown API error',
-                details: error.response.data.errors
+        res.status(500).json({ 
+            error: 'Failed to search flights',
+            message: error.message
+        });
+    }
+});
+
+// Get route cost history
+router.get('/routes/cost-history', async (req, res) => {
+    try {
+        const { origin, destination, type = 'flight', currency = 'USD' } = req.query;
+
+        if (!origin || !destination) {
+            return res.status(400).json({
+                error: 'Missing required parameters',
+                message: 'origin and destination are required'
             });
         }
 
+        const history = await transportationService.getRouteCostHistory(
+            origin,
+            destination,
+            type,
+            currency
+        );
+
+        if (!history) {
+            return res.json({
+                success: true,
+                data: null,
+                message: 'No cost history found for this route'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                origin: history.origin,
+                destination: history.destination,
+                type: history.type,
+                currency: history.currency,
+                priceHistory: history.priceHistory,
+                statistics: history.statistics,
+                lastSearched: history.lastSearched,
+                searchCount: history.searchCount
+            }
+        });
+    } catch (error) {
+        console.error('Error getting route cost history:', error);
         res.status(500).json({ 
-            error: 'Failed to search flights',
+            error: 'Failed to get route cost history',
             message: error.message
         });
     }

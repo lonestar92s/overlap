@@ -37,14 +37,45 @@ NoApiKeyProvidedException: Missing API key. Pass it to the constructor or define
    
    (Replace `your-railway-app` with your actual Railway app name/subdomain)
 
-### Step 3: Verify Other Required Variables
+### Step 3: Add Amadeus Flight API Credentials
+
+For flight search functionality, add these variables:
+
+1. **Get your credentials from Amadeus**:
+   - Go to: https://developers.amadeus.com/
+   - In your dashboard, you'll see "API Key" and "API Secret"
+   - **Important**: "API Key" = `AMADEUS_CLIENT_ID`, "API Secret" = `AMADEUS_CLIENT_SECRET`
+
+2. **Go to Railway dashboard** → Your service → **Variables tab**
+3. **Click "New Variable"** and add:
+
+   ```
+   AMADEUS_CLIENT_ID=your_api_key_from_amadeus_dashboard
+   ```
+   (Use the "API Key" value from Amadeus)
+   
+   ```
+   AMADEUS_CLIENT_SECRET=your_api_secret_from_amadeus_dashboard
+   ```
+   (Use the "API Secret" value from Amadeus)
+   
+   ```
+   AMADEUS_ENVIRONMENT=test
+   ```
+   
+   **Note:** 
+   - Use `AMADEUS_ENVIRONMENT=test` for development/testing
+   - Use `AMADEUS_ENVIRONMENT=production` for production (when you have production credentials)
+   - Test API keys start with `test_`, production keys start with `live_`
+
+### Step 4: Verify Other Required Variables
 
 Make sure these are also set:
 - `JWT_SECRET` - Your JWT secret key (for token signing)
 - `MONGODB_URI` or `MONGO_URL` - Your MongoDB connection string
 - `NODE_ENV=production` - Should be set to production
 
-### Step 4: Redeploy
+### Step 5: Redeploy
 
 After adding the variables:
 1. Railway will automatically detect the new variables
@@ -65,10 +96,15 @@ railway login
 # Link to your project
 railway link
 
-# Set variables
+# Set WorkOS variables
 railway variables set WORKOS_API_KEY=sk_test_your_key_here
 railway variables set WORKOS_CLIENT_ID=client_your_id_here
 railway variables set WORKOS_REDIRECT_URI=https://your-app.up.railway.app/api/auth/workos/callback
+
+# Set Amadeus variables
+railway variables set AMADEUS_CLIENT_ID=your_amadeus_client_id
+railway variables set AMADEUS_CLIENT_SECRET=your_amadeus_client_secret
+railway variables set AMADEUS_ENVIRONMENT=test
 ```
 
 ## Verification
@@ -77,6 +113,8 @@ After setting the variables, check your Railway logs. You should see:
 - No `NoApiKeyProvidedException` errors
 - Server starting successfully
 - WorkOS routes working (when tested)
+- Amadeus provider initialized (if credentials are set)
+- Flight search endpoints available at `/api/transportation/flights/search`
 
 ## Troubleshooting
 
@@ -105,6 +143,9 @@ Before deploying to Railway, test locally:
 WORKOS_API_KEY=sk_test_your_key
 WORKOS_CLIENT_ID=client_your_id
 WORKOS_REDIRECT_URI=http://localhost:3001/api/auth/workos/callback
+AMADEUS_CLIENT_ID=your_amadeus_client_id
+AMADEUS_CLIENT_SECRET=your_amadeus_client_secret
+AMADEUS_ENVIRONMENT=test
 NODE_ENV=development
 ```
 

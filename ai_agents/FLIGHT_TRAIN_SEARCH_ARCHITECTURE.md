@@ -235,6 +235,7 @@ This document outlines the architectural plan for integrating flight and train s
     }
   },
   type: String,           // "flight" | "train"
+  currency: String,       // ISO currency code (e.g., "USD", "EUR", "GBP")
   statistics: {
     averagePrice: Number,
     minPrice: Number,
@@ -245,12 +246,30 @@ This document outlines the architectural plan for integrating flight and train s
   priceHistory: [{
     date: Date,
     price: Number,
-    source: String       // "user_search" | "api" | "aggregated"
+    currency: String,     // Currency at time of recording
+    source: String        // "user_search" | "api" | "aggregated"
+  }],
+  // Multi-currency support: store prices in multiple currencies
+  priceHistoryMultiCurrency: [{
+    date: Date,
+    prices: {
+      USD: Number,
+      EUR: Number,
+      GBP: Number
+      // ... other currencies as needed
+    },
+    source: String
   }],
   createdAt: Date,
   updatedAt: Date
 }
 ```
+
+**Multi-Currency Handling**:
+- Store prices in original currency + convert to base currency (USD) for aggregation
+- Track currency conversion rates at time of recording
+- Display prices in user's preferred currency (convert on-the-fly or store multiple currencies)
+- When aggregating, normalize to base currency before calculating averages
 
 ### Backend: UserTransportationSearch Schema (Optional)
 
@@ -332,6 +351,11 @@ trips: [{
       address: String
     }
   },
+  // Include time-of-day in cache key for accurate caching
+  departureTime: {
+    hour: Number,        // 0-23
+    timeWindow: String   // "morning" | "afternoon" | "evening" | "night"
+  },
   travelTimes: {
     walking: {
       duration: Number,     // minutes
@@ -361,6 +385,12 @@ trips: [{
 ```
 
 **Purpose**: Cache travel time calculations to avoid repeated API calls for same routes.
+
+**Cache Key Strategy**:
+- Cache key includes: `origin.coordinates + destination.coordinates + mode + timeWindow`
+- Time windows: morning (6-12), afternoon (12-18), evening (18-22), night (22-6)
+- Cache for 24 hours (traffic patterns are similar within same time window)
+- If exact time not available, use closest time window
 
 ---
 
@@ -580,11 +610,37 @@ trips: [{
 
 ---
 
+### Context Provider Hierarchy
+
+**Location**: `App.js` or root component
+
+**Provider Structure**:
+```javascript
+<AuthProvider>
+  <ItineraryProvider>
+    <FilterProvider>
+      <TransportationProvider>
+        {children}
+      </TransportationProvider>
+    </FilterProvider>
+  </ItineraryProvider>
+</AuthProvider>
+```
+
+**Context Responsibilities**:
+- **ItineraryContext**: Manages trips, matches, and **home bases** (home bases are trip data)
+- **TransportationContext**: Manages flight/train search state and travel time caching
+- **FilterContext**: Manages match filters (leagues, teams, etc.)
+
+**Note**: Home base CRUD operations are in `ItineraryContext`. `TransportationContext` only handles travel time fetching/caching.
+
+---
+
 ### New Context: TransportationContext
 
 **Location**: `contexts/TransportationContext.js`
 
-**Purpose**: Centralized state management for flight/train searches
+**Purpose**: Centralized state management for flight/train searches and travel time caching
 
 **State Structure**:
 ```javascript
@@ -595,9 +651,23 @@ trips: [{
     destination: null,
     dateFrom: null,
     dateTo: null,
+    returnDate: null,
+    passengers: 1,
+    class: "economy",
+    filters: {
+      maxStops: null,
+      maxPrice: null,
+      airlines: []
+    },
     results: [],
+    pagination: {
+      page: 1,
+      total: 0,
+      hasMore: false
+    },
     loading: false,
-    error: null
+    error: null,
+    lastSearchParams: null
   },
   
   // Train search state
@@ -605,26 +675,39 @@ trips: [{
     origin: null,
     destination: null,
     date: null,
+    time: null,
+    arrivalBy: null,
+    passengers: 1,
     results: [],
+    pagination: {
+      page: 1,
+      total: 0,
+      hasMore: false
+    },
     loading: false,
-    error: null
+    error: null,
+    lastSearchParams: null
   },
   
   // Cost tracking
   routeCosts: {
     // Cached route cost data
-    // Format: { "LHR-MAD": { averagePrice: 450, ... } }
+    // Format: { "LHR-MAD": { averagePrice: 450, currency: "USD", ... } }
   }
 }
 ```
 
 **Actions**:
-- `searchFlights(params)`
-- `searchTrains(params)`
-- `getRouteCost(route)`
-- `clearSearch(type)`
+- `searchFlights(params)` - Search flights with filters
+- `searchTrains(params)` - Search trains
+- `getRouteCost(route, currency?)` - Get route cost (with optional currency conversion)
+- `clearSearch(type)` - Clear search results
+- `setFilters(type, filters)` - Update search filters
+- `loadMoreResults(type)` - Pagination support
 
 **Implementation Pattern**: Use `useReducer` (following architecture recommendations)
+
+**Note**: Home base state management is handled in `ItineraryContext` since home bases are part of trip data. `TransportationContext` only handles travel time fetching/caching.
 
 ---
 
@@ -677,20 +760,11 @@ trips: [{
     min: number,
     max: number,
     average: number
-  },
-  dateFlexibility: {
-    // Suggestions for date shifts
-    suggestions: [
-      {
-        shiftDays: number,  // -14, -7, -1, +1, +7, +14
-        matchCount: number, // How many matches available
-        priceChange: number, // Price difference
-        recommendation: string // "Shifting by +7 days adds 3 matches"
-      }
-    ]
   }
 }
 ```
+
+**Note**: Date flexibility suggestions are provided by a separate endpoint (`/api/transportation/date-flexibility`) to maintain separation of concerns. Frontend can call both endpoints in parallel if needed.
 
 ---
 
@@ -757,16 +831,30 @@ trips: [{
 ```
 
 **Implementation**: 
-- Call match search API for each shifted date range
-- Aggregate results
-- Calculate match count differences
-- Estimate price impact (if flight data available)
+- **Performance Strategy**:
+  - Batch match search API calls in parallel (Promise.all) for all 7 date shifts (±1, ±7, ±14 days + current)
+  - Implement request queuing to respect rate limits
+  - Cache intermediate match search results (15 minutes TTL) to avoid duplicate calls
+  - Add timeout (5 seconds per request) with fallback to cached data
+  - If some requests fail, return partial results with error indicators
+- **Calculation Logic**:
+  - Aggregate results from all date shifts
+  - Calculate match count differences vs. current date range
+  - Estimate price impact by querying route cost history for shifted dates
+  - Rank suggestions by: match count increase, price savings, user preferences
 
 ---
 
 ### Route Cost History Endpoint
 
 **Route**: `GET /api/transportation/route-cost/:origin/:destination`
+
+**Query Parameters**:
+```javascript
+{
+  currency?: string  // Optional - convert to user's preferred currency (default: USD)
+}
+```
 
 **Response**:
 ```javascript
@@ -777,6 +865,7 @@ trips: [{
     destination: { code, city }
   },
   type: "flight" | "train",
+  currency: string,  // Currency of returned prices
   statistics: {
     averagePrice: number,
     minPrice: number,
@@ -785,7 +874,13 @@ trips: [{
     lastUpdated: string
   },
   currentPrice: number,  // If recent search available
-  priceTrend: "up" | "down" | "stable"
+  priceTrend: "up" | "down" | "stable",
+  // Multi-currency support
+  pricesInOtherCurrencies: {
+    USD: number,
+    EUR: number,
+    GBP: number
+  }
 }
 ```
 
@@ -840,9 +935,22 @@ trips: [{
 ```
 
 **Implementation**:
-- If coordinates not provided, geocode address using LocationIQ/Google Maps
-- Validate date range overlaps with trip dates
-- Check for overlapping home base date ranges (warn user)
+- **Geocoding**:
+  - If coordinates not provided, geocode address using LocationIQ/Google Maps
+  - Validate geocoding result (ensure coordinates are valid)
+  - If geocoding fails, require user to provide coordinates manually or select from map
+- **Date Range Validation**:
+  - Home base date range must overlap with trip dates
+  - Warn if multiple home bases have overlapping date ranges (but allow - user might have multiple accommodations)
+  - Auto-suggest date ranges based on match dates (group matches by date clusters)
+- **Type Validation**:
+  - `city`: Only city name required
+  - `hotel`/`airbnb`: Require at least city + name, prefer full address
+  - `custom`: Any format, but coordinates or address required
+- **Location Validation**:
+  - Validate coordinates are valid (lat: -90 to 90, lng: -180 to 180)
+  - Warn if location is very far from all matches (> 50 km) - suggest checking address
+  - If no matches yet, skip distance validation
 
 ---
 
@@ -949,14 +1057,22 @@ trips: [{
 ```
 
 **Implementation**:
-- Calculate centroid of all match venue coordinates
-- Find optimal location that minimizes average travel time
-- Consider city boundaries and major transportation hubs
-- Optionally integrate with hotel search APIs (Booking.com, Airbnb)
+- **Date-Range Aware Logic**:
+  - Group matches by date clusters (matches within 3 days of each other)
+  - For each date cluster, calculate centroid of match venues
+  - Suggest one home base per date cluster (if clusters are far apart)
+  - Or suggest one "optimal" home base if all matches are close together (< 50 km radius)
+- **Location Optimization**:
+  - Find optimal location that minimizes average travel time to matches in cluster
+  - Consider city boundaries and major transportation hubs
+  - Prefer locations near public transport (metro/subway stations)
+  - Avoid suggesting locations > 50 km from any match
+- **Hotel Integration**:
+  - Optionally integrate with hotel search APIs (Booking.com, Airbnb)
+  - Show nearby hotels within 2 km of suggested location
+  - Filter by price range if user preference available
 
 ---
-
-## Integration Points
 
 ## Integration Points
 
@@ -1014,8 +1130,18 @@ trips: [{
 
 **Implementation**:
 - Add `InterMatchTravelCard` between consecutive matches
-- Calculate travel time constraints automatically
-- Show quick search button
+- **Time Constraint Calculation**:
+  - **Minimum Buffer Times**:
+    - Same city: 2 hours between matches (account for match duration ~90 min + travel + buffer)
+    - Different cities: 4 hours minimum (account for inter-city travel)
+    - Overnight: If match ends after 10 PM and next match is before 2 PM next day in different city → suggest overnight accommodation
+  - **Travel Window**:
+    - Departure: After previous match ends + 30 min buffer
+    - Arrival: Before next match starts - 1 hour buffer (to account for venue arrival, security, etc.)
+  - **"Too Tight" Warning**:
+    - If calculated travel time + buffer exceeds available time → show warning
+    - Suggest alternative: "Consider removing one match or adjusting dates"
+- Show quick search button with pre-filled constraints
 
 ---
 
@@ -1210,8 +1336,22 @@ class TransportationService {
 **Third-Party API Integration**:
 - Use adapter pattern for multiple providers
 - Implement fallback chains (primary → secondary API)
-- Rate limiting and error handling
-- Mock data for development
+- **Error Handling Strategy**:
+  - **API Failures**:
+    - Network errors: Retry 3 times with exponential backoff (1s, 2s, 4s)
+    - Rate limit exceeded: Queue request, return "Service busy, please try again"
+    - Invalid API key: Log error, return user-friendly "Service configuration error"
+    - API timeout: Return cached data if available, otherwise "Request timed out"
+  - **Partial Failures**:
+    - If flight search succeeds but train search fails: Return flight results with note "Train search unavailable"
+    - If some date shifts fail in date flexibility: Return partial results with error indicators
+    - If some travel times fail: Return successful ones, mark failed ones as "Unable to calculate"
+  - **Degraded Mode**:
+    - If external API completely unavailable: Return cached data with "Last updated: [timestamp]"
+    - Show clear indicators when data is stale (> 24 hours old)
+    - Allow user to force refresh (bypass cache)
+- Rate limiting and error handling (see detailed strategy above)
+- Mock data for development (use local JSON files or mock service)
 
 ---
 
@@ -1238,13 +1378,30 @@ class TransportationService {
 ### 2. API Rate Limiting
 
 **External APIs**:
-- Implement request queuing for flight/train APIs
-- Batch requests where possible
-- Respect API rate limits
+- **Flight/Train APIs**:
+  - Implement request queuing with exponential backoff
+  - Batch requests where possible (if API supports)
+  - Respect API rate limits (track requests per minute/hour)
+  - Queue overflow: If queue exceeds 100 requests, reject new requests with "Service busy" message
+- **Google Maps Directions API**:
+  - Rate limit: 40 requests/second, 25,000 requests/day (free tier)
+  - Use batch requests for multiple routes (up to 25 routes per batch)
+  - Implement request queue with priority (user-initiated > background)
+  - Fallback strategy: If rate limit exceeded, use cached data or return "Unable to calculate" message
+  - Consider Mapbox as alternative (different rate limits: 600 requests/minute)
+- **Geocoding APIs**:
+  - Cache geocoding results indefinitely (addresses don't change)
+  - Batch geocode requests when possible
 
 **Internal APIs**:
-- Rate limit `/api/transportation/*` endpoints
-- Prevent abuse of expensive external API calls
+- Rate limit `/api/transportation/*` endpoints:
+  - 10 requests/minute per user (prevents abuse)
+  - 100 requests/hour per user (hard limit)
+  - Exempt authenticated users from some limits
+- Prevent abuse of expensive external API calls:
+  - Track API costs per user
+  - Implement daily/monthly limits per user
+  - Show usage warnings if approaching limits
 
 ---
 
@@ -1301,7 +1458,8 @@ class TransportationService {
    - Connect `FlightSearchScreen` to API
    - Display search results
    - Add loading/error states
-   - Integrate with `ApiService`
+   - Extend existing `ApiService` class with new methods (don't create separate service)
+   - Add methods: `searchFlights()`, `searchTrains()`, `getRouteCost()`
 
 **Deliverable**: PR #2 - Basic flight search
 
@@ -1356,8 +1514,12 @@ class TransportationService {
 
 2. **Mobile App**:
    - Create `TrainSearchScreen`
+   - **Access Control**: Only accessible when user has an active trip (check `ItineraryContext`)
    - Integrate into `TripOverviewScreen`
    - Add inter-match travel cards
+   - **Entry Points**:
+     - Flight search: Available always (standalone screen or trip-integrated)
+     - Train search: Only within trip context (from `TripOverviewScreen` or inter-match travel card)
 
 **Deliverable**: PR #5 - Train search
 
@@ -1389,16 +1551,23 @@ class TransportationService {
    - Implement `/api/trips/:id/home-bases` endpoints (CRUD)
    - Implement `/api/trips/:id/travel-times` endpoint
    - Integrate Google Maps/Mapbox Directions API
-   - Create `TravelTimeCache` model for performance
+   - Create `TravelTimeCache` model for performance (with time-of-day support)
    - Implement geocoding for addresses
+   - Add validation rules (type validation, date range validation, location validation)
 
 2. **Mobile App**:
+   - **State Management**: Add home base methods to `ItineraryContext`:
+     - `addHomeBase(tripId, homeBase)`
+     - `updateHomeBase(tripId, homeBaseId, updates)`
+     - `deleteHomeBase(tripId, homeBaseId)`
+     - `getHomeBasesForTrip(tripId)`
    - Create `HomeBaseManager` component
    - Create `HomeBaseSelector` component
    - Create `TravelTimeDisplay` component
    - Integrate into `TripOverviewScreen`
    - Add travel time display to `MatchCard`
    - Add "Manage Home Bases" UI
+   - Handle edge cases: no home base for date, missing coordinates, API failures
 
 **Deliverable**: PR #7 - Home base management
 
@@ -1637,16 +1806,32 @@ RAIL_EUROPE_API_KEY=xxx
    - Premium features?
 
 3. **Data Retention**:
-   - How long to keep search history?
-   - Route cost history retention period?
+   - **Search History**: 
+     - Per-user search history: 90 days (opt-in, user can delete anytime)
+     - Global aggregated data: Indefinite (anonymized, for cost tracking)
+   - **Route Cost History**: 
+     - Keep price history for 1 year
+     - Aggregate older data into monthly averages
+     - Prune data older than 2 years
+   - **Travel Time Cache**: 
+     - Keep for 30 days (addresses don't change, but traffic patterns might)
+     - Prune expired cache entries daily
 
 4. **International Coverage**:
    - Start with Europe only?
    - Expand to other regions?
 
 5. **Train vs. Flight Priority**:
-   - When to show trains vs. flights?
-   - Distance thresholds?
+   - **Decision Logic**:
+     - Show **trains only** if: distance < 500 km AND same country/region (e.g., London-Paris, Madrid-Barcelona)
+     - Show **flights only** if: distance > 800 km OR different continents
+     - Show **both trains and flights** if: distance 500-800 km (let user choose)
+     - User preference: Allow toggle to show only trains or only flights
+   - **Distance Calculation**: Use straight-line distance between venue cities (not exact coordinates)
+   - **Regional Considerations**: 
+     - Europe: Prefer trains for < 500 km
+     - North America: Prefer flights for > 300 km (less train infrastructure)
+     - Asia: Case-by-case (high-speed rail in some regions)
 
 6. **Home Base Data Sources**:
    - Use Google Maps Directions API or Mapbox?
@@ -1695,10 +1880,14 @@ The design follows existing patterns in the codebase (Context API, service layer
 
 **Which Home Base to Use**:
 1. Find all home bases with date ranges that include the match date
-2. If multiple home bases match, prefer:
-   - Most specific (hotel/Airbnb over city)
-   - Closest to match venue
-   - Longest duration (most "stable" home base)
+2. If multiple home bases match, use priority order (NOT based on travel time - that's circular):
+   - **Priority 1**: Most specific type (hotel/Airbnb > custom > city)
+   - **Priority 2**: Longest duration (most "stable" home base - indicates primary accommodation)
+   - **Priority 3**: Straight-line distance (use coordinates, not travel time) - only as tiebreaker
+3. If no home base matches match date:
+   - Default to city center of match venue's city
+   - Show warning: "No home base configured for this date"
+4. Calculate travel times AFTER home base is selected (not used for selection)
 
 **Transportation Modes**:
 - **Walking**: For distances < 2 km
@@ -1737,7 +1926,14 @@ The design follows existing patterns in the codebase (Context API, service layer
 - Show loading state while calculating
 
 **API Rate Limiting**:
-- Google Maps Directions API: 40 requests/second
-- Implement request queuing for bulk calculations
-- Use batch requests where possible
+- Google Maps Directions API: 40 requests/second, 25,000 requests/day
+- Implement request queuing with exponential backoff for bulk calculations
+- Use batch requests where possible (up to 25 routes per batch)
+- **Error Handling for Travel Times**:
+  - If no home base matches match date: Default to city center, show warning
+  - If home base has no coordinates: Use city center, prompt user to add address
+  - If venue has no coordinates: Use straight-line distance estimate, show "Approximate"
+  - If Directions API returns no route: Show "Unable to calculate route - may be unreachable"
+  - If API rate limit exceeded: Use cached data if available, otherwise show "Service temporarily unavailable"
+  - If network error: Show cached data if available, otherwise show "Unable to calculate - check connection"
 
