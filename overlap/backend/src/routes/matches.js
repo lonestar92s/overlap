@@ -712,49 +712,55 @@ router.get('/search', async (req, res) => {
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
                 if (venue?.id) {
+                    // Always fetch venue data from API-Football to get image (MongoDB doesn't store images)
+                    // This is cached, so subsequent calls are fast
+                    let apiVenueData = null;
+                    try {
+                        apiVenueData = await getVenueFromApiFootball(venue.id);
+                    } catch (error) {
+                        console.log(`⚠️ Failed to fetch venue data for ID ${venue.id}: ${error.message}`);
+                    }
+                    
                     const localVenue = await venueService.getVenueByApiId(venue.id);
                     const localCoords = localVenue?.coordinates || localVenue?.location?.coordinates;
                     
                     if (localVenue && localCoords) {
-                        // MongoDB has venue with coordinates - use it
+                        // MongoDB has venue with coordinates - use it, but get image from API
                         venueInfo = {
                             id: venue.id,
                             name: localVenue.name,
                             city: localVenue.city,
                             country: localVenue.country,
                             coordinates: localCoords,
-                            image: localVenue.image || null
+                            image: apiVenueData?.image || null // Use image from API-Football (MongoDB doesn't store images)
                         };
-                    } else {
-                        // MongoDB doesn't have venue OR doesn't have coordinates - try API-Sports
-                        const v = await getVenueFromApiFootball(venue.id);
-                        if (v) {
-                            // API-Sports venue data - check for coordinates in multiple places
-                            const apiCoords = v.coordinates || 
-                                             (Array.isArray(v.location) ? v.location : null) ||
-                                             (v.lat && v.lng ? [v.lng, v.lat] : null) ||
-                                             venue?.coordinates || null;
-                            
-                            venueInfo = {
-                                id: venue.id,
-                                name: v.name || localVenue?.name || venue?.name,
-                                city: v.city || localVenue?.city || venue?.city,
-                                country: v.country || localVenue?.country || venue?.country,
-                                coordinates: apiCoords,
-                                image: v.image || localVenue?.image || null
-                            };
-                        } else if (localVenue) {
-                            // MongoDB has venue but no coordinates, and API-Sports also failed - use MongoDB data without coords
-                            // This will trigger the fallback logic to include based on country matching
-                            venueInfo = {
-                                id: venue.id,
-                                name: localVenue.name,
-                                city: localVenue.city,
-                                country: localVenue.country,
-                                coordinates: null, // No coordinates available
-                                image: localVenue.image || null
-                            };
-                        }
+                    } else if (apiVenueData) {
+                        // MongoDB doesn't have venue OR doesn't have coordinates - use API-Sports data
+                        // API-Sports venue data - check for coordinates in multiple places
+                        const apiCoords = apiVenueData.coordinates || 
+                                         (Array.isArray(apiVenueData.location) ? apiVenueData.location : null) ||
+                                         (apiVenueData.lat && apiVenueData.lng ? [apiVenueData.lng, apiVenueData.lat] : null) ||
+                                         venue?.coordinates || null;
+                        
+                        venueInfo = {
+                            id: venue.id,
+                            name: apiVenueData.name || localVenue?.name || venue?.name,
+                            city: apiVenueData.city || localVenue?.city || venue?.city,
+                            country: apiVenueData.country || localVenue?.country || venue?.country,
+                            coordinates: apiCoords,
+                            image: apiVenueData.image || null // Use image from API-Football
+                        };
+                    } else if (localVenue) {
+                        // MongoDB has venue but no coordinates, and API-Sports also failed - use MongoDB data without coords
+                        // This will trigger the fallback logic to include based on country matching
+                        venueInfo = {
+                            id: venue.id,
+                            name: localVenue.name,
+                            city: localVenue.city,
+                            country: localVenue.country,
+                            coordinates: null, // No coordinates available
+                            image: apiVenueData?.image || null // Use image from API-Football if we fetched it
+                        };
                     }
                 }
                 
@@ -952,28 +958,37 @@ router.get('/search', async (req, res) => {
                 
                 let venueInfo = null;
                 if (venue?.id) {
+                    // Always fetch venue data from API-Football to get image (MongoDB doesn't store images)
+                    // This is cached, so subsequent calls are fast
+                    let apiVenueData = null;
+                    try {
+                        apiVenueData = await getVenueFromApiFootball(venue.id);
+                    } catch (error) {
+                        console.log(`⚠️ Failed to fetch venue data for ID ${venue.id}: ${error.message}`);
+                    }
+                    
                     const localVenue = await venueService.getVenueByApiId(venue.id);
+                    
                     if (localVenue) {
+                        // Use MongoDB data but get image from API-Football
                         venueInfo = {
                             id: venue.id,
                             name: localVenue.name,
                             city: localVenue.city,
                             country: localVenue.country,
                             coordinates: localVenue.coordinates || localVenue.location?.coordinates,
-                            image: localVenue.image || null
+                            image: apiVenueData?.image || null // Use image from API-Football (MongoDB doesn't store images)
                         };
-                    } else {
-                        const v = await getVenueFromApiFootball(venue.id);
-                        if (v) {
-                            venueInfo = {
-                                id: venue.id,
-                                name: v.name,
-                                city: v.city,
-                                country: v.country,
-                                coordinates: null,
-                                image: v.image || null
-                            };
-                        }
+                    } else if (apiVenueData) {
+                        // No MongoDB data, use API-Football data
+                        venueInfo = {
+                            id: venue.id,
+                            name: apiVenueData.name,
+                            city: apiVenueData.city,
+                            country: apiVenueData.country,
+                            coordinates: null,
+                            image: apiVenueData.image || null
+                        };
                     }
                 }
                 if (!venueInfo) {
@@ -1283,9 +1298,18 @@ router.get('/popular', async (req, res) => {
             let finalVenueData = null;
             
             if (venue?.id) {
+                // Always fetch venue data from API-Football to get image (MongoDB doesn't store images)
+                // This is cached, so subsequent calls are fast
+                let apiVenueData = null;
+                try {
+                    apiVenueData = await getVenueFromApiFootball(venue.id);
+                } catch (error) {
+                    console.log(`⚠️ Failed to fetch venue data for ID ${venue.id}: ${error.message}`);
+                }
                 
                 const localVenue = await venueService.getVenueByApiId(venue.id);
                 if (localVenue) {
+                    // Use MongoDB data but get image from API-Football
                     apiFootballVenue = {
                         name: localVenue.name,
                         city: localVenue.city,
@@ -1293,13 +1317,12 @@ router.get('/popular', async (req, res) => {
                         capacity: localVenue.capacity,
                         surface: localVenue.surface,
                         address: localVenue.address,
-                        image: localVenue.image,
+                        image: apiVenueData?.image || null, // Use image from API-Football (MongoDB doesn't store images)
                         coordinates: localVenue.coordinates || localVenue.location?.coordinates
                     };
-                    ;
-                } else {
-
-                    apiFootballVenue = await getVenueFromApiFootball(venue.id);
+                } else if (apiVenueData) {
+                    // No MongoDB data, use API-Football data
+                    apiFootballVenue = apiVenueData;
                 }
             }
             if (!apiFootballVenue && venue?.name) {
