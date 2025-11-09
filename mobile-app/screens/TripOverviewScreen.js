@@ -7,9 +7,13 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView,
+  TextInput,
+  Image
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
@@ -32,7 +36,7 @@ import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../s
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById, updateMatchPlanning, addMatchToItinerary } = useItineraries();
+  const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,12 +46,18 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [scoresLoading, setScoresLoading] = useState(false);
+  const [matchesExpanded, setMatchesExpanded] = useState(true);
+  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [notesText, setNotesText] = useState('');
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   useEffect(() => {
     if (itineraryId) {
       const foundItinerary = getItineraryById(itineraryId);
       if (foundItinerary) {
         setItinerary(foundItinerary);
+        setNotesText(foundItinerary.description || '');
         // Fetch recommendations if trip has matches
         if (foundItinerary.matches && foundItinerary.matches.length > 0) {
           fetchRecommendations(foundItinerary.id || foundItinerary._id);
@@ -58,6 +68,52 @@ const TripOverviewScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
+
+  // Save notes/description to trip
+  const handleSaveNotes = async () => {
+    if (!itinerary) return;
+    
+    setIsSavingNotes(true);
+    try {
+      const tripId = itinerary.id || itinerary._id;
+      await apiService.updateTrip(tripId, { description: notesText });
+      
+      // Update local state
+      setItinerary(prev => ({
+        ...prev,
+        description: notesText
+      }));
+      
+      setIsEditingNotes(false);
+    } catch (error) {
+      console.error('Error saving notes:', error);
+      Alert.alert('Error', 'Failed to save notes. Please try again.');
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  // Format date range for trip info card
+  const formatDateRange = () => {
+    if (!itinerary?.matches || itinerary.matches.length === 0) {
+      return null;
+    }
+    
+    const dates = itinerary.matches
+      .map(m => new Date(m.date))
+      .sort((a, b) => a - b);
+    
+    const start = dates[0];
+    const end = dates[dates.length - 1];
+    
+    if (start.toDateString() === end.toDateString()) {
+      return start.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+    }
+    
+    const startStr = start.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+    const endStr = end.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+    return `${startStr}-${endStr}`;
+  };
 
   const fetchRecommendations = async (tripId, forceRefresh = false) => {
     setRecommendationsLoading(true);
@@ -471,77 +527,193 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header with back button and settings */}
+      <View style={styles.topHeader}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.backButtonIcon}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <MaterialIcons name="arrow-back" size={16} color={colors.text.primary} />
         </TouchableOpacity>
         
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{itinerary.name}</Text>
-          <Text style={styles.headerSubtitle}>
-            {itinerary.matches?.length || 0} matches
-            {groupedMatches.length > 0 && ` • ${groupedMatches.length} date${groupedMatches.length === 1 ? '' : 's'}`}
-            {itinerary.destination && ` • ${itinerary.destination}`}
-          </Text>
-        </View>
-
         <TouchableOpacity
-          style={styles.moreButton}
+          style={styles.settingsButton}
           onPress={() => setModalVisible(true)}
         >
-          <Icon name="more-vert" size={24} color={colors.text.secondary} />
+          <MaterialIcons name="more-vert" size={16} color={colors.text.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      {itinerary.matches && itinerary.matches.length > 0 ? (
-        <FlatList
-          data={flatListData}
-          renderItem={({ item }) => {
-            if (item.type === 'header') {
-              return (
-                <View style={styles.dateHeader}>
-                  <Text style={styles.dateHeaderText}>
-                    {formatDateHeader(item.date)}
-                  </Text>
-                </View>
-              );
-            } else if (item.type === 'recommendations-header') {
-              return (
-                <View style={styles.recommendationsHeader}>
-                  <Icon name="recommend" size={20} color={colors.secondary} />
-                  <Text style={styles.recommendationsHeaderText}>
-                    Recommended Matches to Check Out on Your Trip
-                  </Text>
-                  <View style={styles.recommendationsCountChip}>
-                    <Text style={styles.recommendationsCountText}>
-                      {recommendations.length} recommendation{recommendations.length !== 1 ? 's' : ''}
-                    </Text>
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Trip Info Card */}
+        <View style={styles.tripInfoCard}>
+          <View style={styles.tripInfoHeader}>
+            <Text style={styles.tripInfoTitle}>{itinerary.name}</Text>
+            {formatDateRange() && (
+              <View style={styles.dateRangeContainer}>
+                <MaterialIcons name="calendar-today" size={21} color="rgba(0, 0, 0, 0.5)" />
+                <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
+              </View>
+            )}
+          </View>
+          
+          {/* User section - placeholder for now */}
+          <View style={styles.userSection}>
+            <View style={styles.userInfo}>
+              <View style={styles.profileIcon}>
+                <Text style={styles.profileIconText}>A</Text>
+              </View>
+              <Text style={styles.userName}>Andrew Aluko</Text>
+            </View>
+            <TouchableOpacity style={styles.followButton}>
+              <Text style={styles.followButtonText}>Follow</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Description/Notes preview */}
+          {itinerary.description && (
+            <Text style={styles.tripDescription} numberOfLines={3}>
+              {itinerary.description}
+            </Text>
+          )}
+        </View>
+
+        {/* Matches Section - Collapsible */}
+        <View style={styles.sectionCard}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setMatchesExpanded(!matchesExpanded)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionTitle}>Matches</Text>
+            <MaterialIcons
+              name={matchesExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+              size={24}
+              color={colors.text.primary}
+            />
+          </TouchableOpacity>
+          
+          {matchesExpanded && (
+            <View style={styles.sectionContent}>
+              {itinerary.matches && itinerary.matches.length > 0 ? (
+                <FlatList
+                  data={flatListData}
+                  scrollEnabled={false}
+                  renderItem={({ item }) => {
+                    if (item.type === 'header') {
+                      return (
+                        <View style={styles.dateHeader}>
+                          <Text style={styles.dateHeaderText}>
+                            {formatDateHeader(item.date)}
+                          </Text>
+                        </View>
+                      );
+                    } else if (item.type === 'recommendations-header') {
+                      return (
+                        <View style={styles.recommendationsHeader}>
+                          <Icon name="recommend" size={20} color={colors.secondary} />
+                          <Text style={styles.recommendationsHeaderText}>
+                            Recommended Matches to Check Out on Your Trip
+                          </Text>
+                          <View style={styles.recommendationsCountChip}>
+                            <Text style={styles.recommendationsCountText}>
+                              {recommendations.length} recommendation{recommendations.length !== 1 ? 's' : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    } else if (item.type === 'recommendation') {
+                      return renderRecommendationItem({ item });
+                    } else {
+                      return renderMatchItem({ item });
+                    }
+                  }}
+                  keyExtractor={(item, index) => {
+                    if (item.type === 'header') return `header-${index}`;
+                    if (item.type === 'recommendations-header') return `recommendations-header-${index}`;
+                    if (item.type === 'recommendation') return `recommendation-${item.matchId}-${index}`;
+                    return item.matchId || `match-${index}`;
+                  }}
+                />
+              ) : (
+                renderEmptyState()
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* Notes Section - Collapsible */}
+        <View style={styles.sectionCard}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setNotesExpanded(!notesExpanded)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionTitle}>Notes</Text>
+            <MaterialIcons
+              name={notesExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+              size={24}
+              color={colors.text.primary}
+            />
+          </TouchableOpacity>
+          
+          {notesExpanded && (
+            <View style={styles.notesContent}>
+              {isEditingNotes ? (
+                <View>
+                  <TextInput
+                    style={styles.notesInput}
+                    multiline
+                    value={notesText}
+                    onChangeText={setNotesText}
+                    placeholder="Add notes about your trip..."
+                    placeholderTextColor={colors.text.light}
+                    autoFocus
+                  />
+                  <View style={styles.notesActions}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={() => {
+                        setNotesText(itinerary.description || '');
+                        setIsEditingNotes(false);
+                      }}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={handleSaveNotes}
+                      disabled={isSavingNotes}
+                    >
+                      {isSavingNotes ? (
+                        <ActivityIndicator size="small" color={colors.onPrimary} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save</Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 </View>
-              );
-            } else if (item.type === 'recommendation') {
-              return renderRecommendationItem({ item });
-            } else {
-              return renderMatchItem({ item });
-            }
-          }}
-          keyExtractor={(item, index) => {
-            if (item.type === 'header') return `header-${index}`;
-            if (item.type === 'recommendations-header') return `recommendations-header-${index}`;
-            if (item.type === 'recommendation') return `recommendation-${item.matchId}-${index}`;
-            return item.matchId || `match-${index}`;
-          }}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        renderEmptyState()
-      )}
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setIsEditingNotes(true)}
+                  activeOpacity={0.7}
+                >
+                  {notesText ? (
+                    <Text style={styles.notesText}>{notesText}</Text>
+                  ) : (
+                    <Text style={styles.notesPlaceholder}>Tap to add notes...</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </ScrollView>
 
 
       {/* Map Button - Floating at bottom */}
@@ -597,7 +769,33 @@ const TripOverviewScreen = ({ navigation, route }) => {
                 <Icon name="chevron-right" size={20} color={colors.text.light} />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.modalOption}>
+              <TouchableOpacity 
+                style={styles.modalOption}
+                onPress={() => {
+                  setModalVisible(false);
+                  Alert.alert(
+                    'Delete Trip',
+                    `Are you sure you want to delete "${itinerary.name}"? This action cannot be undone.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            await deleteItinerary(itinerary.id || itinerary._id);
+                            // Navigate back to trips list after successful deletion
+                            navigation.goBack();
+                          } catch (error) {
+                            console.error('Error deleting trip:', error);
+                            Alert.alert('Error', 'Failed to delete trip. Please try again.');
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
                 <View style={styles.modalOptionLeft}>
                   <Icon name="delete" size={20} color={colors.text.secondary} />
                   <Text style={styles.modalOptionText}>Delete</Text>
@@ -935,6 +1133,190 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.primary,
     marginLeft: spacing.sm,
+    fontWeight: '500',
+  },
+  // New styles for redesigned trip overview
+  topHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  backButtonIcon: {
+    padding: spacing.xs,
+    width: 25,
+    height: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsButton: {
+    padding: spacing.xs,
+    width: 25,
+    height: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  tripInfoCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  tripInfoHeader: {
+    gap: spacing.sm + spacing.xs,
+  },
+  tripInfoTitle: {
+    ...typography.h1,
+    fontWeight: '700',
+    fontSize: 24,
+    color: colors.text.primary,
+  },
+  dateRangeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 1,
+  },
+  dateRangeText: {
+    ...typography.caption,
+    color: 'rgba(0, 0, 0, 0.5)',
+  },
+  userSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  profileIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#d9d9d9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileIconText: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  userName: {
+    ...typography.body,
+    color: 'rgba(0, 0, 0, 0.5)',
+  },
+  followButton: {
+    borderWidth: 1,
+    borderColor: colors.text.primary,
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + spacing.xs,
+    minWidth: 66,
+    alignItems: 'center',
+  },
+  followButtonText: {
+    ...typography.caption,
+    color: colors.text.primary,
+  },
+  tripDescription: {
+    ...typography.caption,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
+  },
+  sectionCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  sectionTitle: {
+    ...typography.h1,
+    fontWeight: '500',
+    fontSize: 24,
+    color: colors.text.primary,
+  },
+  sectionContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  notesContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  notesInput: {
+    ...typography.caption,
+    color: colors.text.primary,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.md,
+  },
+  notesText: {
+    ...typography.caption,
+    color: colors.text.primary,
+    paddingVertical: spacing.sm,
+  },
+  notesPlaceholder: {
+    ...typography.caption,
+    color: colors.text.light,
+    paddingVertical: spacing.sm,
+    fontStyle: 'italic',
+  },
+  notesActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  cancelButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  cancelButtonText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    ...typography.caption,
+    color: colors.onPrimary,
     fontWeight: '500',
   },
 });

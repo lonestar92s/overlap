@@ -339,18 +339,6 @@ const TripsListScreen = ({ navigation }) => {
             refreshing={refreshing}
             onRefresh={handleRefresh}
             showsVerticalScrollIndicator={false}
-            ListFooterComponent={
-              <TouchableOpacity
-                style={styles.startNewLapButton}
-                onPress={() => {
-                  // Placeholder - functionality to be determined
-                  Alert.alert('Coming Soon', 'Start a new lap functionality coming soon');
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.startNewLapButtonText}>Start a new lap</Text>
-              </TouchableOpacity>
-            }
           />
         </View>
       ) : (
@@ -603,25 +591,6 @@ const styles = StyleSheet.create({
     fontWeight: '400', // Regular
     lineHeight: 19,
     color: 'rgba(0, 0, 0, 0.75)', // 75% opacity black
-  },
-  startNewLapButton: {
-    backgroundColor: colors.primaryGreen,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.md - spacing.xs,
-    paddingHorizontal: spacing.xl + spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-    ...shadows.small,
-  },
-  startNewLapButtonText: {
-    ...typography.body,
-    fontWeight: '500',
-    color: colors.onPrimary,
   },
   emptyState: {
     flex: 1,

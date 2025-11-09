@@ -1,5 +1,6 @@
 // Design Tokens based on Figma wireframes
 // Colors, spacing, typography, and component styles
+import { Platform } from 'react-native';
 
 export const colors = {
   // Primary colors
@@ -73,18 +74,31 @@ export const safeArea = {
   // For screens with SafeAreaView, use: paddingTop: spacing.lg (SafeAreaView handles safe area)
 };
 
+// Base font family - Helvetica Neue (available on iOS, fallback to system on Android)
+const baseFontFamily = Platform.select({
+  ios: 'Helvetica Neue',
+  android: 'sans-serif', // Android doesn't have Helvetica Neue, use system sans-serif
+});
+
+// Helper function to add fontFamily to typography styles
+const withFontFamily = (style) => ({
+  ...style,
+  fontFamily: baseFontFamily,
+});
+
 export const typography = {
-  h1: { fontSize: 24, fontWeight: '700', lineHeight: 32 }, // Changed 'bold' to '700' for better RN support
-  h2: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
-  h3: { fontSize: 18, fontWeight: '600', lineHeight: 24 },
-  body: { fontSize: 16, fontWeight: '400', lineHeight: 22 },
-  bodySmall: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
-  caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
-  button: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
+  fontFamily: baseFontFamily, // Available as typography.fontFamily if needed
+  h1: withFontFamily({ fontSize: 24, fontWeight: '700', lineHeight: 32 }), // Changed 'bold' to '700' for better RN support
+  h2: withFontFamily({ fontSize: 20, fontWeight: '600', lineHeight: 28 }),
+  h3: withFontFamily({ fontSize: 18, fontWeight: '600', lineHeight: 24 }),
+  body: withFontFamily({ fontSize: 16, fontWeight: '400', lineHeight: 22 }),
+  bodySmall: withFontFamily({ fontSize: 14, fontWeight: '400', lineHeight: 20 }),
+  caption: withFontFamily({ fontSize: 12, fontWeight: '400', lineHeight: 16 }),
+  button: withFontFamily({ fontSize: 16, fontWeight: '600', lineHeight: 22 }),
   // Additional variants
-  h1Large: { fontSize: 28, fontWeight: '700', lineHeight: 36 },
-  h1XLarge: { fontSize: 32, fontWeight: '700', lineHeight: 40 }, // For "Trips" title
-  overline: { fontSize: 10, fontWeight: '600', lineHeight: 14, textTransform: 'uppercase' },
+  h1Large: withFontFamily({ fontSize: 28, fontWeight: '700', lineHeight: 36 }),
+  h1XLarge: withFontFamily({ fontSize: 32, fontWeight: '700', lineHeight: 40 }), // For "Trips" title
+  overline: withFontFamily({ fontSize: 10, fontWeight: '600', lineHeight: 14, textTransform: 'uppercase' }),
 };
 
 export const borderRadius = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, pill: 20, card: 14 }; // card: 14px for trip cards

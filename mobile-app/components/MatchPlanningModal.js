@@ -11,6 +11,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated }) => {
   const { updateMatchPlanning } = useItineraries();
@@ -35,9 +36,9 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
   }, [match]);
 
   const statusOptions = [
-    { value: 'no', label: 'No', color: '#FF6B6B' },
-    { value: 'in-progress', label: 'In Progress', color: '#FFD93D' },
-    { value: 'yes', label: 'Yes', color: '#6BCF7F' }
+    { value: 'no', label: 'No', color: colors.error },
+    { value: 'in-progress', label: 'In Progress', color: colors.warning },
+    { value: 'yes', label: 'Yes', color: colors.success }
   ];
 
   const handleStatusChange = (field, value) => {
@@ -77,13 +78,13 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
               key={option.value}
               style={[
                 styles.statusButton,
-                { backgroundColor: planning[field] === option.value ? option.color : '#F5F5F5' }
+                { backgroundColor: planning[field] === option.value ? option.color : colors.background }
               ]}
               onPress={() => handleStatusChange(field, option.value)}
             >
               <Text style={[
                 styles.statusButtonText,
-                { color: planning[field] === option.value ? '#FFFFFF' : '#333333' }
+                { color: planning[field] === option.value ? colors.onPrimary : colors.text.primary }
               ]}>
                 {option.label}
               </Text>
@@ -167,78 +168,78 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.card
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    backgroundColor: '#FFFFFF'
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card
   },
   closeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm + spacing.xs
   },
   closeButtonText: {
-    fontSize: 16,
-    color: '#007AFF'
+    ...typography.body,
+    color: colors.primary
   },
   title: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: '600',
-    color: '#333333'
+    color: colors.text.primary
   },
   saveButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.sm
   },
   saveButtonDisabled: {
-    backgroundColor: '#CCCCCC'
+    backgroundColor: colors.interactive.disabled
   },
   saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: colors.onPrimary,
+    ...typography.body,
     fontWeight: '600'
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20
+    paddingHorizontal: spacing.lg
   },
   matchInfo: {
-    paddingVertical: 20,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    marginBottom: 20
+    borderBottomColor: colors.border,
+    marginBottom: spacing.lg
   },
   matchTitle: {
-    fontSize: 20,
+    ...typography.h2,
     fontWeight: '700',
-    color: '#333333',
-    marginBottom: 8
+    color: colors.text.primary,
+    marginBottom: spacing.sm
   },
   matchDetails: {
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 4
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs
   },
   matchDate: {
-    fontSize: 14,
-    color: '#888888'
+    ...typography.bodySmall,
+    color: colors.text.light
   },
   statusSection: {
-    marginBottom: 30
+    marginBottom: spacing.xl + spacing.sm
   },
   statusLabel: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: '600',
-    color: '#333333',
-    marginBottom: 12
+    color: colors.text.primary,
+    marginBottom: spacing.sm + spacing.xs
   },
   statusButtons: {
     flexDirection: 'row',
@@ -246,33 +247,33 @@ const styles = StyleSheet.create({
   },
   statusButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginHorizontal: 4,
+    paddingVertical: spacing.sm + spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.sm,
+    marginHorizontal: spacing.xs,
     alignItems: 'center'
   },
   statusButtonText: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600'
   },
   notesSection: {
-    marginBottom: 30
+    marginBottom: spacing.xl + spacing.sm
   },
   notesLabel: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: '600',
-    color: '#333333',
-    marginBottom: 12
+    color: colors.text.primary,
+    marginBottom: spacing.sm + spacing.xs
   },
   notesInput: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.sm + spacing.xs,
+    ...typography.body,
     minHeight: 100,
-    backgroundColor: '#FAFAFA'
+    backgroundColor: colors.cardGrey
   }
 });
 
