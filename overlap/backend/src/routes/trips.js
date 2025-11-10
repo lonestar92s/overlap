@@ -466,24 +466,43 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
         // Mongoose subdocuments can be accessed by _id string
         let flight = trip.flights.id(req.params.flightId);
         
-        // If not found, try finding by matching _id string
+        // If not found, try finding by matching _id string (case-insensitive, handle ObjectId)
         if (!flight) {
-            flight = trip.flights.find(f => 
-                String(f._id) === String(req.params.flightId) ||
-                String(f.id) === String(req.params.flightId)
-            );
+            const flightIdStr = String(req.params.flightId);
+            flight = trip.flights.find(f => {
+                const fId = String(f._id || f.id || '');
+                return fId === flightIdStr || 
+                       fId.toLowerCase() === flightIdStr.toLowerCase() ||
+                       f._id?.toString() === flightIdStr ||
+                       f.id?.toString() === flightIdStr;
+            });
         }
         
         if (!flight) {
             console.error('Flight not found:', {
-                flightId: req.params.flightId,
-                availableFlightIds: trip.flights.map(f => ({ _id: String(f._id), id: String(f.id) }))
+                requestedFlightId: req.params.flightId,
+                requestedFlightIdType: typeof req.params.flightId,
+                tripFlightsCount: trip.flights.length,
+                availableFlightIds: trip.flights.map((f, idx) => ({ 
+                    index: idx,
+                    _id: f._id ? String(f._id) : 'no _id',
+                    id: f.id ? String(f.id) : 'no id',
+                    flightNumber: f.flightNumber,
+                    _idType: typeof f._id,
+                    idType: typeof f.id
+                }))
             });
             return res.status(404).json({
                 success: false,
                 message: 'Flight not found'
             });
         }
+        
+        console.log('Flight found for deletion:', {
+            flightId: String(flight._id || flight.id),
+            flightNumber: flight.flightNumber,
+            tripFlightsCount: trip.flights.length
+        });
 
         // Check if trip has no matches and would have less than 2 flights after deletion
         if (trip.matches.length === 0 && trip.flights.length <= 2) {

@@ -456,6 +456,7 @@ async function getRelevantLeagueIds(bounds) {
                     'Portugal': isInEurope && centerLat > 36 && centerLat < 42 && centerLng > -10 && centerLng < -6,
                     'Netherlands': isInEurope && centerLat > 50 && centerLat < 54 && centerLng > 3 && centerLng < 8,
                     'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
+                    'Mexico': isInNorthAmerica && centerLat > 14 && centerLat < 33 && centerLng > -118 && centerLng < -86,
                     'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
                 };
 
@@ -475,7 +476,7 @@ async function getRelevantLeagueIds(bounds) {
 
     // Fallback: if no relevant leagues found, include top European leagues plus international
     if (relevantLeagueIds.length === 0) {
-        const fallbackApiIds = ['39', '140', '78', '135', '61', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, UCL, UEL
+        const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
         const fallbackLeagues = await League.find({ 
             apiId: { $in: fallbackApiIds },
             isActive: true 
@@ -635,7 +636,7 @@ router.get('/search', async (req, res) => {
             if (majorLeagueIds.length === 0) {
                 console.log('⚠️ No relevant leagues found after filtering, using fallback');
                 // Fallback to essential leagues
-                majorLeagueIds.push(39, 140, 78, 135, 61, 2, 3);
+                majorLeagueIds.push(39, 140, 78, 135, 61, 62, 2, 3);
             }
             
             console.log(`🔍 Location-only search: Using ${majorLeagueIds.length} geographically-relevant leagues (filtered from all active leagues)`);
@@ -1572,10 +1573,10 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 })
                 .filter(Boolean);
             
-            targetLeagues = extractedLeagueIds.length > 0 ? extractedLeagueIds : ['39', '140', '135', '78', '61', '94', '97', '88'];
+            targetLeagues = extractedLeagueIds.length > 0 ? extractedLeagueIds : ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262'];
         } else {
             // Fallback to popular leagues
-            targetLeagues = ['39', '140', '135', '78', '61', '94', '97', '88'];
+            targetLeagues = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262'];
         }
 
         console.log(`🔍 Searching leagues: ${targetLeagues.join(', ')}`);

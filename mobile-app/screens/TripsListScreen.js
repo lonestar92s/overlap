@@ -179,7 +179,6 @@ const TripsListScreen = ({ navigation }) => {
     return matches.filter(m => 
       m.planning && (
         m.planning.ticketsAcquired === 'yes' || 
-        m.planning.flight === 'yes' || 
         m.planning.accommodation === 'yes'
       )
     ).length;

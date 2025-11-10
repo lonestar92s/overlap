@@ -468,7 +468,7 @@ router.get('/flights/by-number', async (req, res) => {
             });
         }
 
-        // Parse flight number (e.g., "UA387" -> airline: "UA", number: "387")
+        // Parse flight number (e.g., "UA387" or "BA0297" -> airline: "UA"/"BA", number: "387"/"297")
         const flightNumberUpper = flightNumber.toUpperCase().replace(/[\s-]/g, '');
         const flightMatch = flightNumberUpper.match(/^([A-Z]{2,3})(\d{1,4})$/);
         
@@ -480,41 +480,131 @@ router.get('/flights/by-number', async (req, res) => {
         }
 
         const [_, airlineCode, number] = flightMatch;
+        
+        // Normalize flight number by removing leading zeros for comparison
+        // BA0297 and BA297 should match
+        const normalizedNumber = parseInt(number, 10).toString();
+        const normalizedFlightNumber = `${airlineCode}${normalizedNumber}`;
+        
+        console.log('Flight number matching:', {
+            original: flightNumberUpper,
+            airlineCode,
+            number,
+            normalizedNumber,
+            normalizedFlightNumber,
+            totalResults: searchResult.results.length
+        });
 
         // Search through results to find matching flight
         let matchingFlight = null;
+        const foundFlightNumbers = [];
         
         for (const flight of searchResult.results) {
-            // Check main flight number
-            if (flight.flightNumber && flight.flightNumber.toUpperCase() === flightNumberUpper) {
-                matchingFlight = flight;
-                break;
+            // Check main flight number (exact match)
+            if (flight.flightNumber) {
+                const flightNumUpper = flight.flightNumber.toUpperCase().replace(/[\s-]/g, '');
+                foundFlightNumbers.push(flightNumUpper);
+                
+                if (flightNumUpper === flightNumberUpper) {
+                    matchingFlight = flight;
+                    break;
+                }
+                
+                // Try normalized match (BA0297 = BA297)
+                const flightMatch = flightNumUpper.match(/^([A-Z]{2,3})(\d{1,4})$/);
+                if (flightMatch) {
+                    const [_, fAirline, fNumber] = flightMatch;
+                    const fNormalized = `${fAirline}${parseInt(fNumber, 10).toString()}`;
+                    if (fNormalized === normalizedFlightNumber) {
+                        matchingFlight = flight;
+                        break;
+                    }
+                }
             }
             
             // Check segments for matching flight number
             if (flight.segments && Array.isArray(flight.segments)) {
                 for (const segment of flight.segments) {
-                    if (segment.flightNumber && segment.flightNumber.toUpperCase() === flightNumberUpper) {
-                        matchingFlight = flight;
-                        break;
+                    if (segment.flightNumber) {
+                        const segNumUpper = segment.flightNumber.toUpperCase().replace(/[\s-]/g, '');
+                        foundFlightNumbers.push(segNumUpper);
+                        
+                        if (segNumUpper === flightNumberUpper) {
+                            matchingFlight = flight;
+                            break;
+                        }
+                        
+                        // Try normalized match
+                        const segMatch = segNumUpper.match(/^([A-Z]{2,3})(\d{1,4})$/);
+                        if (segMatch) {
+                            const [_, sAirline, sNumber] = segMatch;
+                            const sNormalized = `${sAirline}${parseInt(sNumber, 10).toString()}`;
+                            if (sNormalized === normalizedFlightNumber) {
+                                matchingFlight = flight;
+                                break;
+                            }
+                        }
                     }
                     // Fallback: construct from carrier + number
                     if (segment.carrier && segment.number) {
                         const segmentFlightNumber = `${segment.carrier}${segment.number}`.toUpperCase();
+                        foundFlightNumbers.push(segmentFlightNumber);
+                        
                         if (segmentFlightNumber === flightNumberUpper) {
                             matchingFlight = flight;
                             break;
+                        }
+                        
+                        // Try normalized match
+                        const segMatch = segmentFlightNumber.match(/^([A-Z]{2,3})(\d{1,4})$/);
+                        if (segMatch) {
+                            const [_, sAirline, sNumber] = segMatch;
+                            const sNormalized = `${sAirline}${parseInt(sNumber, 10).toString()}`;
+                            if (sNormalized === normalizedFlightNumber) {
+                                matchingFlight = flight;
+                                break;
+                            }
                         }
                     }
                 }
                 if (matchingFlight) break;
             }
         }
+        
+        console.log('Flight search results:', {
+            searchedFor: flightNumberUpper,
+            normalizedSearch: normalizedFlightNumber,
+            foundFlightNumbers: [...new Set(foundFlightNumbers)].slice(0, 10), // Show first 10 unique
+            totalFound: foundFlightNumbers.length,
+            matchFound: !!matchingFlight
+        });
 
         if (!matchingFlight) {
+            // Provide more helpful error message
+            const uniqueFlightNumbers = [...new Set(foundFlightNumbers)].slice(0, 5);
+            
+            // Check if it's a known excluded airline (British Airways, etc.)
+            const excludedAirlines = ['BA', 'AF', 'KL']; // British Airways, Air France, KLM are known to be excluded from Amadeus Flight Offers Search API
+            const isExcludedAirline = excludedAirlines.includes(airlineCode);
+            
+            let errorMessage = `Flight ${flightNumber} not found in search results from ${origin} to ${destination} on ${date}. `;
+            
+            if (isExcludedAirline) {
+                errorMessage += `Note: ${airlineCode} (${airlineCode === 'BA' ? 'British Airways' : airlineCode}) flights are not available through our flight search API. ` +
+                    `While these airlines use Amadeus for their operations, their flights are excluded from the Amadeus Flight Offers Search API. ` +
+                    `You may need to add this flight manually or use the airline's website to verify flight details. `;
+            } else {
+                errorMessage += `Found ${searchResult.results.length} flights on this route. ` +
+                    (uniqueFlightNumbers.length > 0 
+                        ? `Sample flight numbers found: ${uniqueFlightNumbers.join(', ')}. ` 
+                        : '') +
+                    `This could mean: 1) The flight doesn't exist on this date, 2) The airline may not be available in our database for this route/date, ` +
+                    `3) The flight may be codeshared (operated by another airline), or 4) The date may be too far in the future.`;
+            }
+            
             return res.status(404).json({
                 error: 'Flight not found',
-                message: `Flight ${flightNumber} not found in search results from ${origin} to ${destination} on ${date}`
+                message: errorMessage
             });
         }
 

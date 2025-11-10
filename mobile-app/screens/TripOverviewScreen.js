@@ -68,20 +68,46 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (itineraryId) {
-      const foundItinerary = getItineraryById(itineraryId);
-      if (foundItinerary) {
-        setItinerary(foundItinerary);
-        // Separate description (for trip info card) and notes (for notes dropdown)
-        setDescriptionText(foundItinerary.description || '');
-        setNotesText(foundItinerary.notes || '');
-        // Fetch recommendations if trip has matches
-        if (foundItinerary.matches && foundItinerary.matches.length > 0) {
-          fetchRecommendations(foundItinerary.id || foundItinerary._id);
-          // Fetch scores for completed matches
-          fetchScores(foundItinerary.id || foundItinerary._id);
+      // Always fetch fresh data from API on mount to ensure we have latest flights
+      const loadItinerary = async () => {
+        try {
+          const response = await apiService.getTripById(itineraryId);
+          // Handle both response.trip and response.data formats
+          const tripData = response.trip || response.data;
+          if (response.success && tripData) {
+            console.log('Loaded itinerary on mount with flights:', tripData.flights?.length || 0);
+            setItinerary(tripData);
+            setDescriptionText(tripData.description || '');
+            setNotesText(tripData.notes || '');
+            // Fetch recommendations if trip has matches
+            if (tripData.matches && tripData.matches.length > 0) {
+              fetchRecommendations(tripData.id || tripData._id);
+              // Fetch scores for completed matches
+              fetchScores(tripData.id || tripData._id);
+            }
+          } else {
+            // Fallback to context if API fails
+            const foundItinerary = getItineraryById(itineraryId);
+            if (foundItinerary) {
+              setItinerary(foundItinerary);
+              setDescriptionText(foundItinerary.description || '');
+              setNotesText(foundItinerary.notes || '');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading itinerary:', error);
+          // Fallback to context
+          const foundItinerary = getItineraryById(itineraryId);
+          if (foundItinerary) {
+            setItinerary(foundItinerary);
+            setDescriptionText(foundItinerary.description || '');
+            setNotesText(foundItinerary.notes || '');
+          }
+        } finally {
+          setLoading(false);
         }
-      }
-      setLoading(false);
+      };
+      loadItinerary();
     }
   }, [itineraryId, getItineraryById]);
 
@@ -89,15 +115,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const handleFlightAdded = async () => {
     if (itineraryId) {
       try {
+        console.log('Refreshing itinerary after flight added:', itineraryId);
         // Refresh from context (which will update both context and local state)
         const updatedItinerary = await refreshItinerary(itineraryId);
+        console.log('Updated itinerary from context:', updatedItinerary);
         if (updatedItinerary) {
+          console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);
           setItinerary(updatedItinerary);
         } else {
           // Fallback: fetch directly if context refresh fails
+          console.log('Context refresh failed, fetching directly...');
           const response = await apiService.getTripById(itineraryId);
-          if (response.success && response.trip) {
-            setItinerary(response.trip);
+          console.log('Direct fetch response:', response);
+          // Handle both response.trip and response.data formats
+          const tripData = response.trip || response.data;
+          if (response.success && tripData) {
+            console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);
+            setItinerary(tripData);
           }
         }
       } catch (error) {
@@ -130,8 +164,26 @@ const TripOverviewScreen = ({ navigation, route }) => {
               
               await apiService.deleteFlightFromTrip(tripId, flightIdString);
               
-              // Refresh itinerary
-              await handleFlightAdded();
+              console.log('Flight deleted, refreshing itinerary...');
+              
+              // Refresh itinerary from context (which updates both context and local state)
+              const updatedItinerary = await refreshItinerary(tripId);
+              console.log('Updated itinerary after delete:', updatedItinerary);
+              if (updatedItinerary) {
+                console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);
+                setItinerary(updatedItinerary);
+              } else {
+                // Fallback: fetch directly if context refresh fails
+                console.log('Context refresh failed, fetching directly...');
+                const response = await apiService.getTripById(tripId);
+                console.log('Direct fetch response:', response);
+                // Handle both response.trip and response.data formats
+                const tripData = response.trip || response.data;
+                if (response.success && tripData) {
+                  console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);
+                  setItinerary(tripData);
+                }
+              }
             } catch (error) {
               console.error('Error deleting flight:', error);
               console.error('Error details:', {
@@ -945,10 +997,10 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </View>
           </View>
           
-          {itinerary?.flights && itinerary.flights.length > 0 ? (
+          {itinerary?.flights && Array.isArray(itinerary.flights) && itinerary.flights.length > 0 ? (
             <View style={styles.flightsList}>
               {getSortedFlights().map((flight) => {
-                const flightId = flight._id || flight.id;
+                const flightId = flight._id || flight.id || `flight-${flight.flightNumber}-${flight.departure?.date}`;
                 const departureTime = flight.departure?.time || '--:--';
                 const arrivalTime = flight.arrival?.time || '--:--';
                 const departureDate = flight.departure?.date || '';
@@ -982,8 +1034,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
                 
                 const airlineLogoUrl = airlineCode ? getAirlineLogoUrl(airlineCode) : null;
                 
+                // Use a stable key that includes the flight ID
+                const flightKey = `flight-${flightId}-${flight.departure?.date || ''}-${flight.flightNumber || ''}`;
+                
                 return (
-                  <View key={flightId} style={styles.flightCard}>
+                  <View key={flightKey} style={styles.flightCard}>
                     <View style={styles.flightCardHeader}>
                       <View style={styles.flightCardHeaderLeft}>
                         <View style={styles.flightHeaderRow}>

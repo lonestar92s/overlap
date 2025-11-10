@@ -234,6 +234,7 @@ const AVAILABLE_LEAGUES = [
   { id: 211, name: 'Prva HNL', country: 'Croatia', coords: [45.1000, 15.2000] },
   { id: 135, name: 'Serie A', country: 'Italy', coords: [41.8719, 12.5674] },
   { id: 61, name: 'Ligue 1', country: 'France', coords: [46.6034, 1.8883] },
+  { id: 62, name: 'Ligue 2', country: 'France', coords: [46.6034, 1.8883] },
   { id: 2, name: 'Champions League', country: 'Europe', coords: null, isInternational: true },
   { id: 3, name: 'Europa League', country: 'Europe', coords: null, isInternational: true },
   { id: 848, name: 'Europa Conference League', country: 'Europe', coords: null, isInternational: true },

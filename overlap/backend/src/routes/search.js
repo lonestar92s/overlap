@@ -2145,14 +2145,16 @@ router.post('/natural-language', async (req, res) => {
                     leagueIds = ['94', '97', '10']; // Primeira Liga, Taca da Liga, and Friendlies
                 } else if (country === 'united states' || country === 'usa') {
                     leagueIds = ['253', '10', '31']; // MLS, Friendlies, and CONCACAF World Cup Qualifiers
+                } else if (country === 'mexico') {
+                    leagueIds = ['262', '10', '31']; // Liga MX, Friendlies, and CONCACAF World Cup Qualifiers
                 } else {
                     // Default to major European leagues plus international competitions
-                    leagueIds = ['39', '140', '135', '78', '61', '94', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca da Liga, Eredivisie, Friendlies, World Cup, Champions League
+                    leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
                 }
                 console.log('🗺️ Using location-based league selection:', leagueIds);
             } else {
                 // Default to major European leagues plus international competitions
-                leagueIds = ['39', '140', '135', '78', '61', '94', '97', '88', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Primeira Liga, Taca da Liga, Eredivisie, Friendlies, World Cup, Champions League
+                leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
                 console.log('🌍 Using default league selection:', leagueIds);
             }
         }

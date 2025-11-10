@@ -21,6 +21,8 @@ class LeagueService {
             '79': { name: 'Bundesliga 2', country: 'Germany' },
             '135': { name: 'Serie A', country: 'Italy' },
             '61': { name: 'Ligue 1', country: 'France' },
+            '62': { name: 'Ligue 2', country: 'France' },
+            '262': { name: 'Liga MX', country: 'Mexico' },
             '2': { name: 'Champions League', country: 'Europe' },
             '3': { name: 'Europa League', country: 'Europe' },
             '848': { name: 'Europa Conference League', country: 'Europe' },
@@ -216,6 +218,7 @@ class LeagueService {
             'United States': 'US',
             'USA': 'US',
             'Japan': 'JP',
+            'Mexico': 'MX',
             'International': 'INT',
             'Europe': 'INT'
         };

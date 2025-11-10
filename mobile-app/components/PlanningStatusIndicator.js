@@ -29,7 +29,6 @@ const PlanningStatusIndicator = ({ planning, size = 'small' }) => {
 
   const items = [
     { key: 'ticketsAcquired', label: 'Tickets', icon: 'confirmation-number' },
-    { key: 'flight', label: 'Flight', icon: 'flight' },
     { key: 'accommodation', label: 'Hotel', icon: 'hotel' }
   ];
 

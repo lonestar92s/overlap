@@ -17,7 +17,6 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
   const { updateMatchPlanning } = useItineraries();
   const [planning, setPlanning] = useState({
     ticketsAcquired: 'no',
-    flight: 'no',
     accommodation: 'no',
     notes: ''
   });
@@ -28,7 +27,6 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
     if (match && match.planning) {
       setPlanning({
         ticketsAcquired: match.planning.ticketsAcquired || 'no',
-        flight: match.planning.flight || 'no',
         accommodation: match.planning.accommodation || 'no',
         notes: match.planning.notes || ''
       });
@@ -144,7 +142,6 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
           </View>
 
           {renderStatusSelector('ticketsAcquired', 'Tickets Acquired')}
-          {renderStatusSelector('flight', 'Flight')}
           {renderStatusSelector('accommodation', 'Accommodation')}
 
           <View style={styles.notesSection}>

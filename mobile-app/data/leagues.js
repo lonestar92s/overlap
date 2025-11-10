@@ -23,6 +23,7 @@ export const LEAGUES = [
   
   // Ligue 1
   { id: '61', name: 'Ligue 1', country: 'France', countryCode: 'FR', tier: 1 },
+  { id: '62', name: 'Ligue 2', country: 'France', countryCode: 'FR', tier: 2 },
   
   // Other European Leagues
   { id: '88', name: 'Eredivisie', country: 'Netherlands', countryCode: 'NL', tier: 1 },
@@ -33,6 +34,7 @@ export const LEAGUES = [
   // International Leagues
   { id: '71', name: 'Série A', country: 'Brazil', countryCode: 'BR', tier: 1 },
   { id: '253', name: 'Major League Soccer', country: 'United States', countryCode: 'US', tier: 1 },
+  { id: '262', name: 'Liga MX', country: 'Mexico', countryCode: 'MX', tier: 1 },
   { id: '98', name: 'J1 League', country: 'Japan', countryCode: 'JP', tier: 1 },
   
   // International Competitions

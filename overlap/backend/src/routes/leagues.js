@@ -218,7 +218,7 @@ router.get('/relevant', async (req, res) => {
         // Fallback: if no relevant leagues found, include top European leagues plus international
         let response;
         if (relevantLeagues.length === 0) {
-            const fallbackApiIds = ['39', '140', '78', '135', '61', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, UCL, UEL
+            const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
             const fallbackLeagues = await League.find({ 
                 apiId: { $in: fallbackApiIds },
                 isActive: true 

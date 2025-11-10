@@ -246,8 +246,10 @@ export const ItineraryProvider = ({ children }) => {
   const refreshItinerary = async (itineraryId) => {
     try {
       const response = await ApiService.getTripById(itineraryId);
-      if (response.success && response.trip) {
-        const updatedTrip = normalizeId(response.trip);
+      // Handle both response.trip and response.data formats
+      const tripData = response.trip || response.data;
+      if (response.success && tripData) {
+        const updatedTrip = normalizeId(tripData);
         // Update local state with the refreshed trip
         setItineraries(prev => prev.map(itinerary => 
           idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
