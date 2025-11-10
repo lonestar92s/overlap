@@ -275,9 +275,10 @@ class AmadeusProvider {
   async getFlightStatus(airlineCode, flightNumber, scheduledDepartureDate) {
     try {
       // Amadeus Flight Status API endpoint
+      // Note: API uses 'flightNumber' parameter, not 'number'
       const response = await this.amadeus.schedule.flights.get({
         carrierCode: airlineCode,
-        number: flightNumber,
+        flightNumber: flightNumber,
         scheduledDepartureDate
       });
 
@@ -294,41 +295,36 @@ class AmadeusProvider {
       }
 
       // Normalize the response to our standard format
-      // Note: Amadeus Flight Status API structure may vary - adjust as needed
+      // Amadeus Flight Status API structure: { type, id, flightNumber, carrierCode, departure: { iataCode, at }, arrival: { iataCode, at }, duration, status }
       return {
-        flightNumber: `${airlineCode}${flightNumber}`,
+        flightNumber: `${airlineCode}${flight.flightNumber || flightNumber}`,
         airline: {
-          code: airlineCode,
-          name: flight.carrier?.name || flight.aircraft?.aircraftType?.name || airlineCode
+          code: flight.carrierCode || airlineCode,
+          name: flight.operating?.carrierCode || flight.carrierCode || airlineCode
         },
         departure: {
           airport: {
-            code: flight.departure?.iataCode || flight.departure?.airport?.iataCode,
-            name: flight.departure?.airport?.name || flight.departure?.iataCode
+            code: flight.departure?.iataCode,
+            name: flight.departure?.iataCode // Airport name would need separate lookup
           },
-          date: flight.departure?.at ? flight.departure.at.split('T')[0] : 
-                flight.departure?.scheduledAt ? flight.departure.scheduledAt.split('T')[0] : null,
-          time: flight.departure?.at ? flight.departure.at.split('T')[1]?.substring(0, 5) :
-                flight.departure?.scheduledAt ? flight.departure.scheduledAt.split('T')[1]?.substring(0, 5) : null,
-          terminal: flight.departure?.terminal,
-          gate: flight.departure?.gate
+          date: flight.departure?.at ? flight.departure.at.split('T')[0] : null,
+          time: flight.departure?.at ? flight.departure.at.split('T')[1]?.substring(0, 5) : null,
+          terminal: flight.departure?.terminal || null,
+          gate: flight.departure?.gate || null
         },
         arrival: {
           airport: {
-            code: flight.arrival?.iataCode || flight.arrival?.airport?.iataCode,
-            name: flight.arrival?.airport?.name || flight.arrival?.iataCode
+            code: flight.arrival?.iataCode,
+            name: flight.arrival?.iataCode // Airport name would need separate lookup
           },
-          date: flight.arrival?.at ? flight.arrival.at.split('T')[0] :
-                flight.arrival?.scheduledAt ? flight.arrival.scheduledAt.split('T')[0] : null,
-          time: flight.arrival?.at ? flight.arrival.at.split('T')[1]?.substring(0, 5) :
-                flight.arrival?.scheduledAt ? flight.arrival.scheduledAt.split('T')[1]?.substring(0, 5) : null,
-          terminal: flight.arrival?.terminal,
-          gate: flight.arrival?.gate
+          date: flight.arrival?.at ? flight.arrival.at.split('T')[0] : null,
+          time: flight.arrival?.at ? flight.arrival.at.split('T')[1]?.substring(0, 5) : null,
+          terminal: flight.arrival?.terminal || null,
+          gate: flight.arrival?.gate || null
         },
-        duration: flight.duration ? this.parseISODuration(flight.duration) :
-                 flight.flightPoints?.[0]?.duration ? this.parseISODuration(flight.flightPoints[0].duration) : null,
-        aircraft: flight.aircraft?.model || flight.aircraft?.aircraftType?.name || null,
-        status: flight.flightStatus || flight.status || 'SCHEDULED'
+        duration: flight.duration ? this.parseISODuration(flight.duration) : null,
+        aircraft: flight.aircraft?.code || null,
+        status: flight.status || 'SCHEDULED'
       };
     } catch (error) {
       console.error('Amadeus flight status error:', {
@@ -338,10 +334,21 @@ class AmadeusProvider {
         airlineCode,
         flightNumber,
         scheduledDepartureDate,
-        response: error.response?.data
+        response: error.response?.data,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
       });
 
-      throw new Error(`Failed to get flight status: ${error.description || error.message}`);
+      // Better error message handling
+      let errorMessage = 'Failed to get flight status';
+      if (error.description) {
+        errorMessage += `: ${error.description}`;
+      } else if (error.message) {
+        errorMessage += `: ${error.message}`;
+      } else if (error.response?.data) {
+        errorMessage += `: ${JSON.stringify(error.response.data)}`;
+      }
+
+      throw new Error(errorMessage);
     }
   }
 
