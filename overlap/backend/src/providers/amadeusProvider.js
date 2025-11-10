@@ -1,4 +1,5 @@
 const Amadeus = require('amadeus');
+const axios = require('axios');
 
 /**
  * Amadeus Flight API Provider
@@ -274,57 +275,69 @@ class AmadeusProvider {
    */
   async getFlightStatus(airlineCode, flightNumber, scheduledDepartureDate) {
     try {
-      // Amadeus Flight Status API endpoint
-      // Note: API uses 'flightNumber' parameter, not 'number'
+      // Use direct REST API call instead of SDK for more control and transparency
+      // Amadeus Flight Status API: GET /v2/schedule/flights
+      const baseUrl = this.amadeus.client.hostname === 'production' 
+        ? 'https://api.amadeus.com' 
+        : 'https://test.api.amadeus.com';
+      
       const params = {
         carrierCode: airlineCode,
         flightNumber: flightNumber,
         scheduledDepartureDate
       };
       
-      console.log('Calling Amadeus Flight Status API with params:', params);
+      console.log('Calling Amadeus Flight Status REST API:', {
+        url: `${baseUrl}/v2/schedule/flights`,
+        params
+      });
       
-      // Amadeus Flight Status API - check if method exists
-      // Note: Flight Status API might not be available in test environment or free tier
-      if (!this.amadeus.schedule || !this.amadeus.schedule.flights) {
-        console.error('Amadeus schedule.flights API not available. Available namespaces:', Object.keys(this.amadeus));
-        throw new Error('Flight Status API not available in this Amadeus tier/environment');
-      }
+      // Get access token using SDK (it handles OAuth automatically)
+      const accessToken = await this.amadeus.client.getAccessToken();
       
-      const response = await this.amadeus.schedule.flights.get(params);
+      // Make direct REST API call
+      const response = await axios.get(`${baseUrl}/v2/schedule/flights`, {
+        params: params,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
       // Log full response for debugging
-      const responseStr = JSON.stringify(response, null, 2);
+      const responseData = response.data;
+      const responseStr = JSON.stringify(responseData, null, 2);
       console.log('Amadeus Flight Status API full response:', responseStr.substring(0, 2000));
       
       console.log('Amadeus Flight Status API response summary:', {
-        hasData: !!response.data,
-        dataType: typeof response.data,
-        isArray: Array.isArray(response.data),
-        dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
-        responseKeys: response ? Object.keys(response) : 'no response',
-        meta: response.meta || 'no meta'
+        status: response.status,
+        hasData: !!responseData.data,
+        dataType: typeof responseData.data,
+        isArray: Array.isArray(responseData.data),
+        dataLength: Array.isArray(responseData.data) ? responseData.data.length : 'N/A',
+        responseKeys: responseData ? Object.keys(responseData) : 'no response',
+        meta: responseData.meta || 'no meta'
       });
 
       // Handle empty or invalid response
-      if (!response.data) {
+      if (!responseData.data) {
         const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}. Amadeus returned no data. This could mean: 1) Flight doesn't exist for this date, 2) Date is too far in the future, 3) Flight not in Amadeus database.`;
         console.error(errorMsg);
         throw new Error(errorMsg);
       }
 
       // Response can be an array or single object
-      const flight = Array.isArray(response.data) ? response.data[0] : response.data;
+      const flight = Array.isArray(responseData.data) ? responseData.data[0] : responseData.data;
       
       if (!flight) {
         // Check if it's an empty array
-        if (Array.isArray(response.data) && response.data.length === 0) {
+        if (Array.isArray(responseData.data) && responseData.data.length === 0) {
           const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}. Amadeus returned empty array. The flight may not exist in Amadeus database for this date, or the date may be too far in the future (test environment may have limited data).`;
           console.error(errorMsg);
           throw new Error(errorMsg);
         }
         const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}`;
-        console.error(errorMsg, { responseData: response.data });
+        console.error(errorMsg, { responseData: responseData.data });
         throw new Error(errorMsg);
       }
 
@@ -364,22 +377,32 @@ class AmadeusProvider {
       console.error('Amadeus flight status error:', {
         message: error.message,
         code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
         description: error.description,
         airlineCode,
         flightNumber,
         scheduledDepartureDate,
-        response: error.response?.data,
+        responseData: error.response?.data,
         fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
       });
 
       // Better error message handling
       let errorMessage = 'Failed to get flight status';
-      if (error.description) {
+      if (error.response?.data) {
+        // Amadeus API error response
+        const amadeusError = error.response.data;
+        if (amadeusError.errors && Array.isArray(amadeusError.errors)) {
+          errorMessage += `: ${amadeusError.errors.map(e => e.detail || e.title).join(', ')}`;
+        } else if (amadeusError.detail) {
+          errorMessage += `: ${amadeusError.detail}`;
+        } else {
+          errorMessage += `: ${JSON.stringify(amadeusError)}`;
+        }
+      } else if (error.description) {
         errorMessage += `: ${error.description}`;
       } else if (error.message) {
         errorMessage += `: ${error.message}`;
-      } else if (error.response?.data) {
-        errorMessage += `: ${JSON.stringify(error.response.data)}`;
       }
 
       throw new Error(errorMessage);
