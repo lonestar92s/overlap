@@ -1827,6 +1827,42 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Get flight by flight number using flight search (workaround)
+   * Requires origin, destination, date, and flightNumber
+   * @param {string} flightNumber - Full flight number (e.g., "UA387", "DL1234")
+   * @param {string} origin - Origin airport code (e.g., "JFK", "ORD")
+   * @param {string} destination - Destination airport code (e.g., "LHR", "SFO")
+   * @param {string} date - Scheduled departure date (YYYY-MM-DD)
+   * @returns {Promise<Object>} Flight information
+   */
+  async getFlightByNumber(flightNumber, origin, destination, date) {
+    try {
+      if (!flightNumber || !origin || !destination || !date) {
+        throw new Error('Flight number, origin, destination, and date are required');
+      }
+
+      const params = new URLSearchParams();
+      params.append('flightNumber', flightNumber.trim().toUpperCase());
+      params.append('origin', origin.trim().toUpperCase());
+      params.append('destination', destination.trim().toUpperCase());
+      params.append('date', date);
+
+      const url = `${this.baseURL}/transportation/flights/by-number?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 30000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to find flight');
+      }
+
+      return data; // { success: true, data: {...} }
+    } catch (error) {
+      console.error('Error in getFlightByNumber:', error);
+      throw error;
+    }
+  }
 }
 
 // Create API service instance

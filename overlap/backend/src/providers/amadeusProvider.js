@@ -158,11 +158,20 @@ class AmadeusProvider {
           name: firstSegment.carrierCode, // Will need airline lookup for full name
           code: firstSegment.carrierCode
         },
+        // Main flight number (from first segment)
+        flightNumber: firstSegment.number 
+          ? `${firstSegment.carrierCode}${firstSegment.number}` 
+          : firstSegment.carrierCode,
         segments: segments.map(seg => {
           // For individual segments, try to use duration if available, otherwise calculate
           const segDuration = seg.duration 
             ? this.parseISODuration(seg.duration)
             : this.calculateDuration(seg.departure.at, seg.arrival.at);
+          
+          // Construct full flight number: carrierCode + number (e.g., "UA387")
+          const flightNumber = seg.number 
+            ? `${seg.carrierCode}${seg.number}` 
+            : seg.carrierCode; // Fallback to just carrier code if number not available
           
           return {
             departure: {
@@ -174,7 +183,9 @@ class AmadeusProvider {
               time: seg.arrival.at
             },
             duration: segDuration,
-            carrier: seg.carrierCode
+            carrier: seg.carrierCode,
+            flightNumber: flightNumber,
+            number: seg.number || null // Store number separately too
           };
         }),
         bookingUrl: null, // Amadeus free tier doesn't provide booking URLs

@@ -420,6 +420,121 @@ router.get('/flights/status', async (req, res) => {
     }
 });
 
+// Get flight by flight number (workaround using flight search)
+// Requires origin, destination, date, and flightNumber
+router.get('/flights/by-number', async (req, res) => {
+    try {
+        const { flightNumber, origin, destination, date } = req.query;
+
+        // Validate parameters
+        if (!flightNumber || !origin || !destination || !date) {
+            return res.status(400).json({
+                error: 'Missing required parameters',
+                message: 'flightNumber, origin, destination, and date are required'
+            });
+        }
+
+        // Validate date format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(date)) {
+            return res.status(400).json({
+                error: 'Invalid date format',
+                message: 'Date must be in YYYY-MM-DD format'
+            });
+        }
+
+        console.log('Searching for flight by number:', {
+            flightNumber,
+            origin,
+            destination,
+            date
+        });
+
+        // Use flight search to find flights
+        const searchResult = await transportationService.searchFlights({
+            origin,
+            destination,
+            departureDate: date,
+            adults: 1,
+            max: 50, // Get more results to find the specific flight
+            currency: 'USD',
+            nonStop: false
+        });
+
+        if (!searchResult.success || !searchResult.results || searchResult.results.length === 0) {
+            return res.status(404).json({
+                error: 'Flight not found',
+                message: `No flights found from ${origin} to ${destination} on ${date}`
+            });
+        }
+
+        // Parse flight number (e.g., "UA387" -> airline: "UA", number: "387")
+        const flightNumberUpper = flightNumber.toUpperCase().replace(/[\s-]/g, '');
+        const flightMatch = flightNumberUpper.match(/^([A-Z]{2,3})(\d{1,4})$/);
+        
+        if (!flightMatch) {
+            return res.status(400).json({
+                error: 'Invalid flight number format',
+                message: 'Flight number must be in format like UA387 or DL1234'
+            });
+        }
+
+        const [_, airlineCode, number] = flightMatch;
+
+        // Search through results to find matching flight
+        let matchingFlight = null;
+        
+        for (const flight of searchResult.results) {
+            // Check main flight number
+            if (flight.flightNumber && flight.flightNumber.toUpperCase() === flightNumberUpper) {
+                matchingFlight = flight;
+                break;
+            }
+            
+            // Check segments for matching flight number
+            if (flight.segments && Array.isArray(flight.segments)) {
+                for (const segment of flight.segments) {
+                    if (segment.flightNumber && segment.flightNumber.toUpperCase() === flightNumberUpper) {
+                        matchingFlight = flight;
+                        break;
+                    }
+                    // Fallback: construct from carrier + number
+                    if (segment.carrier && segment.number) {
+                        const segmentFlightNumber = `${segment.carrier}${segment.number}`.toUpperCase();
+                        if (segmentFlightNumber === flightNumberUpper) {
+                            matchingFlight = flight;
+                            break;
+                        }
+                    }
+                }
+                if (matchingFlight) break;
+            }
+        }
+
+        if (!matchingFlight) {
+            return res.status(404).json({
+                error: 'Flight not found',
+                message: `Flight ${flightNumber} not found in search results from ${origin} to ${destination} on ${date}`
+            });
+        }
+
+        res.json({
+            success: true,
+            data: matchingFlight
+        });
+    } catch (error) {
+        console.error('Error finding flight by number:', {
+            error: error.message,
+            params: req.query
+        });
+
+        res.status(500).json({ 
+            error: 'Failed to find flight',
+            message: error.message
+        });
+    }
+});
+
 // Get route cost history
 router.get('/routes/cost-history', async (req, res) => {
     try {
