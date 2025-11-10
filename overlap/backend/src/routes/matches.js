@@ -833,9 +833,34 @@ router.get('/search', async (req, res) => {
                     }
                 };
 
-                // Filter by bounds - STRICT: Only include matches with valid coordinates within bounds
-                // Every match should have a venue with coordinates - no fallback logic
+                // Filter by bounds - For domestic leagues, include all matches from that country
+                // For international leagues or foreign leagues, use strict bounds filtering
                 let shouldInclude = false;
+                
+                // Calculate bounds size to determine if this is a city-level or country-level search
+                const boundsLatSpan = bounds.northeast.lat - bounds.southwest.lat;
+                const boundsLngSpan = bounds.northeast.lng - bounds.southwest.lng;
+                const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0; // Less than ~111km span
+                
+                // Determine search country from bounds center using COUNTRY_COORDS mapping
+                const searchCenterLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
+                const searchCenterLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+                
+                // Find which country the search center is in by checking COUNTRY_COORDS
+                let searchCountry = null;
+                let minDistance = Infinity;
+                for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
+                    const distance = calculateDistanceKm(searchCenterLat, searchCenterLng, coords.lat, coords.lng);
+                    if (distance < minDistance && distance < 500) { // Within 500km of country center
+                        minDistance = distance;
+                        searchCountry = countryName;
+                    }
+                }
+                
+                // For city-level searches: include all matches from domestic leagues in the same country
+                // This ensures Ligue 1 and Ligue 2 matches appear when searching in France
+                const isDomesticLeague = searchCountry && match.league?.country && 
+                                        searchCountry.toLowerCase() === match.league.country.toLowerCase();
                 
                 if (venueInfo.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
                     // Validate coordinates are numbers
@@ -843,8 +868,12 @@ router.get('/search', async (req, res) => {
                     if (typeof lon === 'number' && typeof lat === 'number' && 
                         !isNaN(lon) && !isNaN(lat) &&
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        // Check if coordinates are within bounds
-                        if (isWithinBounds(venueInfo.coordinates, bounds)) {
+                        // For city-level searches with domestic leagues, include all matches from that country
+                        if (isCityLevelSearch && isDomesticLeague) {
+                            shouldInclude = true;
+                            console.log(`✅ Match included (domestic league, city search): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                        } else if (isWithinBounds(venueInfo.coordinates, bounds)) {
+                            // Strict bounds check for international leagues or country-level searches
                             shouldInclude = true;
                         } else {
                             matchesFilteredOut++;
