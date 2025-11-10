@@ -276,10 +276,22 @@ class AmadeusProvider {
     try {
       // Amadeus Flight Status API endpoint
       // Note: API uses 'flightNumber' parameter, not 'number'
-      const response = await this.amadeus.schedule.flights.get({
+      const params = {
         carrierCode: airlineCode,
         flightNumber: flightNumber,
         scheduledDepartureDate
+      };
+      
+      console.log('Calling Amadeus Flight Status API with params:', params);
+      
+      const response = await this.amadeus.schedule.flights.get(params);
+
+      console.log('Amadeus Flight Status API response:', {
+        hasData: !!response.data,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data),
+        dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
+        fullResponse: JSON.stringify(response, null, 2).substring(0, 500) // First 500 chars for debugging
       });
 
       // Handle empty or invalid response
