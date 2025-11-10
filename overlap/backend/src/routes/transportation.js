@@ -373,6 +373,53 @@ router.get('/flights/search', async (req, res) => {
     }
 });
 
+// Get flight status by flight number and date
+router.get('/flights/status', async (req, res) => {
+    try {
+        const { flightNumber, date } = req.query;
+
+        // Validate parameters
+        if (!flightNumber || !date) {
+            return res.status(400).json({
+                error: 'Missing required parameters',
+                message: 'flightNumber and date are required'
+            });
+        }
+
+        // Validate date format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(date)) {
+            return res.status(400).json({
+                error: 'Invalid date format',
+                message: 'Date must be in YYYY-MM-DD format'
+            });
+        }
+
+        console.log('Getting flight status:', {
+            flightNumber,
+            date
+        });
+
+        // Use transportation service
+        const result = await transportationService.getFlightStatus(flightNumber, date);
+
+        res.json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        console.error('Error getting flight status:', {
+            error: error.message,
+            params: req.query
+        });
+
+        res.status(500).json({ 
+            error: 'Failed to get flight status',
+            message: error.message
+        });
+    }
+});
+
 // Get route cost history
 router.get('/routes/cost-history', async (req, res) => {
     try {

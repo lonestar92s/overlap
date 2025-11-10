@@ -194,6 +194,30 @@ class TransportationService {
       return [];
     }
   }
+
+  /**
+   * Get flight status by flight number and date
+   * @param {string} flightNumber - Full flight number (e.g., "AA100", "DL1234")
+   * @param {string} scheduledDepartureDate - Scheduled departure date (YYYY-MM-DD)
+   * @returns {Promise<Object>} Flight status information
+   */
+  async getFlightStatus(flightNumber, scheduledDepartureDate) {
+    if (this.flightProviders.length === 0) {
+      throw new Error('No flight providers configured');
+    }
+
+    // Parse flight number into airline code and number
+    const provider = this.flightProviders[0];
+    const { airlineCode, flightNumber: number } = provider.parseFlightNumber(flightNumber);
+
+    // Use first available provider
+    try {
+      return await provider.getFlightStatus(airlineCode, number, scheduledDepartureDate);
+    } catch (error) {
+      console.error('Flight status error:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

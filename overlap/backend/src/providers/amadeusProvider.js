@@ -266,6 +266,108 @@ class AmadeusProvider {
   }
 
   /**
+   * Get flight status by flight number and date
+   * @param {string} airlineCode - Airline IATA code (e.g., "AA", "DL", "UA")
+   * @param {string} flightNumber - Flight number (e.g., "100", "1234")
+   * @param {string} scheduledDepartureDate - Scheduled departure date (YYYY-MM-DD)
+   * @returns {Promise<Object>} Flight status information
+   */
+  async getFlightStatus(airlineCode, flightNumber, scheduledDepartureDate) {
+    try {
+      // Amadeus Flight Status API endpoint
+      const response = await this.amadeus.schedule.flights.get({
+        carrierCode: airlineCode,
+        number: flightNumber,
+        scheduledDepartureDate
+      });
+
+      // Handle empty or invalid response
+      if (!response.data) {
+        throw new Error('Flight not found - no data returned');
+      }
+
+      // Response can be an array or single object
+      const flight = Array.isArray(response.data) ? response.data[0] : response.data;
+      
+      if (!flight) {
+        throw new Error('Flight not found');
+      }
+
+      // Normalize the response to our standard format
+      // Note: Amadeus Flight Status API structure may vary - adjust as needed
+      return {
+        flightNumber: `${airlineCode}${flightNumber}`,
+        airline: {
+          code: airlineCode,
+          name: flight.carrier?.name || flight.aircraft?.aircraftType?.name || airlineCode
+        },
+        departure: {
+          airport: {
+            code: flight.departure?.iataCode || flight.departure?.airport?.iataCode,
+            name: flight.departure?.airport?.name || flight.departure?.iataCode
+          },
+          date: flight.departure?.at ? flight.departure.at.split('T')[0] : 
+                flight.departure?.scheduledAt ? flight.departure.scheduledAt.split('T')[0] : null,
+          time: flight.departure?.at ? flight.departure.at.split('T')[1]?.substring(0, 5) :
+                flight.departure?.scheduledAt ? flight.departure.scheduledAt.split('T')[1]?.substring(0, 5) : null,
+          terminal: flight.departure?.terminal,
+          gate: flight.departure?.gate
+        },
+        arrival: {
+          airport: {
+            code: flight.arrival?.iataCode || flight.arrival?.airport?.iataCode,
+            name: flight.arrival?.airport?.name || flight.arrival?.iataCode
+          },
+          date: flight.arrival?.at ? flight.arrival.at.split('T')[0] :
+                flight.arrival?.scheduledAt ? flight.arrival.scheduledAt.split('T')[0] : null,
+          time: flight.arrival?.at ? flight.arrival.at.split('T')[1]?.substring(0, 5) :
+                flight.arrival?.scheduledAt ? flight.arrival.scheduledAt.split('T')[1]?.substring(0, 5) : null,
+          terminal: flight.arrival?.terminal,
+          gate: flight.arrival?.gate
+        },
+        duration: flight.duration ? this.parseISODuration(flight.duration) :
+                 flight.flightPoints?.[0]?.duration ? this.parseISODuration(flight.flightPoints[0].duration) : null,
+        aircraft: flight.aircraft?.model || flight.aircraft?.aircraftType?.name || null,
+        status: flight.flightStatus || flight.status || 'SCHEDULED'
+      };
+    } catch (error) {
+      console.error('Amadeus flight status error:', {
+        message: error.message,
+        code: error.code,
+        description: error.description,
+        airlineCode,
+        flightNumber,
+        scheduledDepartureDate,
+        response: error.response?.data
+      });
+
+      throw new Error(`Failed to get flight status: ${error.description || error.message}`);
+    }
+  }
+
+  /**
+   * Parse flight number into airline code and flight number
+   * @param {string} flightNumber - Full flight number (e.g., "AA100", "DL1234")
+   * @returns {Object} { airlineCode, flightNumber }
+   */
+  parseFlightNumber(fullFlightNumber) {
+    // Remove any spaces or dashes
+    const cleaned = fullFlightNumber.replace(/[\s-]/g, '').toUpperCase();
+    
+    // Match airline code (2-3 letters) followed by flight number (1-4 digits)
+    const match = cleaned.match(/^([A-Z]{2,3})(\d{1,4})$/);
+    
+    if (!match) {
+      throw new Error(`Invalid flight number format: ${fullFlightNumber}. Expected format: AA100 or DL1234`);
+    }
+    
+    return {
+      airlineCode: match[1],
+      flightNumber: match[2]
+    };
+  }
+
+  /**
    * Get nearest airports by coordinates
    * @param {number} latitude - Latitude
    * @param {number} longitude - Longitude

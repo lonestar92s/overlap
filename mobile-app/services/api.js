@@ -1796,6 +1796,37 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Get flight status by flight number and date
+   * @param {string} flightNumber - Full flight number (e.g., "AA100", "DL1234")
+   * @param {string} date - Scheduled departure date (YYYY-MM-DD)
+   * @returns {Promise<Object>} Flight status information
+   */
+  async getFlightStatus(flightNumber, date) {
+    try {
+      if (!flightNumber || !date) {
+        throw new Error('Flight number and date are required');
+      }
+
+      const params = new URLSearchParams();
+      params.append('flightNumber', flightNumber.trim().toUpperCase());
+      params.append('date', date);
+
+      const url = `${this.baseURL}/transportation/flights/status?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 10000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to get flight status');
+      }
+
+      return data; // { success: true, data: {...} }
+    } catch (error) {
+      console.error('Error in getFlightStatus:', error);
+      throw error;
+    }
+  }
 }
 
 // Create API service instance
