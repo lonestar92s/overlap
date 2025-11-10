@@ -20,6 +20,7 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
+import AddFlightModal from '../components/AddFlightModal';
 import apiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
 
@@ -56,6 +57,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [notesText, setNotesText] = useState('');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [flightsExpanded, setFlightsExpanded] = useState(false);
+  const [addFlightModalVisible, setAddFlightModalVisible] = useState(false);
+  const [deletingFlightId, setDeletingFlightId] = useState(null);
   const scrollViewRef = useRef(null);
   const notesInputRef = useRef(null);
   const descriptionInputRef = useRef(null);
@@ -80,6 +84,69 @@ const TripOverviewScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
+
+  // Refresh itinerary after flight is added
+  const handleFlightAdded = async () => {
+    if (itineraryId) {
+      try {
+        const updatedItinerary = await apiService.getTripById(itineraryId);
+        if (updatedItinerary.success && updatedItinerary.trip) {
+          setItinerary(updatedItinerary.trip);
+        }
+      } catch (error) {
+        console.error('Error refreshing itinerary:', error);
+      }
+    }
+  };
+
+  // Delete flight from trip
+  const handleDeleteFlight = async (flightId) => {
+    if (!itinerary || !flightId) return;
+
+    Alert.alert(
+      'Delete Flight',
+      'Are you sure you want to remove this flight from your trip?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingFlightId(flightId);
+              const tripId = itinerary.id || itinerary._id;
+              await apiService.deleteFlightFromTrip(tripId, flightId);
+              
+              // Refresh itinerary
+              await handleFlightAdded();
+            } catch (error) {
+              console.error('Error deleting flight:', error);
+              Alert.alert('Error', error.message || 'Failed to delete flight. Please try again.');
+            } finally {
+              setDeletingFlightId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Get sorted flights (chronological)
+  const getSortedFlights = () => {
+    if (!itinerary?.flights || itinerary.flights.length === 0) return [];
+    
+    return [...itinerary.flights].sort((a, b) => {
+      const dateA = a.departure?.date || '';
+      const timeA = a.departure?.time || '';
+      const dateB = b.departure?.date || '';
+      const timeB = b.departure?.time || '';
+      
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      return (timeA || '').localeCompare(timeB || '');
+    });
+  };
 
   // Save description (trip info card text)
   const handleSaveDescription = async () => {
@@ -838,8 +905,123 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </View>
           )}
         </View>
+
+        {/* Flights Section - Below Notes */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Flights</Text>
+            <View style={styles.sectionHeaderRight}>
+              {itinerary?.flights && itinerary.flights.length > 0 && (
+                <Text style={styles.flightCount}>
+                  {itinerary.flights.length} {itinerary.flights.length === 1 ? 'flight' : 'flights'}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setAddFlightModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="add" size={20} color={colors.primary} />
+                <Text style={styles.addButtonText}>Add Flight</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          {itinerary?.flights && itinerary.flights.length > 0 ? (
+            <View style={styles.flightsList}>
+              {getSortedFlights().map((flight) => {
+                const flightId = flight._id || flight.id;
+                const departureTime = flight.departure?.time || '--:--';
+                const arrivalTime = flight.arrival?.time || '--:--';
+                const departureDate = flight.departure?.date || '';
+                const arrivalDate = flight.arrival?.date || '';
+                const airlineCode = flight.airline?.code || '';
+                const airlineName = flight.airline?.name || airlineCode;
+                const duration = flight.duration || 0;
+                const stops = flight.stops || 0;
+                
+                // Format duration
+                const formatDuration = (minutes) => {
+                  if (!minutes) return '--';
+                  const hours = Math.floor(minutes / 60);
+                  const mins = minutes % 60;
+                  return `${hours}h ${mins}m`;
+                };
+                
+                // Format date
+                const formatDate = (dateStr) => {
+                  if (!dateStr) return '';
+                  const [year, month, day] = dateStr.split('-').map(Number);
+                  const date = new Date(year, month - 1, day);
+                  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                };
+                
+                return (
+                  <View key={flightId} style={styles.flightCard}>
+                    <View style={styles.flightCardHeader}>
+                      <View style={styles.flightCardHeaderLeft}>
+                        <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
+                        <Text style={styles.flightAirline}>{airlineName}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteFlight(flightId)}
+                        disabled={deletingFlightId === flightId}
+                        style={styles.deleteFlightButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        {deletingFlightId === flightId ? (
+                          <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                          <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.flightRoute}>
+                      <View style={styles.flightSegment}>
+                        <Text style={styles.flightTime}>{departureTime}</Text>
+                        <Text style={styles.flightAirport}>{flight.departure?.airport?.code || 'N/A'}</Text>
+                        <Text style={styles.flightDate}>{formatDate(departureDate)}</Text>
+                      </View>
+                      
+                      <View style={styles.flightDuration}>
+                        <View style={styles.flightDurationLine} />
+                        <Text style={styles.flightDurationText}>{formatDuration(duration)}</Text>
+                        {stops > 0 && (
+                          <Text style={styles.flightStopsText}>
+                            {stops} stop{stops > 1 ? 's' : ''}
+                          </Text>
+                        )}
+                      </View>
+                      
+                      <View style={styles.flightSegment}>
+                        <Text style={styles.flightTime}>{arrivalTime}</Text>
+                        <Text style={styles.flightAirport}>{flight.arrival?.airport?.code || 'N/A'}</Text>
+                        <Text style={styles.flightDate}>{formatDate(arrivalDate)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyFlightsContainer}>
+              <MaterialIcons name="flight" size={48} color={colors.text.light} />
+              <Text style={styles.emptyFlightsText}>No flights added yet</Text>
+              <Text style={styles.emptyFlightsSubtext}>Add your booked flights to track your trip</Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Add Flight Modal */}
+      <AddFlightModal
+        visible={addFlightModalVisible}
+        onClose={() => setAddFlightModalVisible(false)}
+        tripId={itinerary?.id || itinerary?._id}
+        onFlightAdded={handleFlightAdded}
+      />
 
       {/* Map Button - Floating at bottom */}
       <TouchableOpacity
@@ -1469,6 +1651,123 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.onPrimary,
     fontWeight: '500',
+  },
+  // Flights Section Styles
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  flightCount: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  addButtonText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  flightsList: {
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  flightCard: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  flightCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  flightCardHeaderLeft: {
+    flex: 1,
+  },
+  flightNumber: {
+    ...typography.h4,
+    color: colors.text.primary,
+    fontFamily: typography.fontFamily,
+    marginBottom: spacing.xs,
+  },
+  flightAirline: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+  },
+  deleteFlightButton: {
+    padding: spacing.xs,
+  },
+  flightRoute: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  flightSegment: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  flightTime: {
+    ...typography.h3,
+    color: colors.text.primary,
+    fontFamily: typography.fontFamily,
+    marginBottom: spacing.xs,
+  },
+  flightAirport: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  flightDate: {
+    ...typography.caption,
+    color: colors.text.light,
+  },
+  flightDuration: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: spacing.md,
+  },
+  flightDurationLine: {
+    width: '100%',
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  flightDurationText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  flightStopsText: {
+    ...typography.caption,
+    color: colors.text.light,
+    marginTop: spacing.xs,
+  },
+  emptyFlightsContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+  },
+  emptyFlightsText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  emptyFlightsSubtext: {
+    ...typography.caption,
+    color: colors.text.light,
   },
 });
 

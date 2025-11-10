@@ -99,9 +99,27 @@ router.get('/:id', auth, async (req, res) => {
 // Create a new trip (works without authentication)
 router.post('/', authenticateToken, async (req, res) => {
     try {
-        const { name, description, notes, matches } = req.body;
+        const { name, description, notes, matches, flights } = req.body;
         
-        if (!name || !name.trim()) {
+        // Validate: if no matches, must have at least 2 flights (outbound + return)
+        if ((!matches || matches.length === 0) && (!flights || flights.length < 2)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Trips without matches must have at least 2 flights (outbound and return)'
+            });
+        }
+
+        // Auto-generate trip name from flights if not provided
+        let tripName = name?.trim();
+        if (!tripName && flights && flights.length > 0) {
+            const firstFlight = flights[0];
+            const lastFlight = flights[flights.length - 1];
+            const origin = firstFlight.departure?.airport?.code || 'Origin';
+            const destination = lastFlight.arrival?.airport?.code || 'Destination';
+            tripName = `${origin} to ${destination} Trip`;
+        }
+        
+        if (!tripName) {
             return res.status(400).json({
                 success: false,
                 message: 'Trip name is required'
@@ -113,9 +131,10 @@ router.post('/', authenticateToken, async (req, res) => {
             // In a real app, you might want to store this locally or create a guest session
             const tempTrip = {
                 _id: `temp_${Date.now()}`,
-                name: name.trim(),
+                name: tripName,
                 description: description || '',
                 notes: notes || '',
+                flights: flights || [],
                 matches: matches || [],
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -133,9 +152,10 @@ router.post('/', authenticateToken, async (req, res) => {
         const user = await User.findById(req.user.id);
         
         const newTrip = {
-            name: name.trim(),
+            name: tripName,
             description: description || '',
             notes: notes || '',
+            flights: flights || [],
             matches: matches || [],
             createdAt: new Date(),
             updatedAt: new Date()
@@ -353,6 +373,124 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to remove match from trip'
+        });
+    }
+});
+
+// Add a flight to a trip
+router.post('/:id/flights', auth, async (req, res) => {
+    try {
+        const { flightNumber, airline, departure, arrival, duration, stops } = req.body;
+
+        if (!flightNumber || !departure || !arrival) {
+            return res.status(400).json({
+                success: false,
+                message: 'Flight number, departure, and arrival are required'
+            });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        const flightToAdd = {
+            flightNumber,
+            airline: airline || {},
+            departure: {
+                airport: departure.airport || {},
+                date: departure.date,
+                time: departure.time
+            },
+            arrival: {
+                airport: arrival.airport || {},
+                date: arrival.date,
+                time: arrival.time
+            },
+            duration: duration || 0,
+            stops: stops || 0,
+            addedAt: new Date()
+        };
+
+        trip.flights.push(flightToAdd);
+        trip.updatedAt = new Date();
+        await user.save();
+
+        const savedFlight = trip.flights[trip.flights.length - 1];
+
+        res.status(201).json({
+            success: true,
+            flight: savedFlight,
+            message: 'Flight added to trip successfully'
+        });
+    } catch (error) {
+        console.error('Error adding flight to trip:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to add flight to trip'
+        });
+    }
+});
+
+// Delete a flight from a trip
+router.delete('/:id/flights/:flightId', auth, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        const flight = trip.flights.id(req.params.flightId);
+        if (!flight) {
+            return res.status(404).json({
+                success: false,
+                message: 'Flight not found'
+            });
+        }
+
+        // Check if trip has no matches and would have less than 2 flights after deletion
+        if (trip.matches.length === 0 && trip.flights.length <= 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete flight. Trips without matches must have at least 2 flights (outbound and return)'
+            });
+        }
+
+        flight.remove();
+        trip.updatedAt = new Date();
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Flight deleted from trip successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting flight from trip:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete flight from trip'
         });
     }
 });

@@ -174,7 +174,8 @@ const SearchModal = ({
         </View>
 
         {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
+        {/* Flights tab commented out - no booking capability yet */}
+        {/* <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
             onPress={() => setActiveTab('matches')}
@@ -206,10 +207,10 @@ const SearchModal = ({
               Flights
             </Text>
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         {/* Tab Content */}
-        {activeTab === 'matches' ? (
+        {/* {activeTab === 'matches' ? ( */}
           <MatchSearchTab
             location={location}
             setLocation={setLocation}
@@ -226,13 +227,13 @@ const SearchModal = ({
             handleSearch={handleSearch}
             loading={loading}
           />
-        ) : (
+        {/* ) : (
           <FlightSearchTab
             onClose={onClose}
             dateFrom={dateFrom}
             dateTo={dateTo}
           />
-        )}
+        )} */}
       </View>
     </Overlay>
   );

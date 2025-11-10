@@ -252,6 +252,41 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: ''
         },
+        flights: [{
+            flightNumber: {
+                type: String,
+                required: true
+            },
+            airline: {
+                code: String,
+                name: String
+            },
+            departure: {
+                airport: {
+                    code: String,
+                    name: String
+                },
+                date: String, // YYYY-MM-DD
+                time: String // HH:MM
+            },
+            arrival: {
+                airport: {
+                    code: String,
+                    name: String
+                },
+                date: String, // YYYY-MM-DD
+                time: String // HH:MM
+            },
+            duration: Number, // minutes
+            stops: {
+                type: Number,
+                default: 0
+            },
+            addedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
         matches: [{
             matchId: String,
             homeTeam: {

@@ -361,48 +361,50 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
-            onPress={() => setActiveTab('matches')}
-            activeOpacity={0.7}
-            accessibilityLabel="Search matches"
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'matches' }}
-          >
-            <Text style={[
-              styles.tabText,
-              activeTab === 'matches' && styles.activeTabText
-            ]}>
-              Matches
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'flights' && styles.activeTab]}
-            onPress={() => setActiveTab('flights')}
-            activeOpacity={0.7}
-            accessibilityLabel="Search flights"
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'flights' }}
-          >
-            <Text style={[
-              styles.tabText,
-              activeTab === 'flights' && styles.activeTabText
-            ]}>
-              Flights
-            </Text>
-          </TouchableOpacity>
-        </View>
+               {/* Tab Navigation */}
+               {/* Flights tab commented out - no booking capability yet */}
+               {/* <View style={styles.tabContainer}>
+                 <TouchableOpacity
+                   style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
+                   onPress={() => setActiveTab('matches')}
+                   activeOpacity={0.7}
+                   accessibilityLabel="Search matches"
+                   accessibilityRole="tab"
+                   accessibilityState={{ selected: activeTab === 'matches' }}
+                 >
+                   <Text style={[
+                     styles.tabText,
+                     activeTab === 'matches' && styles.activeTabText
+                   ]}>
+                     Matches
+                   </Text>
+                 </TouchableOpacity>
+                 
+                 <TouchableOpacity
+                   style={[styles.tab, activeTab === 'flights' && styles.activeTab]}
+                   onPress={() => setActiveTab('flights')}
+                   activeOpacity={0.7}
+                   accessibilityLabel="Search flights"
+                   accessibilityRole="tab"
+                   accessibilityState={{ selected: activeTab === 'flights' }}
+                 >
+                   <Text style={[
+                     styles.tabText,
+                     activeTab === 'flights' && styles.activeTabText
+                   ]}>
+                     Flights
+                   </Text>
+                 </TouchableOpacity>
+               </View> */}
 
-        {/* Tab Content */}
-        {activeTab === 'matches' ? (
-          <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+               {/* Tab Content */}
+               {/* Flights tab content commented out */}
+               {/* {activeTab === 'matches' ? ( */}
+                 <ScrollView
+                 style={styles.scrollView}
+                 contentContainerStyle={styles.scrollContent}
+                 showsVerticalScrollIndicator={false}
+               >
           {/* Where Card - Collapsible */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -579,16 +581,16 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
             </View>
           </View>
           </ScrollView>
-        ) : (
+        {/* ) : (
           <FlightSearchTab
             onClose={onClose}
             dateFrom={dateFrom}
             dateTo={dateTo}
           />
-        )}
+        )} */}
 
         {/* Bottom Action Buttons - Only show for Matches tab */}
-        {activeTab === 'matches' && (
+        {/* {activeTab === 'matches' && ( */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={styles.clearButton}
@@ -613,7 +615,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
               )}
             </TouchableOpacity>
           </View>
-        )}
+        {/* )} */}
       </SafeAreaView>
     </Modal>
   );

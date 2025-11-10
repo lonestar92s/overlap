@@ -668,6 +668,84 @@ class ApiService {
     }
   }
 
+  /**
+   * Add a flight to a trip
+   * @param {string} tripId - Trip ID
+   * @param {Object} flightData - Flight data (flightNumber, airline, departure, arrival, duration, stops)
+   * @returns {Promise<Object>} Added flight
+   */
+  async addFlightToTrip(tripId, flightData) {
+    try {
+      if (!tripId) {
+        throw new Error('Trip ID is required');
+      }
+
+      const token = await getAuthToken();
+      const url = `${this.baseURL}/trips/${tripId}/flights`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(flightData)
+        },
+        30000
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to add flight to trip');
+      }
+
+      return data; // { success: true, flight: {...} }
+    } catch (error) {
+      console.error('Error adding flight to trip:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a flight from a trip
+   * @param {string} tripId - Trip ID
+   * @param {string} flightId - Flight ID
+   * @returns {Promise<Object>} Success response
+   */
+  async deleteFlightFromTrip(tripId, flightId) {
+    try {
+      if (!tripId || !flightId) {
+        throw new Error('Trip ID and Flight ID are required');
+      }
+
+      const token = await getAuthToken();
+      const url = `${this.baseURL}/trips/${tripId}/flights/${flightId}`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        },
+        10000
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to delete flight from trip');
+      }
+
+      return data; // { success: true, message: '...' }
+    } catch (error) {
+      console.error('Error deleting flight from trip:', error);
+      throw error;
+    }
+  }
+
   async updateMatchPlanning(tripId, matchId, planningData) {
     try {
       console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });
