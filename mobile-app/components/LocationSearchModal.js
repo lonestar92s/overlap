@@ -17,12 +17,14 @@ import { Calendar } from 'react-native-calendars';
 import { debounce } from 'lodash';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import FlightSearchTab from './FlightSearchTab';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
 const MAX_RECENT_SEARCHES = 5;
 
 const LocationSearchModal = ({ visible, onClose, navigation }) => {
+  const [activeTab, setActiveTab] = useState('matches'); // 'matches' or 'flights'
   const [location, setLocation] = useState(null);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState(null);
@@ -352,12 +354,51 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}
+            accessibilityLabel="Close search modal"
+            accessibilityRole="button"
           >
             <MaterialIcons name="close" size={15} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
 
-        <ScrollView
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
+            onPress={() => setActiveTab('matches')}
+            activeOpacity={0.7}
+            accessibilityLabel="Search matches"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'matches' }}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'matches' && styles.activeTabText
+            ]}>
+              Matches
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'flights' && styles.activeTab]}
+            onPress={() => setActiveTab('flights')}
+            activeOpacity={0.7}
+            accessibilityLabel="Search flights"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'flights' }}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'flights' && styles.activeTabText
+            ]}>
+              Flights
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tab Content */}
+        {activeTab === 'matches' ? (
+          <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -537,29 +578,42 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
               />
             </View>
           </View>
-        </ScrollView>
+          </ScrollView>
+        ) : (
+          <FlightSearchTab
+            onClose={onClose}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+          />
+        )}
 
-        {/* Bottom Action Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.clearButton}
-            onPress={clearAll}
-          >
-            <Text style={styles.clearButtonText}>Clear All</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.enterButton, (!location || !dateFrom || !dateTo) && styles.enterButtonDisabled]}
-            onPress={handleSearch}
-            disabled={loading || !location || !dateFrom || !dateTo}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" />
-            ) : (
-              <Text style={styles.enterButtonText}>Search</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Bottom Action Buttons - Only show for Matches tab */}
+        {activeTab === 'matches' && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={clearAll}
+              accessibilityLabel="Clear all search filters"
+              accessibilityRole="button"
+            >
+              <Text style={styles.clearButtonText}>Clear All</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.enterButton, (!location || !dateFrom || !dateTo) && styles.enterButtonDisabled]}
+              onPress={handleSearch}
+              disabled={loading || !location || !dateFrom || !dateTo}
+              accessibilityLabel="Search for matches"
+              accessibilityRole="button"
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" />
+              ) : (
+                <Text style={styles.enterButtonText}>Search</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -584,6 +638,37 @@ const styles = StyleSheet.create({
     height: 25,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardGrey,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    minHeight: 48,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.xs,
+    alignItems: 'center',
+    marginHorizontal: spacing.xs,
+  },
+  activeTab: {
+    backgroundColor: colors.card,
+  },
+  tabText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+    fontSize: 16,
+  },
+  activeTabText: {
+    color: colors.text.primary,
+    fontWeight: '600',
+    fontSize: 16,
   },
   scrollView: {
     flex: 1,

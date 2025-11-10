@@ -101,9 +101,28 @@ class AmadeusProvider {
    */
   normalizeFlightOffers(offers) {
     return offers.map(offer => {
-      const segments = offer.itineraries[0].segments;
+      const itinerary = offer.itineraries[0];
+      const segments = itinerary.segments;
       const firstSegment = segments[0];
       const lastSegment = segments[segments.length - 1];
+
+      // Use Amadeus-provided duration directly
+      // Duration is in ISO 8601 format (e.g., "PT8H5M") - parse to minutes
+      let duration = 0;
+      if (itinerary.duration) {
+        if (typeof itinerary.duration === 'string') {
+          // Parse ISO 8601 duration string
+          duration = this.parseISODuration(itinerary.duration);
+        } else if (typeof itinerary.duration === 'number') {
+          // Already in minutes
+          duration = itinerary.duration;
+        }
+      }
+      
+      // Fallback to calculation if duration not available
+      if (!duration || duration === 0) {
+        duration = this.calculateDuration(firstSegment.departure.at, lastSegment.arrival.at);
+      }
 
       return {
         id: offer.id,
@@ -132,24 +151,31 @@ class AmadeusProvider {
           time: lastSegment.arrival.at.split('T')[1]?.substring(0, 5),
           airport: lastSegment.arrival.iataCode
         },
-        duration: this.calculateDuration(firstSegment.departure.at, lastSegment.arrival.at),
+        duration: duration,
         stops: segments.length - 1,
         airline: {
           name: firstSegment.carrierCode, // Will need airline lookup for full name
           code: firstSegment.carrierCode
         },
-        segments: segments.map(seg => ({
-          departure: {
-            airport: seg.departure.iataCode,
-            time: seg.departure.at
-          },
-          arrival: {
-            airport: seg.arrival.iataCode,
-            time: seg.arrival.at
-          },
-          duration: this.calculateDuration(seg.departure.at, seg.arrival.at),
-          carrier: seg.carrierCode
-        })),
+        segments: segments.map(seg => {
+          // For individual segments, try to use duration if available, otherwise calculate
+          const segDuration = seg.duration 
+            ? this.parseISODuration(seg.duration)
+            : this.calculateDuration(seg.departure.at, seg.arrival.at);
+          
+          return {
+            departure: {
+              airport: seg.departure.iataCode,
+              time: seg.departure.at
+            },
+            arrival: {
+              airport: seg.arrival.iataCode,
+              time: seg.arrival.at
+            },
+            duration: segDuration,
+            carrier: seg.carrierCode
+          };
+        }),
         bookingUrl: null, // Amadeus free tier doesn't provide booking URLs
         provider: 'amadeus'
       };
@@ -157,7 +183,44 @@ class AmadeusProvider {
   }
 
   /**
+   * Parse ISO 8601 duration string to minutes
+   * @param {string} duration - ISO 8601 duration (e.g., "PT8H5M" for 8 hours 5 minutes)
+   * @returns {number} Duration in minutes
+   */
+  parseISODuration(duration) {
+    if (!duration) return 0;
+    
+    // ISO 8601 format: PT8H5M (Period Time: 8 Hours 5 Minutes)
+    // Also handles formats like: PT14H5M, PT8H, PT45M, etc.
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) {
+      console.warn('Failed to parse ISO duration:', duration);
+      return 0;
+    }
+    
+    const hours = parseInt(match[1] || '0', 10);
+    const minutes = parseInt(match[2] || '0', 10);
+    const seconds = parseInt(match[3] || '0', 10);
+    
+    const totalMinutes = hours * 60 + minutes + Math.round(seconds / 60);
+    
+    // Debug logging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Parsed duration:', {
+        input: duration,
+        hours,
+        minutes,
+        seconds,
+        totalMinutes
+      });
+    }
+    
+    return totalMinutes;
+  }
+
+  /**
    * Calculate duration in minutes between two ISO datetime strings
+   * Note: This method is less accurate due to timezone issues. Prefer using parseISODuration
    * @param {string} departure - ISO datetime string
    * @param {string} arrival - ISO datetime string
    * @returns {number} Duration in minutes

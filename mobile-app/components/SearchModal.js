@@ -13,6 +13,8 @@ import {
 import { Button, Overlay } from 'react-native-elements';
 import { Calendar } from 'react-native-calendars';
 import LocationAutocomplete from './LocationAutocomplete';
+import FlightSearchTab from './FlightSearchTab';
+import MatchSearchTab from './MatchSearchTab';
 import { formatDateToLocalString, createDateRange } from '../utils/dateUtils';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
@@ -25,6 +27,7 @@ const SearchModal = ({
   initialDateTo = null,
   loading = false
 }) => {
+  const [activeTab, setActiveTab] = useState('matches'); // 'matches' or 'flights'
   const [location, setLocation] = useState(initialLocation);
   const [selectedDates, setSelectedDates] = useState({});
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
@@ -170,89 +173,66 @@ const SearchModal = ({
           </TouchableOpacity>
         </View>
 
-        {/* Search Form */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={100}
-          style={styles.keyboardAvoidingView}
-        >
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
+            onPress={() => setActiveTab('matches')}
+            activeOpacity={0.7}
+            accessibilityLabel="Search matches"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'matches' }}
           >
-            <View style={styles.form}>
-            {/* Location */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Where</Text>
-              <LocationAutocomplete
-                onLocationSelect={setLocation}
-                initialValue={location?.city}
-                placeholder="Search for a city"
-              />
-            </View>
-
-            {/* Dates */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>When</Text>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowCalendar(!showCalendar)}
-                accessibilityLabel={dateFrom && dateTo 
-                  ? `Selected dates: ${formatDisplayDate(dateFrom)} to ${formatDisplayDate(dateTo)}`
-                  : 'Select travel dates'}
-                accessibilityRole="button"
-              >
-                <Text style={styles.dateButtonText}>
-                  {dateFrom && dateTo 
-                    ? `${formatDisplayDate(dateFrom)} - ${formatDisplayDate(dateTo)}`
-                    : 'Select dates'
-                  }
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Calendar */}
-            {showCalendar && (
-              <View style={styles.calendarContainer}>
-                <Calendar
-                  onDayPress={onDayPress}
-                  markedDates={selectedDates}
-                  markingType="period"
-                  theme={{
-                    selectedDayBackgroundColor: '#007AFF',
-                    selectedDayTextColor: '#ffffff',
-                    todayTextColor: '#007AFF',
-                    dayTextColor: '#2d4150',
-                    textDisabledColor: '#d9e1e8',
-                    arrowColor: '#007AFF',
-                    monthTextColor: '#2d4150',
-                    indicatorColor: '#007AFF',
-                    textDayFontWeight: '300',
-                    textMonthFontWeight: 'bold',
-                    textDayHeaderFontWeight: '300',
-                    textDayFontSize: 16,
-                    textMonthFontSize: 16,
-                    textDayHeaderFontSize: 13
-                  }}
-                />
-              </View>
-            )}
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-
-        {/* Search Button */}
-        <View style={styles.buttonContainer}>
-          <Button
-            title={loading ? "Searching..." : "Search Matches"}
-            onPress={handleSearch}
-            disabled={loading || !location || !dateFrom || !dateTo}
-            loading={loading}
-            buttonStyle={styles.searchButton}
-            titleStyle={styles.searchButtonText}
-          />
+            <Text style={[
+              styles.tabText,
+              activeTab === 'matches' && styles.activeTabText
+            ]}>
+              Matches
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'flights' && styles.activeTab]}
+            onPress={() => setActiveTab('flights')}
+            activeOpacity={0.7}
+            accessibilityLabel="Search flights"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'flights' }}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'flights' && styles.activeTabText
+            ]}>
+              Flights
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Tab Content */}
+        {activeTab === 'matches' ? (
+          <MatchSearchTab
+            location={location}
+            setLocation={setLocation}
+            dateFrom={dateFrom}
+            setDateFrom={setDateFrom}
+            dateTo={dateTo}
+            setDateTo={setDateTo}
+            selectedDates={selectedDates}
+            setSelectedDates={setSelectedDates}
+            showCalendar={showCalendar}
+            setShowCalendar={setShowCalendar}
+            onDayPress={onDayPress}
+            formatDisplayDate={formatDisplayDate}
+            handleSearch={handleSearch}
+            loading={loading}
+          />
+        ) : (
+          <FlightSearchTab
+            onClose={onClose}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+          />
+        )}
       </View>
     </Overlay>
   );
@@ -297,6 +277,37 @@ const styles = StyleSheet.create({
   clearButtonText: {
     ...typography.body,
     color: colors.primary,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardGrey,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    minHeight: 48,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.xs,
+    alignItems: 'center',
+    marginHorizontal: spacing.xs,
+  },
+  activeTab: {
+    backgroundColor: colors.card,
+  },
+  tabText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+    fontSize: 16,
+  },
+  activeTabText: {
+    color: colors.text.primary,
+    fontWeight: '600',
+    fontSize: 16,
   },
   keyboardAvoidingView: {
     flex: 1,

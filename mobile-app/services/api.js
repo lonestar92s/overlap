@@ -1705,6 +1705,97 @@ class ApiService {
       throw error;
     }
   }
+
+  // Flight search methods
+  async searchAirports(query, limit = 10) {
+    try {
+      if (!query || query.trim().length < 2) {
+        return { success: true, data: [] };
+      }
+
+      const params = new URLSearchParams();
+      params.append('query', query.trim());
+      if (limit) params.append('limit', limit.toString());
+
+      const url = `${this.baseURL}/transportation/airports/search?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 10000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to search airports');
+      }
+
+      return data; // { success: true, data: [...], count: ... }
+    } catch (error) {
+      console.error('Error in searchAirports:', error);
+      throw error;
+    }
+  }
+
+  async searchFlights(params) {
+    try {
+      const {
+        origin,
+        destination,
+        departureDate,
+        returnDate,
+        adults = 1,
+        max = 10,
+        currency = 'USD',
+        nonStop = false,
+      } = params;
+
+      if (!origin || !destination || !departureDate) {
+        throw new Error('Origin, destination, and departure date are required');
+      }
+
+      const searchParams = new URLSearchParams();
+      searchParams.append('origin', origin);
+      searchParams.append('destination', destination);
+      searchParams.append('departureDate', departureDate);
+      if (returnDate) searchParams.append('returnDate', returnDate);
+      searchParams.append('adults', adults.toString());
+      searchParams.append('max', max.toString());
+      searchParams.append('currency', currency);
+      if (nonStop) searchParams.append('nonStop', 'true');
+
+      const url = `${this.baseURL}/transportation/flights/search?${searchParams.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 30000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to search flights');
+      }
+
+      return data; // { success: true, provider: '...', data: [...], count: ... }
+    } catch (error) {
+      console.error('Error in searchFlights:', error);
+      throw error;
+    }
+  }
+
+  async getNearestAirports(latitude, longitude, radius = 100, limit = 3) {
+    try {
+      const params = new URLSearchParams();
+      params.append('latitude', latitude.toString());
+      params.append('longitude', longitude.toString());
+      params.append('radius', radius.toString());
+      params.append('limit', limit.toString());
+
+      const url = `${this.baseURL}/transportation/airports/nearest?${params.toString()}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 10000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to get nearest airports');
+      }
+
+      return data; // { success: true, data: [...], count: ... }
+    } catch (error) {
+      console.error('Error in getNearestAirports:', error);
+      throw error;
+    }
+  }
 }
 
 // Create API service instance
