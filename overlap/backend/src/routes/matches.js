@@ -875,6 +875,43 @@ router.get('/search', async (req, res) => {
                     }
                 }
                 
+                // CRITICAL: If venue still has no coordinates but we have name/city, geocode and save it
+                // This ensures every match gets coordinates - the missing piece!
+                if (venueInfo && !venueInfo.coordinates && venueInfo.name && venueInfo.city) {
+                    try {
+                        console.log(`🔍 Geocoding venue (missing coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country}`);
+                        const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
+                            venueInfo.name,
+                            venueInfo.city,
+                            venueInfo.country || match.league?.country
+                        );
+                        
+                        if (geocodedCoords) {
+                            console.log(`✅ Geocoded ${venueInfo.name}: [${geocodedCoords[0]}, ${geocodedCoords[1]}]`);
+                            
+                            // Save to MongoDB for future use
+                            const savedVenue = await venueService.saveVenueWithCoordinates({
+                                venueId: venue?.id || venueInfo.id || null,
+                                name: venueInfo.name,
+                                city: venueInfo.city,
+                                country: venueInfo.country || match.league?.country,
+                                coordinates: geocodedCoords
+                            });
+                            
+                            if (savedVenue) {
+                                console.log(`💾 Saved venue to MongoDB: ${venueInfo.name}`);
+                            }
+                            
+                            // Update venueInfo with geocoded coordinates
+                            venueInfo.coordinates = geocodedCoords;
+                        } else {
+                            console.log(`⚠️ Geocoding failed for ${venueInfo.name}`);
+                        }
+                    } catch (geocodeError) {
+                        console.error(`❌ Geocoding error for ${venueInfo.name}:`, geocodeError.message);
+                    }
+                }
+                
                 if (!venueInfo) {
                     const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
                     const team = await Team.findOne({
@@ -895,13 +932,57 @@ router.get('/search', async (req, res) => {
                             coordinates: team.venue.coordinates
                         };
                     } else {
+                        // Create venueInfo from available data
+                        const venueName = venue?.name || team?.venue?.name || 'Unknown Venue';
+                        const venueCity = venue?.city || team?.city || 'Unknown City';
+                        const venueCountry = match.league?.country || team?.country || 'Unknown Country';
+                        
                         venueInfo = {
                             id: venue?.id || null,
-                            name: venue?.name || 'Unknown Venue',
-                            city: venue?.city || 'Unknown City',
-                            country: match.league?.country || 'Unknown Country',
+                            name: venueName,
+                            city: venueCity,
+                            country: venueCountry,
                             coordinates: venue?.coordinates || null
                         };
+                        
+                        // CRITICAL: If still no coordinates but we have name/city, geocode it
+                        if (!venueInfo.coordinates && venueName !== 'Unknown Venue' && venueCity !== 'Unknown City') {
+                            try {
+                                console.log(`🔍 Geocoding venue from team fallback: ${venueName}, ${venueCity}, ${venueCountry}`);
+                                const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
+                                    venueName,
+                                    venueCity,
+                                    venueCountry
+                                );
+                                
+                                if (geocodedCoords) {
+                                    console.log(`✅ Geocoded ${venueName}: [${geocodedCoords[0]}, ${geocodedCoords[1]}]`);
+                                    
+                                    // Save to MongoDB
+                                    const savedVenue = await venueService.saveVenueWithCoordinates({
+                                        venueId: venue?.id || null,
+                                        name: venueName,
+                                        city: venueCity,
+                                        country: venueCountry,
+                                        coordinates: geocodedCoords
+                                    });
+                                    
+                                    // Also update team if it exists
+                                    if (team && !team.venue?.coordinates) {
+                                        if (!team.venue) team.venue = {};
+                                        team.venue.name = venueName;
+                                        team.venue.coordinates = geocodedCoords;
+                                        team.city = venueCity;
+                                        await team.save();
+                                        console.log(`💾 Updated team ${team.name} with venue coordinates`);
+                                    }
+                                    
+                                    venueInfo.coordinates = geocodedCoords;
+                                }
+                            } catch (geocodeError) {
+                                console.error(`❌ Geocoding error for ${venueName}:`, geocodeError.message);
+                            }
+                        }
                     }
                 }
 
