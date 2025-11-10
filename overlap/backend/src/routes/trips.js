@@ -493,9 +493,23 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
             });
         }
 
-        flight.remove();
+        console.log('Attempting to delete flight:', {
+            flightId: req.params.flightId,
+            flightFound: !!flight,
+            flightIdType: typeof flight?._id,
+            flightIdValue: String(flight?._id),
+            tripFlightsCount: trip.flights.length
+        });
+
+        // Remove the flight from the array
+        // For Mongoose subdocuments, we can use pull or filter
+        trip.flights.pull(flight._id);
         trip.updatedAt = new Date();
+        
+        console.log('Flight removed from array, saving user...');
         await user.save();
+        
+        console.log('User saved successfully, flight deleted');
 
         res.json({
             success: true,
@@ -503,9 +517,18 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleting flight from trip:', error);
+        console.error('Error stack:', error.stack);
+        console.error('Error details:', {
+            flightId: req.params.flightId,
+            tripId: req.params.id,
+            userId: req.user?.id,
+            errorMessage: error.message,
+            errorName: error.name
+        });
         res.status(500).json({
             success: false,
-            message: 'Failed to delete flight from trip'
+            message: 'Failed to delete flight from trip',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
