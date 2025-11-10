@@ -292,8 +292,24 @@ class AmadeusProvider {
         params
       });
       
-      // Get access token using SDK (it handles OAuth automatically)
-      const accessToken = await this.amadeus.client.getAccessToken();
+      // Get access token via OAuth2
+      const tokenUrl = `${baseUrl}/v1/security/oauth2/token`;
+      const tokenParams = new URLSearchParams();
+      tokenParams.append('grant_type', 'client_credentials');
+      tokenParams.append('client_id', process.env.AMADEUS_CLIENT_ID);
+      tokenParams.append('client_secret', process.env.AMADEUS_CLIENT_SECRET);
+      
+      const tokenResponse = await axios.post(tokenUrl, tokenParams.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
+      const accessToken = tokenResponse.data.access_token;
+      
+      if (!accessToken) {
+        throw new Error('Failed to obtain Amadeus access token');
+      }
       
       // Make direct REST API call
       const response = await axios.get(`${baseUrl}/v2/schedule/flights`, {
