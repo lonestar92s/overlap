@@ -751,5 +751,248 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
     }
 });
 
+// Venue Coordinate Management Endpoints
+
+// GET /api/admin/venues/validate-coordinates
+// Detect venues with incorrect coordinates
+router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
+    try {
+        const geocodingService = require('../services/geocodingService');
+        
+        // Country bounds for validation
+        const COUNTRY_BOUNDS = {
+            'England': { minLat: 50.0, maxLat: 55.8, minLng: -6.0, maxLng: 2.0 },
+            'Germany': { minLat: 47.0, maxLat: 55.0, minLng: 5.0, maxLng: 15.0 },
+            'France': { minLat: 41.0, maxLat: 51.0, minLng: -5.0, maxLng: 10.0 },
+            'Spain': { minLat: 36.0, maxLat: 44.0, minLng: -10.0, maxLng: 4.0 },
+            'Italy': { minLat: 36.0, maxLat: 47.0, minLng: 6.0, maxLng: 19.0 }
+        };
+
+        function isWithinCountryBounds(coordinates, country) {
+            if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) return false;
+            const [lon, lat] = coordinates;
+            const bounds = COUNTRY_BOUNDS[country];
+            if (!bounds) return true; // Skip validation for unknown countries
+            return lat >= bounds.minLat && lat <= bounds.maxLat &&
+                   lon >= bounds.minLng && lon <= bounds.maxLng;
+        }
+
+        const venues = await Venue.find({
+            coordinates: { $exists: true, $ne: null },
+            isActive: true
+        }).lean();
+
+        const issues = [];
+        for (const venue of venues) {
+            if (!isWithinCountryBounds(venue.coordinates, venue.country)) {
+                issues.push({
+                    venueId: venue._id,
+                    venueApiId: venue.venueId,
+                    name: venue.name,
+                    city: venue.city,
+                    country: venue.country,
+                    currentCoordinates: venue.coordinates,
+                    issue: 'Coordinates outside country bounds'
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            data: {
+                totalVenues: venues.length,
+                issuesFound: issues.length,
+                issues: issues
+            }
+        });
+    } catch (error) {
+        console.error('Error validating venue coordinates:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to validate venue coordinates'
+        });
+    }
+});
+
+// POST /api/admin/venues/:venueId/fix-coordinates
+// Re-geocode and fix a specific venue's coordinates
+router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
+    try {
+        const { venueId } = req.params;
+        const { dryRun = false } = req.body;
+        const geocodingService = require('../services/geocodingService');
+
+        const venue = await Venue.findById(venueId);
+        if (!venue) {
+            return res.status(404).json({
+                success: false,
+                message: 'Venue not found'
+            });
+        }
+
+        const oldCoordinates = venue.coordinates;
+
+        // Re-geocode
+        const newCoordinates = await geocodingService.geocodeVenueCoordinates(
+            venue.name,
+            venue.city,
+            venue.country
+        );
+
+        if (!newCoordinates) {
+            return res.status(400).json({
+                success: false,
+                message: 'Failed to geocode venue'
+            });
+        }
+
+        if (dryRun) {
+            return res.json({
+                success: true,
+                dryRun: true,
+                venue: {
+                    id: venue._id,
+                    name: venue.name,
+                    city: venue.city,
+                    country: venue.country
+                },
+                oldCoordinates,
+                newCoordinates,
+                message: 'Dry run - no changes made'
+            });
+        }
+
+        // Update venue
+        venue.coordinates = newCoordinates;
+        venue.location = {
+            type: 'Point',
+            coordinates: newCoordinates
+        };
+        venue.lastUpdated = new Date();
+        await venue.save();
+
+        // Update teams that reference this venue
+        const teams = await Team.find({
+            'venue.name': venue.name,
+            city: venue.city
+        });
+
+        let teamsUpdated = 0;
+        for (const team of teams) {
+            if (team.venue && (!team.venue.coordinates || JSON.stringify(team.venue.coordinates) !== JSON.stringify(newCoordinates))) {
+                team.venue.coordinates = newCoordinates;
+                await team.save();
+                teamsUpdated++;
+            }
+        }
+
+        res.json({
+            success: true,
+            venue: {
+                id: venue._id,
+                name: venue.name,
+                city: venue.city,
+                country: venue.country
+            },
+            oldCoordinates,
+            newCoordinates,
+            teamsUpdated,
+            message: 'Venue coordinates updated successfully'
+        });
+    } catch (error) {
+        console.error('Error fixing venue coordinates:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fix venue coordinates'
+        });
+    }
+});
+
+// POST /api/admin/venues/bulk-fix-coordinates
+// Fix coordinates for multiple venues
+router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
+    try {
+        const { venueIds, dryRun = false } = req.body;
+        const geocodingService = require('../services/geocodingService');
+
+        if (!venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'venueIds array is required'
+            });
+        }
+
+        const results = [];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const venueId of venueIds) {
+            try {
+                const venue = await Venue.findById(venueId);
+                if (!venue) {
+                    results.push({ venueId, status: 'not_found' });
+                    failCount++;
+                    continue;
+                }
+
+                const oldCoordinates = venue.coordinates;
+                const newCoordinates = await geocodingService.geocodeVenueCoordinates(
+                    venue.name,
+                    venue.city,
+                    venue.country
+                );
+
+                if (!newCoordinates) {
+                    results.push({ venueId, status: 'geocode_failed', venue: venue.name });
+                    failCount++;
+                    continue;
+                }
+
+                if (!dryRun) {
+                    venue.coordinates = newCoordinates;
+                    venue.location = {
+                        type: 'Point',
+                        coordinates: newCoordinates
+                    };
+                    venue.lastUpdated = new Date();
+                    await venue.save();
+                }
+
+                results.push({
+                    venueId,
+                    status: 'success',
+                    venue: venue.name,
+                    oldCoordinates,
+                    newCoordinates
+                });
+                successCount++;
+
+                // Rate limiting
+                await new Promise(resolve => setTimeout(resolve, 200));
+            } catch (error) {
+                results.push({ venueId, status: 'error', error: error.message });
+                failCount++;
+            }
+        }
+
+        res.json({
+            success: true,
+            dryRun,
+            summary: {
+                total: venueIds.length,
+                success: successCount,
+                failed: failCount
+            },
+            results
+        });
+    } catch (error) {
+        console.error('Error bulk fixing venue coordinates:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to bulk fix venue coordinates'
+        });
+    }
+});
+
 module.exports = router; 
 

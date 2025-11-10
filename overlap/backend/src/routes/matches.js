@@ -625,10 +625,66 @@ router.get('/search', async (req, res) => {
         
         if (hasBounds && dateFrom && dateTo && !hasCompetitionsOrTeams && !hasTeamMatchup) {
             // Location-only search: use geographic filtering to find relevant leagues
-            const bounds = {
+            
+            // PHASE 1: Buffer Zones - Expand bounds by 30% to prevent gaps when panning
+            const originalBounds = {
                 northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
                 southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
             };
+            
+            const boundsLatSpan = originalBounds.northeast.lat - originalBounds.southwest.lat;
+            const boundsLngSpan = originalBounds.northeast.lng - originalBounds.southwest.lng;
+            const bufferPercent = 0.3; // 30% buffer
+            
+            const bounds = {
+                northeast: {
+                    lat: originalBounds.northeast.lat + (boundsLatSpan * bufferPercent),
+                    lng: originalBounds.northeast.lng + (boundsLngSpan * bufferPercent)
+                },
+                southwest: {
+                    lat: originalBounds.southwest.lat - (boundsLatSpan * bufferPercent),
+                    lng: originalBounds.southwest.lng - (boundsLngSpan * bufferPercent)
+                }
+            };
+            
+            // PHASE 1: Country-Level Caching - Determine country from bounds center
+            const searchCenterLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
+            const searchCenterLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+            
+            // Find which country the search center is in
+            let searchCountry = null;
+            let minDistance = Infinity;
+            for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
+                const distance = calculateDistanceKm(searchCenterLat, searchCenterLng, coords.lat, coords.lng);
+                if (distance < minDistance && distance < 500) { // Within 500km of country center
+                    minDistance = distance;
+                    searchCountry = countryName;
+                }
+            }
+            
+            // Use country + date range for cache key (not exact bounds)
+            const cacheKey = `location-search:${searchCountry || 'unknown'}:${dateFrom}:${dateTo}:${season}`;
+            
+            // Check cache first
+            const cachedData = matchesCache.get(cacheKey);
+            if (cachedData) {
+                console.log(`✅ Location-only search: Cache hit for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
+                // Still filter by original bounds (not buffered bounds) for display
+                const filteredMatches = cachedData.data.filter(match => {
+                    if (!match.fixture?.venue?.coordinates) return false;
+                    const [lon, lat] = match.fixture.venue.coordinates;
+                    return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                           lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                });
+                return res.json({ 
+                    success: true, 
+                    data: filteredMatches, 
+                    count: filteredMatches.length,
+                    fromCache: true 
+                });
+            }
+            
+            console.log(`🔍 Location-only search: Cache miss for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo} - fetching from API`);
             
             // Get relevant league IDs using geographic filtering (similar to /leagues/relevant)
             const majorLeagueIds = await getRelevantLeagueIds(bounds);
@@ -648,23 +704,37 @@ router.get('/search', async (req, res) => {
             console.log(`🔍 Location-only search: League names being searched: ${leagueInfo}`);
             console.log(`🔍 Location-only search: Date range: ${dateFrom} to ${dateTo}, Season: ${season}`);
             
+            // PHASE 1: Retry Logic with Exponential Backoff
+            async function fetchWithRetry(leagueId, maxRetries = 3) {
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                            params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
+                            headers: { 'x-apisports-key': API_SPORTS_KEY },
+                            httpsAgent,
+                            timeout: 10000
+                        });
+                        console.log(`✅ League ${leagueId} API call successful (attempt ${attempt + 1}): ${response.data?.response?.length || 0} fixtures`);
+                        return { type: 'league', id: leagueId, data: response.data, success: true };
+                    } catch (error) {
+                        const isLastAttempt = attempt === maxRetries - 1;
+                        const errorMsg = error.message || error.response?.status || 'Unknown error';
+                        
+                        if (isLastAttempt) {
+                            console.error(`❌ League ${leagueId} API call failed after ${maxRetries} attempts: ${errorMsg}`);
+                            return { type: 'league', id: leagueId, data: { response: [] }, success: false };
+                        } else {
+                            const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+                            console.warn(`⚠️ League ${leagueId} API call failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms: ${errorMsg}`);
+                            await new Promise(resolve => setTimeout(resolve, delayMs));
+                        }
+                    }
+                }
+            }
+            
             const requests = [];
             for (const leagueId of majorLeagueIds) {
-                requests.push(
-                    axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                        params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
-                        headers: { 'x-apisports-key': API_SPORTS_KEY },
-                        httpsAgent,
-                        timeout: 10000
-                    }).then(r => {
-                        console.log(`✅ League ${leagueId} API call successful: ${r.data?.response?.length || 0} fixtures`);
-                        return { type: 'league', id: leagueId, data: r.data };
-                    })
-                      .catch((error) => {
-                        console.error(`❌ League ${leagueId} API call failed:`, error.message || error.response?.status || 'Unknown error');
-                        return { type: 'league', id: leagueId, data: { response: [] } };
-                      })
-                );
+                requests.push(fetchWithRetry(leagueId));
             }
 
             const settled = await Promise.allSettled(requests);
@@ -868,18 +938,27 @@ router.get('/search', async (req, res) => {
                     if (typeof lon === 'number' && typeof lat === 'number' && 
                         !isNaN(lon) && !isNaN(lat) &&
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        // For city-level searches with domestic leagues, include all matches from that country
+                        // PHASE 1: For caching, include ALL matches (we'll filter by original bounds when returning)
+                        // This ensures cache contains all country matches for instant zoom-out
                         if (isCityLevelSearch && isDomesticLeague) {
+                            // Include all domestic league matches for city searches (for caching)
                             shouldInclude = true;
                             console.log(`✅ Match included (domestic league, city search): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
                         } else if (isWithinBounds(venueInfo.coordinates, bounds)) {
-                            // Strict bounds check for international leagues or country-level searches
+                            // Include matches within buffered bounds (for caching)
                             shouldInclude = true;
                         } else {
-                            matchesFilteredOut++;
-                            matchesByLeague[leagueId].filteredOut++;
-                            // Log why match was filtered (for debugging)
-                            console.log(`📍 Match filtered (outside bounds): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                            // Still include matches outside buffered bounds if they're in the country
+                            // We'll filter by original bounds when returning to client
+                            // This ensures cache has all country matches
+                            if (isDomesticLeague) {
+                                shouldInclude = true;
+                                console.log(`✅ Match included (domestic league, outside buffered bounds but in country): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                            } else {
+                                matchesFilteredOut++;
+                                matchesByLeague[leagueId].filteredOut++;
+                                console.log(`📍 Match filtered (outside bounds, not domestic): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                            }
                         }
                     } else {
                         matchesWithoutCoords++;
@@ -906,7 +985,31 @@ router.get('/search', async (req, res) => {
 
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
-            return res.json({ success: true, data: transformedMatches, count: transformedMatches.length });
+            
+            // PHASE 1: Cache the results (all country matches, not filtered by bounds)
+            const cacheData = {
+                success: true,
+                data: transformedMatches, // Store all matches, not filtered by bounds
+                count: transformedMatches.length
+            };
+            matchesCache.set(cacheKey, cacheData);
+            console.log(`✅ Location-only search: Cached ${transformedMatches.length} matches for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
+            
+            // Filter by original bounds (not buffered bounds) for this specific request
+            const filteredMatches = transformedMatches.filter(match => {
+                if (!match.fixture?.venue?.coordinates) return false;
+                const [lon, lat] = match.fixture.venue.coordinates;
+                return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                       lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+            });
+            
+            return res.json({ 
+                success: true, 
+                data: filteredMatches, 
+                count: filteredMatches.length,
+                fromCache: false,
+                totalMatches: transformedMatches.length // Include total for debugging
+            });
         }
 
         // Aggregated search path when competitions/teams are provided
