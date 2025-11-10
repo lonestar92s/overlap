@@ -736,12 +736,24 @@ class ApiService {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.message || 'Failed to delete flight from trip');
+        const errorMessage = data?.message || data?.error || 'Failed to delete flight from trip';
+        console.error('Delete flight API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(errorMessage);
       }
 
       return data; // { success: true, message: '...' }
     } catch (error) {
       console.error('Error deleting flight from trip:', error);
+      console.error('Error details:', {
+        tripId,
+        flightId,
+        message: error.message,
+        response: error.response
+      });
       throw error;
     }
   }

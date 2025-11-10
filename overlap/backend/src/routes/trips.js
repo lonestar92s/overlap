@@ -462,8 +462,23 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
             });
         }
 
-        const flight = trip.flights.id(req.params.flightId);
+        // Try to find the flight by ID
+        // Mongoose subdocuments can be accessed by _id string
+        let flight = trip.flights.id(req.params.flightId);
+        
+        // If not found, try finding by matching _id string
         if (!flight) {
+            flight = trip.flights.find(f => 
+                String(f._id) === String(req.params.flightId) ||
+                String(f.id) === String(req.params.flightId)
+            );
+        }
+        
+        if (!flight) {
+            console.error('Flight not found:', {
+                flightId: req.params.flightId,
+                availableFlightIds: trip.flights.map(f => ({ _id: String(f._id), id: String(f.id) }))
+            });
             return res.status(404).json({
                 success: false,
                 message: 'Flight not found'

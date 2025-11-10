@@ -242,6 +242,25 @@ export const ItineraryProvider = ({ children }) => {
     );
   };
 
+  // Refresh a single itinerary from API
+  const refreshItinerary = async (itineraryId) => {
+    try {
+      const response = await ApiService.getTripById(itineraryId);
+      if (response.success && response.trip) {
+        const updatedTrip = normalizeId(response.trip);
+        // Update local state with the refreshed trip
+        setItineraries(prev => prev.map(itinerary => 
+          idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
+        ));
+        return updatedTrip;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error refreshing itinerary:', error);
+      return null;
+    }
+  };
+
   // Check if a match is in any itinerary
   const isMatchInItinerary = (matchId) => {
     const normalizedMatchId = String(matchId);
@@ -289,6 +308,7 @@ export const ItineraryProvider = ({ children }) => {
     updateItinerary,
     deleteItinerary,
     getItineraryById,
+    refreshItinerary,
     isMatchInItinerary,
     getItinerariesForMatch,
     refreshItineraries: loadItinerariesFromAPI

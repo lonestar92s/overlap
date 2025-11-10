@@ -39,7 +39,7 @@ import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../s
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary } = useItineraries();
+  const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary } = useItineraries();
   const { itineraryId } = route.params;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -89,9 +89,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const handleFlightAdded = async () => {
     if (itineraryId) {
       try {
-        const updatedItinerary = await apiService.getTripById(itineraryId);
-        if (updatedItinerary.success && updatedItinerary.trip) {
-          setItinerary(updatedItinerary.trip);
+        // Refresh from context (which will update both context and local state)
+        const updatedItinerary = await refreshItinerary(itineraryId);
+        if (updatedItinerary) {
+          setItinerary(updatedItinerary);
+        } else {
+          // Fallback: fetch directly if context refresh fails
+          const response = await apiService.getTripById(itineraryId);
+          if (response.success && response.trip) {
+            setItinerary(response.trip);
+          }
         }
       } catch (error) {
         console.error('Error refreshing itinerary:', error);
@@ -115,12 +122,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
             try {
               setDeletingFlightId(flightId);
               const tripId = itinerary.id || itinerary._id;
-              await apiService.deleteFlightFromTrip(tripId, flightId);
+              
+              // Ensure flightId is a string (Mongoose subdocuments use _id)
+              const flightIdString = String(flightId);
+              
+              console.log('Deleting flight:', { tripId, flightId: flightIdString, originalFlightId: flightId });
+              
+              await apiService.deleteFlightFromTrip(tripId, flightIdString);
               
               // Refresh itinerary
               await handleFlightAdded();
             } catch (error) {
               console.error('Error deleting flight:', error);
+              console.error('Error details:', {
+                message: error.message,
+                tripId: itinerary.id || itinerary._id,
+                flightId: flightId
+              });
               Alert.alert('Error', error.message || 'Failed to delete flight. Please try again.');
             } finally {
               setDeletingFlightId(null);
@@ -956,12 +974,31 @@ const TripOverviewScreen = ({ navigation, route }) => {
                   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 };
                 
+                // Get airline logo URL
+                const getAirlineLogoUrl = (code) => {
+                  if (!code) return null;
+                  return `https://www.gstatic.com/flights/airline_logos/70px/${code.toUpperCase()}.png`;
+                };
+                
+                const airlineLogoUrl = airlineCode ? getAirlineLogoUrl(airlineCode) : null;
+                
                 return (
                   <View key={flightId} style={styles.flightCard}>
                     <View style={styles.flightCardHeader}>
                       <View style={styles.flightCardHeaderLeft}>
-                        <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
-                        <Text style={styles.flightAirline}>{airlineName}</Text>
+                        <View style={styles.flightHeaderRow}>
+                          {airlineLogoUrl && (
+                            <Image
+                              source={{ uri: airlineLogoUrl }}
+                              style={styles.flightAirlineLogo}
+                              resizeMode="contain"
+                            />
+                          )}
+                          <View style={styles.flightHeaderText}>
+                            <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
+                            <Text style={styles.flightAirline}>{airlineName}</Text>
+                          </View>
+                        </View>
                       </View>
                       <TouchableOpacity
                         onPress={() => handleDeleteFlight(flightId)}
@@ -1695,6 +1732,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   flightCardHeaderLeft: {
+    flex: 1,
+  },
+  flightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  flightAirlineLogo: {
+    width: 40,
+    height: 40,
+  },
+  flightHeaderText: {
     flex: 1,
   },
   flightNumber: {
