@@ -284,26 +284,48 @@ class AmadeusProvider {
       
       console.log('Calling Amadeus Flight Status API with params:', params);
       
+      // Amadeus Flight Status API - check if method exists
+      // Note: Flight Status API might not be available in test environment or free tier
+      if (!this.amadeus.schedule || !this.amadeus.schedule.flights) {
+        console.error('Amadeus schedule.flights API not available. Available namespaces:', Object.keys(this.amadeus));
+        throw new Error('Flight Status API not available in this Amadeus tier/environment');
+      }
+      
       const response = await this.amadeus.schedule.flights.get(params);
 
-      console.log('Amadeus Flight Status API response:', {
+      // Log full response for debugging
+      const responseStr = JSON.stringify(response, null, 2);
+      console.log('Amadeus Flight Status API full response:', responseStr.substring(0, 2000));
+      
+      console.log('Amadeus Flight Status API response summary:', {
         hasData: !!response.data,
         dataType: typeof response.data,
         isArray: Array.isArray(response.data),
         dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
-        fullResponse: JSON.stringify(response, null, 2).substring(0, 500) // First 500 chars for debugging
+        responseKeys: response ? Object.keys(response) : 'no response',
+        meta: response.meta || 'no meta'
       });
 
       // Handle empty or invalid response
       if (!response.data) {
-        throw new Error('Flight not found - no data returned');
+        const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}. Amadeus returned no data. This could mean: 1) Flight doesn't exist for this date, 2) Date is too far in the future, 3) Flight not in Amadeus database.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
       // Response can be an array or single object
       const flight = Array.isArray(response.data) ? response.data[0] : response.data;
       
       if (!flight) {
-        throw new Error('Flight not found');
+        // Check if it's an empty array
+        if (Array.isArray(response.data) && response.data.length === 0) {
+          const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}. Amadeus returned empty array. The flight may not exist in Amadeus database for this date, or the date may be too far in the future (test environment may have limited data).`;
+          console.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+        const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}`;
+        console.error(errorMsg, { responseData: response.data });
+        throw new Error(errorMsg);
       }
 
       // Normalize the response to our standard format
