@@ -670,17 +670,39 @@ router.get('/search', async (req, res) => {
             if (cachedData) {
                 console.log(`✅ Location-only search: Cache hit for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
                 // Still filter by original bounds (not buffered bounds) for display
+                // DEBUG: Include matches without coordinates for debugging
                 const filteredMatches = cachedData.data.filter(match => {
-                    if (!match.fixture?.venue?.coordinates) return false;
-                    const [lon, lat] = match.fixture.venue.coordinates;
-                    return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                           lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                    const coords = match.fixture?.venue?.coordinates;
+                    
+                    // Include matches with coordinates within bounds
+                    if (coords && Array.isArray(coords) && coords.length === 2) {
+                        const [lon, lat] = coords;
+                        return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                               lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                    }
+                    
+                    // DEBUG: Include matches without coordinates (marked for debugging)
+                    if (match.fixture?.venue?.missingCoordinates) {
+                        return true; // Include for debugging
+                    }
+                    
+                    return false;
                 });
+                
+                // Count matches with/without coordinates for debugging
+                const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
+                const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;
+                
                 return res.json({ 
                     success: true, 
                     data: filteredMatches, 
                     count: filteredMatches.length,
-                    fromCache: true 
+                    fromCache: true,
+                    debug: {
+                        withCoordinates: withCoords,
+                        withoutCoordinates: withoutCoords,
+                        totalInCache: cachedData.data.length
+                    }
                 });
             }
             
@@ -968,8 +990,25 @@ router.get('/search', async (req, res) => {
                 } else {
                     matchesWithoutCoords++;
                     matchesByLeague[leagueId].noCoords++;
-                    // Strict: Exclude matches without coordinates - they can't be displayed on map
-                    console.log(`⚠️ Match excluded (no coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country} (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                    
+                    // DEBUG MODE: Include matches without coordinates if they're from relevant leagues
+                    // This helps us understand what matches are being filtered out
+                    const isRelevantLeague = majorLeagueIds.includes(leagueId);
+                    
+                    if (isRelevantLeague) {
+                        // Include match but mark it as missing coordinates
+                        transformed.fixture.venue = {
+                            ...venueInfo,
+                            coordinates: null,
+                            missingCoordinates: true,
+                            debugNote: 'Match included for debugging - missing coordinates'
+                        };
+                        shouldInclude = true; // Mark for inclusion
+                        console.log(`🔍 DEBUG: Match included without coordinates: ${venueInfo?.name || 'Unknown'}, ${venueInfo?.city || 'Unknown'}, ${venueInfo?.country || 'Unknown'} (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                    } else {
+                        // Exclude non-relevant league matches without coordinates
+                        console.log(`⚠️ Match excluded (no coordinates, not relevant league): ${venueInfo?.name || 'Unknown'}, ${venueInfo?.city || 'Unknown'}, ${venueInfo?.country || 'Unknown'} (League: ${match.league.name}, ID: ${match.fixture.id})`);
+                    }
                 }
                 
                 if (shouldInclude) {
@@ -996,19 +1035,40 @@ router.get('/search', async (req, res) => {
             console.log(`✅ Location-only search: Cached ${transformedMatches.length} matches for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
             
             // Filter by original bounds (not buffered bounds) for this specific request
+            // DEBUG: Include matches without coordinates for debugging
             const filteredMatches = transformedMatches.filter(match => {
-                if (!match.fixture?.venue?.coordinates) return false;
-                const [lon, lat] = match.fixture.venue.coordinates;
-                return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                       lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                const coords = match.fixture?.venue?.coordinates;
+                
+                // Include matches with coordinates within bounds
+                if (coords && Array.isArray(coords) && coords.length === 2) {
+                    const [lon, lat] = coords;
+                    return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                           lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                }
+                
+                // DEBUG: Include matches without coordinates (marked for debugging)
+                if (match.fixture?.venue?.missingCoordinates) {
+                    return true; // Include for debugging
+                }
+                
+                return false;
             });
+            
+            // Count matches with/without coordinates for debugging
+            const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
+            const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;
             
             return res.json({ 
                 success: true, 
                 data: filteredMatches, 
                 count: filteredMatches.length,
                 fromCache: false,
-                totalMatches: transformedMatches.length // Include total for debugging
+                totalMatches: transformedMatches.length, // Total matches in cache
+                debug: {
+                    withCoordinates: withCoords,
+                    withoutCoordinates: withoutCoords,
+                    totalInCache: transformedMatches.length
+                }
             });
         }
 
