@@ -994,5 +994,94 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
     }
 });
 
+// League Onboarding
+const leagueOnboardingService = require('../services/leagueOnboardingService');
+
+// Onboard a new league
+router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res) => {
+    try {
+        const { id, name, country, countryCode, tier, shortName } = req.body;
+
+        // Validation
+        if (!id || !name || !country) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: id, name, country'
+            });
+        }
+
+        const leagueData = {
+            id: parseInt(id),
+            name,
+            country,
+            countryCode: countryCode || null,
+            tier: tier || 1
+        };
+
+        // Create progress callback for real-time updates
+        const progressUpdates = [];
+        const progressCallback = (update) => {
+            progressUpdates.push({
+                ...update,
+                timestamp: new Date().toISOString()
+            });
+        };
+
+        // Onboard the league
+        const result = await leagueOnboardingService.onboardLeague(leagueData, progressCallback);
+
+        if (result.success) {
+            res.json({
+                success: true,
+                message: `Successfully onboarded ${name}`,
+                stats: result.stats,
+                progress: progressUpdates,
+                shortName: leagueOnboardingService.getShortName(name),
+                warning: result.warning || null
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: result.error || 'Failed to onboard league',
+                stats: result.stats,
+                progress: progressUpdates
+            });
+        }
+    } catch (error) {
+        console.error('Error onboarding league:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error during league onboarding'
+        });
+    }
+});
+
+// Get suggested short name for a league
+router.get('/leagues/suggest-short-name', authenticateToken, ensureAdmin, (req, res) => {
+    try {
+        const { name } = req.query;
+        
+        if (!name) {
+            return res.status(400).json({
+                success: false,
+                message: 'League name is required'
+            });
+        }
+
+        const shortName = leagueOnboardingService.getShortName(name);
+        
+        res.json({
+            success: true,
+            shortName
+        });
+    } catch (error) {
+        console.error('Error getting short name:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+});
+
 module.exports = router; 
 

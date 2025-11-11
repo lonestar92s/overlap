@@ -41,7 +41,8 @@ import {
     Clear as ClearIcon,
     CheckCircle as CheckCircleIcon,
     Error as ErrorIcon,
-    Schedule as ScheduleIcon
+    Schedule as ScheduleIcon,
+    SportsSoccer as SportsSoccerIcon
 } from '@mui/icons-material';
 import { useAuth } from './Auth';
 import { getBackendUrl } from '../utils/api';
@@ -63,6 +64,294 @@ function TabPanel({ children, value, index, ...other }) {
         </div>
     );
 }
+
+// League Onboarding Wizard Component
+const LeagueOnboardingWizard = ({ getAuthHeaders, onSuccess, onError }) => {
+    const [formData, setFormData] = useState({
+        id: '',
+        name: '',
+        country: '',
+        countryCode: '',
+        tier: 1
+    });
+    const [suggestedShortName, setSuggestedShortName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [onboarding, setOnboarding] = useState(false);
+    const [progress, setProgress] = useState(null);
+    const [result, setResult] = useState(null);
+
+    const handleInputChange = (field, value) => {
+        const newData = { ...formData, [field]: value };
+        setFormData(newData);
+        
+        // Auto-suggest short name when name changes
+        if (field === 'name' && value) {
+            fetchSuggestedShortName(value);
+        }
+    };
+
+    const fetchSuggestedShortName = async (leagueName) => {
+        try {
+            const response = await fetch(
+                `${getBackendUrl()}/admin/leagues/suggest-short-name?name=${encodeURIComponent(leagueName)}`,
+                {
+                    headers: getAuthHeaders()
+                }
+            );
+            const data = await response.json();
+            if (data.success) {
+                setSuggestedShortName(data.shortName);
+            }
+        } catch (error) {
+            // Silently fail - not critical
+        }
+    };
+
+    const handleOnboard = async () => {
+        if (!formData.id || !formData.name || !formData.country) {
+            onError('Please fill in all required fields (ID, Name, Country)');
+            return;
+        }
+
+        setLoading(true);
+        setOnboarding(true);
+        setProgress({ step: 'starting', message: 'Starting onboarding process...' });
+        setResult(null);
+
+        try {
+            const response = await fetch(`${getBackendUrl()}/admin/leagues/onboard`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(formData)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setResult({
+                    success: true,
+                    message: data.message,
+                    stats: data.stats,
+                    shortName: data.shortName,
+                    warning: data.warning
+                });
+                setProgress({ step: 'complete', message: 'Onboarding completed successfully!' });
+                onSuccess();
+            } else {
+                setResult({
+                    success: false,
+                    message: data.message,
+                    stats: data.stats
+                });
+                setProgress({ step: 'error', message: data.message });
+                onError(data.message);
+            }
+        } catch (error) {
+            const errorMsg = 'Failed to onboard league: ' + error.message;
+            setResult({ success: false, message: errorMsg });
+            setProgress({ step: 'error', message: errorMsg });
+            onError(errorMsg);
+        } finally {
+            setLoading(false);
+            setOnboarding(false);
+        }
+    };
+
+    const handleReset = () => {
+        setFormData({ id: '', name: '', country: '', countryCode: '', tier: 1 });
+        setSuggestedShortName('');
+        setProgress(null);
+        setResult(null);
+    };
+
+    return (
+        <Box>
+            <Typography variant="h6" gutterBottom>
+                Onboard New League
+            </Typography>
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                Add a new league to the system. The system will automatically import teams, venues, and geocode stadium locations.
+            </Typography>
+
+            {!onboarding && !result && (
+                <Paper sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <TextField
+                            label="API-Football League ID *"
+                            value={formData.id}
+                            onChange={(e) => handleInputChange('id', e.target.value)}
+                            type="number"
+                            required
+                            fullWidth
+                            helperText="The league ID from API-Football (e.g., 39 for Premier League)"
+                        />
+                        <TextField
+                            label="League Name *"
+                            value={formData.name}
+                            onChange={(e) => handleInputChange('name', e.target.value)}
+                            required
+                            fullWidth
+                            helperText="Full league name (e.g., 'Premier League', 'La Liga')"
+                        />
+                        {suggestedShortName && (
+                            <Alert severity="info" sx={{ mb: 1 }}>
+                                Suggested short name: <strong>{suggestedShortName}</strong>
+                            </Alert>
+                        )}
+                        <TextField
+                            label="Country *"
+                            value={formData.country}
+                            onChange={(e) => handleInputChange('country', e.target.value)}
+                            required
+                            fullWidth
+                            helperText="Country name (e.g., 'England', 'Spain', 'France')"
+                        />
+                        <TextField
+                            label="Country Code"
+                            value={formData.countryCode}
+                            onChange={(e) => handleInputChange('countryCode', e.target.value.toUpperCase())}
+                            fullWidth
+                            helperText="ISO 2-letter country code (e.g., 'GB', 'ES', 'FR'). Auto-detected if not provided."
+                            inputProps={{ maxLength: 2 }}
+                        />
+                        <FormControl fullWidth>
+                            <InputLabel>League Tier</InputLabel>
+                            <Select
+                                value={formData.tier}
+                                label="League Tier"
+                                onChange={(e) => handleInputChange('tier', e.target.value)}
+                            >
+                                <MenuItem value={1}>Tier 1 (Top Division)</MenuItem>
+                                <MenuItem value={2}>Tier 2 (Second Division)</MenuItem>
+                                <MenuItem value={3}>Tier 3 (Third Division)</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Button
+                            variant="contained"
+                            onClick={handleOnboard}
+                            disabled={loading || !formData.id || !formData.name || !formData.country}
+                            startIcon={loading ? <CircularProgress size={20} /> : <AddIcon />}
+                            sx={{ mt: 2 }}
+                        >
+                            {loading ? 'Onboarding...' : 'Onboard League'}
+                        </Button>
+                    </Box>
+                </Paper>
+            )}
+
+            {onboarding && progress && (
+                <Paper sx={{ p: 3, mt: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                        Onboarding in Progress...
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                        <Typography variant="body1" sx={{ mb: 2 }}>
+                            {progress.message}
+                        </Typography>
+                        {progress.total && (
+                            <Box sx={{ mt: 2 }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    Progress: {progress.current || 0} / {progress.total} teams
+                                </Typography>
+                                <Box sx={{ mt: 1, width: '100%' }}>
+                                    <CircularProgress />
+                                </Box>
+                            </Box>
+                        )}
+                    </Box>
+                </Paper>
+            )}
+
+            {result && (
+                <Paper sx={{ p: 3, mt: 2 }}>
+                    <Alert 
+                        severity={result.success ? 'success' : 'error'} 
+                        sx={{ mb: 2 }}
+                        action={
+                            <Button size="small" onClick={handleReset}>
+                                Onboard Another
+                            </Button>
+                        }
+                    >
+                        {result.message}
+                    </Alert>
+                    
+                    {result.success && result.stats && (
+                        <Box sx={{ mt: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                                Import Statistics
+                            </Typography>
+                            <Grid container spacing={2} sx={{ mt: 1 }}>
+                                <Grid item xs={12} md={4}>
+                                    <Card>
+                                        <CardContent>
+                                            <Typography color="textSecondary" gutterBottom>
+                                                League
+                                            </Typography>
+                                            <Typography variant="h5">
+                                                {result.stats.league.created > 0 && 'Created'}
+                                                {result.stats.league.updated > 0 && 'Updated'}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <Card>
+                                        <CardContent>
+                                            <Typography color="textSecondary" gutterBottom>
+                                                Teams
+                                            </Typography>
+                                            <Typography variant="h5">
+                                                {result.stats.teams.created + result.stats.teams.updated}
+                                            </Typography>
+                                            <Typography variant="body2" color="textSecondary">
+                                                {result.stats.teams.created} created, {result.stats.teams.updated} updated
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <Card>
+                                        <CardContent>
+                                            <Typography color="textSecondary" gutterBottom>
+                                                Venues
+                                            </Typography>
+                                            <Typography variant="h5">
+                                                {result.stats.venues.created + result.stats.venues.updated}
+                                            </Typography>
+                                            <Typography variant="body2" color="textSecondary">
+                                                {result.stats.venues.created} created, {result.stats.venues.updated} updated
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </Grid>
+                            
+                            {result.shortName && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                    <Typography variant="body2">
+                                        <strong>Next Steps:</strong> Add this league to the configuration files:
+                                        <br />• <code>bulkImportLeaguesTeamsVenues.js</code> - Add to MAJOR_LEAGUES array
+                                        <br />• <code>mobile-app/data/leagues.js</code> - Add to LEAGUES array
+                                        <br />• <code>mobile-app/services/api.js</code> - Add to AVAILABLE_LEAGUES array
+                                        <br />
+                                        <br />Suggested short name: <strong>{result.shortName}</strong>
+                                    </Typography>
+                                </Alert>
+                            )}
+                            
+                            {result.warning && (
+                                <Alert severity="warning" sx={{ mt: 2 }}>
+                                    {result.warning}
+                                </Alert>
+                            )}
+                        </Box>
+                    )}
+                </Paper>
+            )}
+        </Box>
+    );
+};
 
 const AdminDashboard = () => {
     const { user } = useAuth();
@@ -513,6 +802,7 @@ const AdminDashboard = () => {
                     <Tab label="Venue Issues" icon={<StadiumIcon />} />
                     <Tab label="Data Freshness" icon={<ScheduleIcon />} />
                     <Tab label="Subscriptions" icon={<GroupIcon />} />
+                    <Tab label="League Onboarding" icon={<SportsSoccerIcon />} />
                 </Tabs>
 
                 {/* Unmapped Teams Tab */}
@@ -956,6 +1246,18 @@ const AdminDashboard = () => {
                             </Button>
                         </Box>
                     )}
+                </TabPanel>
+
+                {/* League Onboarding Tab */}
+                <TabPanel value={currentTab} index={4}>
+                    <LeagueOnboardingWizard 
+                        getAuthHeaders={getAuthHeaders}
+                        onSuccess={() => {
+                            setSuccess('League successfully onboarded!');
+                            fetchStats();
+                        }}
+                        onError={(error) => setError(error)}
+                    />
                 </TabPanel>
             </Paper>
 

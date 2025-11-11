@@ -1,9 +1,9 @@
 // Mock dependencies BEFORE requiring the service
-jest.mock('../../../../src/models/RouteCostHistory');
-jest.mock('../../../../src/providers/amadeusProvider');
+jest.mock('../../../src/models/RouteCostHistory');
+jest.mock('../../../src/providers/amadeusProvider');
 
-const RouteCostHistory = require('../../../../src/models/RouteCostHistory');
-const AmadeusProvider = require('../../../../src/providers/amadeusProvider');
+const RouteCostHistory = require('../../../src/models/RouteCostHistory');
+const AmadeusProvider = require('../../../src/providers/amadeusProvider');
 
 describe('TransportationService', () => {
   let service;
@@ -38,8 +38,8 @@ describe('TransportationService', () => {
     RouteCostHistory.findOne = mockRouteCostHistory.findOne;
 
     // Clear module cache and re-require service to get fresh singleton instance
-    delete require.cache[require.resolve('../../../../src/services/transportationService')];
-    service = require('../../../../src/services/transportationService');
+    delete require.cache[require.resolve('../../../src/services/transportationService')];
+    service = require('../../../src/services/transportationService');
     
     // Replace the providers array with our mock for testing
     if (service.flightProviders.length === 0) {
