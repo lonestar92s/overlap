@@ -923,15 +923,36 @@ router.get('/search', async (req, res) => {
                         ]
                     });
                     
-                    if (team?.venue?.coordinates) {
+                    // If team has venueId, try to lookup venue from Venue collection first
+                    if (team?.venue?.venueId) {
+                        const Venue = require('../models/Venue');
+                        const linkedVenue = await Venue.findOne({ venueId: team.venue.venueId });
+                        if (linkedVenue) {
+                            const coords = linkedVenue.coordinates || linkedVenue.location?.coordinates;
+                            if (coords && Array.isArray(coords) && coords.length === 2) {
+                                venueInfo = {
+                                    id: venue?.id || linkedVenue.venueId || null,
+                                    name: linkedVenue.name || team.venue.name || 'Unknown Venue',
+                                    city: linkedVenue.city || team.city || 'Unknown City',
+                                    country: linkedVenue.country || team.country || match.league?.country || 'Unknown Country',
+                                    coordinates: coords
+                                };
+                            }
+                        }
+                    }
+                    
+                    // Fallback to team.venue.coordinates if venueId lookup didn't work
+                    if (!venueInfo && team?.venue?.coordinates) {
                         venueInfo = {
-                            id: venue?.id || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                            id: venue?.id || team.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
                             name: team.venue.name || venue?.name || 'Unknown Venue',
                             city: team.city || venue?.city || 'Unknown City',
                             country: team.country || match.league?.country || 'Unknown Country',
                             coordinates: team.venue.coordinates
                         };
-                    } else {
+                    }
+                    
+                    if (!venueInfo) {
                         // Create venueInfo from available data
                         const venueName = venue?.name || team?.venue?.name || 'Unknown Venue';
                         const venueCity = venue?.city || team?.city || 'Unknown City';
@@ -970,11 +991,15 @@ router.get('/search', async (req, res) => {
                                     // Also update team if it exists
                                     if (team && !team.venue?.coordinates) {
                                         if (!team.venue) team.venue = {};
+                                        // If we saved a venue, link it by venueId
+                                        if (savedVenue && savedVenue.venueId) {
+                                            team.venue.venueId = savedVenue.venueId;
+                                        }
                                         team.venue.name = venueName;
                                         team.venue.coordinates = geocodedCoords;
                                         team.city = venueCity;
                                         await team.save();
-                                        console.log(`💾 Updated team ${team.name} with venue coordinates`);
+                                        console.log(`💾 Updated team ${team.name} with venue coordinates${savedVenue?.venueId ? ` (venueId: ${savedVenue.venueId})` : ''}`);
                                     }
                                     
                                     venueInfo.coordinates = geocodedCoords;

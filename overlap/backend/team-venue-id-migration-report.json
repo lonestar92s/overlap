@@ -1,0 +1,164 @@
+{
+  "summary": {
+    "total": 111,
+    "linked": 67,
+    "noCoords": 1,
+    "notFound": 24,
+    "errors": 0
+  },
+  "noCoords": [
+    {
+      "team": "Manchester United U18",
+      "venue": "Trafford Training Centre",
+      "venueId": 21464
+    }
+  ],
+  "notFound": [
+    {
+      "team": "Manchester City U21",
+      "venueName": "Ewen Fields",
+      "city": "Hyde, Cheshire",
+      "country": "England"
+    },
+    {
+      "team": "Godmanchester Rovers",
+      "venueName": "Bearscroft Lane",
+      "city": "Godmanchester, Cambridgeshire",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool Montevideo",
+      "venueName": "Estadio Belvedere",
+      "city": "Montevideo",
+      "country": "Uruguay"
+    },
+    {
+      "team": "Liverpool U21",
+      "venueName": "Liverpool’s Academy Ground",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "City of Liverpool",
+      "venueName": "DCBL Stadium",
+      "city": "Widnes, Cheshire",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U19",
+      "venueName": "Liverpool’s Academy Ground",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "AFC Liverpool",
+      "venueName": "Berry Street Garage Stadium",
+      "city": "Bootle, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U18",
+      "venueName": "Liverpool’s Academy Ground",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U23",
+      "venueName": "Liverpool’s Academy Ground",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Osasuna",
+      "venueName": "Estadio El Sadar",
+      "city": "Pamplona",
+      "country": "Spain"
+    },
+    {
+      "team": "KV Mechelen",
+      "venueName": "Achter De Kazerne",
+      "city": "Mechelen (Malines)",
+      "country": "Belgium"
+    },
+    {
+      "team": "Central Coast Mariners",
+      "venueName": "Central Coast Stadium",
+      "city": "Gosford",
+      "country": "Australia"
+    },
+    {
+      "team": "Barcelona B",
+      "venueName": "Estadi Johan Cruyff",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona SC",
+      "venueName": "Estadio Monumental Banco Pichincha",
+      "city": "Guayaquil",
+      "country": "Ecuador"
+    },
+    {
+      "team": "Barcelona W",
+      "venueName": "Estadi Johan Cruyff",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona U19",
+      "venueName": "Camp 1 del Ciutat Esportiva Joan Gamper",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona RJ",
+      "venueName": "Estádio Romário de Souza Faria",
+      "city": "Duque de Caxias, Rio de Janeiro",
+      "country": "Brazil"
+    },
+    {
+      "team": "Asante Kotoko",
+      "venueName": "Baba Yara Stadium",
+      "city": "Kumasi",
+      "country": "Ghana"
+    },
+    {
+      "team": "Tököl",
+      "venueName": "Sport utcai stadion",
+      "city": "Tököl",
+      "country": "Hungary"
+    },
+    {
+      "team": "Nzema Kotoko",
+      "venueName": "Akoon Park",
+      "city": "Tarkwa",
+      "country": "Ghana"
+    },
+    {
+      "team": "Tokyo U23",
+      "venueName": "Ajinomoto Field Nishigaoka",
+      "city": "Tokyo",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Int. University",
+      "venueName": "\n    ",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Musashino City",
+      "venueName": "Musashino Municipal Stadium",
+      "city": "Musashino",
+      "country": "Japan"
+    },
+    {
+      "team": "Reading United",
+      "venueName": "Don Thomas Stadium",
+      "city": "Reading, Pennsylvania",
+      "country": "USA"
+    }
+  ],
+  "errors": [],
+  "timestamp": "2025-11-11T21:28:16.518Z"
+}

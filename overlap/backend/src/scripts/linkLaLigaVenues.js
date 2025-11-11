@@ -92,6 +92,7 @@ async function linkLaLigaVenues() {
             if (venue && venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2) {
                 // Update team with venue data
                 team.venue = {
+                    venueId: venue.venueId, // Link to venue by ID
                     name: venue.name,
                     coordinates: venue.coordinates,
                     capacity: venue.capacity || null
@@ -103,7 +104,7 @@ async function linkLaLigaVenues() {
                 }
 
                 await team.save();
-                console.log(`✅ Linked: ${team.name} → ${venue.name}`);
+                console.log(`✅ Linked: ${team.name} → ${venue.name} (venueId: ${venue.venueId})`);
                 console.log(`   Coordinates: [${venue.coordinates[0]}, ${venue.coordinates[1]}]`);
                 linked++;
             } else {

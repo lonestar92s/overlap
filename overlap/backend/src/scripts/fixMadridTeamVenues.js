@@ -33,6 +33,7 @@ async function fixMadridTeamVenues() {
             console.log(`   Coordinates: [${bernabeu.coordinates[0]}, ${bernabeu.coordinates[1]}]`);
             
             realMadrid.venue = {
+                venueId: bernabeu.venueId,
                 name: bernabeu.name,
                 coordinates: bernabeu.coordinates
             };
@@ -54,6 +55,7 @@ async function fixMadridTeamVenues() {
             console.log(`   Coordinates: [${vallecas.coordinates[0]}, ${vallecas.coordinates[1]}]`);
             
             rayoval.venue = {
+                venueId: vallecas.venueId,
                 name: vallecas.name,
                 coordinates: vallecas.coordinates
             };

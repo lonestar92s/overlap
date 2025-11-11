@@ -293,16 +293,25 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
 
     setLoading(true);
     try {
+      // FIXED: Use same viewport-based bounds calculation as "Search this area"
+      // This ensures consistent search areas between initial search and "search this area"
+      const viewportDelta = 0.5; // Default viewport size (matches initialRegion)
       const bounds = {
         northeast: {
-          lat: location.lat + 0.25,
-          lng: location.lon + 0.25,
+          lat: location.lat + (viewportDelta / 2),
+          lng: location.lon + (viewportDelta / 2),
         },
         southwest: {
-          lat: location.lat - 0.25,
-          lng: location.lon - 0.25,
+          lat: location.lat - (viewportDelta / 2),
+          lng: location.lon - (viewportDelta / 2),
         }
       };
+
+      console.log('🔍 Initial search bounds (unified):', {
+        center: { lat: location.lat, lng: location.lon },
+        viewportDelta,
+        bounds
+      });
 
       const response = await ApiService.searchMatchesByBounds({
         bounds,
@@ -325,8 +334,8 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
           initialRegion: {
             latitude: location.lat,
             longitude: location.lon,
-            latitudeDelta: 0.5,
-            longitudeDelta: 0.5,
+            latitudeDelta: viewportDelta,
+            longitudeDelta: viewportDelta,
           },
           hasWho: false,
         });

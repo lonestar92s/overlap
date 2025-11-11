@@ -197,15 +197,36 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 ]
             });
             
-            if (team?.venue?.coordinates) {
+            // If team has venueId, try to lookup venue from Venue collection first
+            if (team?.venue?.venueId) {
+                const Venue = require('../models/Venue');
+                const linkedVenue = await Venue.findOne({ venueId: team.venue.venueId });
+                if (linkedVenue) {
+                    const coords = linkedVenue.coordinates || linkedVenue.location?.coordinates;
+                    if (coords && Array.isArray(coords) && coords.length === 2) {
+                        venueInfo = {
+                            id: venue?.id || linkedVenue.venueId || null,
+                            name: linkedVenue.name || team.venue.name || 'Unknown Venue',
+                            city: linkedVenue.city || team.city || 'Unknown City',
+                            country: linkedVenue.country || team.country || match.league?.country || 'Unknown Country',
+                            coordinates: coords
+                        };
+                    }
+                }
+            }
+            
+            // Fallback to team.venue.coordinates if venueId lookup didn't work
+            if (!venueInfo && team?.venue?.coordinates) {
                 venueInfo = {
-                    id: venue?.id || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                    id: venue?.id || team.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
                     name: team.venue.name || venue?.name || 'Unknown Venue',
                     city: team.city || venue?.city || 'Unknown City',
                     country: team.country || match.league?.country || 'Unknown Country',
                     coordinates: team.venue.coordinates
                 };
-            } else {
+            }
+            
+            if (!venueInfo) {
                 venueInfo = {
                     id: venue?.id || null,
                     name: venue?.name || 'Unknown Venue',

@@ -217,13 +217,44 @@ async function importTeam(teamData, leagueId, leagueName) {
         
         let venueInfo = null;
         if (teamData.venue) {
-            venueInfo = {
-                name: teamData.venue.name || '',
-                capacity: teamData.venue.capacity || null,
-                coordinates: teamData.venue.lat && teamData.venue.lng 
-                    ? [parseFloat(teamData.venue.lng), parseFloat(teamData.venue.lat)]
-                    : null
-            };
+            // Try to link to existing venue by venueId if available
+            let venueId = null;
+            if (teamData.venue.id) {
+                const existingVenue = await Venue.findOne({ venueId: teamData.venue.id });
+                if (existingVenue) {
+                    venueId = existingVenue.venueId;
+                    // Use venue data from database (more reliable, may have coordinates)
+                    venueInfo = {
+                        venueId: venueId,
+                        name: existingVenue.name || teamData.venue.name || '',
+                        capacity: existingVenue.capacity || teamData.venue.capacity || null,
+                        coordinates: existingVenue.coordinates || existingVenue.location?.coordinates || 
+                            (teamData.venue.lat && teamData.venue.lng 
+                                ? [parseFloat(teamData.venue.lng), parseFloat(teamData.venue.lat)]
+                                : null)
+                    };
+                } else {
+                    // Venue doesn't exist yet, but we have venueId from API
+                    venueId = teamData.venue.id;
+                    venueInfo = {
+                        venueId: venueId,
+                        name: teamData.venue.name || '',
+                        capacity: teamData.venue.capacity || null,
+                        coordinates: teamData.venue.lat && teamData.venue.lng 
+                            ? [parseFloat(teamData.venue.lng), parseFloat(teamData.venue.lat)]
+                            : null
+                    };
+                }
+            } else {
+                // No venueId from API, just use embedded data
+                venueInfo = {
+                    name: teamData.venue.name || '',
+                    capacity: teamData.venue.capacity || null,
+                    coordinates: teamData.venue.lat && teamData.venue.lng 
+                        ? [parseFloat(teamData.venue.lng), parseFloat(teamData.venue.lat)]
+                        : null
+                };
+            }
         }
 
         const leagueAssociation = {

@@ -1,0 +1,2385 @@
+{
+  "summary": {
+    "total": 543,
+    "linked": 0,
+    "alreadyLinked": 69,
+    "noCoords": 1,
+    "notFound": 473,
+    "errors": 0
+  },
+  "noCoords": [
+    {
+      "team": "Manchester United U18",
+      "venue": "Trafford Training Centre",
+      "city": "Carrington, Greater Manchester"
+    }
+  ],
+  "notFound": [
+    {
+      "team": "Manchester United",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Manchester City",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Manchester City W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Manchester City U21",
+      "city": "Hyde, Cheshire",
+      "country": "England"
+    },
+    {
+      "team": "Manchester United U19",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Godmanchester Rovers",
+      "city": "Godmanchester, Cambridgeshire",
+      "country": "England"
+    },
+    {
+      "team": "United of Manchester W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Manchester Laces W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool Montevideo",
+      "city": "Montevideo",
+      "country": "Uruguay"
+    },
+    {
+      "team": "Liverpool U21",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "City of Liverpool",
+      "city": "Widnes, Cheshire",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U19",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "AFC Liverpool",
+      "city": "Bootle, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U18",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool Feds W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Liverpool U23",
+      "city": "Knowsley, Merseyside",
+      "country": "England"
+    },
+    {
+      "team": "Newcastle",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Bournemouth",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Fulham",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Wolves",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Arsenal",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Burnley",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Everton",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "West Ham",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Chelsea",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Brighton",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Crystal Palace",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Brentford",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Leeds",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Nottingham Forest",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Aston Villa",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Sunderland",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Levante",
+      "city": "unknown",
+      "country": "Spain"
+    },
+    {
+      "team": "Oviedo",
+      "city": "unknown",
+      "country": "Spain"
+    },
+    {
+      "team": "VfL Wolfsburg",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Borussia Mönchengladbach",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "FSV Mainz 05",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Borussia Dortmund",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "1899 Hoffenheim",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Bayer Leverkusen",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "FC Augsburg",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "VfB Stuttgart",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "RB Leipzig",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Hamburger SV",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "1. FC Heidenheim",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Union Berlin",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "FC St. Pauli",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "1.FC Köln",
+      "city": "unknown",
+      "country": "Germany"
+    },
+    {
+      "team": "Lazio",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Sassuolo",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "AC Milan",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Cagliari",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Napoli",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Udinese",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Genoa",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Juventus",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "AS Roma",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Atalanta",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Bologna",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Fiorentina",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Verona",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Inter",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Cremonese",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Parma",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Pisa",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Lecce",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Como",
+      "city": "unknown",
+      "country": "Italy"
+    },
+    {
+      "team": "Angers",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Lyon",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Marseille",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Nantes",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Nice",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Paris Saint Germain",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Monaco",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Rennes",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Strasbourg",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Lorient",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Stade Brestois 29",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Auxerre",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Le Havre",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Metz",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Lens",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "FC Porto",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Moreirense",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "SC Braga",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Tondela",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Guimaraes",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Santa Clara",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Sporting CP",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Estoril",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Famalicao",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "GIL Vicente",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Casa Pia",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "Estrela",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "AVS",
+      "city": "unknown",
+      "country": "Portugal"
+    },
+    {
+      "team": "PEC Zwolle",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Ajax",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "PSV Eindhoven",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "AZ Alkmaar",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Groningen",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "NAC Breda",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Utrecht",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Feyenoord",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Heerenveen",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "GO Ahead Eagles",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "NEC Nijmegen",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Twente",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "FC Volendam",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Sparta Rotterdam",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "Telstar",
+      "city": "unknown",
+      "country": "Netherlands"
+    },
+    {
+      "team": "OH Leuven",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "KVC Westerlo",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Club Brugge KV",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Zulte Waregem",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Gent",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Antwerp",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Cercle Brugge",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Genk",
+      "city": "unknown",
+      "country": "Belgium"
+    },
+    {
+      "team": "Besiktas",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Istanbul Basaksehir",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Konyaspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Fenerbahce",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Galatasaray",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Goztepe",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Alanyaspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Genclerbirligi",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Trabzonspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Kayserispor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Kasimpasa",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Antalyaspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Rizespor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Gazişehir Gaziantep",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Eyüpspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Fatih Karagümrük",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Samsunspor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Kocaelispor",
+      "city": "unknown",
+      "country": "Turkey"
+    },
+    {
+      "team": "Western Sydney Wanderers",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Perth Glory",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Wellington Phoenix",
+      "city": "unknown",
+      "country": "New-Zealand"
+    },
+    {
+      "team": "Sydney",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Melbourne Victory",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Melbourne City",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Newcastle Jets",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Brisbane Roar",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Adelaide United",
+      "city": "unknown",
+      "country": "Australia"
+    },
+    {
+      "team": "Auckland",
+      "city": "unknown",
+      "country": "New-Zealand"
+    },
+    {
+      "team": "FC Basel 1893",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "BSC Young Boys",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Lugano",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Sion",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Luzern",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Zurich",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC ST. Gallen",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Thun",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "Grasshoppers",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "Lausanne",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "FC Winterthur",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "Servette FC",
+      "city": "unknown",
+      "country": "Switzerland"
+    },
+    {
+      "team": "Rangers",
+      "city": "unknown",
+      "country": "Scotland"
+    },
+    {
+      "team": "Breidablik",
+      "city": "unknown",
+      "country": "Iceland"
+    },
+    {
+      "team": "Bodo/Glimt",
+      "city": "unknown",
+      "country": "Norway"
+    },
+    {
+      "team": "Lech Poznan",
+      "city": "unknown",
+      "country": "Poland"
+    },
+    {
+      "team": "The New Saints",
+      "city": "unknown",
+      "country": "Wales"
+    },
+    {
+      "team": "Malmo FF",
+      "city": "unknown",
+      "country": "Sweden"
+    },
+    {
+      "team": "Dinamo Minsk",
+      "city": "unknown",
+      "country": "Belarus"
+    },
+    {
+      "team": "FC Copenhagen",
+      "city": "unknown",
+      "country": "Denmark"
+    },
+    {
+      "team": "Olympiakos Piraeus",
+      "city": "unknown",
+      "country": "Greece"
+    },
+    {
+      "team": "Qarabag",
+      "city": "unknown",
+      "country": "Azerbaijan"
+    },
+    {
+      "team": "FCSB",
+      "city": "unknown",
+      "country": "Romania"
+    },
+    {
+      "team": "Slavia Praha",
+      "city": "unknown",
+      "country": "Czech-Republic"
+    },
+    {
+      "team": "Ludogorets",
+      "city": "unknown",
+      "country": "Bulgaria"
+    },
+    {
+      "team": "Plzen",
+      "city": "unknown",
+      "country": "Czech-Republic"
+    },
+    {
+      "team": "Red Bull Salzburg",
+      "city": "unknown",
+      "country": "Austria"
+    },
+    {
+      "team": "Dynamo Kyiv",
+      "city": "unknown",
+      "country": "Ukraine"
+    },
+    {
+      "team": "Buducnost Podgorica",
+      "city": "unknown",
+      "country": "Montenegro"
+    },
+    {
+      "team": "Vikingur Gota",
+      "city": "unknown",
+      "country": "Faroe-Islands"
+    },
+    {
+      "team": "Linfield",
+      "city": "unknown",
+      "country": "Northern-Ireland"
+    },
+    {
+      "team": "FK Zalgiris Vilnius",
+      "city": "unknown",
+      "country": "Lithuania"
+    },
+    {
+      "team": "Zrinjski",
+      "city": "unknown",
+      "country": "Bosnia"
+    },
+    {
+      "team": "FK Crvena Zvezda",
+      "city": "unknown",
+      "country": "Serbia"
+    },
+    {
+      "team": "Maccabi Tel Aviv",
+      "city": "unknown",
+      "country": "Israel"
+    },
+    {
+      "team": "Shkendija",
+      "city": "unknown",
+      "country": "Macedonia"
+    },
+    {
+      "team": "Panathinaikos",
+      "city": "unknown",
+      "country": "Greece"
+    },
+    {
+      "team": "Sturm Graz",
+      "city": "unknown",
+      "country": "Austria"
+    },
+    {
+      "team": "Ferencvarosi TC",
+      "city": "unknown",
+      "country": "Hungary"
+    },
+    {
+      "team": "Slovan Bratislava",
+      "city": "unknown",
+      "country": "Slovakia"
+    },
+    {
+      "team": "Kairat Almaty",
+      "city": "unknown",
+      "country": "Kazakhstan"
+    },
+    {
+      "team": "Lincoln Red Imps FC",
+      "city": "unknown",
+      "country": "Gibraltar"
+    },
+    {
+      "team": "Olimpija Ljubljana",
+      "city": "unknown",
+      "country": "Slovenia"
+    },
+    {
+      "team": "FC Differdange 03",
+      "city": "unknown",
+      "country": "Luxembourg"
+    },
+    {
+      "team": "Milsami Orhei",
+      "city": "unknown",
+      "country": "Moldova"
+    },
+    {
+      "team": "KuPS",
+      "city": "unknown",
+      "country": "Finland"
+    },
+    {
+      "team": "FC Levadia Tallinn",
+      "city": "unknown",
+      "country": "Estonia"
+    },
+    {
+      "team": "Egnatia Rrogozhinë",
+      "city": "unknown",
+      "country": "Albania"
+    },
+    {
+      "team": "Inter Club d'Escaldes",
+      "city": "unknown",
+      "country": "Andorra"
+    },
+    {
+      "team": "Pafos",
+      "city": "unknown",
+      "country": "Cyprus"
+    },
+    {
+      "team": "Saburtalo",
+      "city": "unknown",
+      "country": "Georgia"
+    },
+    {
+      "team": "FC Noah",
+      "city": "unknown",
+      "country": "Armenia"
+    },
+    {
+      "team": "Shelbourne",
+      "city": "unknown",
+      "country": "Ireland"
+    },
+    {
+      "team": "Rīgas FS",
+      "city": "unknown",
+      "country": "Latvia"
+    },
+    {
+      "team": "Hamrun Spartans",
+      "city": "unknown",
+      "country": "Malta"
+    },
+    {
+      "team": "Virtus",
+      "city": "unknown",
+      "country": "San-Marino"
+    },
+    {
+      "team": "Drita",
+      "city": "unknown",
+      "country": "Kosovo"
+    },
+    {
+      "team": "Hibernian",
+      "city": "unknown",
+      "country": "Scotland"
+    },
+    {
+      "team": "Aberdeen",
+      "city": "unknown",
+      "country": "Scotland"
+    },
+    {
+      "team": "Legia Warszawa",
+      "city": "unknown",
+      "country": "Poland"
+    },
+    {
+      "team": "BK Hacken",
+      "city": "unknown",
+      "country": "Sweden"
+    },
+    {
+      "team": "FC Midtjylland",
+      "city": "unknown",
+      "country": "Denmark"
+    },
+    {
+      "team": "Shakhtar Donetsk",
+      "city": "unknown",
+      "country": "Ukraine"
+    },
+    {
+      "team": "Hapoel Beer Sheva",
+      "city": "unknown",
+      "country": "Israel"
+    },
+    {
+      "team": "Sheriff Tiraspol",
+      "city": "unknown",
+      "country": "Moldova"
+    },
+    {
+      "team": "FK Partizan",
+      "city": "unknown",
+      "country": "Serbia"
+    },
+    {
+      "team": "AEK Larnaca",
+      "city": "unknown",
+      "country": "Cyprus"
+    },
+    {
+      "team": "PAOK",
+      "city": "unknown",
+      "country": "Greece"
+    },
+    {
+      "team": "Dinamo Zagreb",
+      "city": "unknown",
+      "country": "Croatia"
+    },
+    {
+      "team": "Levski Sofia",
+      "city": "unknown",
+      "country": "Bulgaria"
+    },
+    {
+      "team": "Prishtina",
+      "city": "unknown",
+      "country": "Kosovo"
+    },
+    {
+      "team": "Wolfsberger AC",
+      "city": "unknown",
+      "country": "Austria"
+    },
+    {
+      "team": "Spartak Trnava",
+      "city": "unknown",
+      "country": "Slovakia"
+    },
+    {
+      "team": "Ilves",
+      "city": "unknown",
+      "country": "Finland"
+    },
+    {
+      "team": "CFR 1907 Cluj",
+      "city": "unknown",
+      "country": "Romania"
+    },
+    {
+      "team": "Sigma Olomouc",
+      "city": "unknown",
+      "country": "Czech-Republic"
+    },
+    {
+      "team": "Baník Ostrava",
+      "city": "unknown",
+      "country": "Czech-Republic"
+    },
+    {
+      "team": "Celje",
+      "city": "unknown",
+      "country": "Slovenia"
+    },
+    {
+      "team": "Aktobe",
+      "city": "unknown",
+      "country": "Kazakhstan"
+    },
+    {
+      "team": "Sabah FA",
+      "city": "unknown",
+      "country": "Azerbaijan"
+    },
+    {
+      "team": "KA Akureyri",
+      "city": "unknown",
+      "country": "Iceland"
+    },
+    {
+      "team": "Valur Reykjavik",
+      "city": "unknown",
+      "country": "Iceland"
+    },
+    {
+      "team": "Vikingur Reykjavik",
+      "city": "unknown",
+      "country": "Iceland"
+    },
+    {
+      "team": "Rosenborg",
+      "city": "unknown",
+      "country": "Norway"
+    },
+    {
+      "team": "Jagiellonia",
+      "city": "unknown",
+      "country": "Poland"
+    },
+    {
+      "team": "Hammarby FF",
+      "city": "unknown",
+      "country": "Sweden"
+    },
+    {
+      "team": "AIK Stockholm",
+      "city": "unknown",
+      "country": "Sweden"
+    },
+    {
+      "team": "Torpedo Zhodino",
+      "city": "unknown",
+      "country": "Belarus"
+    },
+    {
+      "team": "Dinamo Brest",
+      "city": "unknown",
+      "country": "Belarus"
+    },
+    {
+      "team": "Brondby",
+      "city": "unknown",
+      "country": "Denmark"
+    },
+    {
+      "team": "Maribor",
+      "city": "unknown",
+      "country": "Slovenia"
+    },
+    {
+      "team": "FC Astana",
+      "city": "unknown",
+      "country": "Kazakhstan"
+    },
+    {
+      "team": "Vardar Skopje",
+      "city": "unknown",
+      "country": "Macedonia"
+    },
+    {
+      "team": "AEK Athens FC",
+      "city": "unknown",
+      "country": "Greece"
+    },
+    {
+      "team": "F91 Dudelange",
+      "city": "unknown",
+      "country": "Luxembourg"
+    },
+    {
+      "team": "FC Santa Coloma",
+      "city": "unknown",
+      "country": "Andorra"
+    },
+    {
+      "team": "Austria Vienna",
+      "city": "unknown",
+      "country": "Austria"
+    },
+    {
+      "team": "HNK Hajduk Split",
+      "city": "unknown",
+      "country": "Croatia"
+    },
+    {
+      "team": "Sparta Praha",
+      "city": "unknown",
+      "country": "Czech-Republic"
+    },
+    {
+      "team": "Universitatea Craiova",
+      "city": "unknown",
+      "country": "Romania"
+    },
+    {
+      "team": "Zira",
+      "city": "unknown",
+      "country": "Azerbaijan"
+    },
+    {
+      "team": "HJK helsinki",
+      "city": "unknown",
+      "country": "Finland"
+    },
+    {
+      "team": "Shamrock Rovers",
+      "city": "unknown",
+      "country": "Ireland"
+    },
+    {
+      "team": "Zeljeznicar Sarajevo",
+      "city": "unknown",
+      "country": "Bosnia"
+    },
+    {
+      "team": "Beitar Jerusalem",
+      "city": "unknown",
+      "country": "Israel"
+    },
+    {
+      "team": "FC Vaduz",
+      "city": "unknown",
+      "country": "Liechtenstein"
+    },
+    {
+      "team": "Kalju Nomme",
+      "city": "unknown",
+      "country": "Estonia"
+    },
+    {
+      "team": "FK Rabotnicki",
+      "city": "unknown",
+      "country": "Macedonia"
+    },
+    {
+      "team": "Sutjeska",
+      "city": "unknown",
+      "country": "Montenegro"
+    },
+    {
+      "team": "FK Sarajevo",
+      "city": "unknown",
+      "country": "Bosnia"
+    },
+    {
+      "team": "NSI Runavik",
+      "city": "unknown",
+      "country": "Faroe-Islands"
+    },
+    {
+      "team": "Torpedo Kutaisi",
+      "city": "unknown",
+      "country": "Georgia"
+    },
+    {
+      "team": "Flora Tallinn",
+      "city": "unknown",
+      "country": "Estonia"
+    },
+    {
+      "team": "SJK",
+      "city": "unknown",
+      "country": "Finland"
+    },
+    {
+      "team": "Ordabasy",
+      "city": "unknown",
+      "country": "Kazakhstan"
+    },
+    {
+      "team": "St Joseph S Fc",
+      "city": "unknown",
+      "country": "Gibraltar"
+    },
+    {
+      "team": "KI Klaksvik",
+      "city": "unknown",
+      "country": "Faroe-Islands"
+    },
+    {
+      "team": "Partizani",
+      "city": "unknown",
+      "country": "Albania"
+    },
+    {
+      "team": "Pyunik Yerevan",
+      "city": "unknown",
+      "country": "Armenia"
+    },
+    {
+      "team": "Viking",
+      "city": "unknown",
+      "country": "Norway"
+    },
+    {
+      "team": "Rapid Vienna",
+      "city": "unknown",
+      "country": "Austria"
+    },
+    {
+      "team": "Cherno More Varna",
+      "city": "unknown",
+      "country": "Bulgaria"
+    },
+    {
+      "team": "Aris Thessalonikis",
+      "city": "unknown",
+      "country": "Greece"
+    },
+    {
+      "team": "Dundee Utd",
+      "city": "unknown",
+      "country": "Scotland"
+    },
+    {
+      "team": "Arda Kardzhali",
+      "city": "unknown",
+      "country": "Bulgaria"
+    },
+    {
+      "team": "NK Varazdin",
+      "city": "unknown",
+      "country": "Croatia"
+    },
+    {
+      "team": "Racing FC Union Luxembourg",
+      "city": "unknown",
+      "country": "Luxembourg"
+    },
+    {
+      "team": "UNA Strassen",
+      "city": "unknown",
+      "country": "Luxembourg"
+    },
+    {
+      "team": "Silkeborg",
+      "city": "unknown",
+      "country": "Denmark"
+    },
+    {
+      "team": "Penybont",
+      "city": "unknown",
+      "country": "Wales"
+    },
+    {
+      "team": "Haverfordwest County AFC",
+      "city": "unknown",
+      "country": "Wales"
+    },
+    {
+      "team": "La Fiorita",
+      "city": "unknown",
+      "country": "San-Marino"
+    },
+    {
+      "team": "Tre Fiori",
+      "city": "unknown",
+      "country": "San-Marino"
+    },
+    {
+      "team": "Cliftonville FC",
+      "city": "unknown",
+      "country": "Northern-Ireland"
+    },
+    {
+      "team": "Petrocub",
+      "city": "unknown",
+      "country": "Moldova"
+    },
+    {
+      "team": "FC Urartu",
+      "city": "unknown",
+      "country": "Armenia"
+    },
+    {
+      "team": "Birkirkara",
+      "city": "unknown",
+      "country": "Malta"
+    },
+    {
+      "team": "Puskas Academy",
+      "city": "unknown",
+      "country": "Hungary"
+    },
+    {
+      "team": "Gyori ETO FC",
+      "city": "unknown",
+      "country": "Hungary"
+    },
+    {
+      "team": "Universitatea Cluj",
+      "city": "unknown",
+      "country": "Romania"
+    },
+    {
+      "team": "Novi Pazar",
+      "city": "unknown",
+      "country": "Serbia"
+    },
+    {
+      "team": "Radnicki 1923",
+      "city": "unknown",
+      "country": "Serbia"
+    },
+    {
+      "team": "Dinamo Tirana",
+      "city": "unknown",
+      "country": "Albania"
+    },
+    {
+      "team": "Vllaznia Shkodër",
+      "city": "unknown",
+      "country": "Albania"
+    },
+    {
+      "team": "Atlètic Club d'Escaldes",
+      "city": "unknown",
+      "country": "Andorra"
+    },
+    {
+      "team": "Borac Banja Luka",
+      "city": "unknown",
+      "country": "Bosnia"
+    },
+    {
+      "team": "Omonia Nicosia",
+      "city": "unknown",
+      "country": "Cyprus"
+    },
+    {
+      "team": "Aris",
+      "city": "unknown",
+      "country": "Cyprus"
+    },
+    {
+      "team": "Raków Częstochowa",
+      "city": "unknown",
+      "country": "Poland"
+    },
+    {
+      "team": "Dila",
+      "city": "unknown",
+      "country": "Georgia"
+    },
+    {
+      "team": "Žilina",
+      "city": "unknown",
+      "country": "Slovakia"
+    },
+    {
+      "team": "Oleksandria",
+      "city": "unknown",
+      "country": "Ukraine"
+    },
+    {
+      "team": "Ararat-Armenia",
+      "city": "unknown",
+      "country": "Armenia"
+    },
+    {
+      "team": "Dečić",
+      "city": "unknown",
+      "country": "Montenegro"
+    },
+    {
+      "team": "St Patrick's Athl.",
+      "city": "unknown",
+      "country": "Ireland"
+    },
+    {
+      "team": "Banga",
+      "city": "unknown",
+      "country": "Lithuania"
+    },
+    {
+      "team": "Hegelmann Litauen",
+      "city": "unknown",
+      "country": "Lithuania"
+    },
+    {
+      "team": "Kauno Žalgiris",
+      "city": "unknown",
+      "country": "Lithuania"
+    },
+    {
+      "team": "Hibernians",
+      "city": "unknown",
+      "country": "Malta"
+    },
+    {
+      "team": "HB",
+      "city": "unknown",
+      "country": "Faroe-Islands"
+    },
+    {
+      "team": "Auda",
+      "city": "unknown",
+      "country": "Latvia"
+    },
+    {
+      "team": "BFC Daugavpils",
+      "city": "unknown",
+      "country": "Latvia"
+    },
+    {
+      "team": "Maccabi Haifa",
+      "city": "unknown",
+      "country": "Israel"
+    },
+    {
+      "team": "Sileks",
+      "city": "unknown",
+      "country": "Macedonia"
+    },
+    {
+      "team": "Koper",
+      "city": "unknown",
+      "country": "Slovenia"
+    },
+    {
+      "team": "Floriana",
+      "city": "unknown",
+      "country": "Malta"
+    },
+    {
+      "team": "Dungannon Swifts",
+      "city": "unknown",
+      "country": "Northern-Ireland"
+    },
+    {
+      "team": "Larne",
+      "city": "unknown",
+      "country": "Northern-Ireland"
+    },
+    {
+      "team": "Polessya",
+      "city": "unknown",
+      "country": "Ukraine"
+    },
+    {
+      "team": "Riga",
+      "city": "unknown",
+      "country": "Latvia"
+    },
+    {
+      "team": "FK Košice",
+      "city": "unknown",
+      "country": "Slovakia"
+    },
+    {
+      "team": "Araz",
+      "city": "unknown",
+      "country": "Azerbaijan"
+    },
+    {
+      "team": "Ballkani",
+      "city": "unknown",
+      "country": "Kosovo"
+    },
+    {
+      "team": "Spaeri",
+      "city": "unknown",
+      "country": "Georgia"
+    },
+    {
+      "team": "Malisheva",
+      "city": "unknown",
+      "country": "Kosovo"
+    },
+    {
+      "team": "Magpies",
+      "city": "unknown",
+      "country": "Gibraltar"
+    },
+    {
+      "team": "Seattle Sounders",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "San Jose Earthquakes",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "FC Dallas",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Orlando City SC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Philadelphia Union",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Houston Dynamo",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Toronto FC",
+      "city": "unknown",
+      "country": "Canada"
+    },
+    {
+      "team": "New York Red Bulls",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Vancouver Whitecaps",
+      "city": "unknown",
+      "country": "Canada"
+    },
+    {
+      "team": "New York City FC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Los Angeles Galaxy",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Real Salt Lake",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Chicago Fire",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Atlanta United FC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "New England Revolution",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Colorado Rapids",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Sporting Kansas City",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Minnesota United FC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Columbus Crew",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "CF Montreal",
+      "city": "unknown",
+      "country": "Canada"
+    },
+    {
+      "team": "DC United",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Los Angeles FC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Portland Timbers",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "FC Cincinnati",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Inter Miami",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Nashville SC",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Austin",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Charlotte",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "St. Louis City",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "San Diego",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Bahia",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Internacional",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Botafogo",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Palmeiras",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Sport Recife",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Fluminense",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Sao Paulo",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Flamengo",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Ceara",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Gremio",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Corinthians",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Vasco DA Gama",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Cruzeiro",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Vitoria",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Juventude",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Fortaleza EC",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "RB Bragantino",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Atletico-MG",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Mirassol",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Guadalajara Chivas",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Tigres UANL",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Club Tijuana",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Toluca",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Monterrey",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Atlas",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Santos Laguna",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "U.N.A.M. - Pumas",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Club America",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Necaxa",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Leon",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Club Queretaro",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Puebla",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Pachuca",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Cruz Azul",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "FC Juarez",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Atletico San Luis",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Mazatlán",
+      "city": "unknown",
+      "country": "Mexico"
+    },
+    {
+      "team": "Al Khaleej Saihat",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Ahli Jeddah",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Fateh",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Hilal Saudi FC",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Qadisiyah FC",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Ettifaq",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Ittihad FC",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Nassr",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al Shabab",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Fayha",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al-Hazm",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Damac",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al Okhdood",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al Najma",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al Kholood",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Al Riyadh",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "NEOM",
+      "city": "unknown",
+      "country": "Saudi-Arabia"
+    },
+    {
+      "team": "Kashiwa Reysol",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Sanfrecce Hiroshima",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Shimizu S-pulse",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Shonan Bellmare",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Urawa",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Nagoya Grampus",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Vissel Kobe",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Kashima",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Cerezo Osaka",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "FC Tokyo",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Gamba Osaka",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Kawasaki Frontale",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Yokohama F. Marinos",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Kyoto Sanga",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Machida Zelvia",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Verdy",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Yokohama FC",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Fagiano Okayama",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Albirex Niigata",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Avispa Fukuoka",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Barcelona B",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona SC",
+      "city": "Guayaquil",
+      "country": "Ecuador"
+    },
+    {
+      "team": "Barcelona W",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona RO",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Barcelona U19",
+      "city": "Sant Joan Despí",
+      "country": "Spain"
+    },
+    {
+      "team": "Barcelona BA",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Barcelona SC W",
+      "city": "unknown",
+      "country": "Ecuador"
+    },
+    {
+      "team": "Barcelona BA U20",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Barcelona EC",
+      "city": "unknown",
+      "country": "Brazil"
+    },
+    {
+      "team": "Barcelona Copiapó",
+      "city": "unknown",
+      "country": "Chile"
+    },
+    {
+      "team": "Barcelona Atlético",
+      "city": "unknown",
+      "country": "Dominican-Republic"
+    },
+    {
+      "team": "Barcelona RJ",
+      "city": "Duque de Caxias, Rio de Janeiro",
+      "country": "Brazil"
+    },
+    {
+      "team": "Asante Kotoko",
+      "city": "Kumasi",
+      "country": "Ghana"
+    },
+    {
+      "team": "Tököl Egyesülete",
+      "city": "unknown",
+      "country": "Hungary"
+    },
+    {
+      "team": "Tököl",
+      "city": "Tököl",
+      "country": "Hungary"
+    },
+    {
+      "team": "Tokoha University",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Nzema Kotoko",
+      "city": "Tarkwa",
+      "country": "Ghana"
+    },
+    {
+      "team": "Tokyo U23",
+      "city": "Tokyo",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Int. University",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Musashino City",
+      "city": "Musashino",
+      "country": "Japan"
+    },
+    {
+      "team": "Tokyo Verdy Beleza W",
+      "city": "unknown",
+      "country": "Japan"
+    },
+    {
+      "team": "Reading W",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Reading United",
+      "city": "Reading, Pennsylvania",
+      "country": "USA"
+    },
+    {
+      "team": "Reading Town",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Reading U18",
+      "city": "unknown",
+      "country": "England"
+    },
+    {
+      "team": "Reading United W",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "Montpellier",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Amiens",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Guingamp",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Reims",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Clermont Foot",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Grenoble",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Nancy",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "RED Star FC 93",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Estac Troyes",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Laval",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Saint Etienne",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Le Mans",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Boulogne",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Rodez",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Dunkerque",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Bastia",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Annecy",
+      "city": "unknown",
+      "country": "France"
+    },
+    {
+      "team": "Liga MX All-Stars",
+      "city": "unknown",
+      "country": "USA"
+    },
+    {
+      "team": "MLS All-Stars",
+      "city": "unknown",
+      "country": "USA"
+    }
+  ],
+  "errors": []
+}

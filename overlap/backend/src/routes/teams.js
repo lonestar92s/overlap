@@ -93,13 +93,42 @@ router.get('/search', async (req, res) => {
                                 
                                 if (!existingTeam) {
                                     // Create new team from API data
-                                    const venueInfo = venue ? {
-                                        name: venue.name || '',
-                                        capacity: venue.capacity || null,
-                                        coordinates: venue.lat && venue.lng 
-                                            ? [parseFloat(venue.lng), parseFloat(venue.lat)]
-                                            : null
-                                    } : null;
+                                    let venueInfo = null;
+                                    if (venue) {
+                                        // Try to link to existing venue by venueId if available
+                                        if (venue.id) {
+                                            const Venue = require('../models/Venue');
+                                            const existingVenue = await Venue.findOne({ venueId: venue.id });
+                                            if (existingVenue) {
+                                                venueInfo = {
+                                                    venueId: existingVenue.venueId,
+                                                    name: existingVenue.name || venue.name || '',
+                                                    capacity: existingVenue.capacity || venue.capacity || null,
+                                                    coordinates: existingVenue.coordinates || existingVenue.location?.coordinates || 
+                                                        (venue.lat && venue.lng 
+                                                            ? [parseFloat(venue.lng), parseFloat(venue.lat)]
+                                                            : null)
+                                                };
+                                            } else {
+                                                venueInfo = {
+                                                    venueId: venue.id,
+                                                    name: venue.name || '',
+                                                    capacity: venue.capacity || null,
+                                                    coordinates: venue.lat && venue.lng 
+                                                        ? [parseFloat(venue.lng), parseFloat(venue.lat)]
+                                                        : null
+                                                };
+                                            }
+                                        } else {
+                                            venueInfo = {
+                                                name: venue.name || '',
+                                                capacity: venue.capacity || null,
+                                                coordinates: venue.lat && venue.lng 
+                                                    ? [parseFloat(venue.lng), parseFloat(venue.lat)]
+                                                    : null
+                                            };
+                                        }
+                                    }
                                     
                                     await Team.create({
                                         apiId: team.id.toString(),

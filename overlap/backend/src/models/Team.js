@@ -31,6 +31,7 @@ const teamSchema = new mongoose.Schema({
     },
     city: String,
     venue: {
+        venueId: Number, // Reference to Venue collection (venueId field)
         name: String,
         capacity: Number,
         coordinates: [Number] // [longitude, latitude]
@@ -75,6 +76,7 @@ teamSchema.index({ name: 'text', aliases: 'text' }); // Full-text search
 teamSchema.index({ country: 1, name: 1 }); // Country + name lookup
 teamSchema.index({ searchCount: -1 }); // Popular teams first
 teamSchema.index({ 'leagues.leagueId': 1 }); // League-based queries
+teamSchema.index({ 'venue.venueId': 1 }); // Venue lookup
 
 // Method to increment search count and update popularity
 teamSchema.methods.incrementSearch = function() {

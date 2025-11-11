@@ -95,22 +95,22 @@ const MapResultsScreen = ({ navigation, route }) => {
     closeFilterModal
   } = useFilter();
 
-  // Process real match data for filters
-  useEffect(() => {
-    // Only process filter data if we have meaningful matches and they're different from current filter data
-    if (matches && matches.length > 0) {
-      // Check if the matches are significantly different from what we already have
-      const currentMatchIds = matches.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
-      const previousMatchIds = filterData?.matchIds || [];
-      
-      // Only update if match IDs are different (avoid unnecessary updates on map movement)
-      if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
+  // Process matches for filter data (extracted to reusable function)
+  // FIXED: Moved before useEffect to fix function definition order
+  const processMatchesForFilters = useCallback((matchesToProcess) => {
+    if (!matchesToProcess || matchesToProcess.length === 0) return;
+    
+    const currentMatchIds = matchesToProcess.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
+    const previousMatchIds = filterData?.matchIds || [];
+    
+    // Only update if match IDs are different (avoid unnecessary updates on map movement)
+    if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
         // Extract unique countries, leagues, and teams from matches
         const countriesMap = new Map();
         const leaguesMap = new Map();
         const teamsMap = new Map();
 
-        matches.forEach((match) => {
+        matchesToProcess.forEach((match) => {
           // Process country from area.name
           let countryId = null;
           let countryName = null;
@@ -321,18 +321,50 @@ const MapResultsScreen = ({ navigation, route }) => {
         } else {
           updateFilterData(filterData);
         }
-      }
     }
-  }, [matches, updateFilterData]);
+  }, [filterData, updateFilterData]);
+
+  // Process real match data for filters
+  // FIXED: Initialize filterData from initialMatches immediately on mount to prevent race condition
+  useEffect(() => {
+    // On mount, process initialMatches immediately if filterData is not ready
+    if (initialMatches && initialMatches.length > 0 && (!filterData || !filterData.matchIds || filterData.matchIds.length === 0)) {
+      console.log('🔧 Initializing filterData from initialMatches on mount:', initialMatches.length);
+      processMatchesForFilters(initialMatches);
+    }
+  }, []); // Run once on mount
+
+  // Process matches when they change (after initial mount)
+  useEffect(() => {
+    // Only process filter data if we have meaningful matches and they're different from current filter data
+    if (matches && matches.length > 0) {
+      processMatchesForFilters(matches);
+    }
+  }, [matches, processMatchesForFilters]);
 
   // Set initial search region when component mounts
+  // FIXED: Add debugging and ensure initialRegion is set properly
   useEffect(() => {
+    console.log('🗺️ MapResultsScreen: Initializing map region:', {
+      hasInitialRegion: !!initialRegion,
+      hasInitialMatches: !!(initialMatches && initialMatches.length > 0),
+      initialMatchesCount: initialMatches?.length || 0,
+      initialRegion: initialRegion ? {
+        lat: initialRegion.latitude,
+        lng: initialRegion.longitude,
+        delta: initialRegion.latitudeDelta
+      } : null
+    });
+    
     if (initialRegion && !initialSearchRegion) {
       setInitialSearchRegion(initialRegion);
+      setMapRegion(initialRegion); // Also set mapRegion immediately
+      console.log('✅ Set initial search region from route params');
     }
     // Also set it from mapRegion if available and initialSearchRegion isn't set yet
     if (mapRegion && !initialSearchRegion) {
       setInitialSearchRegion(mapRegion);
+      console.log('✅ Set initial search region from mapRegion');
     }
   }, [initialRegion, initialSearchRegion, mapRegion]);
 
@@ -666,29 +698,34 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Handle map region change (when user pans/zooms)
+  // FIXED: Always allow "Search this area" - removed movement threshold requirement
+  // The button should always be available to allow re-searching the current viewport
   const handleMapRegionChange = (region, bounds) => {
     setMapRegion(region);
     
-    // Check if user has moved from initial search area
-    // Use much more sensitive thresholds so button appears easier
+    // Always show "Search this area" button - user should be able to re-search current viewport
+    // This fixes the issue where button doesn't appear if user hasn't moved enough
+    setHasMovedFromInitial(true);
+    
+    // Optional: Still track movement for analytics/debugging, but don't use it to hide button
     if (initialSearchRegion) {
       const latDiff = Math.abs(region.latitude - initialSearchRegion.latitude);
       const lngDiff = Math.abs(region.longitude - initialSearchRegion.longitude);
-      // Reduced from 0.1 to 0.02 degrees (~2km instead of ~11km) - much more sensitive
-      const hasMoved = latDiff > 0.02 || lngDiff > 0.02;
-      
-      // Check if user has zoomed out or in (any zoom change shows the button)
       const initialLatDelta = initialSearchRegion.latitudeDelta || 0.5;
       const initialLngDelta = initialSearchRegion.longitudeDelta || 0.5;
-      // More sensitive: show button if zoomed out 1.2x OR zoomed in 1.2x (was 1.5x only for zoom out)
       const hasZoomedOut = region.latitudeDelta > initialLatDelta * 1.2 || region.longitudeDelta > initialLngDelta * 1.2;
       const hasZoomedIn = region.latitudeDelta < initialLatDelta * 0.8 || region.longitudeDelta < initialLngDelta * 0.8;
       
-      setHasMovedFromInitial(hasMoved || hasZoomedOut || hasZoomedIn);
-    } else {
-      // If no initial search region set yet, show button after any movement
-      // This handles edge cases where initialSearchRegion might not be set immediately
-      setHasMovedFromInitial(true);
+      // Log for debugging but don't control button visibility
+      if (latDiff > 0.02 || lngDiff > 0.02 || hasZoomedOut || hasZoomedIn) {
+        console.log('📍 Map region changed:', {
+          latDiff: latDiff.toFixed(4),
+          lngDiff: lngDiff.toFixed(4),
+          hasZoomed: hasZoomedOut || hasZoomedIn,
+          newDelta: { lat: region.latitudeDelta, lng: region.longitudeDelta },
+          initialDelta: { lat: initialLatDelta, lng: initialLngDelta }
+        });
+      }
     }
   };
 
@@ -871,8 +908,17 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Filter matches based on selected filters
+  // FIXED: Don't filter if filterData is not ready - return all matches to prevent race condition
   const getFilteredMatches = () => {
-    if (!matches || !selectedFilters) return matches;
+    if (!matches) return matches;
+    
+    // If filterData is not ready, return all matches (prevents race condition)
+    if (!filterData || !filterData.matchIds || filterData.matchIds.length === 0) {
+      console.log('⚠️ Filter data not ready, returning all matches:', matches.length);
+      return matches;
+    }
+    
+    if (!selectedFilters) return matches;
     
     const { countries, leagues, teams } = selectedFilters;
     // Normalize selected IDs to strings for consistent comparisons
@@ -882,7 +928,6 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // If no filters are selected, return all matches
     if (selectedCountryIds.length === 0 && selectedLeagueIds.length === 0 && selectedTeamIds.length === 0) {
-
       return matches;
     }
     
@@ -939,7 +984,21 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Get the filtered matches for display (memoized)
-  const filteredMatches = useMemo(() => getFilteredMatches(), [matches, selectedFilters]);
+  // FIXED: Include filterData in dependencies to ensure re-computation when filterData is ready
+  const filteredMatches = useMemo(() => {
+    const result = getFilteredMatches();
+    console.log('🔍 Filtered matches:', {
+      totalMatches: matches?.length || 0,
+      filteredCount: result?.length || 0,
+      filterDataReady: !!(filterData && filterData.matchIds && filterData.matchIds.length > 0),
+      selectedFilters: selectedFilters ? {
+        countries: selectedFilters.countries?.length || 0,
+        leagues: selectedFilters.leagues?.length || 0,
+        teams: selectedFilters.teams?.length || 0,
+      } : null
+    });
+    return result;
+  }, [matches, selectedFilters, filterData]);
 
   // Get the final filtered matches combining both filters and date selection
   // This is now the SINGLE SOURCE OF TRUTH for all filtered data
@@ -996,6 +1055,7 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Get matches for map markers - show all loaded markers
   // Native map library handles viewport culling and off-screen rendering
+  // FIXED: Added comprehensive debugging to track match flow
   const mapMarkersMatches = useMemo(() => {
     // Option 1: Show all loaded markers - let native map library handle rendering
     // This is the standard approach - simple, predictable, and performant for < 1000 markers
@@ -1005,17 +1065,34 @@ const MapResultsScreen = ({ navigation, route }) => {
     const validMarkers = allMarkers.filter(match => {
       const venue = match.fixture?.venue;
       const coordinates = venue?.coordinates;
-      return coordinates && Array.isArray(coordinates) && coordinates.length === 2;
+      const isValid = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
+      
+      // Additional validation: check coordinates are numbers
+      if (isValid) {
+        const [lon, lat] = coordinates;
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          console.warn('⚠️ Invalid coordinate values:', { lon, lat, matchId: match.fixture?.id });
+          return false;
+        }
+      }
+      
+      return isValid;
     });
     
-    console.log('MapResultsScreen: mapMarkersMatches (all loaded):', {
-      totalDrawerMatches: displayFilteredMatches?.length || 0,
+    console.log('📍 MapResultsScreen: mapMarkersMatches (all loaded):', {
+      totalMatches: matches?.length || 0,
+      filteredMatches: filteredMatches?.length || 0,
+      finalFilteredMatches: finalFilteredMatches?.length || 0,
+      displayFilteredMatches: displayFilteredMatches?.length || 0,
+      totalDrawerMatches: allMarkers.length,
       validMarkers: validMarkers.length,
-      markersWithoutCoords: allMarkers.length - validMarkers.length
+      markersWithoutCoords: allMarkers.length - validMarkers.length,
+      filterDataReady: !!(filterData && filterData.matchIds && filterData.matchIds.length > 0)
     });
     
     return validMarkers;
-  }, [displayFilteredMatches]);
+  }, [displayFilteredMatches, matches, filteredMatches, finalFilteredMatches, filterData]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
@@ -1290,16 +1367,20 @@ const MapResultsScreen = ({ navigation, route }) => {
   // - No more fixed size increments that don't match what user sees
   // - Bounds automatically adapt to zoom level: zoomed out = larger bounds, zoomed in = smaller bounds
   // - Maximum bounds capped at 5° × 5° to prevent extremely large searches
+  // FIXED: Always allow search even if region hasn't changed - user should be able to re-search
   const handleSearchThisArea = async () => {
-    if (!dateFrom || !dateTo) return;
+    if (!dateFrom || !dateTo) {
+      Alert.alert('Error', 'Please select your travel dates');
+      return;
+    }
     
-    // Get the current map region - prefer debouncedMapRegion (most recent stable region)
-    // then mapRegion (current state), then fallback to initialRegion
-    let currentRegion = debouncedMapRegion || mapRegion || initialRegion;
+    // Get the current map region - prefer mapRegion (most current), then debouncedMapRegion, then initialRegion
+    // FIXED: Use mapRegion first (most current) instead of debouncedMapRegion to get latest viewport
+    let currentRegion = mapRegion || debouncedMapRegion || initialRegion;
     
     console.log('🔍 Search this area clicked:', {
       currentRegion,
-      source: debouncedMapRegion ? 'debounced' : mapRegion ? 'state' : 'initial',
+      source: mapRegion ? 'current' : debouncedMapRegion ? 'debounced' : 'initial',
       coordinates: currentRegion ? `${currentRegion.latitude}, ${currentRegion.longitude}` : 'none',
       deltas: currentRegion ? `${currentRegion.latitudeDelta}, ${currentRegion.longitudeDelta}` : 'none',
       initialRegion: initialRegion ? {
@@ -1321,8 +1402,11 @@ const MapResultsScreen = ({ navigation, route }) => {
       return;
     }
     
+    // FIXED: Always perform search - don't check if region has changed
+    // This allows user to re-search the same area if needed
     const requestId = currentRequestId + 1;
     setCurrentRequestId(requestId);
+    setIsSearching(true);
     await performBoundsSearch(currentRegion, requestId);
   };
 
@@ -1412,24 +1496,23 @@ const MapResultsScreen = ({ navigation, route }) => {
       />
       
       {/* Floating Search Button */}
-      {hasMovedFromInitial && (
-        <TouchableOpacity
-          style={styles.floatingSearchButton}
-          onPress={handleSearchThisArea}
-          disabled={isSearching}
-        >
-          {isSearching ? (
-            <>
-              <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
-              <Text style={styles.floatingSearchText}>Searching...</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.floatingSearchText}>Search this area</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
+      {/* FIXED: Always show button - removed hasMovedFromInitial check to allow re-searching */}
+      <TouchableOpacity
+        style={styles.floatingSearchButton}
+        onPress={handleSearchThisArea}
+        disabled={isSearching}
+      >
+        {isSearching ? (
+          <>
+            <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+            <Text style={styles.floatingSearchText}>Searching...</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.floatingSearchText}>Search this area</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
       {/* Bottom Sheet (hidden while overlay is open) */}
       <BottomSheet
