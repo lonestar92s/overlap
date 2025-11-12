@@ -94,27 +94,41 @@ class RecommendationService {
             const userRadius = user.preferences?.recommendationRadius || this.defaultRadius;
 
             // Generate recommendations for each day without matches
+            // Return 2-3 top recommendations per day
             const recommendations = [];
+            const seenMatchIds = new Set(); // Track matchIds to prevent duplicates
+            const maxRecommendationsPerDay = 3; // Show up to 3 recommendations per day
+            
             for (const day of daysWithoutMatches) {
-                const recommendation = await this.generateRecommendationForDay(
+                const dayRecommendations = await this.generateRecommendationsForDay(
                     day,
                     savedMatchVenues,
                     tripDates,
                     restrictedLeagues,
                     trip,
                     userRadius,
-                    user
+                    user,
+                    maxRecommendationsPerDay
                 );
                 
-                if (recommendation) {
-                    recommendations.push(recommendation);
+                // Add all recommendations for this day (deduplication happens in generateRecommendationsForDay)
+                for (const recommendation of dayRecommendations) {
+                    const matchId = String(recommendation.matchId || recommendation.match?.fixture?.id || recommendation.match?.id);
+                    
+                    // Only add if we haven't seen this matchId before (across all days)
+                    if (!seenMatchIds.has(matchId)) {
+                        seenMatchIds.add(matchId);
+                        recommendations.push(recommendation);
+                    } else {
+                        console.log(`⚠️ Skipping duplicate recommendation for matchId: ${matchId}`);
+                    }
                 }
             }
 
             // Cache the results
             this.setCache(cacheKey, recommendations);
             
-            console.log(`✅ Generated ${recommendations.length} recommendations`);
+            console.log(`✅ Generated ${recommendations.length} unique recommendations`);
             return {
                 recommendations,
                 cached: false
@@ -130,9 +144,9 @@ class RecommendationService {
     }
 
     /**
-     * Generate a recommendation for a specific day
+     * Generate multiple recommendations for a specific day (2-3 top matches)
      */
-    async generateRecommendationForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius, user) {
+    async generateRecommendationsForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius, user, maxRecommendations = 3) {
         try {
             // Search for matches on this day and nearby dates
             const searchDates = this.getSearchDates(day, tripDates);
@@ -145,7 +159,7 @@ class RecommendationService {
             }
 
             if (allMatches.length === 0) {
-                return null;
+                return [];
             }
 
             // Filter matches by proximity to saved venues
@@ -156,14 +170,14 @@ class RecommendationService {
             );
 
             if (nearbyMatches.length === 0) {
-                return null;
+                return [];
             }
 
             // Remove conflicts with existing trip matches
             const conflictFreeMatches = this.removeConflicts(nearbyMatches, trip);
 
             if (conflictFreeMatches.length === 0) {
-                return null;
+                return [];
             }
 
             // Extract user preferences for scoring
@@ -180,30 +194,66 @@ class RecommendationService {
                 score: this.scoreMatch(match, savedMatchVenues, day, trip, userPreferences)
             }));
 
-            // Sort by score and get the best match
+            // Sort by score (highest first)
             scoredMatches.sort((a, b) => b.score - a.score);
-            const bestMatch = scoredMatches[0];
-
-            if (bestMatch.score < weights.baseScore.minThreshold) {
-                return null;
+            
+            // Filter out negative scores (penalized matches)
+            const positiveMatches = scoredMatches.filter(m => m.score > 0);
+            
+            if (positiveMatches.length === 0) {
+                console.log(`No positive-scoring matches found for ${day}`);
+                return [];
             }
 
-            // Generate alternative dates
-            const alternativeDates = this.generateAlternativeDates(bestMatch.match, day, tripDates);
+            // Log scoring info for debugging
+            console.log(`📊 Recommendations for ${day}: Found ${positiveMatches.length} positive matches, top scores:`, 
+                positiveMatches.slice(0, 5).map(m => ({ 
+                    matchId: m.match.id, 
+                    score: m.score,
+                    teams: `${m.match.teams?.home?.name} vs ${m.match.teams?.away?.name}`
+                }))
+            );
 
-            return {
-                matchId: bestMatch.match.id,
-                recommendedForDate: day,
-                match: bestMatch.match,
-                reason: this.generateRecommendationReason(bestMatch.match, savedMatchVenues),
-                proximity: this.calculateProximityText(bestMatch.match, savedMatchVenues),
-                score: bestMatch.score,
-                alternativeDates: alternativeDates
-            };
+            // Take top N matches (up to maxRecommendations)
+            // Prioritize matches above threshold, but include lower-scoring ones if needed to fill slots
+            const aboveThreshold = positiveMatches.filter(m => m.score >= weights.baseScore.minThreshold);
+            const belowThreshold = positiveMatches.filter(m => m.score < weights.baseScore.minThreshold && m.score > 0);
+            
+            // If we have enough above threshold, use those. Otherwise, supplement with below-threshold matches
+            let selectedMatches = [];
+            if (aboveThreshold.length >= maxRecommendations) {
+                selectedMatches = aboveThreshold.slice(0, maxRecommendations);
+            } else {
+                // Take all above threshold, then fill remaining slots with best below-threshold matches
+                selectedMatches = [
+                    ...aboveThreshold,
+                    ...belowThreshold.slice(0, maxRecommendations - aboveThreshold.length)
+                ];
+            }
 
+            console.log(`✅ Selected ${selectedMatches.length} recommendations for ${day} (${aboveThreshold.length} above threshold, ${selectedMatches.length - aboveThreshold.length} below threshold)`);
+
+            // Generate recommendations for each selected match
+            const recommendations = [];
+            for (const scoredMatch of selectedMatches) {
+                // Generate alternative dates
+                const alternativeDates = this.generateAlternativeDates(scoredMatch.match, day, tripDates);
+
+                recommendations.push({
+                    matchId: scoredMatch.match.id,
+                    recommendedForDate: day,
+                    match: scoredMatch.match,
+                    reason: this.generateRecommendationReason(scoredMatch.match, savedMatchVenues),
+                    proximity: this.calculateProximityText(scoredMatch.match, savedMatchVenues),
+                    score: scoredMatch.score,
+                    alternativeDates: alternativeDates
+                });
+            }
+
+            return recommendations;
         } catch (error) {
-            console.error(`❌ Error generating recommendation for ${day}:`, error);
-            return null;
+            console.error(`❌ Error generating recommendations for ${day}:`, error);
+            return [];
         }
     }
 

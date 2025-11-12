@@ -1609,20 +1609,30 @@ class ApiService {
   }
 
   // Recommendation API methods
+  
+  // Get cached recommendations synchronously (for immediate display)
+  getCachedRecommendations(tripId) {
+    const cacheKey = `recommendations:${tripId}`;
+    const cached = recommendationCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      console.log('⚡ API Service - Returning cached recommendations (sync)');
+      return {
+        ...cached.data,
+        cached: true
+      };
+    }
+    return null;
+  }
+
   async getRecommendations(tripId, forceRefresh = false) {
     try {
       console.log('🎯 API Service - Getting recommendations for trip:', tripId);
       
       // Check client-side cache first
       if (!forceRefresh) {
-        const cacheKey = `recommendations:${tripId}`;
-        const cached = recommendationCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-          console.log('⚡ API Service - Returning cached recommendations');
-          return {
-            ...cached.data,
-            cached: true
-          };
+        const cached = this.getCachedRecommendations(tripId);
+        if (cached) {
+          return cached;
         }
       }
       

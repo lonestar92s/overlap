@@ -12,7 +12,8 @@ import {
   TextInput,
   Image,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Dimensions
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -40,7 +41,7 @@ import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../s
  */
 const TripOverviewScreen = ({ navigation, route }) => {
   const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary } = useItineraries();
-  const { itineraryId } = route.params;
+  const itineraryId = route?.params?.itineraryId;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -51,6 +52,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [recommendationsExpanded, setRecommendationsExpanded] = useState(true);
   const [descriptionText, setDescriptionText] = useState('');
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isSavingDescription, setIsSavingDescription] = useState(false);
@@ -68,6 +70,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (itineraryId) {
+      // Load cached recommendations immediately (synchronously) for instant display
+      const cachedRecs = apiService.getCachedRecommendations(itineraryId);
+      if (cachedRecs && cachedRecs.success && cachedRecs.recommendations) {
+        const recommendations = cachedRecs.recommendations || [];
+        const seenMatchIds = new Set();
+        const uniqueRecommendations = recommendations.filter(rec => {
+          const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
+          if (seenMatchIds.has(matchId)) {
+            return false;
+          }
+          seenMatchIds.add(matchId);
+          return true;
+        });
+        setRecommendations(uniqueRecommendations);
+        console.log('⚡ Loaded cached recommendations immediately:', uniqueRecommendations.length);
+      }
+
       // Always fetch fresh data from API on mount to ensure we have latest flights
       const loadItinerary = async () => {
         try {
@@ -79,8 +98,10 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(tripData);
             setDescriptionText(tripData.description || '');
             setNotesText(tripData.notes || '');
-            // Fetch recommendations if trip has matches
+            // Fetch recommendations if trip has matches (will use cache if available, or fetch fresh)
             if (tripData.matches && tripData.matches.length > 0) {
+              // Fetch in background - if cache exists, it will return immediately
+              // If no cache, it will fetch and update
               fetchRecommendations(tripData.id || tripData._id);
               // Fetch scores for completed matches
               fetchScores(tripData.id || tripData._id);
@@ -108,6 +129,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
         }
       };
       loadItinerary();
+    } else {
+      // No itineraryId provided, stop loading
+      setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
 
@@ -289,16 +313,40 @@ const TripOverviewScreen = ({ navigation, route }) => {
   };
 
   const fetchRecommendations = async (tripId, forceRefresh = false) => {
-    setRecommendationsLoading(true);
+    // Only show loading if we don't have cached data
+    const hasCache = apiService.getCachedRecommendations(tripId);
+    if (!hasCache) {
+      setRecommendationsLoading(true);
+    }
+    
     try {
       const data = await apiService.getRecommendations(tripId, forceRefresh);
       if (data.success) {
-        setRecommendations(data.recommendations || []);
+        // Deduplicate recommendations by matchId (in case backend returns duplicates)
+        const recommendations = data.recommendations || [];
+        const seenMatchIds = new Set();
+        const uniqueRecommendations = recommendations.filter(rec => {
+          const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
+          if (seenMatchIds.has(matchId)) {
+            console.log(`⚠️ Filtering duplicate recommendation in UI for matchId: ${matchId}`);
+            return false;
+          }
+          seenMatchIds.add(matchId);
+          return true;
+        });
+        
+        setRecommendations(uniqueRecommendations);
         
         // Track that user viewed recommendations (only if not cached)
+        // Use a Set to prevent duplicate tracking calls
         if (!data.cached) {
-          data.recommendations?.forEach(rec => {
-            trackRecommendation(rec.matchId, 'viewed', tripId, rec.recommendedForDate, rec.score, rec.reason);
+          const trackedMatchIds = new Set();
+          uniqueRecommendations.forEach(rec => {
+            const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
+            if (!trackedMatchIds.has(matchId)) {
+              trackedMatchIds.add(matchId);
+              trackRecommendation(matchId, 'viewed', tripId, rec.recommendedForDate, rec.score, rec.reason);
+            }
           });
         }
       }
@@ -499,13 +547,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
       });
     });
     
-    // Add recommendations section if we have recommendations
-    if (recommendations.length > 0) {
-      data.push({ type: 'recommendations-header' });
-      recommendations.forEach((recommendation, index) => {
-        data.push({ type: 'recommendation', ...recommendation, index });
-      });
-    }
+    // Recommendations are now in a separate collapsible section, not in the flat list
     
     return data;
   }, [groupedMatches, recommendations]);
@@ -654,6 +696,72 @@ const TripOverviewScreen = ({ navigation, route }) => {
     );
   };
 
+  // Carousel component for recommendations (shows all recommendations in horizontal scroll)
+  const RecommendationsCarousel = React.memo(({ recommendations, renderRecommendationItem }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const scrollViewRef = useRef(null);
+    const screenWidth = Dimensions.get('window').width;
+    const cardWidth = screenWidth - (spacing.lg * 2) - spacing.md; // Account for padding and spacing
+
+    const handleScroll = (event) => {
+      const scrollPosition = event.nativeEvent.contentOffset.x;
+      const index = Math.round(scrollPosition / cardWidth);
+      setCurrentIndex(Math.min(index, recommendations.length - 1));
+    };
+
+    if (recommendations.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.carouselContainer}>
+        {/* Counter showing current position */}
+        {recommendations.length > 1 && (
+          <View style={styles.carouselCounter}>
+            <Text style={styles.carouselCounterText}>
+              {currentIndex + 1} of {recommendations.length}
+            </Text>
+          </View>
+        )}
+
+        {/* Horizontal scrollable carousel */}
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.carouselContent}
+          style={styles.carouselScrollView}
+          snapToInterval={cardWidth + spacing.md}
+          decelerationRate="fast"
+        >
+          {recommendations.map((recommendation, index) => (
+            <View key={recommendation.matchId || index} style={[styles.carouselItem, { width: cardWidth }]}>
+              {renderRecommendationItem({ item: recommendation })}
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Pagination indicators */}
+        {recommendations.length > 1 && (
+          <View style={styles.carouselPagination}>
+            {recommendations.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.carouselDot,
+                  index === currentIndex && styles.carouselDotActive
+                ]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  });
+
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Icon name="sports-soccer" size={64} color={colors.text.light} />
@@ -676,6 +784,24 @@ const TripOverviewScreen = ({ navigation, route }) => {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading itinerary...</Text>
+      </View>
+    );
+  }
+
+  if (!itineraryId) {
+    return (
+      <View style={styles.errorContainer}>
+        <Icon name="error" size={64} color={colors.error} />
+        <Text style={styles.errorTitle}>Invalid Itinerary</Text>
+        <Text style={styles.errorSubtitle}>
+          No itinerary ID provided. Please go back and try again.
+        </Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -835,30 +961,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
                           </Text>
                         </View>
                       );
-                    } else if (item.type === 'recommendations-header') {
-                      return (
-                        <View style={styles.recommendationsHeader}>
-                          <Icon name="recommend" size={20} color={colors.secondary} />
-                          <Text style={styles.recommendationsHeaderText}>
-                            Recommended Matches to Check Out on Your Trip
-                          </Text>
-                          <View style={styles.recommendationsCountChip}>
-                            <Text style={styles.recommendationsCountText}>
-                              {recommendations.length} recommendation{recommendations.length !== 1 ? 's' : ''}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    } else if (item.type === 'recommendation') {
-                      return renderRecommendationItem({ item });
                     } else {
                       return renderMatchItem({ item });
                     }
                   }}
                   keyExtractor={(item, index) => {
                     if (item.type === 'header') return `header-${index}`;
-                    if (item.type === 'recommendations-header') return `recommendations-header-${index}`;
-                    if (item.type === 'recommendation') return `recommendation-${item.matchId}-${index}`;
                     return item.matchId || `match-${index}`;
                   }}
                 />
@@ -868,6 +976,41 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </View>
           )}
         </View>
+
+        {/* Recommendations Section - Collapsible */}
+        {recommendations.length > 0 && (
+          <View style={styles.sectionCard}>
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={() => setRecommendationsExpanded(!recommendationsExpanded)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <Icon name="recommend" size={20} color={colors.secondary} />
+                <Text style={styles.sectionTitle}>Recommended Matches</Text>
+                <View style={styles.recommendationsCountChip}>
+                  <Text style={styles.recommendationsCountText}>
+                    {recommendations.length}
+                  </Text>
+                </View>
+              </View>
+              <MaterialIcons
+                name={recommendationsExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                size={24}
+                color={colors.text.primary}
+              />
+            </TouchableOpacity>
+            
+            {recommendationsExpanded && (
+              <View style={styles.recommendationsContent}>
+                <RecommendationsCarousel
+                  recommendations={recommendations}
+                  renderRecommendationItem={renderRecommendationItem}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Notes Section - Collapsible */}
         <View 
@@ -1484,6 +1627,55 @@ const styles = StyleSheet.create({
   },
   recommendationItem: {
     marginBottom: spacing.md,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.sm,
+  },
+  recommendationsContent: {
+    paddingTop: spacing.md,
+  },
+  carouselContainer: {
+    marginBottom: spacing.lg,
+  },
+  carouselCounter: {
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  carouselCounterText: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  carouselScrollView: {
+    marginHorizontal: -spacing.lg,
+  },
+  carouselContent: {
+    paddingHorizontal: spacing.lg,
+  },
+  carouselItem: {
+    marginRight: spacing.md,
+  },
+  carouselPagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  carouselDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+    marginHorizontal: 4,
+  },
+  carouselDotActive: {
+    backgroundColor: colors.secondary,
+    width: 24,
   },
   recommendationInfo: {
     backgroundColor: colors.card,
