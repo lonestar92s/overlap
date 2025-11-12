@@ -329,7 +329,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   useEffect(() => {
     // On mount, process initialMatches immediately if filterData is not ready
     if (initialMatches && initialMatches.length > 0 && (!filterData || !filterData.matchIds || filterData.matchIds.length === 0)) {
-      console.log('🔧 Initializing filterData from initialMatches on mount:', initialMatches.length);
+      console.log('🔧 [INIT] Processing filterData from initialMatches:', initialMatches.length);
       processMatchesForFilters(initialMatches);
     }
   }, []); // Run once on mount
@@ -343,30 +343,18 @@ const MapResultsScreen = ({ navigation, route }) => {
   }, [matches, processMatchesForFilters]);
 
   // Set initial search region when component mounts
-  // FIXED: Add debugging and ensure initialRegion is set properly
+  // FIXED: Only run once on mount to prevent repeated initialization
   useEffect(() => {
-    console.log('🗺️ MapResultsScreen: Initializing map region:', {
-      hasInitialRegion: !!initialRegion,
-      hasInitialMatches: !!(initialMatches && initialMatches.length > 0),
-      initialMatchesCount: initialMatches?.length || 0,
-      initialRegion: initialRegion ? {
-        lat: initialRegion.latitude,
-        lng: initialRegion.longitude,
-        delta: initialRegion.latitudeDelta
-      } : null
-    });
-    
     if (initialRegion && !initialSearchRegion) {
+      console.log('🗺️ [INIT] Setting initial region:', {
+        center: { lat: initialRegion.latitude.toFixed(4), lng: initialRegion.longitude.toFixed(4) },
+        delta: { lat: initialRegion.latitudeDelta.toFixed(4), lng: initialRegion.longitudeDelta.toFixed(4) },
+        initialMatchesCount: initialMatches?.length || 0
+      });
       setInitialSearchRegion(initialRegion);
       setMapRegion(initialRegion); // Also set mapRegion immediately
-      console.log('✅ Set initial search region from route params');
     }
-    // Also set it from mapRegion if available and initialSearchRegion isn't set yet
-    if (mapRegion && !initialSearchRegion) {
-      setInitialSearchRegion(mapRegion);
-      console.log('✅ Set initial search region from mapRegion');
-    }
-  }, [initialRegion, initialSearchRegion, mapRegion]);
+  }, []); // Only run once on mount
 
   // Apply pre-selected filters from natural language search
   useEffect(() => {
@@ -484,31 +472,18 @@ const MapResultsScreen = ({ navigation, route }) => {
         },
       };
       
-      console.log('🔍 Viewport-only search (RESPONSIVE):', {
-        center: { lat: region.latitude, lng: region.longitude },
-        viewport: {
-          actualLatDelta: region.latitudeDelta,
-          actualLngDelta: region.longitudeDelta,
-          finalLatSpan: viewportLatSpan,
-          finalLngSpan: viewportLngSpan,
-          radiusKm: `${(viewportLatSpan * 111 / 2).toFixed(1)}km × ${(viewportLngSpan * 111 / 2).toFixed(1)}km`
+      console.log('🔍 [SEARCH] Starting bounds search:', {
+        requestId,
+        currentRequestId,
+        region: {
+          center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
+          delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
         },
-        bounds,
-        // Show the zoom level and what it means
-        zoomInfo: {
-          latDelta: region.latitudeDelta,
-          lngDelta: region.longitudeDelta,
-          zoomCategory: region.latitudeDelta < 0.05 ? 'city block' : 
-                       region.latitudeDelta < 0.2 ? 'neighborhood' :
-                       region.latitudeDelta < 1.0 ? 'city' : 
-                       region.latitudeDelta < 3.0 ? 'region' : 'country'
+        bounds: {
+          ne: { lat: bounds.northeast.lat.toFixed(4), lng: bounds.northeast.lng.toFixed(4) },
+          sw: { lat: bounds.southwest.lat.toFixed(4), lng: bounds.southwest.lng.toFixed(4) }
         },
-        // Add geographic coverage info
-        geographicCoverage: {
-          latCoverageKm: (viewportLatSpan * 111).toFixed(0),
-          lngCoverageKm: (viewportLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180)).toFixed(0),
-          estimatedArea: `${((viewportLatSpan * 111) * (viewportLngSpan * 111 * Math.cos(region.latitude * Math.PI / 180))).toFixed(0)} km²`
-        }
+        dateRange: { from: dateFrom, to: dateTo }
       });
 
       const response = await ApiService.searchMatchesByBounds({
@@ -519,12 +494,16 @@ const MapResultsScreen = ({ navigation, route }) => {
         teams: [],        // Explicitly no filters - search all matches
       });
 
-      // More intelligent response handling: accept responses that are recent enough
-      // Only reject if this request is significantly older than the current one
+      // Check if this request is stale (replaced by a newer request)
       const isSignificantlyStale = requestId < (currentRequestId - 1);
       
       if (isSignificantlyStale) {
-        console.log('⏭️ Skipping stale request:', requestId, 'current:', currentRequestId);
+        console.log('⏭️ [SEARCH] REJECTED - Stale request:', {
+          requestId,
+          currentRequestId,
+          isStale: true,
+          reason: 'Replaced by newer request'
+        });
         return;
       }
 
@@ -534,65 +513,75 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         // Ensure response.data is an array (defensive check)
         const newMatches = Array.isArray(response.data) ? response.data : [];
+        const previousMatchCount = matches.length;
         
-        console.log('🔍 Search results received:', {
-          matchCount: newMatches.length,
+        console.log('✅ [SEARCH] Results received:', {
+          requestId,
+          currentRequestId,
+          newMatchCount: newMatches.length,
+          previousMatchCount,
+          willUpdate: !isSignificantlyStale,
           bounds: {
-            northeast: bounds.northeast,
-            southwest: bounds.southwest,
-            span: {
-              lat: bounds.northeast.lat - bounds.southwest.lat,
-              lng: bounds.northeast.lng - bounds.southwest.lng
-            }
-          },
-          dateFrom,
-          dateTo,
-          previousMatchCount: matches.length,
-          region: {
-            center: { lat: region.latitude, lng: region.longitude },
-            delta: { lat: region.latitudeDelta, lng: region.longitudeDelta }
+            center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
+            delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
           }
         });
         
         // Update matches efficiently - all markers will be displayed
         updateMatchesEfficiently(newMatches);
         
-        // Don't auto-zoom after search - preserve user's current view
-        // The markers will appear on the map at their current zoom level
-        // Native map library handles rendering off-screen markers efficiently
-        
         // Show user feedback if no results
         if (newMatches.length === 0) {
-          console.warn('⚠️ Search returned 0 results:', {
-            bounds,
-            dateRange: { from: dateFrom, to: dateTo },
-            region,
-            previousMatches: matches.length
-          });
+          console.log('⚠️ [SEARCH] No results found for this area');
         }
       } else {
-        console.error('❌ API returned error:', response.error);
+        console.error('❌ [SEARCH] API error:', {
+          requestId,
+          error: response.error,
+          bounds
+        });
         Alert.alert('Search Error', response.error || 'Failed to search matches');
       }
     } catch (error) {
-      console.error('Search error:', error);
+      console.error('❌ [SEARCH] Error:', {
+        requestId,
+        currentRequestId,
+        error: error.message,
+        isRecentRequest: requestId >= (currentRequestId - 1)
+      });
       // Only show error if this is still a recent request
       if (requestId >= (currentRequestId - 1)) {
         Alert.alert('Error', 'Failed to search matches');
       }
     } finally {
       // Only clear searching if this is still a recent request
-      if (requestId >= (currentRequestId - 1)) {
+      const isRecentRequest = requestId >= (currentRequestId - 1);
+      if (isRecentRequest) {
+        console.log('✅ [SEARCH] Completed:', { requestId, currentRequestId });
         setIsSearching(false);
+      } else {
+        console.log('⏭️ [SEARCH] Skipping cleanup for stale request:', { requestId, currentRequestId });
       }
     }
   };
 
   // Simplified marker updates
   const updateMatchesEfficiently = (newMatches) => {
-    console.log('🔄 Updating matches:', {
-      currentCount: matches.length,
-      newCount: newMatches.length
+    const previousCount = matches.length;
+    const newCount = newMatches.length;
+    const matchIdsBefore = matches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
+    const matchIdsAfter = newMatches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
+    const matchesRemoved = matchIdsBefore.filter(id => !matchIdsAfter.includes(id));
+    const matchesAdded = matchIdsAfter.filter(id => !matchIdsBefore.includes(id));
+    
+    console.log('🔄 [MATCHES] Updating:', {
+      previousCount,
+      newCount,
+      difference: newCount - previousCount,
+      matchesRemoved: matchesRemoved.length,
+      matchesAdded: matchesAdded.length,
+      removedIds: matchesRemoved.slice(0, 5), // Show first 5
+      addedIds: matchesAdded.slice(0, 5) // Show first 5
     });
     
     // Simply update the matches state - all markers will be displayed
@@ -699,34 +688,14 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Handle map region change (when user pans/zooms)
   // FIXED: Always allow "Search this area" - removed movement threshold requirement
-  // The button should always be available to allow re-searching the current viewport
   const handleMapRegionChange = (region, bounds) => {
     setMapRegion(region);
     
     // Always show "Search this area" button - user should be able to re-search current viewport
-    // This fixes the issue where button doesn't appear if user hasn't moved enough
     setHasMovedFromInitial(true);
     
-    // Optional: Still track movement for analytics/debugging, but don't use it to hide button
-    if (initialSearchRegion) {
-      const latDiff = Math.abs(region.latitude - initialSearchRegion.latitude);
-      const lngDiff = Math.abs(region.longitude - initialSearchRegion.longitude);
-      const initialLatDelta = initialSearchRegion.latitudeDelta || 0.5;
-      const initialLngDelta = initialSearchRegion.longitudeDelta || 0.5;
-      const hasZoomedOut = region.latitudeDelta > initialLatDelta * 1.2 || region.longitudeDelta > initialLngDelta * 1.2;
-      const hasZoomedIn = region.latitudeDelta < initialLatDelta * 0.8 || region.longitudeDelta < initialLngDelta * 0.8;
-      
-      // Log for debugging but don't control button visibility
-      if (latDiff > 0.02 || lngDiff > 0.02 || hasZoomedOut || hasZoomedIn) {
-        console.log('📍 Map region changed:', {
-          latDiff: latDiff.toFixed(4),
-          lngDiff: lngDiff.toFixed(4),
-          hasZoomed: hasZoomedOut || hasZoomedIn,
-          newDelta: { lat: region.latitudeDelta, lng: region.longitudeDelta },
-          initialDelta: { lat: initialLatDelta, lng: initialLngDelta }
-        });
-      }
-    }
+    // Reduced logging - only log significant changes
+    // (Removed verbose logging on every pan/zoom)
   };
 
   // Handle marker press: show overlay, hide bottom sheet, and center map
@@ -914,7 +883,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // If filterData is not ready, return all matches (prevents race condition)
     if (!filterData || !filterData.matchIds || filterData.matchIds.length === 0) {
-      console.log('⚠️ Filter data not ready, returning all matches:', matches.length);
+      // Reduced logging - only log once when filterData becomes ready
       return matches;
     }
     
@@ -931,8 +900,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       return matches;
     }
     
-    console.log('Filtering matches with (normalized):', { countries: selectedCountryIds, leagues: selectedLeagueIds, teams: selectedTeamIds });
-    console.log('Total matches to filter:', matches.length);
+    // Reduced verbose logging
     
     const filtered = matches.filter(match => {
       let matched = false;
@@ -979,7 +947,6 @@ const MapResultsScreen = ({ navigation, route }) => {
       return matched;
     });
     
-    console.log('Filtered matches result:', filtered.length);
     return filtered;
   };
 
@@ -987,16 +954,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   // FIXED: Include filterData in dependencies to ensure re-computation when filterData is ready
   const filteredMatches = useMemo(() => {
     const result = getFilteredMatches();
-    console.log('🔍 Filtered matches:', {
-      totalMatches: matches?.length || 0,
-      filteredCount: result?.length || 0,
-      filterDataReady: !!(filterData && filterData.matchIds && filterData.matchIds.length > 0),
-      selectedFilters: selectedFilters ? {
-        countries: selectedFilters.countries?.length || 0,
-        leagues: selectedFilters.leagues?.length || 0,
-        teams: selectedFilters.teams?.length || 0,
-      } : null
-    });
+    // Reduced logging - only log when filter state changes significantly
     return result;
   }, [matches, selectedFilters, filterData]);
 
@@ -1015,7 +973,6 @@ const MapResultsScreen = ({ navigation, route }) => {
       return matchDate.toDateString() === selectedDate.toDateString();
     });
     
-    console.log('MapResultsScreen: Date filter applied, showing date-filtered matches:', dateFiltered?.length || 0);
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
   
@@ -1025,16 +982,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     // Does NOT filter by viewport - remains constant until new search
     const final = finalFilteredMatches || [];
     
-    // Debug: Log the filtering results
-    console.log('MapResultsScreen: displayFilteredMatches (bottom drawer) updated:', {
-      totalMatches: matches?.length || 0,
-      filterFiltered: filteredMatches?.length || 0,
-      dateFiltered: finalFilteredMatches?.length || 0,
-      bottomDrawerMatches: final.length,
-      hasDateHeader: !!selectedDateHeader,
-      selectedDate: selectedDateHeader ? selectedDateHeader.toDateString() : 'none'
-    });
-    
+    // Reduced logging - this updates frequently
     return final;
   }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader]);
 
@@ -1055,13 +1003,10 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Get matches for map markers - show all loaded markers
   // Native map library handles viewport culling and off-screen rendering
-  // FIXED: Added comprehensive debugging to track match flow
   const mapMarkersMatches = useMemo(() => {
-    // Option 1: Show all loaded markers - let native map library handle rendering
-    // This is the standard approach - simple, predictable, and performant for < 1000 markers
     const allMarkers = displayFilteredMatches || [];
     
-    // Filter out matches without valid coordinates (they can't be displayed anyway)
+    // Filter out matches without valid coordinates
     const validMarkers = allMarkers.filter(match => {
       const venue = match.fixture?.venue;
       const coordinates = venue?.coordinates;
@@ -1072,7 +1017,6 @@ const MapResultsScreen = ({ navigation, route }) => {
         const [lon, lat] = coordinates;
         if (typeof lon !== 'number' || typeof lat !== 'number' ||
             lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-          console.warn('⚠️ Invalid coordinate values:', { lon, lat, matchId: match.fixture?.id });
           return false;
         }
       }
@@ -1080,19 +1024,10 @@ const MapResultsScreen = ({ navigation, route }) => {
       return isValid;
     });
     
-    console.log('📍 MapResultsScreen: mapMarkersMatches (all loaded):', {
-      totalMatches: matches?.length || 0,
-      filteredMatches: filteredMatches?.length || 0,
-      finalFilteredMatches: finalFilteredMatches?.length || 0,
-      displayFilteredMatches: displayFilteredMatches?.length || 0,
-      totalDrawerMatches: allMarkers.length,
-      validMarkers: validMarkers.length,
-      markersWithoutCoords: allMarkers.length - validMarkers.length,
-      filterDataReady: !!(filterData && filterData.matchIds && filterData.matchIds.length > 0)
-    });
+    // Reduced logging - markers update frequently during map interactions
     
     return validMarkers;
-  }, [displayFilteredMatches, matches, filteredMatches, finalFilteredMatches, filterData]);
+  }, [displayFilteredMatches, matches]);
 
   // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
@@ -1362,49 +1297,50 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Manual search function
-  // FIXED: Now uses truly responsive bounds calculation based on actual map viewport
-  // - Uses region.latitudeDelta/longitudeDelta directly (actual visible area)
-  // - No more fixed size increments that don't match what user sees
-  // - Bounds automatically adapt to zoom level: zoomed out = larger bounds, zoomed in = smaller bounds
-  // - Maximum bounds capped at 5° × 5° to prevent extremely large searches
   // FIXED: Always allow search even if region hasn't changed - user should be able to re-search
   const handleSearchThisArea = async () => {
+    console.log('🔘 [SEARCH THIS AREA] Button clicked');
+    
     if (!dateFrom || !dateTo) {
+      console.log('❌ [SEARCH THIS AREA] Missing dates:', { dateFrom, dateTo });
       Alert.alert('Error', 'Please select your travel dates');
       return;
     }
     
     // Get the current map region - prefer mapRegion (most current), then debouncedMapRegion, then initialRegion
-    // FIXED: Use mapRegion first (most current) instead of debouncedMapRegion to get latest viewport
     let currentRegion = mapRegion || debouncedMapRegion || initialRegion;
     
-    console.log('🔍 Search this area clicked:', {
-      currentRegion,
-      source: mapRegion ? 'current' : debouncedMapRegion ? 'debounced' : 'initial',
-      coordinates: currentRegion ? `${currentRegion.latitude}, ${currentRegion.longitude}` : 'none',
-      deltas: currentRegion ? `${currentRegion.latitudeDelta}, ${currentRegion.longitudeDelta}` : 'none',
-      initialRegion: initialRegion ? {
-        lat: initialRegion.latitude,
-        lng: initialRegion.longitude,
-        delta: initialRegion.latitudeDelta
+    console.log('🔍 [SEARCH THIS AREA] Region state:', {
+      hasMapRegion: !!mapRegion,
+      hasDebouncedMapRegion: !!debouncedMapRegion,
+      hasInitialRegion: !!initialRegion,
+      source: mapRegion ? 'mapRegion (current)' : debouncedMapRegion ? 'debouncedMapRegion' : 'initialRegion',
+      currentRegion: currentRegion ? {
+        center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
+        delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
       } : null,
-      comparison: currentRegion && initialRegion ? {
-        latDiff: Math.abs(currentRegion.latitude - initialRegion.latitude),
-        lngDiff: Math.abs(currentRegion.longitude - initialRegion.longitude),
-        deltaLatDiff: Math.abs(currentRegion.latitudeDelta - initialRegion.latitudeDelta),
-        deltaLngDiff: Math.abs(currentRegion.longitudeDelta - initialRegion.longitudeDelta)
-      } : null
+      isSearching,
+      currentRequestId,
+      lastSuccessfulRequestId
     });
     
     if (!currentRegion) {
-      console.error('❌ No current region available for search');
+      console.log('❌ [SEARCH THIS AREA] No region available');
       Alert.alert('Error', 'Unable to determine current map location. Please try again.');
       return;
     }
     
-    // FIXED: Always perform search - don't check if region has changed
-    // This allows user to re-search the same area if needed
+    // Always perform search - don't check if region has changed
     const requestId = currentRequestId + 1;
+    console.log('🚀 [SEARCH THIS AREA] Starting search:', {
+      requestId,
+      previousRequestId: currentRequestId,
+      region: {
+        center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
+        delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
+      }
+    });
+    
     setCurrentRequestId(requestId);
     setIsSearching(true);
     await performBoundsSearch(currentRegion, requestId);

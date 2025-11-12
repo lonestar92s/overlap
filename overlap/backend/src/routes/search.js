@@ -1382,9 +1382,127 @@ const ConversationStateManager = {
     }
 };
 
+// Helper function to detect multi-query patterns
+function detectMultiQuery(query) {
+    const lowerQuery = query.toLowerCase();
+    
+    // Indicators of secondary criteria
+    const secondaryIndicators = [
+        'but would also like',
+        'but also',
+        'also want',
+        'plus',
+        'and also',
+        'would also like',
+        'other matches',
+        'additional matches',
+        'more matches'
+    ];
+    
+    // Indicators of count constraints
+    const countIndicators = [
+        /\d+\s+other\s+matches?/i,
+        /\d+\s+additional\s+matches?/i,
+        /\d+\s+more\s+matches?/i,
+        /a few\s+matches?/i,
+        /several\s+matches?/i,
+        /some\s+matches?/i
+    ];
+    
+    // Indicators of distance from primary
+    const distanceFromPrimaryIndicators = [
+        /within\s+\d+\s+miles/i,
+        /within\s+\d+\s+km/i,
+        /\d+\s+miles\s+away/i,
+        /\d+\s+km\s+away/i
+    ];
+    
+    const hasSecondary = secondaryIndicators.some(indicator => 
+        lowerQuery.includes(indicator)
+    );
+    
+    const hasCount = countIndicators.some(pattern => pattern.test(query));
+    
+    const hasDistanceFromPrimary = distanceFromPrimaryIndicators.some(pattern => 
+        pattern.test(query)
+    );
+    
+    return hasSecondary || (hasCount && hasDistanceFromPrimary);
+}
+
+// Helper function to extract count constraint
+function extractCountConstraint(query) {
+    const patterns = [
+        { pattern: /(\d+)\s+other\s+matches?/i, extract: (match) => parseInt(match[1]) },
+        { pattern: /(\d+)\s+additional\s+matches?/i, extract: (match) => parseInt(match[1]) },
+        { pattern: /(\d+)\s+more\s+matches?/i, extract: (match) => parseInt(match[1]) },
+        { pattern: /a\s+few\s+matches?/i, extract: () => 3 },
+        { pattern: /several\s+matches?/i, extract: () => 5 },
+        { pattern: /some\s+matches?/i, extract: () => 3 },
+        { pattern: /other\s+matches?/i, extract: () => 3 } // Default
+    ];
+    
+    for (const { pattern, extract } of patterns) {
+        const match = query.match(pattern);
+        if (match) {
+            return extract(match);
+        }
+    }
+    
+    return null;
+}
+
+// Helper function to extract distance constraint
+function extractDistanceConstraint(query) {
+    // Pattern: "within X miles" or "within X km"
+    const milePattern = /within\s+(\d+)\s+miles?/i;
+    const kmPattern = /within\s+(\d+)\s+km/i;
+    const awayPattern = /(\d+)\s+miles?\s+away/i;
+    
+    const mileMatch = query.match(milePattern);
+    if (mileMatch) {
+        return parseInt(mileMatch[1]);
+    }
+    
+    const kmMatch = query.match(kmPattern);
+    if (kmMatch) {
+        return Math.round(parseInt(kmMatch[1]) * 0.621371); // Convert km to miles
+    }
+    
+    const awayMatch = query.match(awayPattern);
+    if (awayMatch) {
+        return parseInt(awayMatch[1]);
+    }
+    
+    return null;
+}
+
+// Helper function to calculate period date range
+function calculatePeriodDateRange(query, referenceDate = new Date()) {
+    // Pattern: "over a X day period" or "over X days"
+    const periodPattern = /over\s+(?:a\s+)?(\d+)\s+day\s+period/i;
+    const daysPattern = /over\s+(\d+)\s+days?/i;
+    
+    const periodMatch = query.match(periodPattern) || query.match(daysPattern);
+    if (periodMatch) {
+        const days = parseInt(periodMatch[1]);
+        const start = new Date(referenceDate);
+        const end = new Date(referenceDate);
+        end.setDate(end.getDate() + days - 1);
+        
+        return {
+            start: formatDate(start),
+            end: formatDate(end)
+        };
+    }
+    
+    return null;
+}
+
 // Enhanced natural language parser with OpenAI and smart defaults
 const parseNaturalLanguage = async (query, conversationHistory = []) => {
     let result = {
+        isMultiQuery: false, // NEW: Multi-query flag
         location: null,
         date: null,
         dateRange: null,
@@ -1393,8 +1511,16 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         distance: null,
         matchType: null,
         confidence: 0,
-        errorMessage: null
+        errorMessage: null,
+        // NEW: Multi-query structures
+        primary: null,
+        secondary: null,
+        relationship: null
     };
+    
+    // Detect if this is a multi-query
+    const isMultiQuery = detectMultiQuery(query);
+    result.isMultiQuery = isMultiQuery;
 
     try {
         // First try OpenAI for intelligent parsing (if available)
@@ -1430,6 +1556,46 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
                         The current date is ${formatDate(now)}. 
                         
+                        MULTI-QUERY DETECTION:
+                        - If query contains phrases like "but would also like", "but also", "plus", "other matches", "additional matches", parse as multi-query
+                        - Multi-query structure: primary match + secondary matches with different criteria
+                        - Set isMultiQuery: true when secondary criteria detected
+                        
+                        PRIMARY MATCH CRITERIA:
+                        - Extract team name(s) for primary match
+                        - Extract match type: "at home" → matchType: "home", "away" → matchType: "away"
+                        - Primary match leagues are optional (defaults to team's league)
+                        
+                        SECONDARY MATCH CRITERIA:
+                        - Extract count constraint: "2 other matches" → count: 2, "a few matches" → count: 3, "several matches" → count: 5
+                        - Extract league filters: "bundesliga 2 or austrian bundesliga" → leagues: [79, 218]
+                        - Extract distance constraint: "within 200 miles" → maxDistance: 200
+                        - Always set excludePrimary: true for secondary matches
+                        
+                        RELATIONSHIP CONSTRAINTS:
+                        - Extract shared date range: "over a 10 day period" → calculate dateRange
+                        - Distance is relative to primary match venue: distanceFrom: "primary"
+                        - If no date range specified, infer from primary match date
+                        
+                        COUNT CONSTRAINT PARSING:
+                        - "2 other matches" → count: 2
+                        - "a few matches" → count: 3 (default)
+                        - "several matches" → count: 5 (default)
+                        - "some matches" → count: 3 (default)
+                        - "other matches" (no number) → count: 3 (default)
+                        
+                        DISTANCE PARSING:
+                        - "within 200 miles" → maxDistance: 200
+                        - "within 200 km" → maxDistance: 124 (convert km to miles)
+                        - "200 miles away" → maxDistance: 200
+                        - If distance mentioned without "from" or "of", assume relative to primary venue
+                        
+                        DATE RANGE PARSING:
+                        - "over a 10 day period" → Calculate 10-day range from today or specified date
+                        - "over 10 days" → Same as above
+                        - If primary match date specified, use that as start date
+                        - If no date specified, use current date as start
+                        
                         IMPORTANT RULES:
                         - ALWAYS require a date/timeframe - if none provided AND no conversation history, return error message
                         - If conversation history exists, inherit missing information (location, dates) from previous searches
@@ -1459,22 +1625,61 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         
                         When handling weekends, always use Friday through Sunday (3 days).
                         
-                        Return only a JSON object with the following fields:
-                        - location (object with city, country, and coordinates) - infer from teams/leagues if not specified
-                        - dateRange (start and end dates in YYYY-MM-DD format) - REQUIRED
-                        - leagues (array of league IDs)
-                        - maxDistance (in miles)
-                        - teams (array of team names)
-                        - matchTypes (array of types like 'derby', 'rivalry', etc.)
+                        Return only a JSON object. For multi-query, use this structure:
+                        {
+                            "isMultiQuery": true,
+                            "primary": {
+                                "teams": ["Bayern Munich"],
+                                "matchType": "home",
+                                "leagues": []
+                            },
+                            "secondary": {
+                                "count": 2,
+                                "leagues": [79, 218],
+                                "maxDistance": 200,
+                                "excludePrimary": true
+                            },
+                            "relationship": {
+                                "distanceFrom": "primary",
+                                "dateRange": {
+                                    "start": "2025-03-01",
+                                    "end": "2025-03-10"
+                                }
+                            },
+                            "errorMessage": null,
+                            "suggestions": []
+                        }
+                        
+                        For single query, use this structure:
+                        {
+                            "isMultiQuery": false,
+                            "location": { "city": "London", "country": "United Kingdom", "coordinates": [-0.118092, 51.509865] },
+                            "dateRange": { "start": "2025-03-01", "end": "2025-03-31" },
+                            "leagues": [39],
+                            "maxDistance": 50,
+                            "teams": ["Arsenal FC"],
+                            "matchTypes": [],
+                            "errorMessage": null,
+                            "suggestions": []
+                        }
+                        
+                        Fields:
+                        - isMultiQuery (boolean) - REQUIRED: true if multi-query detected, false otherwise
+                        - For multi-query: primary, secondary, relationship objects
+                        - For single query: location, dateRange, leagues, maxDistance, teams, matchTypes
                         - errorMessage (string if there's an error, null otherwise)
                         - suggestions (array of helpful suggestions for refining the search)
                         
                         Available leagues (use these exact IDs):
                         - 39 (Premier League)
                         - 40 (Championship)
-                        - 140 (La Liga)
                         - 78 (Bundesliga)
+                        - 79 (Bundesliga 2)
+                        - 140 (La Liga)
+                        - 141 (La Liga 2)
+                        - 218 (Austrian Bundesliga)
                         - 61 (Ligue 1)
+                        - 62 (Ligue 2)
                         - 88 (Eredivisie)
                         - 94 (Primeira Liga)
                         
@@ -1531,6 +1736,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         
                         Example response format for follow-up query "just premier league" (with conversation history):
                         {
+                            "isMultiQuery": false,
                             "location": {
                                 "city": "London",
                                 "country": "United Kingdom",
@@ -1540,10 +1746,37 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                                 "start": "2025-11-01",
                                 "end": "2025-11-30"
                             },
-                            "leagues": [{"apiId": "39", "name": "Premier League", "country": "England"}],
+                            "leagues": [39],
                             "maxDistance": 50,
                             "teams": [],
                             "matchTypes": [],
+                            "errorMessage": null,
+                            "suggestions": []
+                        }
+                        
+                        Example response format for multi-query:
+                        Query: "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period. The other matches can be bundesliga 2 or austrian bundesliga"
+                        Response:
+                        {
+                            "isMultiQuery": true,
+                            "primary": {
+                                "teams": ["Bayern Munich"],
+                                "matchType": "home",
+                                "leagues": []
+                            },
+                            "secondary": {
+                                "count": 2,
+                                "leagues": [79, 218],
+                                "maxDistance": 200,
+                                "excludePrimary": true
+                            },
+                            "relationship": {
+                                "distanceFrom": "primary",
+                                "dateRange": {
+                                    "start": "2025-03-01",
+                                    "end": "2025-03-10"
+                                }
+                            },
                             "errorMessage": null,
                             "suggestions": []
                         }`
@@ -1554,7 +1787,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                     }
                 ],
                 temperature: 0.3,
-                max_tokens: 500
+                max_tokens: 800  // Increased for multi-query responses
             });
 
             const parsedResponse = JSON.parse(completion.choices[0].message.content);
@@ -1566,32 +1799,82 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 // Don't return early - let context inheritance handle it
             }
 
-            // Map OpenAI response to our result format
-            result.location = parsedResponse.location;
-            result.dateRange = parsedResponse.dateRange;
-            result.distance = parsedResponse.maxDistance;
-            result.matchType = parsedResponse.matchTypes?.[0] || null;
-            result.suggestions = parsedResponse.suggestions || [];
-            
-            // Convert team names to our team objects (simplified for now)
-            if (parsedResponse.teams && parsedResponse.teams.length > 0) {
-                result.teams.any = parsedResponse.teams.map(teamName => ({ name: teamName }));
-            }
-            
-            // Convert league IDs to our league objects (simplified for now)
-            if (parsedResponse.leagues && parsedResponse.leagues.length > 0) {
-                result.leagues = parsedResponse.leagues.map(leagueId => ({ apiId: leagueId, name: leagueId }));
-            }
+            // Check if multi-query
+            if (parsedResponse.isMultiQuery) {
+                result.isMultiQuery = true;
+                
+                // Map primary criteria
+                result.primary = {
+                    teams: parsedResponse.primary?.teams || [],
+                    matchType: parsedResponse.primary?.matchType || null,
+                    leagues: parsedResponse.primary?.leagues || []
+                };
+                
+                // Map secondary criteria
+                result.secondary = {
+                    count: parsedResponse.secondary?.count || null,
+                    leagues: parsedResponse.secondary?.leagues || [],
+                    maxDistance: parsedResponse.secondary?.maxDistance || null,
+                    excludePrimary: parsedResponse.secondary?.excludePrimary !== false
+                };
+                
+                // Map relationship
+                result.relationship = {
+                    distanceFrom: parsedResponse.relationship?.distanceFrom || 'primary',
+                    dateRange: parsedResponse.relationship?.dateRange || parsedResponse.dateRange
+                };
+                
+                // Populate legacy fields for backward compatibility
+                result.dateRange = result.relationship.dateRange;
+                result.teams.any = result.primary.teams.map(name => ({ name }));
+                result.matchType = result.primary.matchType;
+                result.leagues = result.primary.leagues.map(leagueId => ({ apiId: String(leagueId), name: String(leagueId) }));
+                
+                // Calculate confidence for multi-query
+                let confidence = 0;
+                if (result.primary.teams.length > 0) confidence += 30;
+                if (result.secondary.count) confidence += 20;
+                if (result.secondary.leagues.length > 0) confidence += 20;
+                if (result.secondary.maxDistance) confidence += 15;
+                if (result.relationship.dateRange) confidence += 15;
+                result.confidence = Math.min(confidence, 100);
+                
+            } else {
+                // Single query mode (existing logic)
+                result.isMultiQuery = false;
+                result.location = parsedResponse.location;
+                result.dateRange = parsedResponse.dateRange;
+                result.distance = parsedResponse.maxDistance;
+                result.matchType = parsedResponse.matchTypes?.[0] || null;
+                result.suggestions = parsedResponse.suggestions || [];
+                
+                // Convert team names to our team objects (simplified for now)
+                if (parsedResponse.teams && parsedResponse.teams.length > 0) {
+                    result.teams.any = parsedResponse.teams.map(teamName => ({ name: teamName }));
+                }
+                
+                // Convert league IDs to our league objects (simplified for now)
+                if (parsedResponse.leagues && parsedResponse.leagues.length > 0) {
+                    result.leagues = parsedResponse.leagues.map(leagueId => ({ apiId: String(leagueId), name: String(leagueId) }));
+                }
 
-            // Calculate confidence score
-            let confidence = 0;
-            if (result.teams.any.length > 0) confidence += 30;
-            if (result.leagues.length > 0) confidence += 25;
-            if (result.location) confidence += 25;
-            if (result.dateRange) confidence += 15;
-            if (result.distance) confidence += 10;
-            
-            result.confidence = Math.min(confidence, 100);
+                // Map to primary structure for consistency
+                result.primary = {
+                    teams: parsedResponse.teams || [],
+                    matchType: result.matchType,
+                    leagues: parsedResponse.leagues || []
+                };
+
+                // Calculate confidence score
+                let confidence = 0;
+                if (result.teams.any.length > 0) confidence += 30;
+                if (result.leagues.length > 0) confidence += 25;
+                if (result.location) confidence += 25;
+                if (result.dateRange) confidence += 15;
+                if (result.distance) confidence += 10;
+                
+                result.confidence = Math.min(confidence, 100);
+            }
 
             // Apply conversation state management after AI parsing
             const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
@@ -1669,6 +1952,30 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
 
 // Convert parsed entities to search parameters
 const buildSearchParameters = (parsed) => {
+    // If multi-query, return structure for multi-query execution
+    if (parsed.isMultiQuery) {
+        return {
+            isMultiQuery: true,
+            primary: {
+                teams: parsed.primary?.teams || [],
+                matchType: parsed.primary?.matchType,
+                leagues: parsed.primary?.leagues || [],
+                dateRange: parsed.relationship?.dateRange || parsed.dateRange
+            },
+            secondary: {
+                count: parsed.secondary?.count || null,
+                leagues: parsed.secondary?.leagues || [],
+                maxDistance: parsed.secondary?.maxDistance || null,
+                excludePrimary: parsed.secondary?.excludePrimary !== false
+            },
+            relationship: parsed.relationship || {
+                distanceFrom: 'primary',
+                dateRange: parsed.dateRange
+            }
+        };
+    }
+    
+    // Existing single-query logic
     const params = {};
 
     // Team filtering
@@ -2248,31 +2555,73 @@ router.post('/natural-language', async (req, res) => {
         const locationName = parsed.location ? `${parsed.location.city}, ${parsed.location.country}` : 'the specified location';
         const dateRange = parsed.dateRange ? `${parsed.dateRange.start} to ${parsed.dateRange.end}` : 'the specified dates';
         
-        const response = {
-            success: true,
-            query: query,
-            confidence: parsed.confidence,
-            message: await generateResponse({
-                type: 'success',
-                matchCount: matches.length,
-                location: locationName,
-                dateRange: dateRange
-            }),
-            parsed: {
-                teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
-                leagues: mapLeagueIdsToNames(leagueIds),
-                location: parsed.location,
-                dateRange: parsed.dateRange,
-                distance: parsed.distance
-            },
-            preSelectedFilters: {
-                country: parsed.location?.country || null, // Country-level filter
-                leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name), // League-level filters
-                teams: parsed.teams.any.map(t => t.name) // Team-level filters
-            },
-            matches: matches, // No distance calculation needed for messages screen
-            count: matches.length
-        };
+        // Build response structure - handle multi-query vs single query
+        let response;
+        
+        if (parsed.isMultiQuery) {
+            // Multi-query response structure
+            // Note: Full multi-query execution will be implemented in Phase 3
+            // For now, return parsed structure indicating multi-query was detected
+            response = {
+                success: true,
+                query: query,
+                confidence: parsed.confidence,
+                isMultiQuery: true,
+                message: "Multi-query detected. Full execution will be implemented in Phase 3. For now, searching with primary criteria only.",
+                parsed: {
+                    primary: {
+                        teams: parsed.primary?.teams || [],
+                        matchType: parsed.primary?.matchType || null,
+                        leagues: parsed.primary?.leagues || []
+                    },
+                    secondary: {
+                        count: parsed.secondary?.count || null,
+                        leagues: parsed.secondary?.leagues || [],
+                        maxDistance: parsed.secondary?.maxDistance || null,
+                        excludePrimary: parsed.secondary?.excludePrimary !== false
+                    },
+                    relationship: parsed.relationship || {
+                        distanceFrom: 'primary',
+                        dateRange: parsed.dateRange
+                    }
+                },
+                preSelectedFilters: {
+                    country: parsed.location?.country || null,
+                    leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name),
+                    teams: parsed.primary?.teams || []
+                },
+                matches: matches, // For now, return primary matches only
+                count: matches.length
+            };
+        } else {
+            // Single query response (backward compatible)
+            response = {
+                success: true,
+                query: query,
+                confidence: parsed.confidence,
+                isMultiQuery: false,
+                message: await generateResponse({
+                    type: 'success',
+                    matchCount: matches.length,
+                    location: locationName,
+                    dateRange: dateRange
+                }),
+                parsed: {
+                    teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
+                    leagues: mapLeagueIdsToNames(leagueIds),
+                    location: parsed.location,
+                    dateRange: parsed.dateRange,
+                    distance: parsed.distance
+                },
+                preSelectedFilters: {
+                    country: parsed.location?.country || null, // Country-level filter
+                    leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name), // League-level filters
+                    teams: parsed.teams.any.map(t => t.name) // Team-level filters
+                },
+                matches: matches, // No distance calculation needed for messages screen
+                count: matches.length
+            };
+        }
 
 
         res.json(response);

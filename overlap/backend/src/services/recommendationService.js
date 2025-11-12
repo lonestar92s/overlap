@@ -34,6 +34,17 @@ class RecommendationService {
         try {
             console.log(`🎯 Generating recommendations for trip: ${tripId}`);
             
+            // Validate trip exists (prevent generating recommendations for deleted trips)
+            if (!trip) {
+                console.log(`❌ Trip not found or deleted: ${tripId}`);
+                // Clear any cached recommendations for this trip
+                this.invalidateTripCache(tripId);
+                return {
+                    recommendations: [],
+                    cached: false
+                };
+            }
+            
             // Check cache first
             const cacheKey = this.generateCacheKey(tripId, user, trip);
             const cachedResult = this.getFromCache(cacheKey);
@@ -91,7 +102,8 @@ class RecommendationService {
                     tripDates,
                     restrictedLeagues,
                     trip,
-                    userRadius
+                    userRadius,
+                    user
                 );
                 
                 if (recommendation) {
@@ -120,7 +132,7 @@ class RecommendationService {
     /**
      * Generate a recommendation for a specific day
      */
-    async generateRecommendationForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius) {
+    async generateRecommendationForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius, user) {
         try {
             // Search for matches on this day and nearby dates
             const searchDates = this.getSearchDates(day, tripDates);

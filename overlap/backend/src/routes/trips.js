@@ -221,20 +221,86 @@ router.put('/:id', auth, async (req, res) => {
 // Delete a trip
 router.delete('/:id', auth, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        const trip = user.trips.id(req.params.id);
+        // Use req.user._id for consistency (auth middleware sets req.user to full user document)
+        const userId = req.user._id || req.user.id;
+        if (!userId) {
+            console.error('Delete trip: User ID not found in req.user');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated'
+            });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            console.error('Delete trip: User not found in database:', userId);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const tripId = req.params.id;
+        console.log('Delete trip: Attempting to delete trip:', { tripId, userId, userTripsCount: user.trips.length });
+
+        // Try to find the trip by ID (Mongoose subdocument lookup)
+        let trip = user.trips.id(tripId);
         
+        // If not found, try finding by matching _id string (handles ID format mismatches)
         if (!trip) {
+            const tripIdStr = String(tripId);
+            trip = user.trips.find(t => {
+                const tId = String(t._id || t.id || '');
+                return tId === tripIdStr || tId.toLowerCase() === tripIdStr.toLowerCase();
+            });
+        }
+
+        if (!trip) {
+            console.error('Delete trip: Trip not found:', {
+                requestedTripId: tripId,
+                requestedTripIdType: typeof tripId,
+                userTripsCount: user.trips.length,
+                availableTripIds: user.trips.map((t, idx) => ({
+                    index: idx,
+                    _id: t._id ? String(t._id) : 'no _id',
+                    id: t.id ? String(t.id) : 'no id',
+                    name: t.name,
+                    _idType: typeof t._id,
+                    idType: typeof t.id
+                }))
+            });
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
 
+        console.log('Delete trip: Trip found, removing:', {
+            tripId: String(trip._id || trip.id),
+            tripName: trip.name,
+            tripsBeforeDelete: user.trips.length
+        });
+
         // Use pull() to properly remove subdocument from array
         // This is the correct way to remove subdocuments in Mongoose
-        user.trips.pull(req.params.id);
+        const deletedTripId = String(trip._id || trip.id);
+        user.trips.pull(trip._id || trip.id);
         await user.save();
+
+        // Clear recommendation cache for deleted trip
+        try {
+            const recommendationService = require('../services/recommendationService');
+            recommendationService.invalidateTripCache(deletedTripId);
+            console.log('Delete trip: Cleared recommendation cache for trip:', deletedTripId);
+        } catch (cacheError) {
+            console.warn('Delete trip: Failed to clear recommendation cache:', cacheError.message);
+            // Don't fail the deletion if cache clearing fails
+        }
+
+        console.log('Delete trip: Successfully deleted trip:', {
+            tripId: deletedTripId,
+            tripsAfterDelete: user.trips.length
+        });
 
         res.json({
             success: true,
@@ -242,9 +308,11 @@ router.delete('/:id', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleting trip:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
-            message: 'Failed to delete trip'
+            message: 'Failed to delete trip',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });

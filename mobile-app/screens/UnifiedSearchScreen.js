@@ -320,6 +320,20 @@ const UnifiedSearchScreen = () => {
       return '';
     };
 
+    const isFav = () => {
+      if (item.type === 'league') return isLeagueFav(item);
+      if (item.type === 'team') return isTeamFav(item);
+      if (item.type === 'venue') return isVenueFav(item);
+      return false;
+    };
+
+    const handleToggle = (e) => {
+      e.stopPropagation();
+      if (item.type === 'league') toggleLeague(item);
+      else if (item.type === 'team') toggleTeam(item);
+      else if (item.type === 'venue') toggleVenue(item);
+    };
+
     return (
       <TouchableOpacity
         key={`${item.type}-${item.id}`}
@@ -334,6 +348,17 @@ const UnifiedSearchScreen = () => {
           <Text style={styles.itemTitle}>{item.name}</Text>
           <Text style={styles.itemSubtitle}>{getSubtitle()}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.starButton}
+          onPress={handleToggle}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialIcons
+            name={isFav() ? 'star' : 'star-border'}
+            size={20}
+            color={isFav() ? colors.secondary : colors.text.light}
+          />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -345,6 +370,18 @@ const UnifiedSearchScreen = () => {
         return <Image source={{ uri: item.badge }} style={styles.itemIcon} />;
       }
       return <View style={styles.itemIconPlaceholder} />;
+    };
+
+    const isFav = () => {
+      if (item.type === 'league') return isLeagueFav(item);
+      if (item.type === 'team') return isTeamFav(item);
+      return false;
+    };
+
+    const handleToggle = (e) => {
+      e.stopPropagation();
+      if (item.type === 'league') toggleLeague(item);
+      else if (item.type === 'team') toggleTeam(item);
     };
 
     return (
@@ -361,6 +398,17 @@ const UnifiedSearchScreen = () => {
           <Text style={styles.itemTitle}>{item.name}</Text>
           <Text style={styles.itemSubtitle}>{item.country || ''}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.starButton}
+          onPress={handleToggle}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialIcons
+            name={isFav() ? 'star' : 'star-border'}
+            size={20}
+            color={isFav() ? colors.secondary : colors.text.light}
+          />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -436,6 +484,20 @@ const UnifiedSearchScreen = () => {
                           <Text style={styles.itemTitle}>{item.name}</Text>
                           <Text style={styles.itemSubtitle}>{item.country || 'League'}</Text>
                         </View>
+                        <TouchableOpacity
+                          style={styles.starButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            toggleLeague(item);
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <MaterialIcons
+                            name={isLeagueFav(item) ? 'star' : 'star-border'}
+                            size={20}
+                            color={isLeagueFav(item) ? colors.secondary : colors.text.light}
+                          />
+                        </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -466,6 +528,20 @@ const UnifiedSearchScreen = () => {
                             {item.city ? `${item.city}, ${item.country || ''}` : item.country || 'Team'}
                           </Text>
                         </View>
+                        <TouchableOpacity
+                          style={styles.starButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            toggleTeam(item);
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <MaterialIcons
+                            name={isTeamFav(item) ? 'star' : 'star-border'}
+                            size={20}
+                            color={isTeamFav(item) ? colors.secondary : colors.text.light}
+                          />
+                        </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -492,6 +568,20 @@ const UnifiedSearchScreen = () => {
                             {item.city ? `${item.city}, ${item.country || ''}` : item.country || 'Venue'}
                           </Text>
                         </View>
+                        <TouchableOpacity
+                          style={styles.starButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            toggleVenue(item);
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <MaterialIcons
+                            name={isVenueFav(item) ? 'star' : 'star-border'}
+                            size={20}
+                            color={isVenueFav(item) ? colors.secondary : colors.text.light}
+                          />
+                        </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -676,6 +766,10 @@ const styles = StyleSheet.create({
   searchActionText: {
     ...typography.caption,
     color: colors.text.primary,
+  },
+  starButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.sm,
   },
 });
 

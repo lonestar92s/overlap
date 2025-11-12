@@ -17,6 +17,8 @@ import * as Haptics from 'expo-haptics';
 
 import { processNaturalLanguageQuery, formatSearchResults, getSearchExamples } from '../services/naturalLanguageService';
 import ApiService from '../services/api';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import MatchCard from '../components/MatchCard';
 
 const { width } = Dimensions.get('window');
 
@@ -38,39 +40,6 @@ const MessagesScreen = ({ navigation }) => {
       timestamp: new Date(),
     }]);
   }, []);
-
-  const testConnection = async () => {
-    console.log('🧪 Testing API connection...');
-    try {
-      const response = await fetch('https://friendly-gratitude-production-3f31.up.railway.app/api/search/natural-language', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: 'test' })
-      });
-      console.log('🧪 Test response status:', response.status);
-      const data = await response.json();
-      console.log('🧪 Test response data:', data);
-      
-      const testMessage = {
-        id: Date.now().toString(),
-        text: `Test successful! Status: ${response.status}`,
-        isBot: true,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, testMessage]);
-    } catch (error) {
-      console.error('🧪 Test failed:', error);
-      const errorMessage = {
-        id: Date.now().toString(),
-        text: `Test failed: ${error.message}`,
-        isBot: true,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    }
-  };
 
   const scrollToBottom = () => {
     if (flatListRef.current) {
@@ -104,9 +73,12 @@ const MessagesScreen = ({ navigation }) => {
       console.log('🚀 MessagesScreen - Formatted response:', formattedResponse);
 
       if (formattedResponse.success) {
+        const matchCount = formattedResponse.matches?.length || formattedResponse.count || 0;
         const botMessage = {
           id: (Date.now() + 1).toString(),
-          text: formattedResponse.message || `Found ${formattedResponse.count} matches!`,
+          text: formattedResponse.message || (matchCount > 0 
+            ? `Found ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}!` 
+            : 'Search completed'),
           isBot: true,
           timestamp: new Date(),
           data: formattedResponse,
@@ -149,6 +121,23 @@ const MessagesScreen = ({ navigation }) => {
   const handleExamplePress = (example) => {
     setInputText(example);
     setShowExamples(false);
+  };
+
+  const handleMatchPress = (match) => {
+    // Navigate to match details or open match modal
+    // For now, navigate to MapResults with this match selected
+    navigation.navigate('SearchTab', {
+      screen: 'MapResults',
+      params: {
+        matches: [match],
+        initialRegion: match.fixture?.venue?.coordinates ? {
+          latitude: match.fixture.venue.coordinates[1],
+          longitude: match.fixture.venue.coordinates[0],
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        } : null,
+      }
+    });
   };
 
   const handleSearchResultPress = async (data) => {
@@ -292,6 +281,8 @@ const MessagesScreen = ({ navigation }) => {
               rounded
               icon={{ name: 'search', type: 'material' }}
               containerStyle={styles.botAvatar}
+              accessibilityLabel="Match Assistant avatar"
+              accessibilityRole="image"
             />
             <Text style={styles.botName}>Match Assistant</Text>
             <Text style={styles.timestamp}>
@@ -302,50 +293,87 @@ const MessagesScreen = ({ navigation }) => {
           
           {item.data && (
             <View style={styles.searchResults}>
-              <Text style={styles.resultsTitle}>Search Results:</Text>
-              
-              {item.data.parsed.teams.length > 0 && (
-                <View style={styles.parsedSection}>
-                  <Text style={styles.parsedLabel}>Teams:</Text>
-                  <Text style={styles.parsedValue}>
-                    {item.data.parsed.teams.map(t => t.name).join(', ')}
+              {/* Show match cards if matches are available */}
+              {item.data.matches && item.data.matches.length > 0 ? (
+                <View style={styles.matchesContainer}>
+                  <Text style={styles.resultsTitle}>
+                    Found {item.data.matches.length} {item.data.matches.length === 1 ? 'match' : 'matches'}:
                   </Text>
+                  {item.data.matches.map((match, index) => (
+                    <MatchCard
+                      key={match.fixture?.id || match.id || `match-${index}`}
+                      match={match}
+                      onPress={() => handleMatchPress(match)}
+                      variant="default"
+                      showHeart={true}
+                      style={styles.matchCardInMessage}
+                    />
+                  ))}
+                  {item.data.count > item.data.matches.length && (
+                    <Text style={styles.moreMatchesText}>
+                      Showing {item.data.matches.length} of {item.data.count} matches
+                    </Text>
+                  )}
+                  <Button
+                    title="View All on Map"
+                    onPress={() => handleSearchResultPress(item.data)}
+                    buttonStyle={styles.viewMatchesButton}
+                    titleStyle={styles.viewMatchesButtonText}
+                    accessibilityLabel="View all matches on map"
+                    accessibilityRole="button"
+                  />
                 </View>
-              )}
-              
-              {item.data.parsed.leagues.length > 0 && (
-                <View style={styles.parsedSection}>
-                  <Text style={styles.parsedLabel}>Leagues:</Text>
-                  <Text style={styles.parsedValue}>
-                    {item.data.parsed.leagues.map(l => l.name).join(', ')}
-                  </Text>
-                </View>
-              )}
-              
-              {item.data.parsed.location && item.data.parsed.location.city && item.data.parsed.location.country && (
-                <View style={styles.parsedSection}>
-                  <Text style={styles.parsedLabel}>Location:</Text>
-                  <Text style={styles.parsedValue}>
-                    {item.data.parsed.location.city}, {item.data.parsed.location.country}
-                  </Text>
-                </View>
-              )}
-              
-              {item.data.parsed.dateRange && (
-                <View style={styles.parsedSection}>
-                  <Text style={styles.parsedLabel}>Dates:</Text>
-                  <Text style={styles.parsedValue}>
-                    {item.data.parsed.dateRange.start} to {item.data.parsed.dateRange.end}
-                  </Text>
-                </View>
-              )}
+              ) : (
+                <>
+                  {/* Show parsed search criteria if no matches yet */}
+                  <Text style={styles.resultsTitle}>Search Criteria:</Text>
+                  
+                  {item.data.parsed.teams.length > 0 && (
+                    <View style={styles.parsedSection}>
+                      <Text style={styles.parsedLabel}>Teams:</Text>
+                      <Text style={styles.parsedValue}>
+                        {item.data.parsed.teams.map(t => t.name).join(', ')}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {item.data.parsed.leagues.length > 0 && (
+                    <View style={styles.parsedSection}>
+                      <Text style={styles.parsedLabel}>Leagues:</Text>
+                      <Text style={styles.parsedValue}>
+                        {item.data.parsed.leagues.map(l => l.name).join(', ')}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {item.data.parsed.location && item.data.parsed.location.city && item.data.parsed.location.country && (
+                    <View style={styles.parsedSection}>
+                      <Text style={styles.parsedLabel}>Location:</Text>
+                      <Text style={styles.parsedValue}>
+                        {item.data.parsed.location.city}, {item.data.parsed.location.country}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {item.data.parsed.dateRange && (
+                    <View style={styles.parsedSection}>
+                      <Text style={styles.parsedLabel}>Dates:</Text>
+                      <Text style={styles.parsedValue}>
+                        {item.data.parsed.dateRange.start} to {item.data.parsed.dateRange.end}
+                      </Text>
+                    </View>
+                  )}
 
-              <Button
-                title="View Matches"
-                onPress={() => handleSearchResultPress(item.data)}
-                buttonStyle={styles.viewMatchesButton}
-                titleStyle={styles.viewMatchesButtonText}
-              />
+                  <Button
+                    title="View Matches"
+                    onPress={() => handleSearchResultPress(item.data)}
+                    buttonStyle={styles.viewMatchesButton}
+                    titleStyle={styles.viewMatchesButtonText}
+                    accessibilityLabel="View matches on map"
+                    accessibilityRole="button"
+                  />
+                </>
+              )}
             </View>
           )}
         </Card>
@@ -366,6 +394,8 @@ const MessagesScreen = ({ navigation }) => {
               type: 'material' 
             }}
             containerStyle={item.isBot ? styles.botAvatar : styles.userAvatar}
+            accessibilityLabel={item.isBot ? 'Match Assistant avatar' : 'Your avatar'}
+            accessibilityRole="image"
           />
           <Text style={item.isBot ? styles.botName : styles.userName}>
             {item.isBot ? 'Match Assistant' : 'You'}
@@ -384,6 +414,8 @@ const MessagesScreen = ({ navigation }) => {
                 key={index}
                 style={styles.suggestionChip}
                 onPress={() => setInputText(suggestion)}
+                accessibilityLabel={`Use suggestion: ${suggestion}`}
+                accessibilityRole="button"
               >
                 <Text style={styles.suggestionText}>{suggestion}</Text>
               </TouchableOpacity>
@@ -398,6 +430,8 @@ const MessagesScreen = ({ navigation }) => {
     <TouchableOpacity
       style={styles.exampleChip}
       onPress={() => handleExamplePress(item)}
+      accessibilityLabel={`Try example: ${item}`}
+      accessibilityRole="button"
     >
       <Text style={styles.exampleText}>{item}</Text>
     </TouchableOpacity>
@@ -405,14 +439,6 @@ const MessagesScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Match Search Assistant</Text>
-        <Text style={styles.headerSubtitle}>Ask me about football matches!</Text>
-        <TouchableOpacity style={styles.testButton} onPress={testConnection}>
-          <Text style={styles.testButtonText}>Test Connection</Text>
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -457,10 +483,15 @@ const MessagesScreen = ({ navigation }) => {
                 buttonStyle={styles.sendButton}
                 titleStyle={styles.sendButtonText}
                 size="small"
+                accessibilityLabel="Send message"
+                accessibilityRole="button"
               />
             }
             multiline
             maxLength={500}
+            accessibilityLabel="Message input"
+            accessibilityRole="textbox"
+            accessibilityHint="Type your question about football matches here"
           />
         </View>
       </KeyboardAvoidingView>
@@ -471,210 +502,191 @@ const MessagesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#1976d2',
-    padding: 20,
-    paddingTop: 10,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  testButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 8,
-    alignSelf: 'center',
-  },
-  testButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
+    backgroundColor: colors.background,
   },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
-    padding: 16,
-    paddingBottom: 80,
+    padding: spacing.md,
+    paddingBottom: spacing.xxl + spacing.xl,
   },
   messageCard: {
-    marginVertical: 4,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    marginVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    ...shadows.small,
   },
   botMessage: {
-    backgroundColor: '#f8f9fa',
-    borderLeftWidth: 4,
-    borderLeftColor: '#1976d2',
+    backgroundColor: colors.cardGrey,
+    borderLeftWidth: spacing.xs,
+    borderLeftColor: colors.primary,
   },
   userMessage: {
-    backgroundColor: '#1976d2',
-    marginLeft: 40,
+    backgroundColor: colors.primary,
+    marginLeft: spacing.xl,
   },
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   botAvatar: {
-    backgroundColor: '#1976d2',
+    backgroundColor: colors.primary,
   },
   userAvatar: {
-    backgroundColor: 'white',
+    backgroundColor: colors.card,
   },
   botName: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#333',
-    marginLeft: 8,
+    color: colors.text.primary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   userName: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: 'white',
-    marginLeft: 8,
+    color: colors.onPrimary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   timestamp: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#333',
+    ...typography.body,
+    color: colors.text.primary,
   },
   searchResults: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: 'white',
-    borderRadius: 8,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   resultsTitle: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
   },
   parsedSection: {
-    marginBottom: 6,
+    marginBottom: spacing.sm,
   },
   parsedLabel: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#666',
+    color: colors.text.secondary,
   },
   parsedValue: {
-    fontSize: 14,
-    color: '#333',
-    marginTop: 2,
+    ...typography.bodySmall,
+    color: colors.text.primary,
+    marginTop: spacing.xs,
   },
   viewMatchesButton: {
-    backgroundColor: '#1976d2',
-    borderRadius: 8,
-    marginTop: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    marginTop: spacing.md,
   },
   viewMatchesButtonText: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
   },
   suggestions: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   suggestionsTitle: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 6,
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
   },
   suggestionChip: {
-    backgroundColor: '#e3f2fd',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 4,
+    backgroundColor: colors.status.attendancePromptBg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    marginRight: spacing.sm,
+    marginBottom: spacing.xs,
   },
   suggestionText: {
-    fontSize: 12,
-    color: '#1976d2',
+    ...typography.caption,
+    color: colors.primary,
   },
   examplesContainer: {
-    padding: 16,
-    backgroundColor: 'white',
+    padding: spacing.md,
+    backgroundColor: colors.card,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.border,
   },
   examplesTitle: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
   },
   examplesList: {
-    paddingRight: 16,
+    paddingRight: spacing.md,
   },
   exampleChip: {
-    backgroundColor: '#e3f2fd',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
+    backgroundColor: colors.status.attendancePromptBg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.pill,
+    marginRight: spacing.sm,
   },
   exampleText: {
-    fontSize: 14,
-    color: '#1976d2',
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '500',
   },
   inputContainer: {
-    backgroundColor: 'white',
+    backgroundColor: colors.card,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.border,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 16,
+    padding: spacing.md,
   },
   inputWrapper: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   inputField: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f8f9fa',
+    borderColor: colors.border,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.cardGrey,
   },
   sendButton: {
-    backgroundColor: '#1976d2',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   sendButtonText: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
+  },
+  matchesContainer: {
+    marginTop: spacing.md,
+  },
+  matchCardInMessage: {
+    marginBottom: spacing.sm,
+  },
+  moreMatchesText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    fontStyle: 'italic',
   },
 });
 

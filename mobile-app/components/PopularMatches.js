@@ -23,7 +23,6 @@ const CARD_WIDTH = SCREEN_WIDTH * 0.85; // 85% of screen width for horizontal ca
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [isRecommended, setIsRecommended] = useState(false);
   const { isMatchInItinerary } = useItineraries();
   const { user } = useAuth();
@@ -98,18 +97,12 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchMatches();
   }, [user]); // Re-fetch when user authentication status changes
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchMatches();
-  };
 
   const formatMatchDate = (dateString) => {
     const date = new Date(dateString);
@@ -151,14 +144,6 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         <Text style={styles.emptyText}>
           {isRecommended ? 'No recommended matches available' : 'No popular matches available'}
         </Text>
-        <TouchableOpacity 
-          style={styles.refreshButton} 
-          onPress={onRefresh}
-          accessibilityLabel="Refresh matches"
-          accessibilityRole="button"
-        >
-          <Text style={styles.refreshButtonText}>Refresh</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -175,8 +160,6 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
         snapToInterval={CARD_WIDTH + spacing.md * 2}
         decelerationRate="fast"
         snapToAlignment="start"
@@ -294,17 +277,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.secondary,
     marginBottom: spacing.md,
-  },
-  refreshButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.sm,
-  },
-  refreshButtonText: {
-    color: colors.card,
-    ...typography.bodySmall,
-    fontWeight: '500',
   },
 });
 

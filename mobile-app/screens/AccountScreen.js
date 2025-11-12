@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, SafeAreaView, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, SafeAreaView, FlatList, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Button } from 'react-native-elements';
 import ApiService from '../services/api';
@@ -102,13 +102,24 @@ const AccountScreen = ({ navigation }) => {
         ) : (
           (prefs.favoriteLeaguesExpanded || []).map((l) => (
             <View key={`fav-league-${l.id}`} style={styles.favoriteItem}>
-              <Text style={styles.favoriteItemText}>
-                {l.name || `League ${l.id}`}{l.country ? ` (${l.country})` : ''}
-              </Text>
-              <Button 
-                title="Remove" 
-                type="clear" 
-                titleStyle={styles.removeButtonText}
+              <View style={styles.favoriteItemContent}>
+                <View style={styles.itemIconContainer}>
+                  {l.badge || l.logo || l.emblem ? (
+                    <Image 
+                      source={{ uri: l.badge || l.logo || l.emblem }} 
+                      style={styles.itemIcon}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.itemIconPlaceholder} />
+                  )}
+                </View>
+                <Text style={styles.favoriteItemText}>
+                  {l.name || `League ${l.id}`}{l.country ? ` (${l.country})` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.starButton}
                 onPress={async () => {
                   try {
                     await ApiService.removeFavoriteLeague(l.id);
@@ -116,8 +127,17 @@ const AccountScreen = ({ navigation }) => {
                   } catch (e) {
                     // ignore
                   }
-                }} 
-              />
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Remove from favorites"
+                accessibilityRole="button"
+              >
+                <MaterialIcons
+                  name="star"
+                  size={20}
+                  color="#FFD700"
+                />
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -134,13 +154,24 @@ const AccountScreen = ({ navigation }) => {
         ) : (
           (prefs.favoriteTeams || []).map((ft) => (
             <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={styles.favoriteItem}>
-              <Text style={styles.favoriteItemText}>
-                {ft.teamId?.name || `Team ${ft.teamId}`}
-              </Text>
-              <Button 
-                title="Remove" 
-                type="clear" 
-                titleStyle={styles.removeButtonText}
+              <View style={styles.favoriteItemContent}>
+                <View style={styles.itemIconContainer}>
+                  {ft.teamId?.badge || ft.teamId?.logo ? (
+                    <Image 
+                      source={{ uri: ft.teamId.badge || ft.teamId.logo }} 
+                      style={styles.itemIcon}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.itemIconPlaceholder} />
+                  )}
+                </View>
+                <Text style={styles.favoriteItemText}>
+                  {ft.teamId?.name || `Team ${ft.teamId}`}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.starButton}
                 onPress={async () => {
                   try {
                     const mongoId = ft.teamId?._id || ft.teamId;
@@ -149,8 +180,17 @@ const AccountScreen = ({ navigation }) => {
                   } catch (e) {
                     // ignore
                   }
-                }} 
-              />
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Remove from favorites"
+                accessibilityRole="button"
+              >
+                <MaterialIcons
+                  name="star"
+                  size={20}
+                  color="#FFD700"
+                />
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -171,10 +211,8 @@ const AccountScreen = ({ navigation }) => {
                 {v.name || `Venue ${v.venueId}`}
                 {v.city || v.country ? ` (${[v.city, v.country].filter(Boolean).join(', ')})` : ''}
               </Text>
-              <Button 
-                title="Remove" 
-                type="clear" 
-                titleStyle={styles.removeButtonText}
+              <TouchableOpacity
+                style={styles.starButton}
                 onPress={async () => {
                   try {
                     await ApiService.removeFavoriteVenue(v.venueId);
@@ -182,8 +220,17 @@ const AccountScreen = ({ navigation }) => {
                   } catch (e) {
                     // ignore
                   }
-                }} 
-              />
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Remove from favorites"
+                accessibilityRole="button"
+              >
+                <MaterialIcons
+                  name="star"
+                  size={20}
+                  color="#FFD700"
+                />
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -509,6 +556,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  favoriteItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  itemIconContainer: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  itemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.xs,
+  },
+  itemIconPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.borderLight,
+  },
   favoriteItemText: {
     ...typography.body,
     color: colors.text.primary,
@@ -520,8 +592,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: spacing.sm,
   },
-  removeButtonText: {
-    color: colors.error,
+  starButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.sm,
   },
   logoutButton: {
     backgroundColor: colors.error,

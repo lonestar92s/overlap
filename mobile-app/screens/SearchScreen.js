@@ -9,6 +9,7 @@ import {
   FlatList,
   Image,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import PopularMatches from '../components/PopularMatches';
 import LocationSearchModal from '../components/LocationSearchModal';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
@@ -80,6 +81,7 @@ const SearchScreen = ({ navigation }) => {
           onPress={() => setShowLocationSearchModal(true)}
           activeOpacity={0.7}
         >
+          <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
           <Text style={styles.startLapButtonText}>Start your lap</Text>
         </TouchableOpacity>
 
@@ -124,20 +126,23 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   startLapButton: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1,
+    borderColor: colors.text.primary,
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.sm,
+    height: 49,
+    gap: spacing.sm,
   },
   startLapButtonText: {
-    ...typography.h2,
-    color: colors.onPrimary,
-    fontWeight: '600',
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
   },
   section: {
     marginBottom: spacing.xl,

@@ -32,13 +32,17 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
         // Find the specific trip
         const trip = user.trips.id(tripId);
         if (!trip) {
+            // Trip not found - could be deleted, clear cache and return empty
+            console.log(`Recommendations: Trip not found (may have been deleted): ${tripId}`);
+            recommendationService.invalidateTripCache(tripId);
             return res.status(404).json({
                 success: false,
-                message: 'Trip not found'
+                message: 'Trip not found',
+                recommendations: []
             });
         }
 
-        // Generate recommendations
+        // Generate recommendations (service will validate trip exists)
         const result = await recommendationService.getRecommendationsForTrip(
             tripId,
             user,

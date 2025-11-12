@@ -336,16 +336,6 @@ const MatchCard = ({
         </Text>
       </View>
 
-      {/* Recommendation reasons - only show for recommended matches */}
-      {match.recommendationReasons && match.recommendationReasons.length > 0 && (
-        <View style={styles.recommendationContainer}>
-          <Icon name="star" size={14} color={colors.warning} />
-          <Text style={styles.recommendationText} numberOfLines={2}>
-            {match.recommendationReasons.slice(0, 2).join(' • ')}
-          </Text>
-        </View>
-      )}
-
       {/* Planning Status Indicator - only show for matches with planning data */}
       {match.planning && (
         <PlanningStatusIndicator 
@@ -538,24 +528,6 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginLeft: 6,
     flex: 1,
-  },
-  recommendationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    backgroundColor: colors.status.recommendationBg,
-    borderRadius: borderRadius.sm,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.warning,
-  },
-  recommendationText: {
-    ...typography.caption,
-    color: colors.warning,
-    marginLeft: 6,
-    flex: 1,
-    fontWeight: '500',
   },
   vsContent: {
     alignItems: 'center',
