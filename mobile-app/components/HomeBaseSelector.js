@@ -1,0 +1,428 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Platform
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import LocationAutocomplete from './LocationAutocomplete';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+
+const HomeBaseSelector = ({ 
+  visible, 
+  onClose, 
+  onSave, 
+  homeBase = null, // For editing existing home base
+  tripDateRange = null // { from: Date, to: Date }
+}) => {
+  const [name, setName] = useState(homeBase?.name || '');
+  const [type, setType] = useState(homeBase?.type || 'custom');
+  const [selectedLocation, setSelectedLocation] = useState(
+    homeBase ? {
+      city: homeBase.address?.city || '',
+      country: homeBase.address?.country || '',
+      region: '',
+      lat: homeBase.coordinates?.lat || null,
+      lon: homeBase.coordinates?.lng || null
+    } : null
+  );
+  const [dateFrom, setDateFrom] = useState(
+    homeBase?.dateRange?.from 
+      ? new Date(homeBase.dateRange.from).toISOString().split('T')[0]
+      : (tripDateRange?.from ? new Date(tripDateRange.from).toISOString().split('T')[0] : '')
+  );
+  const [dateTo, setDateTo] = useState(
+    homeBase?.dateRange?.to 
+      ? new Date(homeBase.dateRange.to).toISOString().split('T')[0]
+      : (tripDateRange?.to ? new Date(tripDateRange.to).toISOString().split('T')[0] : '')
+  );
+  const [notes, setNotes] = useState(homeBase?.notes || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleLocationSelect = (location) => {
+    if (location) {
+      setSelectedLocation({
+        city: location.city || '',
+        country: location.country || '',
+        region: location.region || '',
+        lat: location.lat || null,
+        lon: location.lon || null
+      });
+      
+      // Auto-fill name if empty
+      if (!name) {
+        setName(location.city || '');
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    // Validation
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Please enter a name for your home base');
+      return;
+    }
+
+    if (!selectedLocation || !selectedLocation.city) {
+      Alert.alert('Validation Error', 'Please select a location');
+      return;
+    }
+
+    if (!dateFrom || !dateTo) {
+      Alert.alert('Validation Error', 'Please select a date range');
+      return;
+    }
+
+    const fromDate = new Date(dateFrom);
+    const toDate = new Date(dateTo);
+    
+    if (fromDate > toDate) {
+      Alert.alert('Validation Error', 'Start date must be before end date');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const homeBaseData = {
+        name: name.trim(),
+        type: type,
+        address: {
+          city: selectedLocation.city,
+          country: selectedLocation.country,
+          street: '',
+          postalCode: ''
+        },
+        coordinates: {
+          lat: selectedLocation.lat,
+          lng: selectedLocation.lon
+        },
+        dateRange: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString()
+        },
+        notes: notes.trim()
+      };
+
+      await onSave(homeBaseData);
+      handleClose();
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to save home base');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = () => {
+    // Reset form
+    setName(homeBase?.name || '');
+    setType(homeBase?.type || 'custom');
+    setSelectedLocation(
+      homeBase ? {
+        city: homeBase.address?.city || '',
+        country: homeBase.address?.country || '',
+        region: '',
+        lat: homeBase.coordinates?.lat || null,
+        lon: homeBase.coordinates?.lng || null
+      } : null
+    );
+    setDateFrom(
+      homeBase?.dateRange?.from 
+        ? new Date(homeBase.dateRange.from).toISOString().split('T')[0]
+        : (tripDateRange?.from ? new Date(tripDateRange.from).toISOString().split('T')[0] : '')
+    );
+    setDateTo(
+      homeBase?.dateRange?.to 
+        ? new Date(homeBase.dateRange.to).toISOString().split('T')[0]
+        : (tripDateRange?.to ? new Date(tripDateRange.to).toISOString().split('T')[0] : '')
+    );
+    setNotes(homeBase?.notes || '');
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={handleClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>
+              {homeBase ? 'Edit Home Base' : 'Add Home Base'}
+            </Text>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <MaterialIcons name="close" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
+            {/* Name Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g., Hotel X, Airbnb in Shoreditch"
+                placeholderTextColor={colors.text.light}
+              />
+            </View>
+
+            {/* Location Autocomplete */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Location *</Text>
+              <LocationAutocomplete
+                value={selectedLocation}
+                onSelect={handleLocationSelect}
+                placeholder="Search for a location..."
+                style={styles.locationInput}
+              />
+            </View>
+
+            {/* Type Selector */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Type</Text>
+              <View style={styles.typeSelector}>
+                {['city', 'hotel', 'airbnb', 'custom'].map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.typeButton,
+                      type === t && styles.typeButtonActive
+                    ]}
+                    onPress={() => setType(t)}
+                  >
+                    <Text style={[
+                      styles.typeButtonText,
+                      type === t && styles.typeButtonTextActive
+                    ]}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Date Range */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Date Range *</Text>
+              <View style={styles.dateRow}>
+                <View style={styles.dateInputContainer}>
+                  <Text style={styles.dateLabel}>From</Text>
+                  <TextInput
+                    style={styles.dateInput}
+                    value={dateFrom}
+                    onChangeText={setDateFrom}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.text.light}
+                  />
+                </View>
+                <View style={styles.dateInputContainer}>
+                  <Text style={styles.dateLabel}>To</Text>
+                  <TextInput
+                    style={styles.dateInput}
+                    value={dateTo}
+                    onChangeText={setDateTo}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.text.light}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Notes */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Notes (Optional)</Text>
+              <TextInput
+                style={[styles.input, styles.notesInput]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Add any notes about this location..."
+                placeholderTextColor={colors.text.light}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+          </View>
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleClose}
+              disabled={saving}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : (
+                <Text style={styles.saveButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: borderRadius.large,
+    borderTopRightRadius: borderRadius.large,
+    maxHeight: '90%',
+    paddingBottom: Platform.OS === 'ios' ? 34 : spacing.medium,
+    ...shadows.large,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.medium,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+  },
+  closeButton: {
+    padding: spacing.small,
+  },
+  form: {
+    padding: spacing.medium,
+  },
+  inputGroup: {
+    marginBottom: spacing.medium,
+  },
+  label: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginBottom: spacing.small,
+    fontWeight: '600',
+  },
+  input: {
+    ...typography.body,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.medium,
+    padding: spacing.medium,
+    backgroundColor: colors.surface,
+    color: colors.text.primary,
+  },
+  locationInput: {
+    marginTop: 0,
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: spacing.small,
+  },
+  typeButton: {
+    flex: 1,
+    padding: spacing.small,
+    borderRadius: borderRadius.medium,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  typeButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  typeButtonText: {
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  typeButtonTextActive: {
+    color: colors.onPrimary,
+    fontWeight: '600',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: spacing.small,
+  },
+  dateInputContainer: {
+    flex: 1,
+  },
+  dateLabel: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginBottom: spacing.xsmall,
+  },
+  dateInput: {
+    ...typography.body,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.medium,
+    padding: spacing.medium,
+    backgroundColor: colors.surface,
+    color: colors.text.primary,
+  },
+  notesInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.medium,
+    padding: spacing.medium,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  cancelButton: {
+    flex: 1,
+    padding: spacing.medium,
+    borderRadius: borderRadius.medium,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  cancelButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flex: 1,
+    padding: spacing.medium,
+    borderRadius: borderRadius.medium,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    ...typography.body,
+    color: colors.onPrimary,
+    fontWeight: '600',
+  },
+});
+
+export default HomeBaseSelector;
+

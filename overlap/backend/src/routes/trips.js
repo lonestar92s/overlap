@@ -3,6 +3,7 @@ const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const axios = require('axios');
 const { isTripCompleted } = require('../utils/tripUtils');
+const geocodingService = require('../services/geocodingService');
 
 const router = express.Router();
 
@@ -790,6 +791,305 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
             success: false,
             message: 'Failed to fetch match scores',
             error: error.message
+        });
+    }
+});
+
+// Add a home base to a trip
+router.post('/:id/home-bases', auth, async (req, res) => {
+    try {
+        const { name, type, address, coordinates, dateRange, notes } = req.body;
+
+        if (!name || !dateRange || !dateRange.from || !dateRange.to) {
+            return res.status(400).json({
+                success: false,
+                message: 'Name and date range (from, to) are required'
+            });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        // Validate date range overlaps with trip dates
+        const tripStart = trip.matches.length > 0 
+            ? new Date(Math.min(...trip.matches.map(m => new Date(m.date))))
+            : new Date();
+        const tripEnd = trip.matches.length > 0
+            ? new Date(Math.max(...trip.matches.map(m => new Date(m.date))))
+            : new Date();
+        
+        const homeBaseFrom = new Date(dateRange.from);
+        const homeBaseTo = new Date(dateRange.to);
+
+        if (homeBaseFrom > homeBaseTo) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date range is invalid (from date must be before to date)'
+            });
+        }
+
+        // Geocode if coordinates not provided but address is available
+        let finalCoordinates = coordinates;
+        if (!finalCoordinates || !finalCoordinates.lat || !finalCoordinates.lng) {
+            if (address && (address.city || address.street)) {
+                try {
+                    const addressQuery = address.street 
+                        ? `${address.street}, ${address.city}, ${address.country}`
+                        : `${address.city}, ${address.country}`;
+                    
+                    const geocoded = await geocodingService.geocodeVenue(
+                        addressQuery,
+                        address.city,
+                        address.country
+                    );
+                    
+                    if (geocoded && geocoded.lat && geocoded.lng) {
+                        finalCoordinates = {
+                            lat: geocoded.lat,
+                            lng: geocoded.lng
+                        };
+                    }
+                } catch (geocodeError) {
+                    console.error('Geocoding error:', geocodeError);
+                    // Continue without coordinates - user can add manually later
+                }
+            }
+        }
+
+        const homeBaseToAdd = {
+            name: name.trim(),
+            type: type || 'custom',
+            address: {
+                street: address?.street || '',
+                city: address?.city || '',
+                country: address?.country || '',
+                postalCode: address?.postalCode || ''
+            },
+            coordinates: finalCoordinates || { lat: null, lng: null },
+            dateRange: {
+                from: homeBaseFrom,
+                to: homeBaseTo
+            },
+            notes: notes || '',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        trip.homeBases.push(homeBaseToAdd);
+        trip.updatedAt = new Date();
+        await user.save();
+
+        const savedHomeBase = trip.homeBases[trip.homeBases.length - 1];
+
+        res.status(201).json({
+            success: true,
+            homeBase: savedHomeBase,
+            message: 'Home base added to trip successfully'
+        });
+    } catch (error) {
+        console.error('Error adding home base to trip:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to add home base to trip',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// Update a home base in a trip
+router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
+    try {
+        const { name, type, address, coordinates, dateRange, notes } = req.body;
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        let homeBase = trip.homeBases.id(req.params.homeBaseId);
+        
+        // If not found, try finding by matching _id string
+        if (!homeBase) {
+            const homeBaseIdStr = String(req.params.homeBaseId);
+            homeBase = trip.homeBases.find(hb => {
+                const hbId = String(hb._id || hb.id || '');
+                return hbId === homeBaseIdStr || 
+                       hbId.toLowerCase() === homeBaseIdStr.toLowerCase() ||
+                       hb._id?.toString() === homeBaseIdStr ||
+                       hb.id?.toString() === homeBaseIdStr;
+            });
+        }
+
+        if (!homeBase) {
+            return res.status(404).json({
+                success: false,
+                message: 'Home base not found'
+            });
+        }
+
+        // Update fields if provided
+        if (name !== undefined) {
+            homeBase.name = name.trim();
+        }
+        if (type !== undefined) {
+            homeBase.type = type;
+        }
+        if (address !== undefined) {
+            homeBase.address = {
+                street: address.street || homeBase.address.street || '',
+                city: address.city || homeBase.address.city || '',
+                country: address.country || homeBase.address.country || '',
+                postalCode: address.postalCode || homeBase.address.postalCode || ''
+            };
+        }
+        if (dateRange !== undefined) {
+            if (dateRange.from && dateRange.to) {
+                const fromDate = new Date(dateRange.from);
+                const toDate = new Date(dateRange.to);
+                if (fromDate > toDate) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Date range is invalid (from date must be before to date)'
+                    });
+                }
+                homeBase.dateRange = {
+                    from: fromDate,
+                    to: toDate
+                };
+            }
+        }
+        if (notes !== undefined) {
+            homeBase.notes = notes;
+        }
+
+        // Geocode if coordinates not provided but address is available
+        if ((!coordinates || !coordinates.lat || !coordinates.lng) && 
+            (address?.city || homeBase.address?.city)) {
+            try {
+                const addressQuery = (address?.street || homeBase.address?.street)
+                    ? `${address?.street || homeBase.address.street}, ${address?.city || homeBase.address.city}, ${address?.country || homeBase.address.country}`
+                    : `${address?.city || homeBase.address.city}, ${address?.country || homeBase.address.country}`;
+                
+                const geocoded = await geocodingService.geocodeVenue(
+                    addressQuery,
+                    address?.city || homeBase.address.city,
+                    address?.country || homeBase.address.country
+                );
+                
+                if (geocoded && geocoded.lat && geocoded.lng) {
+                    homeBase.coordinates = {
+                        lat: geocoded.lat,
+                        lng: geocoded.lng
+                    };
+                }
+            } catch (geocodeError) {
+                console.error('Geocoding error:', geocodeError);
+                // Keep existing coordinates if geocoding fails
+            }
+        } else if (coordinates && coordinates.lat && coordinates.lng) {
+            homeBase.coordinates = {
+                lat: coordinates.lat,
+                lng: coordinates.lng
+            };
+        }
+
+        homeBase.updatedAt = new Date();
+        trip.updatedAt = new Date();
+        await user.save();
+
+        res.json({
+            success: true,
+            homeBase: homeBase,
+            message: 'Home base updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating home base:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update home base',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// Delete a home base from a trip
+router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        let homeBase = trip.homeBases.id(req.params.homeBaseId);
+        
+        // If not found, try finding by matching _id string
+        if (!homeBase) {
+            const homeBaseIdStr = String(req.params.homeBaseId);
+            homeBase = trip.homeBases.find(hb => {
+                const hbId = String(hb._id || hb.id || '');
+                return hbId === homeBaseIdStr || 
+                       hbId.toLowerCase() === homeBaseIdStr.toLowerCase() ||
+                       hb._id?.toString() === homeBaseIdStr ||
+                       hb.id?.toString() === homeBaseIdStr;
+            });
+        }
+
+        if (!homeBase) {
+            return res.status(404).json({
+                success: false,
+                message: 'Home base not found'
+            });
+        }
+
+        trip.homeBases.pull(homeBase._id);
+        trip.updatedAt = new Date();
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Home base deleted from trip successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting home base from trip:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete home base from trip',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });

@@ -22,6 +22,7 @@ import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
 import AddFlightModal from '../components/AddFlightModal';
+import HomeBaseSection from '../components/HomeBaseSection';
 import apiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
 
@@ -98,12 +99,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(tripData);
             setDescriptionText(tripData.description || '');
             setNotesText(tripData.notes || '');
-            // Fetch recommendations if trip has matches (will use cache if available, or fetch fresh)
+            // Always fetch recommendations (will use cache if available, or fetch fresh)
+            // Fetch in background - if cache exists, it will return immediately
+            // If no cache, it will fetch and update
+            fetchRecommendations(tripData.id || tripData._id);
+            // Fetch scores for completed matches
             if (tripData.matches && tripData.matches.length > 0) {
-              // Fetch in background - if cache exists, it will return immediately
-              // If no cache, it will fetch and update
-              fetchRecommendations(tripData.id || tripData._id);
-              // Fetch scores for completed matches
               fetchScores(tripData.id || tripData._id);
             }
           } else {
@@ -113,6 +114,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
               setItinerary(foundItinerary);
               setDescriptionText(foundItinerary.description || '');
               setNotesText(foundItinerary.notes || '');
+              // Always fetch recommendations
+              fetchRecommendations(foundItinerary.id || foundItinerary._id);
             }
           }
         } catch (error) {
@@ -123,6 +126,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(foundItinerary);
             setDescriptionText(foundItinerary.description || '');
             setNotesText(foundItinerary.notes || '');
+            // Always fetch recommendations
+            fetchRecommendations(foundItinerary.id || foundItinerary._id);
           }
         } finally {
           setLoading(false);
@@ -710,7 +715,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
     };
 
     if (recommendations.length === 0) {
-      return null;
+      return (
+        <View style={styles.emptyRecommendationsContainer}>
+          <Text style={styles.emptyRecommendationsText}>No recommendations available</Text>
+        </View>
+      );
     }
 
     return (
@@ -978,39 +987,36 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </View>
 
         {/* Recommendations Section - Collapsible */}
-        {recommendations.length > 0 && (
-          <View style={styles.sectionCard}>
-            <TouchableOpacity
-              style={styles.sectionHeader}
-              onPress={() => setRecommendationsExpanded(!recommendationsExpanded)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.sectionHeaderLeft}>
-                <Icon name="recommend" size={20} color={colors.secondary} />
-                <Text style={styles.sectionTitle}>Recommended Matches</Text>
-                <View style={styles.recommendationsCountChip}>
-                  <Text style={styles.recommendationsCountText}>
-                    {recommendations.length}
-                  </Text>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setRecommendationsExpanded(!recommendationsExpanded)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionTitle}>Recommended Matches</Text>
+            <MaterialIcons
+              name={recommendationsExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+              size={24}
+              color={colors.text.primary}
+            />
+          </TouchableOpacity>
+          
+          {recommendationsExpanded && (
+            <View style={styles.recommendationsContent}>
+              {recommendationsLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.secondary} />
+                  <Text style={styles.loadingText}>Loading recommendations...</Text>
                 </View>
-              </View>
-              <MaterialIcons
-                name={recommendationsExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-                size={24}
-                color={colors.text.primary}
-              />
-            </TouchableOpacity>
-            
-            {recommendationsExpanded && (
-              <View style={styles.recommendationsContent}>
+              ) : (
                 <RecommendationsCarousel
                   recommendations={recommendations}
                   renderRecommendationItem={renderRecommendationItem}
                 />
-              </View>
-            )}
-          </View>
-        )}
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Notes Section - Collapsible */}
         <View 
@@ -1119,7 +1125,33 @@ const TripOverviewScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Flights Section - Below Notes */}
+        {/* Home Bases Section - Below Notes */}
+        <HomeBaseSection
+          tripId={itineraryId}
+          homeBases={itinerary?.homeBases || []}
+          onHomeBasesUpdated={async () => {
+            // Refresh itinerary to get updated home bases
+            try {
+              const response = await apiService.getTripById(itineraryId);
+              const tripData = response.trip || response.data;
+              if (response.success && tripData) {
+                setItinerary(tripData);
+              }
+            } catch (error) {
+              console.error('Error refreshing itinerary:', error);
+            }
+          }}
+          tripDateRange={
+            itinerary?.matches && itinerary.matches.length > 0
+              ? {
+                  from: new Date(Math.min(...itinerary.matches.map(m => new Date(m.date)))),
+                  to: new Date(Math.max(...itinerary.matches.map(m => new Date(m.date))))
+                }
+              : null
+          }
+        />
+
+        {/* Flights Section - Below Home Bases */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Flights</Text>
@@ -1452,6 +1484,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: spacing.xl,
+    minHeight: 100,
   },
   loadingText: {
     marginTop: spacing.md,
@@ -2064,6 +2098,16 @@ const styles = StyleSheet.create({
   emptyFlightsSubtext: {
     ...typography.caption,
     color: colors.text.light,
+  },
+  emptyRecommendationsContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+  },
+  emptyRecommendationsText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
 });
 

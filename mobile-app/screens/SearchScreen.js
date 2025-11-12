@@ -86,7 +86,7 @@ const SearchScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Hi Nico</Text>
+          <Text style={styles.sectionTitle}>Popular Destinations</Text>
           <FlatList
             data={popularDestinations}
             renderItem={renderDestinationCard}

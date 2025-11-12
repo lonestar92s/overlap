@@ -358,6 +358,68 @@ const userSchema = new mongoose.Schema({
                 }
             }
         }],
+        homeBases: [{
+            name: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            type: {
+                type: String,
+                enum: ['city', 'hotel', 'airbnb', 'custom'],
+                default: 'custom'
+            },
+            address: {
+                street: {
+                    type: String,
+                    default: ''
+                },
+                city: {
+                    type: String,
+                    default: ''
+                },
+                country: {
+                    type: String,
+                    default: ''
+                },
+                postalCode: {
+                    type: String,
+                    default: ''
+                }
+            },
+            coordinates: {
+                lat: {
+                    type: Number,
+                    default: null
+                },
+                lng: {
+                    type: Number,
+                    default: null
+                }
+            },
+            dateRange: {
+                from: {
+                    type: Date,
+                    required: true
+                },
+                to: {
+                    type: Date,
+                    required: true
+                }
+            },
+            notes: {
+                type: String,
+                default: ''
+            },
+            createdAt: {
+                type: Date,
+                default: Date.now
+            },
+            updatedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
         createdAt: {
             type: Date,
             default: Date.now

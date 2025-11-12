@@ -759,6 +759,141 @@ class ApiService {
     }
   }
 
+  // Home Base API methods
+  async addHomeBaseToTrip(tripId, homeBaseData) {
+    try {
+      if (!tripId) {
+        throw new Error('Trip ID is required');
+      }
+
+      const token = await getAuthToken();
+      const url = `${this.baseURL}/trips/${tripId}/home-bases`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(homeBaseData)
+        },
+        30000
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = data?.message || data?.error || 'Failed to add home base to trip';
+        console.error('Add home base API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(errorMessage);
+      }
+
+      return data; // { success: true, homeBase: {...}, message: '...' }
+    } catch (error) {
+      console.error('Error adding home base to trip:', error);
+      console.error('Error details:', {
+        tripId,
+        homeBaseData,
+        message: error.message
+      });
+      throw error;
+    }
+  }
+
+  async updateHomeBaseInTrip(tripId, homeBaseId, updates) {
+    try {
+      if (!tripId || !homeBaseId) {
+        throw new Error('Trip ID and Home Base ID are required');
+      }
+
+      const token = await getAuthToken();
+      const url = `${this.baseURL}/trips/${tripId}/home-bases/${homeBaseId}`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updates)
+        },
+        30000
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = data?.message || data?.error || 'Failed to update home base';
+        console.error('Update home base API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(errorMessage);
+      }
+
+      return data; // { success: true, homeBase: {...}, message: '...' }
+    } catch (error) {
+      console.error('Error updating home base:', error);
+      console.error('Error details:', {
+        tripId,
+        homeBaseId,
+        updates,
+        message: error.message
+      });
+      throw error;
+    }
+  }
+
+  async deleteHomeBaseFromTrip(tripId, homeBaseId) {
+    try {
+      if (!tripId || !homeBaseId) {
+        throw new Error('Trip ID and Home Base ID are required');
+      }
+
+      const token = await getAuthToken();
+      const url = `${this.baseURL}/trips/${tripId}/home-bases/${homeBaseId}`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        },
+        10000
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = data?.message || data?.error || 'Failed to delete home base from trip';
+        console.error('Delete home base API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(errorMessage);
+      }
+
+      return data; // { success: true, message: '...' }
+    } catch (error) {
+      console.error('Error deleting home base from trip:', error);
+      console.error('Error details:', {
+        tripId,
+        homeBaseId,
+        message: error.message
+      });
+      throw error;
+    }
+  }
+
   async updateMatchPlanning(tripId, matchId, planningData) {
     try {
       console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });
