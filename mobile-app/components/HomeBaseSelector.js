@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import LocationAutocomplete from './LocationAutocomplete';
-import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, shadows, input, components } from '../styles/designTokens';
 
 const HomeBaseSelector = ({ 
   visible, 
@@ -160,7 +160,13 @@ const HomeBaseSelector = ({
             <Text style={styles.headerTitle}>
               {homeBase ? 'Edit Home Base' : 'Add Home Base'}
             </Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <TouchableOpacity 
+              onPress={handleClose} 
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close modal"
+              accessibilityHint="Double tap to close the home base form"
+            >
               <MaterialIcons name="close" size={24} color={colors.text.primary} />
             </TouchableOpacity>
           </View>
@@ -176,22 +182,26 @@ const HomeBaseSelector = ({
                 onChangeText={setName}
                 placeholder="e.g., Hotel X, Airbnb in Shoreditch"
                 placeholderTextColor={colors.text.light}
+                accessibilityLabel="Home base name"
+                accessibilityHint="Enter a name for your home base, such as a hotel or Airbnb"
               />
             </View>
 
             {/* Location Autocomplete */}
-            <View style={styles.inputGroup}>
+            <View style={[styles.inputGroup, styles.locationInputGroup]}>
               <Text style={styles.label}>Location *</Text>
-              <LocationAutocomplete
-                value={selectedLocation}
-                onSelect={handleLocationSelect}
-                placeholder="Search for a location..."
-                style={styles.locationInput}
-              />
+              <View style={styles.locationAutocompleteContainer}>
+                <LocationAutocomplete
+                  value={selectedLocation}
+                  onSelect={handleLocationSelect}
+                  placeholder="Search for a location..."
+                  style={styles.locationInput}
+                />
+              </View>
             </View>
 
             {/* Type Selector */}
-            <View style={styles.inputGroup}>
+            <View style={[styles.inputGroup, styles.typeSelectorGroup]}>
               <Text style={styles.label}>Type</Text>
               <View style={styles.typeSelector}>
                 {['city', 'hotel', 'airbnb', 'custom'].map((t) => (
@@ -202,6 +212,10 @@ const HomeBaseSelector = ({
                       type === t && styles.typeButtonActive
                     ]}
                     onPress={() => setType(t)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${t} type`}
+                    accessibilityState={{ selected: type === t }}
+                    accessibilityHint={`Double tap to select ${t} as the home base type`}
                   >
                     <Text style={[
                       styles.typeButtonText,
@@ -226,6 +240,8 @@ const HomeBaseSelector = ({
                     onChangeText={setDateFrom}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={colors.text.light}
+                    accessibilityLabel="Start date"
+                    accessibilityHint="Enter the start date in YYYY-MM-DD format"
                   />
                 </View>
                 <View style={styles.dateInputContainer}>
@@ -236,6 +252,8 @@ const HomeBaseSelector = ({
                     onChangeText={setDateTo}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={colors.text.light}
+                    accessibilityLabel="End date"
+                    accessibilityHint="Enter the end date in YYYY-MM-DD format"
                   />
                 </View>
               </View>
@@ -252,6 +270,8 @@ const HomeBaseSelector = ({
                 placeholderTextColor={colors.text.light}
                 multiline
                 numberOfLines={3}
+                accessibilityLabel="Notes"
+                accessibilityHint="Optional field to add notes about this home base location"
               />
             </View>
           </View>
@@ -262,6 +282,9 @@ const HomeBaseSelector = ({
               style={styles.cancelButton}
               onPress={handleClose}
               disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              accessibilityHint="Double tap to cancel and close the form"
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -269,6 +292,10 @@ const HomeBaseSelector = ({
               style={[styles.saveButton, saving && styles.saveButtonDisabled]}
               onPress={handleSave}
               disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={saving ? "Saving home base" : "Save home base"}
+              accessibilityHint="Double tap to save the home base"
+              accessibilityState={{ disabled: saving }}
             >
               {saving ? (
                 <ActivityIndicator size="small" color={colors.onPrimary} />
@@ -291,17 +318,17 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.large,
-    borderTopRightRadius: borderRadius.large,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
     maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : spacing.medium,
+    paddingBottom: Platform.OS === 'ios' ? 34 : spacing.md,
     ...shadows.large,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.medium,
+    padding: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -310,40 +337,48 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
   closeButton: {
-    padding: spacing.small,
+    padding: spacing.sm,
   },
   form: {
-    padding: spacing.medium,
+    padding: spacing.md,
+    overflow: 'visible', // Allow dropdown to show, but contained by parent
   },
   inputGroup: {
-    marginBottom: spacing.medium,
+    marginBottom: spacing.md,
+  },
+  locationInputGroup: {
+    marginBottom: spacing.lg, // Extra spacing to prevent dropdown overlap with type selector
   },
   label: {
     ...typography.body,
     color: colors.text.primary,
-    marginBottom: spacing.small,
+    marginBottom: spacing.sm,
     fontWeight: '600',
   },
   input: {
-    ...typography.body,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.medium,
-    padding: spacing.medium,
-    backgroundColor: colors.surface,
-    color: colors.text.primary,
+    ...input,
+  },
+  locationAutocompleteContainer: {
+    position: 'relative',
+    zIndex: 100,
+    marginBottom: 0,
   },
   locationInput: {
     marginTop: 0,
   },
+  typeSelectorGroup: {
+    zIndex: 1,
+    position: 'relative',
+  },
   typeSelector: {
     flexDirection: 'row',
-    gap: spacing.small,
+    gap: spacing.sm,
   },
   typeButton: {
     flex: 1,
-    padding: spacing.small,
-    borderRadius: borderRadius.medium,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
@@ -363,7 +398,7 @@ const styles = StyleSheet.create({
   },
   dateRow: {
     flexDirection: 'row',
-    gap: spacing.small,
+    gap: spacing.sm,
   },
   dateInputContainer: {
     flex: 1,
@@ -371,56 +406,45 @@ const styles = StyleSheet.create({
   dateLabel: {
     ...typography.caption,
     color: colors.text.secondary,
-    marginBottom: spacing.xsmall,
+    marginBottom: spacing.xs,
   },
   dateInput: {
-    ...typography.body,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.medium,
-    padding: spacing.medium,
-    backgroundColor: colors.surface,
-    color: colors.text.primary,
+    ...input,
   },
   notesInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+    paddingVertical: spacing.md,
   },
   actions: {
     flexDirection: 'row',
-    gap: spacing.medium,
-    padding: spacing.medium,
+    gap: spacing.md,
+    padding: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   cancelButton: {
+    ...components.buttonSecondary,
     flex: 1,
-    padding: spacing.medium,
-    borderRadius: borderRadius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    justifyContent: 'center',
   },
   cancelButtonText: {
-    ...typography.body,
+    ...typography.button,
     color: colors.text.primary,
-    fontWeight: '600',
   },
   saveButton: {
+    ...components.button,
     flex: 1,
-    padding: spacing.medium,
-    borderRadius: borderRadius.medium,
-    backgroundColor: colors.primary,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButtonDisabled: {
     opacity: 0.6,
   },
   saveButtonText: {
-    ...typography.body,
+    ...typography.button,
     color: colors.onPrimary,
-    fontWeight: '600',
   },
 });
 

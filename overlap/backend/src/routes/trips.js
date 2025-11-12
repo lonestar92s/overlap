@@ -608,12 +608,12 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
 // Update match planning details
 router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
     try {
-        const { ticketsAcquired, flight, accommodation, notes } = req.body;
+        const { ticketsAcquired, flight, accommodation, homeBaseId, notes } = req.body;
         
         console.log('📋 BACKEND - Updating match planning details');
         console.log('📋 BACKEND - Trip ID:', req.params.id);
         console.log('📋 BACKEND - Match ID:', req.params.matchId);
-        console.log('📋 BACKEND - Planning data:', { ticketsAcquired, flight, accommodation, notes });
+        console.log('📋 BACKEND - Planning data:', { ticketsAcquired, flight, accommodation, homeBaseId, notes });
         
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
@@ -639,6 +639,7 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                 ticketsAcquired: 'no',
                 flight: 'no',
                 accommodation: 'no',
+                homeBaseId: null,
                 notes: ''
             };
         }
@@ -652,6 +653,40 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
         }
         if (accommodation !== undefined) {
             match.planning.accommodation = accommodation;
+        }
+        if (homeBaseId !== undefined) {
+            // Validate homeBaseId if provided
+            if (homeBaseId && homeBaseId !== null && homeBaseId !== '') {
+                // Check if home base exists in trip
+                const homeBase = trip.homeBases.find(hb => {
+                    const hbId = String(hb._id || hb.id || '');
+                    return hbId === String(homeBaseId) || 
+                           hbId.toLowerCase() === String(homeBaseId).toLowerCase() ||
+                           hb._id?.toString() === String(homeBaseId) ||
+                           hb.id?.toString() === String(homeBaseId);
+                });
+                
+                if (!homeBase) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Home base not found in trip'
+                    });
+                }
+                
+                // Validate that home base date range includes match date
+                const matchDate = new Date(match.date);
+                const homeBaseFrom = new Date(homeBase.dateRange.from);
+                const homeBaseTo = new Date(homeBase.dateRange.to);
+                
+                if (matchDate < homeBaseFrom || matchDate > homeBaseTo) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Home base date range does not include match date'
+                    });
+                }
+            }
+            
+            match.planning.homeBaseId = homeBaseId || null;
         }
         if (notes !== undefined) {
             match.planning.notes = notes;

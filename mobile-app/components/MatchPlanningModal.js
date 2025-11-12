@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -8,16 +8,19 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  FlatList
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
-const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated }) => {
+const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], onPlanningUpdated }) => {
   const { updateMatchPlanning } = useItineraries();
   const [planning, setPlanning] = useState({
     ticketsAcquired: 'no',
     accommodation: 'no',
+    homeBaseId: null,
     notes: ''
   });
   const [loading, setLoading] = useState(false);
@@ -28,10 +31,47 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
       setPlanning({
         ticketsAcquired: match.planning.ticketsAcquired || 'no',
         accommodation: match.planning.accommodation || 'no',
+        homeBaseId: match.planning.homeBaseId || null,
         notes: match.planning.notes || ''
       });
     }
   }, [match]);
+
+  // Filter home bases by match date
+  const availableHomeBases = useMemo(() => {
+    if (!match || !match.date || !homeBases || homeBases.length === 0) {
+      return [];
+    }
+
+    const matchDate = new Date(match.date);
+    
+    return homeBases.filter(homeBase => {
+      if (!homeBase.dateRange || !homeBase.dateRange.from || !homeBase.dateRange.to) {
+        return false;
+      }
+      
+      const fromDate = new Date(homeBase.dateRange.from);
+      const toDate = new Date(homeBase.dateRange.to);
+      
+      // Check if match date is within home base date range
+      return matchDate >= fromDate && matchDate <= toDate;
+    });
+  }, [match, homeBases]);
+
+  // Get selected home base details
+  const selectedHomeBase = useMemo(() => {
+    if (!planning.homeBaseId || !homeBases || homeBases.length === 0) {
+      return null;
+    }
+
+    return homeBases.find(hb => {
+      const hbId = String(hb._id || hb.id || '');
+      return hbId === String(planning.homeBaseId) || 
+             hbId.toLowerCase() === String(planning.homeBaseId).toLowerCase() ||
+             hb._id?.toString() === String(planning.homeBaseId) ||
+             hb.id?.toString() === String(planning.homeBaseId);
+    });
+  }, [planning.homeBaseId, homeBases]);
 
   const statusOptions = [
     { value: 'no', label: 'No', color: colors.error },
@@ -40,9 +80,25 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
   ];
 
   const handleStatusChange = (field, value) => {
+    setPlanning(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      
+      // If accommodation is set to 'no', clear homeBaseId
+      if (field === 'accommodation' && value === 'no') {
+        updated.homeBaseId = null;
+      }
+      
+      return updated;
+    });
+  };
+
+  const handleHomeBaseSelect = (homeBaseId) => {
     setPlanning(prev => ({
       ...prev,
-      [field]: value
+      homeBaseId: homeBaseId === prev.homeBaseId ? null : homeBaseId // Toggle if same selected
     }));
   };
 
@@ -143,6 +199,92 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, onPlanningUpdated
 
           {renderStatusSelector('ticketsAcquired', 'Tickets Acquired')}
           {renderStatusSelector('accommodation', 'Accommodation')}
+
+          {/* Home Base Selector - Show when accommodation is yes or in-progress */}
+          {(planning.accommodation === 'yes' || planning.accommodation === 'in-progress') && (
+            <View style={styles.homeBaseSection}>
+              <Text style={styles.homeBaseLabel}>Select Home Base</Text>
+              
+              {availableHomeBases.length === 0 ? (
+                <View style={styles.emptyHomeBaseState}>
+                  <MaterialIcons name="home" size={32} color={colors.text.light} />
+                  <Text style={styles.emptyHomeBaseText}>
+                    No home bases available for this match date
+                  </Text>
+                  <Text style={styles.emptyHomeBaseSubtext}>
+                    Add a home base in the trip settings that covers this match date
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {selectedHomeBase && (
+                    <View style={styles.selectedHomeBase}>
+                      <MaterialIcons 
+                        name={selectedHomeBase.type === 'hotel' ? 'hotel' : selectedHomeBase.type === 'airbnb' ? 'home' : 'location-on'} 
+                        size={20} 
+                        color={colors.primary} 
+                      />
+                      <View style={styles.selectedHomeBaseInfo}>
+                        <Text style={styles.selectedHomeBaseName}>{selectedHomeBase.name}</Text>
+                        <Text style={styles.selectedHomeBaseLocation}>
+                          {selectedHomeBase.address?.city || ''}{selectedHomeBase.address?.country ? `, ${selectedHomeBase.address.country}` : ''}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleHomeBaseSelect(null)}
+                        style={styles.clearHomeBaseButton}
+                      >
+                        <MaterialIcons name="close" size={18} color={colors.text.secondary} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  
+                  <FlatList
+                    data={availableHomeBases}
+                    keyExtractor={(item) => item._id?.toString() || item.id?.toString() || `homebase-${item.name}`}
+                    renderItem={({ item }) => {
+                      const isSelected = planning.homeBaseId && (
+                        String(item._id || item.id) === String(planning.homeBaseId) ||
+                        String(item._id || item.id).toLowerCase() === String(planning.homeBaseId).toLowerCase()
+                      );
+                      
+                      return (
+                        <TouchableOpacity
+                          style={[
+                            styles.homeBaseOption,
+                            isSelected && styles.homeBaseOptionSelected
+                          ]}
+                          onPress={() => handleHomeBaseSelect(item._id || item.id)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons 
+                            name={item.type === 'hotel' ? 'hotel' : item.type === 'airbnb' ? 'home' : 'location-on'} 
+                            size={20} 
+                            color={isSelected ? colors.primary : colors.text.secondary} 
+                          />
+                          <View style={styles.homeBaseOptionInfo}>
+                            <Text style={[
+                              styles.homeBaseOptionName,
+                              isSelected && styles.homeBaseOptionNameSelected
+                            ]}>
+                              {item.name}
+                            </Text>
+                            <Text style={styles.homeBaseOptionLocation}>
+                              {item.address?.city || ''}{item.address?.country ? `, ${item.address.country}` : ''}
+                            </Text>
+                          </View>
+                          {isSelected && (
+                            <MaterialIcons name="check-circle" size={20} color={colors.primary} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    }}
+                    scrollEnabled={false}
+                  />
+                </>
+              )}
+            </View>
+          )}
 
           <View style={styles.notesSection}>
             <Text style={styles.notesLabel}>Notes</Text>
@@ -271,6 +413,97 @@ const styles = StyleSheet.create({
     ...typography.body,
     minHeight: 100,
     backgroundColor: colors.cardGrey
+  },
+  homeBaseSection: {
+    marginBottom: spacing.xl + spacing.sm
+  },
+  homeBaseLabel: {
+    ...typography.h3,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.sm + spacing.xs
+  },
+  emptyHomeBaseState: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.cardGrey,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed'
+  },
+  emptyHomeBaseText: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  emptyHomeBaseSubtext: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+    textAlign: 'center'
+  },
+  selectedHomeBase: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.primary + '15',
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: spacing.sm
+  },
+  selectedHomeBaseInfo: {
+    flex: 1,
+    marginLeft: spacing.sm
+  },
+  selectedHomeBaseName: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
+    marginBottom: spacing.xs
+  },
+  selectedHomeBaseLocation: {
+    ...typography.bodySmall,
+    color: colors.text.secondary
+  },
+  clearHomeBaseButton: {
+    padding: spacing.xs
+  },
+  homeBaseOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardGrey,
+    marginBottom: spacing.sm
+  },
+  homeBaseOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10'
+  },
+  homeBaseOptionInfo: {
+    flex: 1,
+    marginLeft: spacing.sm
+  },
+  homeBaseOptionName: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    marginBottom: spacing.xs
+  },
+  homeBaseOptionNameSelected: {
+    fontWeight: '600',
+    color: colors.primary
+  },
+  homeBaseOptionLocation: {
+    ...typography.bodySmall,
+    color: colors.text.secondary
   }
 });
 

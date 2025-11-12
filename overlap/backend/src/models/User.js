@@ -324,6 +324,10 @@ const userSchema = new mongoose.Schema({
                     enum: ['yes', 'no', 'in-progress'],
                     default: 'no'
                 },
+                homeBaseId: {
+                    type: String,
+                    default: null
+                },
                 notes: {
                     type: String,
                     default: ''

@@ -1387,6 +1387,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         onClose={handleClosePlanningModal}
         match={selectedMatch}
         tripId={itineraryId}
+        homeBases={itinerary?.homeBases || []}
         onPlanningUpdated={handlePlanningUpdated}
       />
     </SafeAreaView>

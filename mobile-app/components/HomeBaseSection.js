@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import HomeBaseSelector from './HomeBaseSelector';
-import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 import apiService from '../services/api';
 
 const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateRange = null }) => {
@@ -126,6 +126,9 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
             style={styles.actionButton}
             onPress={() => handleEditHomeBase(item)}
             disabled={isDeleting}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit home base ${item.name}`}
+            accessibilityHint="Double tap to edit this home base"
           >
             <MaterialIcons name="edit" size={18} color={colors.text.secondary} />
           </TouchableOpacity>
@@ -134,6 +137,9 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
             style={styles.actionButton}
             onPress={() => handleDeleteHomeBase(item._id)}
             disabled={isDeleting}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete home base ${item.name}`}
+            accessibilityHint="Double tap to delete this home base"
           >
             {isDeleting ? (
               <ActivityIndicator size="small" color={colors.error} />
@@ -152,6 +158,9 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
         style={styles.sectionHeader}
         onPress={() => setExpanded(!expanded)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? 'Collapse home bases section' : 'Expand home bases section'}
+        accessibilityHint="Double tap to show or hide home bases list"
       >
         <Text style={styles.sectionTitle}>Home Bases</Text>
         <View style={styles.sectionHeaderRight}>
@@ -193,6 +202,9 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
             style={styles.addButton}
             onPress={handleAddHomeBase}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Add home base"
+            accessibilityHint="Double tap to add a new home base"
           >
             <MaterialIcons name="add" size={20} color={colors.primary} />
             <Text style={styles.addButtonText}>Add Home Base</Text>
@@ -217,16 +229,16 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
 const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.medium,
-    marginHorizontal: spacing.medium,
-    marginBottom: spacing.medium,
-    ...typography.shadow,
+    borderRadius: borderRadius.md,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.small,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.medium,
+    padding: spacing.md,
   },
   sectionTitle: {
     ...typography.h3,
@@ -236,50 +248,50 @@ const styles = StyleSheet.create({
   sectionHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.small,
+    gap: spacing.sm,
   },
   countText: {
     ...typography.body,
     color: colors.text.secondary,
-    marginRight: spacing.xsmall,
+    marginRight: spacing.xs,
   },
   sectionContent: {
-    paddingHorizontal: spacing.medium,
-    paddingBottom: spacing.medium,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: spacing.large,
+    paddingVertical: spacing.lg,
   },
   emptyStateText: {
     ...typography.body,
     color: colors.text.primary,
-    marginTop: spacing.medium,
+    marginTop: spacing.md,
     fontWeight: '600',
   },
   emptyStateSubtext: {
     ...typography.caption,
     color: colors.text.secondary,
-    marginTop: spacing.xsmall,
+    marginTop: spacing.xs,
     textAlign: 'center',
   },
   homeBaseItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.medium,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   homeBaseContent: {
     flex: 1,
-    marginRight: spacing.small,
+    marginRight: spacing.sm,
   },
   homeBaseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.small,
-    marginBottom: spacing.xsmall,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   homeBaseName: {
     ...typography.body,
@@ -290,7 +302,7 @@ const styles = StyleSheet.create({
   homeBaseLocation: {
     ...typography.caption,
     color: colors.text.secondary,
-    marginBottom: spacing.xsmall,
+    marginBottom: spacing.xs,
   },
   homeBaseDateRange: {
     ...typography.caption,
@@ -298,19 +310,19 @@ const styles = StyleSheet.create({
   },
   homeBaseActions: {
     flexDirection: 'row',
-    gap: spacing.small,
+    gap: spacing.sm,
   },
   actionButton: {
-    padding: spacing.small,
+    padding: spacing.sm,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.small,
-    padding: spacing.medium,
-    marginTop: spacing.medium,
-    borderRadius: borderRadius.medium,
+    gap: spacing.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.primary,
     borderStyle: 'dashed',
