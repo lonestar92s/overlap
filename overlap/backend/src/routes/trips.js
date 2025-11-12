@@ -101,14 +101,6 @@ router.post('/', authenticateToken, async (req, res) => {
     try {
         const { name, description, notes, matches, flights } = req.body;
         
-        // Validate: if no matches, must have at least 2 flights (outbound + return)
-        if ((!matches || matches.length === 0) && (!flights || flights.length < 2)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Trips without matches must have at least 2 flights (outbound and return)'
-            });
-        }
-
         // Auto-generate trip name from flights if not provided
         let tripName = name?.trim();
         if (!tripName && flights && flights.length > 0) {
@@ -571,14 +563,6 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
             flightNumber: flight.flightNumber,
             tripFlightsCount: trip.flights.length
         });
-
-        // Check if trip has no matches and would have less than 2 flights after deletion
-        if (trip.matches.length === 0 && trip.flights.length <= 2) {
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot delete flight. Trips without matches must have at least 2 flights (outbound and return)'
-            });
-        }
 
         console.log('Attempting to delete flight:', {
             flightId: req.params.flightId,
