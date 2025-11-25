@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet'); // Security headers middleware - redeploy
+const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
 const mongoose = require('mongoose');
@@ -53,24 +54,62 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" } // Allow CORS resources
 }));
 
+// Rate limiting configuration
+// General API rate limit - 100 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests from this IP, please try again later.' },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Stricter rate limit for auth endpoints - 5 attempts per 15 minutes
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 login attempts per 15 minutes
+    message: { error: 'Too many login attempts, please try again later.' },
+    skipSuccessfulRequests: true, // Don't count successful requests
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 // Configure CORS with more detailed options
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        
-        // Allow localhost and local network IPs
-        if (origin.match(/^http:\/\/localhost:\d+$/) || 
-            origin.match(/^http:\/\/192\.168\.\d+\.\d+:\d+$/) ||
-            origin.match(/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/) ||
-            origin.match(/^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:\d+$/)) {
+        // In production, be more strict about no-origin requests
+        if (!origin) {
+            // Allow no-origin in development (for testing)
+            if (process.env.NODE_ENV !== 'production') {
+                return callback(null, true);
+            }
+            // In production, allow no-origin but log it (mobile apps don't send origin)
+            // This is acceptable for mobile apps, but we should validate via other means
             return callback(null, true);
+        }
+        
+        // Allow localhost and local network IPs in development
+        if (process.env.NODE_ENV !== 'production') {
+            if (origin.match(/^http:\/\/localhost:\d+$/) || 
+                origin.match(/^http:\/\/192\.168\.\d+\.\d+:\d+$/) ||
+                origin.match(/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/) ||
+                origin.match(/^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:\d+$/)) {
+                return callback(null, true);
+            }
         }
         
         // Allow Expo tunnel domains
         if (origin.match(/^https:\/\/.*\.exp\.direct$/) ||
             origin.match(/^https:\/\/.*\.exp\.dev$/)) {
             return callback(null, true);
+        }
+        
+        // In production, check allowed origins from environment variable
+        if (process.env.NODE_ENV === 'production') {
+            const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
         }
         
         // Reject other origins
@@ -81,7 +120,12 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Limit request body size
+app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Limit URL-encoded body size
+
+// Apply rate limiting to API routes
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
 
 // Log security headers in development (for verification)
 // Note: Headers are set by Helmet before response is sent

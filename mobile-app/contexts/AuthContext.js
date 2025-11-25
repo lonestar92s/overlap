@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import ApiService from '../services/api';
+
+// Secure storage keys
+const SECURE_STORAGE_KEYS = {
+  AUTH_TOKEN: 'authToken',
+  REMEMBER_ME: 'rememberMe', // Stored in AsyncStorage (not sensitive)
+};
 
 const AuthContext = createContext();
 
@@ -25,7 +32,24 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthState = async () => {
     try {
-      const storedToken = await AsyncStorage.getItem('authToken');
+      // Try to get token from secure storage first
+      let storedToken = null;
+      try {
+        storedToken = await SecureStore.getItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN);
+      } catch (secureError) {
+        // Fallback to AsyncStorage for migration (remove after migration period)
+        try {
+          storedToken = await AsyncStorage.getItem('authToken');
+          // If found in AsyncStorage, migrate to SecureStore
+          if (storedToken) {
+            await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, storedToken);
+            await AsyncStorage.removeItem('authToken'); // Remove from insecure storage
+          }
+        } catch (migrationError) {
+          console.error('Error migrating token to secure storage:', migrationError);
+        }
+      }
+      
       const storedRememberMe = await AsyncStorage.getItem('rememberMe');
       
       if (storedToken) {
@@ -76,14 +100,18 @@ export const AuthProvider = ({ children }) => {
         // Set the token in the API service
         ApiService.setAuthToken(authToken);
         
-        // Store token and remember me preference
-        if (remember) {
-          await AsyncStorage.setItem('authToken', authToken);
-          await AsyncStorage.setItem('rememberMe', 'true');
-        } else {
-          // Store token temporarily (will be cleared on app restart)
-          await AsyncStorage.setItem('authToken', authToken);
-          await AsyncStorage.setItem('rememberMe', 'false');
+        // Store token securely and remember me preference
+        // Always store token in secure storage (encrypted)
+        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
+        
+        // Store remember me preference in AsyncStorage (not sensitive)
+        await AsyncStorage.setItem('rememberMe', remember ? 'true' : 'false');
+        
+        // Clean up old token from AsyncStorage if it exists (migration)
+        try {
+          await AsyncStorage.removeItem('authToken');
+        } catch (e) {
+          // Ignore if doesn't exist
         }
         
         return { success: true };
@@ -113,9 +141,16 @@ export const AuthProvider = ({ children }) => {
         // Set the token in the API service
         ApiService.setAuthToken(authToken);
         
-        // Store token and remember me preference
-        await AsyncStorage.setItem('authToken', authToken);
+        // Store token securely and remember me preference
+        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
+        
+        // Clean up old token from AsyncStorage if it exists
+        try {
+          await AsyncStorage.removeItem('authToken');
+        } catch (e) {
+          // Ignore if doesn't exist
+        }
         
         return { success: true };
       } else {
@@ -131,8 +166,19 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Clear stored data
-      await AsyncStorage.removeItem('authToken');
+      // Clear stored data from secure storage
+      try {
+        await SecureStore.deleteItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN);
+      } catch (secureError) {
+        // Fallback: try AsyncStorage (for migration)
+        try {
+          await AsyncStorage.removeItem('authToken');
+        } catch (e) {
+          // Ignore if doesn't exist
+        }
+      }
+      
+      // Clear remember me preference
       await AsyncStorage.removeItem('rememberMe');
       
       // Clear token from API service
@@ -162,9 +208,16 @@ export const AuthProvider = ({ children }) => {
         // Set the token in the API service
         ApiService.setAuthToken(authToken);
         
-        // Store token and remember me preference
-        await AsyncStorage.setItem('authToken', authToken);
+        // Store token securely and remember me preference
+        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
+        
+        // Clean up old token from AsyncStorage if it exists
+        try {
+          await AsyncStorage.removeItem('authToken');
+        } catch (e) {
+          // Ignore if doesn't exist
+        }
         
         return { success: true };
       } else {
