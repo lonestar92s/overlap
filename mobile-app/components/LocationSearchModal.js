@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
@@ -409,11 +410,16 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                {/* Tab Content */}
                {/* Flights tab content commented out */}
                {/* {activeTab === 'matches' ? ( */}
-                 <ScrollView
-                 style={styles.scrollView}
-                 contentContainerStyle={styles.scrollContent}
-                 showsVerticalScrollIndicator={false}
-               >
+                 <KeyboardAvoidingView
+                   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                   style={styles.keyboardAvoidingView}
+                 >
+                   <ScrollView
+                     style={styles.scrollView}
+                     contentContainerStyle={styles.scrollContent}
+                     showsVerticalScrollIndicator={false}
+                     keyboardShouldPersistTaps="handled"
+                   >
           {/* Where Card - Collapsible */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -590,6 +596,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
             </View>
           </View>
           </ScrollView>
+                 </KeyboardAvoidingView>
         {/* ) : (
           <FlightSearchTab
             onClose={onClose}
@@ -680,6 +687,9 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontWeight: '600',
     fontSize: 16,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,

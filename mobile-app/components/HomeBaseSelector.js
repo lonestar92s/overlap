@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Platform
+  Platform,
+  ScrollView,
+  KeyboardAvoidingView
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import LocationAutocomplete from './LocationAutocomplete';
@@ -44,6 +46,10 @@ const HomeBaseSelector = ({
   );
   const [notes, setNotes] = useState(homeBase?.notes || '');
   const [saving, setSaving] = useState(false);
+  const scrollViewRef = useRef(null);
+  const dateFromInputRef = useRef(null);
+  const dateToInputRef = useRef(null);
+  const notesInputRef = useRef(null);
 
   const handleLocationSelect = (location) => {
     if (location) {
@@ -150,29 +156,43 @@ const HomeBaseSelector = ({
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
-              {homeBase ? 'Edit Home Base' : 'Add Home Base'}
-            </Text>
-            <TouchableOpacity 
-              onPress={handleClose} 
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close modal"
-              accessibilityHint="Double tap to close the home base form"
-            >
-              <MaterialIcons name="close" size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-          </View>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>
+            {homeBase ? 'Edit Home Base' : 'Add Home Base'}
+          </Text>
+          <TouchableOpacity 
+            onPress={handleSave} 
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-          {/* Form */}
-          <View style={styles.form}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <ScrollView 
+            ref={scrollViewRef}
+            style={styles.content}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={true}
+          >
             {/* Name Input */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Name *</Text>
@@ -235,6 +255,7 @@ const HomeBaseSelector = ({
                 <View style={styles.dateInputContainer}>
                   <Text style={styles.dateLabel}>From</Text>
                   <TextInput
+                    ref={dateFromInputRef}
                     style={styles.dateInput}
                     value={dateFrom}
                     onChangeText={setDateFrom}
@@ -242,11 +263,17 @@ const HomeBaseSelector = ({
                     placeholderTextColor={colors.text.light}
                     accessibilityLabel="Start date"
                     accessibilityHint="Enter the start date in YYYY-MM-DD format"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
                   />
                 </View>
                 <View style={styles.dateInputContainer}>
                   <Text style={styles.dateLabel}>To</Text>
                   <TextInput
+                    ref={dateToInputRef}
                     style={styles.dateInput}
                     value={dateTo}
                     onChangeText={setDateTo}
@@ -254,6 +281,11 @@ const HomeBaseSelector = ({
                     placeholderTextColor={colors.text.light}
                     accessibilityLabel="End date"
                     accessibilityHint="Enter the end date in YYYY-MM-DD format"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
                   />
                 </View>
               </View>
@@ -263,6 +295,7 @@ const HomeBaseSelector = ({
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Notes (Optional)</Text>
               <TextInput
+                ref={notesInputRef}
                 style={[styles.input, styles.notesInput]}
                 value={notes}
                 onChangeText={setNotes}
@@ -272,88 +305,70 @@ const HomeBaseSelector = ({
                 numberOfLines={3}
                 accessibilityLabel="Notes"
                 accessibilityHint="Optional field to add notes about this home base location"
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 300);
+                }}
               />
             </View>
-          </View>
-
-          {/* Actions */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={handleClose}
-              disabled={saving}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-              accessibilityHint="Double tap to cancel and close the form"
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-              accessibilityRole="button"
-              accessibilityLabel={saving ? "Saving home base" : "Save home base"}
-              accessibilityHint="Double tap to save the home base"
-              accessibilityState={{ disabled: saving }}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color={colors.onPrimary} />
-              ) : (
-                <Text style={styles.saveButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : spacing.md,
-    ...shadows.large,
+    backgroundColor: colors.card
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
+    backgroundColor: colors.card
   },
   closeButton: {
-    padding: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm + spacing.xs
   },
-  form: {
-    padding: spacing.md,
-    overflow: 'visible', // Allow dropdown to show, but contained by parent
+  closeButtonText: {
+    ...typography.body,
+    color: colors.primary
+  },
+  title: {
+    ...typography.h3,
+    fontWeight: '600',
+    color: colors.text.primary
+  },
+  keyboardAvoidingView: {
+    flex: 1
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: spacing.lg
+  },
+  scrollContent: {
+    paddingVertical: spacing.lg,
+    paddingBottom: spacing.xxl + spacing.xl // Extra padding at bottom for keyboard
   },
   inputGroup: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.xl + spacing.sm,
   },
   locationInputGroup: {
-    marginBottom: spacing.lg, // Extra spacing to prevent dropdown overlap with type selector
+    marginBottom: spacing.xl + spacing.sm, // Extra spacing to prevent dropdown overlap with type selector
   },
   label: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
+    ...typography.h3,
     fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.sm + spacing.xs
   },
   input: {
     ...input,
@@ -412,39 +427,23 @@ const styles = StyleSheet.create({
     ...input,
   },
   notesInput: {
-    minHeight: 80,
+    minHeight: 100,
     textAlignVertical: 'top',
-    paddingVertical: spacing.md,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  cancelButton: {
-    ...components.buttonSecondary,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    ...typography.button,
-    color: colors.text.primary,
+    backgroundColor: colors.cardGrey
   },
   saveButton: {
-    ...components.button,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.sm
   },
   saveButtonDisabled: {
-    opacity: 0.6,
+    backgroundColor: colors.interactive.disabled
   },
   saveButtonText: {
-    ...typography.button,
     color: colors.onPrimary,
+    ...typography.body,
+    fontWeight: '600'
   },
 });
 

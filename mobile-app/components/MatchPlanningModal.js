@@ -9,7 +9,9 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  FlatList
+  FlatList,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useItineraries } from '../contexts/ItineraryContext';
@@ -177,8 +179,15 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], o
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content}>
-          <View style={styles.matchInfo}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+        >
+          <ScrollView
+            style={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.matchInfo}>
             <Text style={styles.matchTitle}>
               {match.homeTeam.name} vs {match.awayTeam.name}
             </Text>
@@ -298,7 +307,8 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], o
               textAlignVertical="top"
             />
           </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -345,6 +355,9 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     ...typography.body,
     fontWeight: '600'
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   content: {
     flex: 1,

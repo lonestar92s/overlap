@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, FlatList, Image, ActivityIndicator, SafeAreaView, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, FlatList, Image, ActivityIndicator, SafeAreaView, TouchableOpacity, ScrollView, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { debounce } from 'lodash';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -421,12 +421,17 @@ const UnifiedSearchScreen = () => {
         <View style={styles.containerContent}>
           {renderSearchInput()}
           
-          <ScrollView 
-            style={styles.scrollContent}
-            contentContainerStyle={styles.scrollContentContainer}
-            showsVerticalScrollIndicator={true}
-            nestedScrollEnabled={true}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
           >
+            <ScrollView 
+              style={styles.scrollContent}
+              contentContainerStyle={styles.scrollContentContainer}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
           {/* Recent Searches Section - Only show when not typing */}
           {!isTyping && recentSearches.length > 0 && (
             <View style={styles.section}>
@@ -589,7 +594,8 @@ const UnifiedSearchScreen = () => {
               )}
             </>
           )}
-          </ScrollView>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </View>
 
@@ -660,6 +666,10 @@ const styles = StyleSheet.create({
   searchPlaceholder: {
     ...typography.body,
     color: colors.text.light,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+    width: '100%',
   },
   scrollContent: {
     flex: 1,

@@ -11,6 +11,8 @@ import {
   Alert,
   TextInput,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -409,12 +411,16 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
         >
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Flight Number */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -605,7 +611,8 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
 
           {/* Found Flight Card */}
           {renderFlightCard()}
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );
@@ -641,6 +648,9 @@ const styles = StyleSheet.create({
   clearButtonText: {
     ...typography.body,
     color: colors.primary,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,

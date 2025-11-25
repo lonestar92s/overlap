@@ -8,7 +8,9 @@ import {
   TextInput,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -168,9 +170,17 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
           </Text>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Existing Itineraries */}
-          {itineraries.length > 0 && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+        >
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Existing Itineraries */}
+            {itineraries.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Save to existing itinerary</Text>
               {itineraries.map((itinerary) => (
@@ -239,7 +249,8 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
               </View>
             )}
           </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
       </Modal>
     </ErrorBoundary>
@@ -288,6 +299,9 @@ const styles = StyleSheet.create({
   matchDate: {
     ...typography.bodySmall,
     color: colors.text.light,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   content: {
     flex: 1,

@@ -5,6 +5,24 @@ const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
 const mongoose = require('mongoose');
+
+// Initialize Sentry error reporting (if DSN is configured)
+let Sentry = null;
+if (process.env.SENTRY_DSN) {
+    Sentry = require('@sentry/node');
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        environment: process.env.NODE_ENV || 'development',
+        tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in prod, 100% in dev
+        beforeSend(event, hint) {
+            // Don't send errors in development
+            if (process.env.NODE_ENV !== 'production') {
+                return null;
+            }
+            return event;
+        }
+    });
+}
 const transportationRoutes = require('./routes/transportation');
 const matchesRoutes = require('./routes/matches');
 const searchRoutes = require('./routes/search');
@@ -29,6 +47,12 @@ dotenv.config({ path: envPath });
 
 
 const app = express();
+
+// Sentry request handler (must be before other middleware)
+if (Sentry) {
+    app.use(Sentry.Handlers.requestHandler());
+    app.use(Sentry.Handlers.tracingHandler());
+}
 
 // Security headers middleware (must be before other middleware)
 app.use(helmet({
@@ -209,6 +233,29 @@ if (process.env.NODE_ENV !== 'production') {
 // Set up unmapped team logging after routes are loaded
 const teamService = require('./services/teamService');
 teamService.setUnmappedLogger(adminRouter.logUnmappedTeam);
+
+// Sentry error handler (must be after all routes, before error handlers)
+if (Sentry) {
+    app.use(Sentry.Handlers.errorHandler());
+}
+
+// Global error handler
+app.use((err, req, res, next) => {
+    // Log error to Sentry if configured
+    if (Sentry) {
+        Sentry.captureException(err);
+    }
+    
+    // Log error to console (will be replaced with logger later)
+    console.error('Unhandled error:', err);
+    
+    res.status(err.status || 500).json({
+        error: process.env.NODE_ENV === 'production' 
+            ? 'Internal server error' 
+            : err.message,
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+    });
+});
 
 const PORT = process.env.PORT || 3001;
 

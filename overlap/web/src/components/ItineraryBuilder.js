@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import {
     Box,
     Paper,
@@ -87,7 +88,7 @@ const TransportOption = ({
             
             <Collapse in={expanded}>
                 <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" dangerouslySetInnerHTML={{ __html: option.details }} />
+                    <Typography variant="body2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(option.details || '') }} />
                 </Box>
             </Collapse>
         </Paper>

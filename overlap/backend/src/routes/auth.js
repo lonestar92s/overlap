@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { WorkOS } = require('@workos-inc/node');
+const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
 const { auth, adminAuth } = require('../middleware/auth');
@@ -29,8 +30,27 @@ const isWorkOSConfigured = () => {
 };
 
 // Register a new user
-router.post('/register', async (req, res) => {
+router.post('/register', [
+    body('email')
+        .isEmail()
+        .normalizeEmail()
+        .withMessage('Please provide a valid email address'),
+    body('password')
+        .isLength({ min: 8 })
+        .withMessage('Password must be at least 8 characters long')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+        .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+], async (req, res) => {
     try {
+        // Check for validation errors
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ 
+                error: 'Validation failed',
+                details: errors.array()
+            });
+        }
+
         const { email, password, profile, subscriptionTier } = req.body;
 
         // Check if user already exists
@@ -95,8 +115,25 @@ router.post('/register', async (req, res) => {
 });
 
 // Login user
-router.post('/login', async (req, res) => {
+router.post('/login', [
+    body('email')
+        .isEmail()
+        .normalizeEmail()
+        .withMessage('Please provide a valid email address'),
+    body('password')
+        .notEmpty()
+        .withMessage('Password is required')
+], async (req, res) => {
     try {
+        // Check for validation errors
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ 
+                error: 'Validation failed',
+                details: errors.array()
+            });
+        }
+
         const { email, password } = req.body;
 
         // Find user and include password for comparison
@@ -312,13 +349,23 @@ router.get('/workos/logout', auth, async (req, res) => {
 // Password Reset Routes
 
 // Request password reset (for local users)
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', [
+    body('email')
+        .isEmail()
+        .normalizeEmail()
+        .withMessage('Please provide a valid email address')
+], async (req, res) => {
     try {
-        const { email } = req.body;
-
-        if (!email) {
-            return res.status(400).json({ error: 'Email is required' });
+        // Check for validation errors
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ 
+                error: 'Validation failed',
+                details: errors.array()
+            });
         }
+
+        const { email } = req.body;
 
         // Find user
         const user = await User.findOne({ email: email.toLowerCase() });
@@ -375,14 +422,25 @@ router.post('/forgot-password', async (req, res) => {
 });
 
 // Reset password (for local users)
-router.post('/reset-password/:token', async (req, res) => {
+router.post('/reset-password/:token', [
+    body('password')
+        .isLength({ min: 8 })
+        .withMessage('Password must be at least 8 characters long')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+        .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+], async (req, res) => {
     try {
+        // Check for validation errors
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ 
+                error: 'Validation failed',
+                details: errors.array()
+            });
+        }
+
         const { token } = req.params;
         const { password } = req.body;
-
-        if (!password || password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters long' });
-        }
 
         // Hash the token to compare with stored hash
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
