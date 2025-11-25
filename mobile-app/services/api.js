@@ -3,17 +3,19 @@
 const getApiBaseUrl = () => {
   // In production, EXPO_PUBLIC_API_URL must be set
   if (!__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
-    if (__DEV__) {
-      console.error('ERROR: EXPO_PUBLIC_API_URL environment variable is required in production');
-    }
     throw new Error('Missing required environment variable: EXPO_PUBLIC_API_URL');
   }
   
   // Development fallback for local testing
   // NOTE: localhost only works with Expo Dev Client on emulator/simulator
-  // For Expo Go or physical devices, use your machine's IP address or production URL
-  return process.env.EXPO_PUBLIC_API_URL || 
-    (__DEV__ ? 'https://friendly-gratitude-production-3f31.up.railway.app/api' : '');
+  // For Expo Go or physical devices, set EXPO_PUBLIC_API_URL to your machine's IP address
+  if (__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
+    console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback');
+    console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');
+    return 'http://localhost:3001/api';
+  }
+  
+  return process.env.EXPO_PUBLIC_API_URL;
 };
 
 const API_BASE_URL = getApiBaseUrl();

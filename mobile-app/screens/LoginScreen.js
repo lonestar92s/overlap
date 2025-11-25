@@ -13,6 +13,7 @@ import {
 import { Input, Button, CheckBox } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import { colors, spacing, typography, borderRadius, shadows, input } from '../styles/designTokens';
 
 const LoginScreen = ({ navigation }) => {
   const { login, loading } = useAuth();
@@ -75,7 +76,7 @@ const LoginScreen = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.header}>
-            <MaterialIcons name="sports-soccer" size={80} color="#1976d2" />
+            <MaterialIcons name="sports-soccer" size={80} color={colors.primary} />
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue your football journey</Text>
           </View>
@@ -89,11 +90,12 @@ const LoginScreen = ({ navigation }) => {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              leftIcon={<MaterialIcons name="email" size={20} color="#666" />}
+              leftIcon={<MaterialIcons name="email" size={20} color={colors.text.secondary} />}
               errorMessage={errors.email}
               containerStyle={styles.inputContainer}
               inputStyle={styles.input}
               labelStyle={styles.label}
+              accessibilityLabel="Email input"
             />
 
             <Input
@@ -102,13 +104,17 @@ const LoginScreen = ({ navigation }) => {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
-              leftIcon={<MaterialIcons name="lock" size={20} color="#666" />}
+              leftIcon={<MaterialIcons name="lock" size={20} color={colors.text.secondary} />}
               rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityRole="button"
+                >
                   <MaterialIcons 
                     name={showPassword ? "visibility-off" : "visibility"} 
                     size={20} 
-                    color="#666" 
+                    color={colors.text.secondary} 
                   />
                 </TouchableOpacity>
               }
@@ -116,6 +122,7 @@ const LoginScreen = ({ navigation }) => {
               containerStyle={styles.inputContainer}
               inputStyle={styles.input}
               labelStyle={styles.label}
+              accessibilityLabel="Password input"
             />
 
             <View style={styles.passwordActionsContainer}>
@@ -126,11 +133,16 @@ const LoginScreen = ({ navigation }) => {
                   onPress={() => setRememberMe(!rememberMe)}
                   containerStyle={styles.checkboxContainer}
                   textStyle={styles.checkboxText}
-                  checkedColor="#1976d2"
-                  uncheckedColor="#666"
+                  checkedColor={colors.primary}
+                  uncheckedColor={colors.text.secondary}
+                  accessibilityLabel="Remember me checkbox"
                 />
               </View>
-              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('ForgotPassword')}
+                accessibilityLabel="Forgot password"
+                accessibilityRole="link"
+              >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
@@ -143,6 +155,8 @@ const LoginScreen = ({ navigation }) => {
               buttonStyle={styles.loginButton}
               titleStyle={styles.buttonTitle}
               containerStyle={styles.buttonContainer}
+              accessibilityLabel="Sign in button"
+              accessibilityRole="button"
             />
 
             <View style={styles.dividerContainer}>
@@ -155,14 +169,20 @@ const LoginScreen = ({ navigation }) => {
               style={styles.googleButton}
               onPress={handleWorkOSLogin}
               disabled={loading}
+              accessibilityLabel="Continue with Gmail"
+              accessibilityRole="button"
             >
-              <MaterialIcons name="mail" size={20} color="#fff" style={styles.googleIcon} />
+              <MaterialIcons name="mail" size={20} color={colors.onPrimary} style={styles.googleIcon} />
               <Text style={styles.googleButtonText}>Continue with Gmail</Text>
             </TouchableOpacity>
 
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={navigateToRegister}>
+              <TouchableOpacity 
+                onPress={navigateToRegister}
+                accessibilityLabel="Sign up"
+                accessibilityRole="link"
+              >
                 <Text style={styles.registerLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
@@ -176,7 +196,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   keyboardAvoid: {
     flex: 1,
@@ -184,62 +204,54 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.xxl,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 20,
-    marginBottom: 10,
+    ...typography.h1Large,
+    color: colors.text.primary,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   form: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    ...shadows.medium,
   },
   inputContainer: {
-    marginBottom: 15,
+    marginBottom: spacing.md,
   },
   input: {
-    fontSize: 16,
-    color: '#333',
+    ...typography.body,
+    color: colors.text.primary,
   },
   label: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
   },
   passwordActionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   rememberMeContainer: {
     flex: 1,
   },
   forgotPasswordText: {
-    fontSize: 14,
-    color: '#1976d2',
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '600',
   },
   checkboxContainer: {
@@ -249,21 +261,21 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   checkboxText: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
     fontWeight: 'normal',
   },
   buttonContainer: {
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   loginButton: {
-    backgroundColor: '#1976d2',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md,
   },
   buttonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
+    color: colors.onPrimary,
   },
   registerContainer: {
     flexDirection: 'row',
@@ -271,45 +283,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerText: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   registerLink: {
-    fontSize: 14,
-    color: '#1976d2',
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '600',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: spacing.lg,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: colors.border,
   },
   dividerText: {
-    marginHorizontal: 10,
-    fontSize: 14,
-    color: '#666',
+    marginHorizontal: spacing.sm,
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DB4437',
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginBottom: 20,
+    backgroundColor: '#DB4437', // Google brand color - keeping as is
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
   },
   googleIcon: {
-    marginRight: 10,
+    marginRight: spacing.sm,
   },
   googleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
+    color: colors.onPrimary,
   },
 });
 
