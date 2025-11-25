@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet'); // Security headers middleware
+const helmet = require('helmet'); // Security headers middleware - redeploy
 const dotenv = require('dotenv');
 const path = require('path');
 const mongoose = require('mongoose');
