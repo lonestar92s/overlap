@@ -37,7 +37,8 @@
       "url": "https://u.expo.dev/a3678060-654a-4163-ae5e-85c04a80efd9"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store"
     ]
   }
 }

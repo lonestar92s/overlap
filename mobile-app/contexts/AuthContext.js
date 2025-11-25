@@ -1,12 +1,69 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import ApiService from '../services/api';
 
 // Secure storage keys
 const SECURE_STORAGE_KEYS = {
   AUTH_TOKEN: 'authToken',
   REMEMBER_ME: 'rememberMe', // Stored in AsyncStorage (not sensitive)
+};
+
+// Secure storage wrapper with fallback to AsyncStorage
+// expo-secure-store requires a development build, so we fallback gracefully
+let SecureStore = null;
+let secureStoreAvailable = false;
+
+try {
+  SecureStore = require('expo-secure-store');
+  secureStoreAvailable = true;
+} catch (error) {
+  // SecureStore not available (Expo Go or not installed)
+  // Will fallback to AsyncStorage
+  secureStoreAvailable = false;
+}
+
+// Secure storage helper functions
+const secureStorage = {
+  async getItem(key) {
+    if (secureStoreAvailable && SecureStore) {
+      try {
+        return await SecureStore.getItemAsync(key);
+      } catch (error) {
+        console.warn('SecureStore getItem failed, falling back to AsyncStorage:', error);
+        return await AsyncStorage.getItem(key);
+      }
+    }
+    // Fallback to AsyncStorage
+    return await AsyncStorage.getItem(key);
+  },
+
+  async setItem(key, value) {
+    if (secureStoreAvailable && SecureStore) {
+      try {
+        await SecureStore.setItemAsync(key, value);
+        return;
+      } catch (error) {
+        console.warn('SecureStore setItem failed, falling back to AsyncStorage:', error);
+      }
+    }
+    // Fallback to AsyncStorage
+    await AsyncStorage.setItem(key, value);
+  },
+
+  async removeItem(key) {
+    if (secureStoreAvailable && SecureStore) {
+      try {
+        await SecureStore.deleteItemAsync(key);
+        // Also remove from AsyncStorage in case it was migrated
+        await AsyncStorage.removeItem(key).catch(() => {});
+        return;
+      } catch (error) {
+        console.warn('SecureStore removeItem failed, falling back to AsyncStorage:', error);
+      }
+    }
+    // Fallback to AsyncStorage
+    await AsyncStorage.removeItem(key);
+  }
 };
 
 const AuthContext = createContext();
@@ -32,21 +89,16 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthState = async () => {
     try {
-      // Try to get token from secure storage first
-      let storedToken = null;
-      try {
-        storedToken = await SecureStore.getItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN);
-      } catch (secureError) {
-        // Fallback to AsyncStorage for migration (remove after migration period)
-        try {
-          storedToken = await AsyncStorage.getItem('authToken');
-          // If found in AsyncStorage, migrate to SecureStore
-          if (storedToken) {
-            await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, storedToken);
-            await AsyncStorage.removeItem('authToken'); // Remove from insecure storage
-          }
-        } catch (migrationError) {
-          console.error('Error migrating token to secure storage:', migrationError);
+      // Try to get token from secure storage (with fallback)
+      let storedToken = await secureStorage.getItem(SECURE_STORAGE_KEYS.AUTH_TOKEN);
+      
+      // If not found, try AsyncStorage for migration
+      if (!storedToken) {
+        storedToken = await AsyncStorage.getItem('authToken');
+        // If found in AsyncStorage, migrate to secure storage
+        if (storedToken) {
+          await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, storedToken);
+          await AsyncStorage.removeItem('authToken'); // Remove from insecure storage
         }
       }
       
@@ -101,8 +153,8 @@ export const AuthProvider = ({ children }) => {
         ApiService.setAuthToken(authToken);
         
         // Store token securely and remember me preference
-        // Always store token in secure storage (encrypted)
-        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
+        // Store token in secure storage (encrypted if available, otherwise AsyncStorage)
+        await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         
         // Store remember me preference in AsyncStorage (not sensitive)
         await AsyncStorage.setItem('rememberMe', remember ? 'true' : 'false');
@@ -142,7 +194,7 @@ export const AuthProvider = ({ children }) => {
         ApiService.setAuthToken(authToken);
         
         // Store token securely and remember me preference
-        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
+        await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
         
         // Clean up old token from AsyncStorage if it exists
@@ -166,17 +218,11 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Clear stored data from secure storage
-      try {
-        await SecureStore.deleteItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN);
-      } catch (secureError) {
-        // Fallback: try AsyncStorage (for migration)
-        try {
-          await AsyncStorage.removeItem('authToken');
-        } catch (e) {
-          // Ignore if doesn't exist
-        }
-      }
+      // Clear stored data from secure storage (with fallback)
+      await secureStorage.removeItem(SECURE_STORAGE_KEYS.AUTH_TOKEN);
+      
+      // Also clear from AsyncStorage (in case it was there)
+      await AsyncStorage.removeItem('authToken').catch(() => {});
       
       // Clear remember me preference
       await AsyncStorage.removeItem('rememberMe');
@@ -209,7 +255,7 @@ export const AuthProvider = ({ children }) => {
         ApiService.setAuthToken(authToken);
         
         // Store token securely and remember me preference
-        await SecureStore.setItemAsync(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
+        await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
         
         // Clean up old token from AsyncStorage if it exists

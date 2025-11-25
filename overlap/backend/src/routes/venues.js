@@ -22,20 +22,26 @@ router.get('/search', async (req, res) => {
     try {
         const { query } = req.query;
         
-        if (!query || query.length < 2) {
+        // Sanitize and validate query input
+        const { sanitizeSearchQuery } = require('../utils/security');
+        const validation = sanitizeSearchQuery(query, 100);
+        
+        if (!validation.valid) {
             return res.status(400).json({
                 success: false,
-                message: 'Search query must be at least 2 characters'
+                message: validation.error || 'Invalid search query'
             });
         }
+
+        const sanitizedQuery = validation.sanitized;
 
         // Search in database
         const dbVenues = await Venue.find({
             $or: [
-                { name: { $regex: query, $options: 'i' } },
-                { city: { $regex: query, $options: 'i' } },
-                { country: { $regex: query, $options: 'i' } },
-                { aliases: { $regex: query, $options: 'i' } }
+                { name: { $regex: sanitizedQuery, $options: 'i' } },
+                { city: { $regex: sanitizedQuery, $options: 'i' } },
+                { country: { $regex: sanitizedQuery, $options: 'i' } },
+                { aliases: { $regex: sanitizedQuery, $options: 'i' } }
             ],
             isActive: true
         })

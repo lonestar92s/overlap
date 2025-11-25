@@ -2135,20 +2135,26 @@ router.get('/unified', async (req, res) => {
     try {
         const { query } = req.query;
         
-        if (!query || query.length < 2) {
+        // Sanitize and validate query input
+        const { sanitizeSearchQuery } = require('../utils/security');
+        const validation = sanitizeSearchQuery(query, 100);
+        
+        if (!validation.valid) {
             return res.status(400).json({
                 success: false,
-                message: 'Search query must be at least 2 characters'
+                message: validation.error || 'Invalid search query'
             });
         }
+
+        const sanitizedQuery = validation.sanitized;
 
         // Search all three collections in parallel for better performance
         const [leagues, teams, venues] = await Promise.all([
             // Search leagues
             League.find({
                 $or: [
-                    { name: { $regex: query, $options: 'i' } },
-                    { shortName: { $regex: query, $options: 'i' } }
+                    { name: { $regex: sanitizedQuery, $options: 'i' } },
+                    { shortName: { $regex: sanitizedQuery, $options: 'i' } }
                 ],
                 isActive: true
             })
@@ -2159,8 +2165,8 @@ router.get('/unified', async (req, res) => {
             // Search teams
             Team.find({
                 $or: [
-                    { name: { $regex: query, $options: 'i' } },
-                    { aliases: { $regex: query, $options: 'i' } }
+                    { name: { $regex: sanitizedQuery, $options: 'i' } },
+                    { aliases: { $regex: sanitizedQuery, $options: 'i' } }
                 ]
             })
             .select('apiId name country city logo code venue')
@@ -2170,9 +2176,9 @@ router.get('/unified', async (req, res) => {
             // Search venues
             Venue.find({
                 $or: [
-                    { name: { $regex: query, $options: 'i' } },
-                    { city: { $regex: query, $options: 'i' } },
-                    { aliases: { $regex: query, $options: 'i' } }
+                    { name: { $regex: sanitizedQuery, $options: 'i' } },
+                    { city: { $regex: sanitizedQuery, $options: 'i' } },
+                    { aliases: { $regex: sanitizedQuery, $options: 'i' } }
                 ],
                 isActive: true
             })
