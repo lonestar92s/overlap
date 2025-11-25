@@ -44,19 +44,6 @@ router.get('/search', async (req, res) => {
             });
         }
 
-        // Sanitize and validate query input
-        const { sanitizeSearchQuery } = require('../utils/security');
-        const validation = sanitizeSearchQuery(query, 100);
-        
-        if (!validation.valid) {
-            return res.status(400).json({
-                success: false,
-                message: validation.error || 'Invalid search query'
-            });
-        }
-
-        const sanitizedQuery = validation.sanitized;
-
         // Search local database first
         const dbTeams = await Team.find({
             $or: [
