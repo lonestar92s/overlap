@@ -14,14 +14,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
-  Modal
+  Modal,
+  InteractionManager
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
@@ -643,50 +643,68 @@ const TripOverviewScreen = ({ navigation, route }) => {
     setIsSharing(true);
 
     try {
-      // Request media library permissions
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'We need permission to save the image to your photo library before sharing.',
-          [{ text: 'OK' }]
-        );
-        setIsSharing(false);
-        return;
+      // Validate that the ref is attached
+      if (!shareableViewRef.current) {
+        throw new Error('Shareable view reference is not available. Please try again.');
       }
 
-      // Wait a bit for the view to render
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for interactions to complete and view to be fully rendered
+      await InteractionManager.runAfterInteractions();
+
+      // Add a delay to ensure the view is fully laid out and rendered
+      // This is important for off-screen views that need to be captured
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       // Capture the shareable view as an image
-      const uri = await captureRef(shareableViewRef, {
-        format: 'png',
-        quality: 1.0,
-        result: 'tmpfile',
-      });
-
-      // Save to media library
-      const asset = await MediaLibrary.createAssetAsync(uri);
-      
-      // Share the image
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync(asset.uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Share Trip',
+      let uri;
+      try {
+        uri = await captureRef(shareableViewRef, {
+          format: 'png',
+          quality: 1.0,
+          result: 'tmpfile',
         });
-      } else {
+      } catch (captureError) {
+        console.error('Error capturing view:', captureError);
+        throw new Error('Failed to capture trip image. The view may not be ready yet.');
+      }
+
+      if (!uri) {
+        throw new Error('Failed to generate image. Please try again.');
+      }
+
+      // Check if sharing is available
+      let isAvailable;
+      try {
+        isAvailable = await Sharing.isAvailableAsync();
+      } catch (sharingCheckError) {
+        console.error('Error checking sharing availability:', sharingCheckError);
+        throw new Error('Unable to check if sharing is available on this device.');
+      }
+
+      if (!isAvailable) {
         Alert.alert(
           'Sharing Not Available',
           'Sharing is not available on this device.',
           [{ text: 'OK' }]
         );
+        return;
+      }
+
+      // Share the image directly from the temporary file
+      try {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share Trip',
+        });
+      } catch (shareError) {
+        console.error('Error sharing image:', shareError);
+        throw new Error('Failed to open share dialog. Please try again.');
       }
     } catch (error) {
       console.error('Error sharing trip:', error);
       Alert.alert(
         'Error',
-        'Failed to share trip. Please try again.',
+        error.message || 'Failed to share trip. Please try again.',
         [{ text: 'OK' }]
       );
     } finally {
@@ -2167,7 +2185,8 @@ const styles = StyleSheet.create({
     top: -10000,
     width: 800,
     height: 1200,
-    opacity: 0,
+    overflow: 'hidden',
+    pointerEvents: 'none',
   },
   keyboardAvoidingView: {
     flex: 1,

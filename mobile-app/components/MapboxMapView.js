@@ -13,9 +13,11 @@ if (MAPBOX_CONFIG.accessToken) {
 
 const MapboxMapView = ({
   matches = [],
+  homeBases = [],
   initialRegion = null,
   onRegionChange = () => {},
   onMarkerPress = () => {},
+  onHomeBasePress = () => {},
   selectedMatchId = null,
   style = {},
   showLocationButton = true,
@@ -115,6 +117,11 @@ useEffect(() => {
     onMarkerPress(match);
   };
 
+  // Handle home base press
+  const handleHomeBasePress = (homeBase) => {
+    onHomeBasePress(homeBase);
+  };
+
   // Center map to specific coordinates
   const centerMap = (latitude, longitude, animated = true) => {
     if (mapRef.current) {
@@ -126,20 +133,34 @@ useEffect(() => {
     }
   };
 
-  // Fit map to show all matches
+  // Fit map to show all matches and home bases
   const fitToMatches = () => {
-    if (!matches || matches.length === 0 || !mapRef.current) return;
+    if (!mapRef.current) return;
 
-    // GeoJSON format: [longitude, latitude]
-    const coordinates = matches
+    // Collect coordinates from matches (GeoJSON format: [longitude, latitude])
+    const matchCoordinates = (matches || [])
       .filter(match => match.fixture?.venue?.coordinates)
       .map(match => [
         match.fixture.venue.coordinates[0], // longitude (GeoJSON index 0)
         match.fixture.venue.coordinates[1]  // latitude (GeoJSON index 1)
       ]);
 
-    if (coordinates.length > 0) {
-      mapRef.current.fitBounds(coordinates, {
+    // Collect coordinates from home bases (convert to GeoJSON format)
+    const homeBaseCoordinates = (homeBases || [])
+      .filter(homeBase => {
+        const coords = homeBase.coordinates;
+        return coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
+      })
+      .map(homeBase => [
+        homeBase.coordinates.lng, // longitude (GeoJSON format)
+        homeBase.coordinates.lat  // latitude (GeoJSON format)
+      ]);
+
+    // Combine all coordinates
+    const allCoordinates = [...matchCoordinates, ...homeBaseCoordinates];
+
+    if (allCoordinates.length > 0) {
+      mapRef.current.fitBounds(allCoordinates, {
         edgePadding: { top: 100, right: 50, bottom: 200, left: 50 },
         animationDuration: 1000,
       });
@@ -190,6 +211,29 @@ useEffect(() => {
                 <Text style={styles.markerText}>
                   {match.teams.home.name.charAt(0)}{match.teams.away.name.charAt(0)}
                 </Text>
+              </View>
+            </Mapbox.PointAnnotation>
+          );
+        })}
+
+        {/* Home base markers */}
+        {homeBases && homeBases.map((homeBase) => {
+          if (!homeBase.coordinates || typeof homeBase.coordinates.lat !== 'number' || typeof homeBase.coordinates.lng !== 'number') {
+            return null;
+          }
+
+          // GeoJSON format: [longitude, latitude]
+          const [longitude, latitude] = [homeBase.coordinates.lng, homeBase.coordinates.lat];
+
+          return (
+            <Mapbox.PointAnnotation
+              key={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
+              id={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
+              coordinate={[longitude, latitude]}
+              onSelected={() => handleHomeBasePress(homeBase)}
+            >
+              <View style={styles.homeBaseMarker}>
+                <Icon name="home" size={20} color="white" />
               </View>
             </Mapbox.PointAnnotation>
           );
@@ -272,6 +316,24 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  homeBaseMarker: {
+    backgroundColor: '#4CAF50', // Green color for home bases
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   locationButton: {
     position: 'absolute',

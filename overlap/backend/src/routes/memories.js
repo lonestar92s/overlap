@@ -319,18 +319,40 @@ router.put('/:id', auth, upload.array('photos', 10), handleUploadError, async (r
     }
 
     // Handle regular field updates
-    const allowedUpdates = ['userScore', 'userNotes', 'venue', 'competition', 'date'];
+    const allowedUpdates = ['userScore', 'userNotes', 'venue', 'competition', 'date', 'homeTeam', 'awayTeam'];
     allowedUpdates.forEach(field => {
       if (req.body[field] !== undefined) {
         if (field === 'date') {
           memory[field] = new Date(req.body[field]);
-        } else if (field === 'venue' && typeof req.body[field] === 'string') {
-          try {
-            memory[field] = JSON.parse(req.body[field]);
-          } catch (e) {
-            memory[field] = req.body[field];
+        } else if (field === 'venue' || field === 'homeTeam' || field === 'awayTeam') {
+          // Handle object fields - parse if string, merge if object
+          let fieldValue = req.body[field];
+          
+          // Parse JSON string if needed
+          if (typeof fieldValue === 'string') {
+            try {
+              fieldValue = JSON.parse(fieldValue);
+            } catch (e) {
+              // If parsing fails, keep as string (shouldn't happen for objects)
+              console.warn(`Failed to parse ${field} as JSON:`, e);
+            }
+          }
+          
+          // If it's an object, merge with existing data to preserve other fields
+          if (typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue)) {
+            if (memory[field] && typeof memory[field] === 'object') {
+              // Merge with existing object to preserve fields not being updated
+              memory[field] = { ...memory[field], ...fieldValue };
+            } else {
+              // Replace entirely if no existing object
+              memory[field] = fieldValue;
+            }
+          } else {
+            // For non-object values, assign directly
+            memory[field] = fieldValue;
           }
         } else {
+          // For simple fields like userScore, userNotes, competition
           memory[field] = req.body[field];
         }
       }

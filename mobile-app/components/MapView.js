@@ -8,9 +8,11 @@ import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
 
 const MatchMapView = forwardRef(({
   matches = [],
+  homeBases = [],
   initialRegion = null,
   onRegionChange = () => {},
   onMarkerPress = () => {},
+  onHomeBasePress = () => {},
   selectedMatchId = null,
   style = {},
   showLocationButton = true,
@@ -156,11 +158,12 @@ const MatchMapView = forwardRef(({
     }
   }, [region.latitudeDelta, region.longitudeDelta]);
 
-  // Fit map to show all matches using adaptive bounds
+  // Fit map to show all matches and home bases using adaptive bounds
   const fitToMatches = useCallback(() => {
-    if (!matches || matches.length === 0 || !mapRef.current) return;
+    if (!mapRef.current) return;
 
-    const coordinates = matches
+    // Collect coordinates from matches
+    const matchCoordinates = (matches || [])
       .filter(match => {
         const venue = match.fixture?.venue;
         return venue?.coordinates && venue.coordinates.length === 2;
@@ -170,10 +173,24 @@ const MatchMapView = forwardRef(({
         longitude: match.fixture.venue.coordinates[0], // So lat is index 1, lon is index 0
       }));
 
-    if (coordinates.length === 0) return;
+    // Collect coordinates from home bases
+    const homeBaseCoordinates = (homeBases || [])
+      .filter(homeBase => {
+        const coords = homeBase.coordinates;
+        return coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
+      })
+      .map(homeBase => ({
+        latitude: homeBase.coordinates.lat,
+        longitude: homeBase.coordinates.lng,
+      }));
 
-    // Use adaptive bounds calculation for better match coverage
-    const adaptiveRegion = calculateAdaptiveBounds(coordinates, {
+    // Combine all coordinates
+    const allCoordinates = [...matchCoordinates, ...homeBaseCoordinates];
+
+    if (allCoordinates.length === 0) return;
+
+    // Use adaptive bounds calculation for better coverage
+    const adaptiveRegion = calculateAdaptiveBounds(allCoordinates, {
       minSpan: 0.1,
       maxSpan: 5.0,
       basePadding: 2.0,
@@ -187,7 +204,7 @@ const MatchMapView = forwardRef(({
     setTimeout(() => {
       isAnimatingRef.current = false;
     }, 700); // Slightly longer than animation duration
-  }, [matches]);
+  }, [matches, homeBases]);
 
   // Expose methods via ref for parent components
   useImperativeHandle(ref, () => ({
@@ -211,6 +228,16 @@ const MatchMapView = forwardRef(({
       }
     },
   }), [centerMap, fitToMatches]);
+
+  // Handle home base press
+  const handleHomeBasePress = useCallback((homeBase) => {
+    // Prevent presses during map animations
+    if (isAnimatingRef.current) {
+      return;
+    }
+    
+    onHomeBasePress(homeBase);
+  }, [onHomeBasePress]);
 
   // Render match markers with memoization
   const markers = useMemo(() => {
@@ -267,6 +294,47 @@ const MatchMapView = forwardRef(({
     });
   }, [matches, selectedMatchId, handleMarkerPress]);
 
+  // Render home base markers with memoization
+  const homeBaseMarkers = useMemo(() => {
+    if (!homeBases || homeBases.length === 0) {
+      return null;
+    }
+    
+    const validHomeBases = homeBases.filter(homeBase => {
+      const coords = homeBase.coordinates;
+      if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+        return false;
+      }
+      
+      // Check if coordinates are within reasonable world bounds
+      if (coords.lng < -180 || coords.lng > 180 || coords.lat < -90 || coords.lat > 90) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    return validHomeBases.map(homeBase => {
+      const coordinate = {
+        latitude: homeBase.coordinates.lat,
+        longitude: homeBase.coordinates.lng,
+      };
+      
+      const markerKey = `homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`;
+      
+      return (
+        <Marker
+          key={markerKey}
+          coordinate={coordinate}
+          onPress={() => handleHomeBasePress(homeBase)}
+          pinColor="#4CAF50" // Green color for home bases
+          tracksViewChanges={false}
+          identifier={markerKey}
+        />
+      );
+    });
+  }, [homeBases, handleHomeBasePress]);
+
   return (
     <View style={[styles.container, style]}>
       <MapView
@@ -286,6 +354,7 @@ const MatchMapView = forwardRef(({
         moveOnMarkerPress={false} // Prevent map movement when pressing markers
       >
         {markers}
+        {homeBaseMarkers}
       </MapView>
       
       {/* Custom Location Button */}

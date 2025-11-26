@@ -162,11 +162,19 @@ const MemoriesScreen = () => {
   }, [selectedMemoryForViewer]);
 
   // Handle edit memory from photo viewer
-  const handleEditMemoryFromViewer = useCallback(() => {
-    if (!selectedMemoryForViewer) return;
+  const handleEditMemoryFromViewer = useCallback((memoryParam) => {
+    // Use passed memory parameter, or fall back to selectedMemoryForViewer
+    const memoryToEdit = memoryParam || selectedMemoryForViewer;
+    console.log('handleEditMemoryFromViewer called, memory:', memoryToEdit?.id);
+    
+    if (!memoryToEdit) {
+      console.log('No memory to edit, returning early');
+      return;
+    }
     
     setPhotoViewerVisible(false);
-    navigation.navigate('EditMemory', { memory: selectedMemoryForViewer });
+    console.log('Navigating to EditMemory with memory:', memoryToEdit.id);
+    navigation.navigate('EditMemory', { memory: memoryToEdit });
     setSelectedMemoryForViewer(null);
   }, [selectedMemoryForViewer, navigation]);
 

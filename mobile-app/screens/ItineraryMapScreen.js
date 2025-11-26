@@ -65,62 +65,71 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     loadItinerary();
   }, [itineraryId, getItineraryById]);
 
-  // Calculate map region to fit all matches
+  // Calculate map region to fit all matches and home bases
   const mapRegion = useMemo(() => {
-    console.log('🗺️ ItineraryMapScreen - Calculating map region for matches:', itinerary?.matches);
+    console.log('🗺️ ItineraryMapScreen - Calculating map region for matches and home bases:', itinerary?.matches, itinerary?.homeBases);
     
-    if (!itinerary?.matches || itinerary.matches.length === 0) {
-      console.log('🗺️ ItineraryMapScreen - No matches, using default region');
-      return {
-        latitude: 51.5074, // London default
-        longitude: -0.1278,
-        latitudeDelta: 0.8, // More generous default zoom
-        longitudeDelta: 0.8, // More generous default zoom
-      };
-    }
+    const allCoordinates = [];
 
     // Extract coordinates from matches - try multiple possible sources
-    const coordinates = itinerary.matches
-      .map(match => {
-
-        
-        // Try to get coordinates from different possible locations
-        // First check the new venueData field we're saving
-        const coords = match.venueData?.coordinates ||
-                      match.venue?.coordinates || 
-                      match.fixture?.venue?.coordinates ||
-                      match.venue?.lat || 
-                      match.fixture?.venue?.lat ||
-                      null;
-        
-        console.log('🗺️ ItineraryMapScreen - Found coordinates:', coords);
-        
-        if (coords) {
-          // Handle array format [longitude, latitude] (GeoJSON)
-          if (Array.isArray(coords) && coords.length === 2) {
-            return { lat: coords[1], lng: coords[0] };  // GeoJSON: [lon, lat]
-          }
-          // Handle object format { lat, lng } or { latitude, longitude }
-          else if (typeof coords === 'object') {
-            if (coords.lat && coords.lng) {
-              return { lat: coords.lat, lng: coords.lng };
-            } else if (coords.latitude && coords.longitude) {
-              return { lat: coords.latitude, lng: coords.longitude };
+    if (itinerary?.matches && itinerary.matches.length > 0) {
+      const matchCoordinates = itinerary.matches
+        .map(match => {
+          // Try to get coordinates from different possible locations
+          // First check the new venueData field we're saving
+          const coords = match.venueData?.coordinates ||
+                        match.venue?.coordinates || 
+                        match.fixture?.venue?.coordinates ||
+                        match.venue?.lat || 
+                        match.fixture?.venue?.lat ||
+                        null;
+          
+          console.log('🗺️ ItineraryMapScreen - Found coordinates:', coords);
+          
+          if (coords) {
+            // Handle array format [longitude, latitude] (GeoJSON)
+            if (Array.isArray(coords) && coords.length === 2) {
+              return { lat: coords[1], lng: coords[0] };  // GeoJSON: [lon, lat]
+            }
+            // Handle object format { lat, lng } or { latitude, longitude }
+            else if (typeof coords === 'object') {
+              if (coords.lat && coords.lng) {
+                return { lat: coords.lat, lng: coords.lng };
+              } else if (coords.latitude && coords.longitude) {
+                return { lat: coords.latitude, lng: coords.longitude };
+              }
             }
           }
-        }
-        
-        // If no coordinates, return null
-        return null;
-      })
-      .filter(coord => coord !== null);
+          
+          // If no coordinates, return null
+          return null;
+        })
+        .filter(coord => coord !== null);
+      
+      allCoordinates.push(...matchCoordinates);
+    }
 
-    console.log('🗺️ ItineraryMapScreen - Extracted coordinates:', coordinates);
+    // Extract coordinates from home bases
+    if (itinerary?.homeBases && itinerary.homeBases.length > 0) {
+      const homeBaseCoordinates = itinerary.homeBases
+        .filter(homeBase => {
+          const coords = homeBase.coordinates;
+          return coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
+        })
+        .map(homeBase => ({
+          lat: homeBase.coordinates.lat,
+          lng: homeBase.coordinates.lng,
+        }));
+      
+      allCoordinates.push(...homeBaseCoordinates);
+    }
+
+    console.log('🗺️ ItineraryMapScreen - Extracted coordinates:', allCoordinates);
 
     // If we have coordinates, calculate bounds
-    if (coordinates.length > 0) {
-      const lats = coordinates.map(coord => coord.lat);
-      const lngs = coordinates.map(coord => coord.lng);
+    if (allCoordinates.length > 0) {
+      const lats = allCoordinates.map(coord => coord.lat);
+      const lngs = allCoordinates.map(coord => coord.lng);
       
       const minLat = Math.min(...lats);
       const maxLat = Math.max(...lats);
@@ -143,8 +152,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     return {
       latitude: 51.5074, // London default
       longitude: -0.1278,
-      latitudeDelta: 0.5,
-      longitudeDelta: 0.5,
+      latitudeDelta: 0.8, // More generous default zoom
+      longitudeDelta: 0.8, // More generous default zoom
     };
   }, [itinerary]);
 
@@ -247,6 +256,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           initialRegion={mapRegion}
           onMapPress={handleMapPress}
           matches={transformMatchesForMap(itinerary.matches || [])}
+          homeBases={itinerary.homeBases || []}
           onMarkerPress={handleMarkerPress}
           autoFitKey={autoFitKey}
         />

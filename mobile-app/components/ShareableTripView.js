@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Image,
-  ScrollView,
 } from 'react-native';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
@@ -162,10 +161,8 @@ const ShareableTripView = ({ trip, width = 800, height = 1200 }) => {
 
   return (
     <View style={[styles.container, { width, height }]}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <View 
+        style={[styles.scrollView, styles.scrollContent]}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -362,7 +359,7 @@ const ShareableTripView = ({ trip, width = 800, height = 1200 }) => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Created with Overlap</Text>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 };
@@ -374,9 +371,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    padding: spacing.lg,
   },
   scrollContent: {
-    padding: spacing.lg,
+    // Combined with scrollView
   },
   header: {
     marginBottom: spacing.lg,

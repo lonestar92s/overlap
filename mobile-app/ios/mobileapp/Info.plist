@@ -76,5 +76,7 @@
     <string>Light</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app needs access to your location to show your position on maps and help you find nearby matches and plan your trips.</string>
   </dict>
 </plist>

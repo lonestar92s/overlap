@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Alert,
+  Animated,
+  Platform,
+  ActionSheetIOS,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +26,15 @@ const PhotoViewerModal = ({
 }) => {
   const [imageIndex, setImageIndex] = useState(0);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Store memory in ref to avoid stale closure issues
+  const memoryRef = useRef(memory);
+  
+  // Update ref when memory changes
+  useEffect(() => {
+    memoryRef.current = memory;
+    console.log('Memory ref updated:', memory?.id || memory?._id);
+  }, [memory]);
 
   // Get the photo URL
   const getImageUrl = useCallback((photo) => {
@@ -55,8 +67,27 @@ const PhotoViewerModal = ({
     if (visible && memory && photos.length > 0) {
       setImageIndex(0);
       setActionSheetVisible(false);
+      slideAnim.setValue(0);
     }
-  }, [visible, memory, photos]);
+  }, [visible, memory, photos, slideAnim]);
+
+  // Animate action sheet
+  useEffect(() => {
+    if (actionSheetVisible) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [actionSheetVisible, slideAnim]);
 
   const handleClose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -65,16 +96,54 @@ const PhotoViewerModal = ({
   }, [onClose]);
 
   const handleMenuPress = useCallback(() => {
+    console.log('handleMenuPress called, memory:', memory?.id || memory?._id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActionSheetVisible(true);
-  }, []);
+    
+    if (Platform.OS === 'ios') {
+      // Use native ActionSheet on iOS
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Edit Memory', 'Delete Memory'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            handleEdit();
+          } else if (buttonIndex === 2) {
+            handleDelete();
+          }
+        }
+      );
+    } else {
+      // Use custom bottom sheet on Android
+      setActionSheetVisible(true);
+    }
+  }, [handleEdit, handleDelete, memory]);
 
   const handleEdit = useCallback(() => {
+    // Get current memory value from ref to avoid stale closure issues
+    const currentMemory = memoryRef.current || memory;
+    console.log('handleEdit called, memory from ref:', memoryRef.current?.id || memoryRef.current?._id);
+    console.log('handleEdit called, memory from prop:', memory?.id || memory?._id);
+    console.log('handleEdit called, currentMemory:', currentMemory?.id || currentMemory?._id);
+    
+    if (!currentMemory) {
+      console.log('No memory available in handleEdit');
+      return;
+    }
+    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setActionSheetVisible(false);
-    onClose();
-    onEdit();
-  }, [onClose, onEdit]);
+    // Call onEdit immediately - it should handle navigation
+    // Pass memory directly if onEdit accepts it, otherwise it will use selectedMemoryForViewer
+    if (onEdit) {
+      console.log('Calling onEdit with memory:', currentMemory?.id || currentMemory?._id);
+      onEdit(currentMemory);
+    } else {
+      console.log('onEdit is not defined');
+    }
+  }, [onEdit, memory]);
 
   const handleDelete = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -100,38 +169,48 @@ const PhotoViewerModal = ({
   // Header Component - Location above image with close and menu buttons
   const HeaderComponent = useCallback(({ imageIndex: currentIndex }) => {
     const venue = memory?.venue;
-    let locationText = '';
+    const stadiumName = venue?.name;
     
-    if (venue?.name) {
-      locationText = venue.name;
-    } else if (venue?.city && venue?.country) {
+    // Build location text (city, country)
+    let locationText = '';
+    if (venue?.city && venue?.country) {
       locationText = `${venue.city}, ${venue.country}`;
     } else if (venue?.city) {
       locationText = venue.city;
     } else if (venue?.country) {
       locationText = venue.country;
     }
+    
+    const hasLocationInfo = stadiumName || locationText;
 
     return (
-      <SafeAreaView edges={['top']} style={styles.headerOverlay}>
-        <View style={styles.headerContent}>
+      <SafeAreaView edges={['top']} style={styles.headerOverlay} pointerEvents="box-none">
+        <View style={styles.headerContent} pointerEvents="box-none">
           <TouchableOpacity
             onPress={handleClose}
             style={styles.closeButton}
             accessibilityLabel="Close"
             accessibilityRole="button"
+            activeOpacity={0.7}
           >
             <MaterialIcons name="close" size={iconSizes.lg} color={colors.onPrimary} />
           </TouchableOpacity>
           
-          {locationText ? (
-            <View style={styles.locationContainer}>
-              <Text style={styles.locationText} numberOfLines={1}>
-                {locationText}
-              </Text>
+          {hasLocationInfo ? (
+            <View style={styles.locationContainer} pointerEvents="none">
+              {stadiumName && (
+                <Text style={styles.stadiumNameText} numberOfLines={1}>
+                  {stadiumName}
+                </Text>
+              )}
+              {locationText && (
+                <Text style={styles.locationText} numberOfLines={1}>
+                  {locationText}
+                </Text>
+              )}
             </View>
           ) : (
-            <View style={styles.locationContainer} />
+            <View style={styles.locationContainer} pointerEvents="none" />
           )}
           
           <TouchableOpacity
@@ -139,6 +218,7 @@ const PhotoViewerModal = ({
             style={styles.menuButton}
             accessibilityLabel="More options"
             accessibilityRole="button"
+            activeOpacity={0.7}
           >
             <MaterialIcons name="more-vert" size={iconSizes.lg} color={colors.onPrimary} />
           </TouchableOpacity>
@@ -159,7 +239,7 @@ const PhotoViewerModal = ({
     }) : null;
 
     return (
-      <View style={styles.footerOverlay}>
+      <SafeAreaView edges={['bottom']} style={styles.footerOverlay}>
         <Text style={styles.teamsText}>
           {homeTeam} vs {awayTeam}
         </Text>
@@ -169,11 +249,19 @@ const PhotoViewerModal = ({
         {date && (
           <Text style={styles.dateText}>{date}</Text>
         )}
-      </View>
+      </SafeAreaView>
     );
   }, [memory]);
 
-  if (!memory || !hasPhotos || images.length === 0) return null;
+  // Log when memory changes
+  useEffect(() => {
+    console.log('PhotoViewerModal memory changed:', memory?.id || memory?._id, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
+  }, [memory, hasPhotos, images.length]);
+
+  if (!memory || !hasPhotos || images.length === 0) {
+    console.log('PhotoViewerModal returning null - memory:', !!memory, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
+    return null;
+  }
 
   return (
     <>
@@ -190,65 +278,78 @@ const PhotoViewerModal = ({
         backgroundColor="#000000"
       />
 
-      {/* Action Sheet Modal - Separate modal to work with ImageView */}
-      <Modal
-        visible={actionSheetVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setActionSheetVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <TouchableWithoutFeedback onPress={() => setActionSheetVisible(false)}>
-          <View style={styles.actionSheetOverlayContainer}>
-            <TouchableWithoutFeedback>
-              <View style={styles.actionSheet}>
-                <TouchableOpacity
-                  style={styles.actionSheetItem}
-                  onPress={handleEdit}
-                  accessibilityLabel="Edit Memory"
-                  accessibilityRole="button"
-                  activeOpacity={0.7}
-                >
-                  <MaterialIcons name="edit" size={iconSizes.md} color={colors.text.primary} />
-                  <Text style={styles.actionSheetText}>Edit Memory</Text>
-                </TouchableOpacity>
-                
-                <View style={styles.actionSheetDivider} />
-                
-                <TouchableOpacity
-                  style={[styles.actionSheetItem, styles.actionSheetItemDestructive]}
-                  onPress={handleDelete}
-                  accessibilityLabel="Delete Memory"
-                  accessibilityRole="button"
-                  activeOpacity={0.7}
-                >
-                  <MaterialIcons name="delete" size={iconSizes.md} color={colors.error} />
-                  <Text style={[styles.actionSheetText, styles.actionSheetTextDestructive]}>
-                    Delete Memory
-                  </Text>
-                </TouchableOpacity>
-                
-                <View style={styles.actionSheetDivider} />
-                
-                <TouchableOpacity
-                  style={styles.actionSheetItem}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setActionSheetVisible(false);
-                  }}
-                  accessibilityLabel="Cancel"
-                  accessibilityRole="button"
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.actionSheetText, styles.actionSheetTextCancel]}>
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
-              </View>
+      {/* Action Sheet - Use Modal for Android, native ActionSheet for iOS */}
+      {Platform.OS === 'android' && (
+        <Modal
+          visible={visible && actionSheetVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setActionSheetVisible(false)}
+          statusBarTranslucent={true}
+        >
+          <View style={styles.actionSheetOverlayContainer} pointerEvents="box-none">
+            <TouchableWithoutFeedback onPress={() => setActionSheetVisible(false)}>
+              <View style={StyleSheet.absoluteFill} />
             </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+            <Animated.View 
+              style={[
+                styles.actionSheet,
+                {
+                  transform: [{
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [300, 0],
+                    }),
+                  }],
+                },
+              ]}
+            >
+            <TouchableOpacity
+              style={styles.actionSheetItem}
+              onPress={handleEdit}
+              accessibilityLabel="Edit Memory"
+              accessibilityRole="button"
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="edit" size={iconSizes.md} color={colors.text.primary} />
+              <Text style={styles.actionSheetText}>Edit Memory</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.actionSheetDivider} />
+            
+            <TouchableOpacity
+              style={[styles.actionSheetItem, styles.actionSheetItemDestructive]}
+              onPress={handleDelete}
+              accessibilityLabel="Delete Memory"
+              accessibilityRole="button"
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="delete" size={iconSizes.md} color={colors.error} />
+              <Text style={[styles.actionSheetText, styles.actionSheetTextDestructive]}>
+                Delete Memory
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={styles.actionSheetDivider} />
+            
+            <TouchableOpacity
+              style={styles.actionSheetItem}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActionSheetVisible(false);
+              }}
+              accessibilityLabel="Cancel"
+              accessibilityRole="button"
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.actionSheetText, styles.actionSheetTextCancel]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
       </Modal>
+      )}
     </>
   );
 };
@@ -256,24 +357,33 @@ const PhotoViewerModal = ({
 const styles = StyleSheet.create({
   headerOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingTop: spacing.lg,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    paddingTop: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingTop: spacing.xxl,
   },
   locationContainer: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: spacing.md,
   },
-  locationText: {
+  stadiumNameText: {
     ...typography.body,
     color: colors.onPrimary,
     fontFamily: typography.fontFamily,
+    fontWeight: '600',
+    marginBottom: spacing.xs / 2,
+  },
+  locationText: {
+    ...typography.bodySmall,
+    color: colors.onPrimary,
+    fontFamily: typography.fontFamily,
+    opacity: 0.9,
   },
   closeButton: {
     width: 44,
@@ -294,8 +404,8 @@ const styles = StyleSheet.create({
   footerOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   teamsText: {
     ...typography.body,
@@ -316,20 +426,19 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily,
   },
   actionSheetOverlayContainer: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    zIndex: 10000,
+    elevation: 10000,
   },
   actionSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: colors.card,
     borderTopLeftRadius: borderRadius.lg,
     borderTopRightRadius: borderRadius.lg,
     paddingBottom: spacing.xl,
     paddingTop: spacing.md,
+    width: '100%',
   },
   actionSheetItem: {
     flexDirection: 'row',
@@ -362,3 +471,4 @@ const styles = StyleSheet.create({
 });
 
 export default PhotoViewerModal;
+
