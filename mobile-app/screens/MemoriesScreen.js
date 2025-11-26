@@ -20,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
+import PhotoViewerModal from '../components/PhotoViewerModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_ITEM_SIZE = SCREEN_WIDTH / 3;
@@ -33,6 +34,8 @@ const MemoriesScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [activeTab, setActiveTab] = useState('memories');
+  const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
+  const [selectedMemoryForViewer, setSelectedMemoryForViewer] = useState(null);
 
   // Fetch memories and stats
   const fetchMemories = useCallback(async () => {
@@ -74,8 +77,18 @@ const MemoriesScreen = () => {
   const handleMemoryPress = useCallback((memory) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedMemory(memory);
-    // Navigate to edit memory screen
-    navigation.navigate('EditMemory', { memory });
+    
+    // Check if memory has photos
+    const hasPhotos = memory.photos && memory.photos.length > 0;
+    
+    if (hasPhotos) {
+      // Open photo viewer
+      setSelectedMemoryForViewer(memory);
+      setPhotoViewerVisible(true);
+    } else {
+      // Navigate to edit memory screen if no photos
+      navigation.navigate('EditMemory', { memory });
+    }
   }, [navigation]);
 
   // Delete memory
@@ -116,6 +129,51 @@ const MemoriesScreen = () => {
         }
       ]
     );
+  }, []);
+
+  // Handle delete memory from photo viewer
+  const handleDeleteMemoryFromViewer = useCallback(async () => {
+    if (!selectedMemoryForViewer) return;
+    
+    try {
+      setLoading(true);
+      const response = await ApiService.deleteMemory(selectedMemoryForViewer._id || selectedMemoryForViewer.matchId);
+      
+      if (response.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Remove from local state
+        setMemories(prev => prev.filter(m => (m._id || m.matchId) !== (selectedMemoryForViewer._id || selectedMemoryForViewer.matchId)));
+        // Refresh stats
+        const statsResponse = await ApiService.getMemoryStats();
+        if (statsResponse.success) {
+          setStats(statsResponse.data);
+        }
+        // Close viewer
+        setPhotoViewerVisible(false);
+        setSelectedMemoryForViewer(null);
+      }
+    } catch (error) {
+      console.error('Error deleting memory:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', 'Failed to delete memory. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedMemoryForViewer]);
+
+  // Handle edit memory from photo viewer
+  const handleEditMemoryFromViewer = useCallback(() => {
+    if (!selectedMemoryForViewer) return;
+    
+    setPhotoViewerVisible(false);
+    navigation.navigate('EditMemory', { memory: selectedMemoryForViewer });
+    setSelectedMemoryForViewer(null);
+  }, [selectedMemoryForViewer, navigation]);
+
+  // Handle close photo viewer
+  const handleClosePhotoViewer = useCallback(() => {
+    setPhotoViewerVisible(false);
+    setSelectedMemoryForViewer(null);
   }, []);
 
   // Navigate to add memory
@@ -423,6 +481,15 @@ const MemoriesScreen = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Photo Viewer Modal */}
+      <PhotoViewerModal
+        visible={photoViewerVisible}
+        onClose={handleClosePhotoViewer}
+        memory={selectedMemoryForViewer}
+        onEdit={handleEditMemoryFromViewer}
+        onDelete={handleDeleteMemoryFromViewer}
+      />
     </SafeAreaView>
   );
 };
