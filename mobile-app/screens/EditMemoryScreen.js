@@ -118,6 +118,49 @@ const EditMemoryScreen = () => {
     return true;
   }, [photos]);
 
+  // Delete memory
+  const handleDelete = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    Alert.alert(
+      'Delete Memory',
+      'Are you sure you want to delete this memory? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const response = await ApiService.deleteMemory(memory._id || memory.matchId);
+              
+              if (response.success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                  'Success!',
+                  'Memory deleted successfully',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => navigation.goBack()
+                    }
+                  ]
+                );
+              }
+            } catch (error) {
+              console.error('Error deleting memory:', error);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Error', 'Failed to delete memory. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  }, [memory, navigation]);
+
   // Update memory
   const handleUpdate = useCallback(async () => {
     if (!validateForm()) return;
@@ -200,11 +243,21 @@ const EditMemoryScreen = () => {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
           >
             <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
           </TouchableOpacity>
           <Text style={styles.title}>Edit Memory</Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+            disabled={loading}
+            accessibilityLabel="Delete memory"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="delete-outline" size={24} color="#FF3B30" />
+          </TouchableOpacity>
         </View>
 
         {/* Photo Section */}
@@ -372,8 +425,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a1a1a',
   },
-  placeholder: {
+  deleteButton: {
+    padding: 8,
     width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   card: {
     borderRadius: 16,

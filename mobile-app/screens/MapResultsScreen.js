@@ -79,6 +79,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Refs
   const mapRef = useRef();
   const suppressNextMapPressRef = useRef(false);
+  const lastMarkerPressTimeRef = useRef(0);
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
@@ -699,7 +700,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Handle marker press: show overlay, hide bottom sheet, and center map
-  const getVenueGroupKey = (match) => {
+  const getVenueGroupKey = useCallback((match) => {
     const venue = match?.fixture?.venue;
     if (!venue) return null;
     if (venue.id != null) return `id:${venue.id}`;
@@ -707,40 +708,102 @@ const MapResultsScreen = ({ navigation, route }) => {
       return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
     }
     return null;
-  };
+  }, []);
 
-  const handleMarkerPress = (match) => {
+  const handleMarkerPress = useCallback((match) => {
+    // Defensive checks - validate match data
+    if (!match) {
+      if (__DEV__) {
+        console.warn('MapResultsScreen: handleMarkerPress called with null/undefined match');
+      }
+      return;
+    }
+    
+    if (!match.fixture) {
+      if (__DEV__) {
+        console.warn('MapResultsScreen: handleMarkerPress called with match missing fixture');
+      }
+      return;
+    }
+    
+    // Debounce rapid successive marker presses (prevent double-taps)
+    const now = Date.now();
+    const timeSinceLastPress = now - lastMarkerPressTimeRef.current;
+    if (timeSinceLastPress < 300) {
+      // Ignore presses within 300ms of the last press
+      return;
+    }
+    lastMarkerPressTimeRef.current = now;
+    
     // Prevent immediate map-press from closing the overlay
+    // Increased timeout from 250ms to 350ms to ensure marker press completes
     suppressNextMapPressRef.current = true;
-    setTimeout(() => { suppressNextMapPressRef.current = false; }, 250);
-
-    // Map marker selects the venue group containing this match
-    const key = getVenueGroupKey(match);
-    if (!venueGroups || venueGroups.length === 0 || !key) return;
-    const index = venueGroups.findIndex(g => g.key === key);
-    const nextIndex = index >= 0 ? index : 0;
-    setSelectedVenueIndex(nextIndex);
-    if (bottomSheetRef.current && typeof bottomSheetRef.current.close === 'function') {
-      bottomSheetRef.current.close();
+    const suppressTimeout = setTimeout(() => { 
+      suppressNextMapPressRef.current = false; 
+    }, 350);
+    
+    try {
+      // Map marker selects the venue group containing this match
+      const key = getVenueGroupKey(match);
+      if (!venueGroups || venueGroups.length === 0) {
+        if (__DEV__) {
+          console.warn('MapResultsScreen: No venue groups available');
+        }
+        clearTimeout(suppressTimeout);
+        suppressNextMapPressRef.current = false;
+        return;
+      }
+      
+      if (!key) {
+        if (__DEV__) {
+          console.warn('MapResultsScreen: Could not generate venue group key for match', match.fixture.id);
+        }
+        clearTimeout(suppressTimeout);
+        suppressNextMapPressRef.current = false;
+        return;
+      }
+      
+      const index = venueGroups.findIndex(g => g.key === key);
+      const nextIndex = index >= 0 ? index : 0;
+      setSelectedVenueIndex(nextIndex);
+      
+      // Close bottom sheet if open
+      if (bottomSheetRef.current && typeof bottomSheetRef.current.close === 'function') {
+        bottomSheetRef.current.close();
+      }
+      
+      // Center map on venue with a slight delay to ensure marker press event completes
+      const venue = match.fixture?.venue;
+      if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
+        // Small delay before animating to ensure marker press is fully processed
+        setTimeout(() => {
+          if (mapRef.current) {
+            mapRef.current.animateToRegion({
+              latitude: venue.coordinates[1],
+              longitude: venue.coordinates[0],
+              latitudeDelta: mapRegion?.latitudeDelta || 0.1,
+              longitudeDelta: mapRegion?.longitudeDelta || 0.1,
+            }, 1000);
+          }
+        }, 50); // Small delay to ensure event completes
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.error('MapResultsScreen: Error in handleMarkerPress', error);
+      }
+      clearTimeout(suppressTimeout);
+      suppressNextMapPressRef.current = false;
     }
-    const venue = match.fixture?.venue;
-    if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: venue.coordinates[1],
-        longitude: venue.coordinates[0],
-        latitudeDelta: mapRegion?.latitudeDelta || 0.1,
-        longitudeDelta: mapRegion?.longitudeDelta || 0.1,
-      }, 1000);
-    }
-  };
+  }, [venueGroups, mapRegion, getVenueGroupKey]);
 
-  const handleMapPress = () => {
+  const handleMapPress = useCallback(() => {
+    // Check if we should suppress this map press (e.g., immediately after marker press)
     if (suppressNextMapPressRef.current) {
       suppressNextMapPressRef.current = false;
       return;
     }
     handleOverlayClose();
-  };
+  }, [handleOverlayClose]);
 
   const centerMapOnVenueByIndex = (index) => {
     const group = venueGroups?.[index];
@@ -755,12 +818,12 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleOverlayClose = () => {
+  const handleOverlayClose = useCallback(() => {
     setSelectedVenueIndex(null);
     if (bottomSheetRef.current && typeof bottomSheetRef.current.snapToIndex === 'function') {
       bottomSheetRef.current.snapToIndex(0);
     }
-  };
+  }, []);
 
   const handleOverlayPrev = () => {
     if (selectedVenueIndex === null || selectedVenueIndex <= 0) return;

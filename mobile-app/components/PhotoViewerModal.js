@@ -1,22 +1,18 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  Image,
-  Dimensions,
-  ActivityIndicator,
   TouchableWithoutFeedback,
   Alert,
+  Modal,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import ImageView from 'react-native-image-viewing';
 import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const PhotoViewerModal = ({
   visible,
@@ -25,8 +21,7 @@ const PhotoViewerModal = ({
   onEdit,
   onDelete,
 }) => {
-  const insets = useSafeAreaInsets();
-  const [imageLoading, setImageLoading] = useState(true);
+  const [imageIndex, setImageIndex] = useState(0);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
 
   // Get the photo URL
@@ -43,17 +38,25 @@ const PhotoViewerModal = ({
   }, []);
 
   const hasPhotos = memory?.photos && memory.photos.length > 0;
-  const firstPhoto = hasPhotos ? memory.photos[0] : null;
-  const imageUrl = getImageUrl(firstPhoto);
-  const memoryTitle = memory?.matchTitle || memory?.teams || 'Memory';
+  const photos = memory?.photos || [];
 
-  // Reset loading state when memory changes
+  // Convert photos to format expected by react-native-image-viewing
+  const images = useMemo(() => {
+    return photos
+      .map((photo) => {
+        const url = getImageUrl(photo);
+        return url ? { uri: url } : null;
+      })
+      .filter(Boolean);
+  }, [photos, getImageUrl]);
+
+  // Reset image index when memory changes
   useEffect(() => {
-    if (visible && memory) {
-      setImageLoading(true);
+    if (visible && memory && photos.length > 0) {
+      setImageIndex(0);
       setActionSheetVisible(false);
     }
-  }, [visible, memory]);
+  }, [visible, memory, photos]);
 
   const handleClose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -94,87 +97,109 @@ const PhotoViewerModal = ({
     );
   }, [onClose, onDelete]);
 
-  const handleImageLoad = useCallback(() => {
-    setImageLoading(false);
-  }, []);
+  // Header Component - Location above image with close and menu buttons
+  const HeaderComponent = useCallback(({ imageIndex: currentIndex }) => {
+    const venue = memory?.venue;
+    let locationText = '';
+    
+    if (venue?.name) {
+      locationText = venue.name;
+    } else if (venue?.city && venue?.country) {
+      locationText = `${venue.city}, ${venue.country}`;
+    } else if (venue?.city) {
+      locationText = venue.city;
+    } else if (venue?.country) {
+      locationText = venue.country;
+    }
 
-  const handleImageError = useCallback(() => {
-    setImageLoading(false);
-  }, []);
+    return (
+      <SafeAreaView edges={['top']} style={styles.headerOverlay}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.closeButton}
+            accessibilityLabel="Close"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="close" size={iconSizes.lg} color={colors.onPrimary} />
+          </TouchableOpacity>
+          
+          {locationText ? (
+            <View style={styles.locationContainer}>
+              <Text style={styles.locationText} numberOfLines={1}>
+                {locationText}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.locationContainer} />
+          )}
+          
+          <TouchableOpacity
+            onPress={handleMenuPress}
+            style={styles.menuButton}
+            accessibilityLabel="More options"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="more-vert" size={iconSizes.lg} color={colors.onPrimary} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }, [memory, handleClose, handleMenuPress]);
 
-  if (!memory || !hasPhotos) return null;
+  // Footer Component - Teams, score, date below image
+  const FooterComponent = useCallback(({ imageIndex: currentIndex }) => {
+    const homeTeam = memory?.homeTeam?.name || 'Unknown';
+    const awayTeam = memory?.awayTeam?.name || 'Unknown';
+    const score = memory?.userScore || memory?.apiMatchData?.officialScore || null;
+    const date = memory?.date ? new Date(memory.date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }) : null;
+
+    return (
+      <View style={styles.footerOverlay}>
+        <Text style={styles.teamsText}>
+          {homeTeam} vs {awayTeam}
+        </Text>
+        {score && (
+          <Text style={styles.scoreText}>{score}</Text>
+        )}
+        {date && (
+          <Text style={styles.dateText}>{date}</Text>
+        )}
+      </View>
+    );
+  }, [memory]);
+
+  if (!memory || !hasPhotos || images.length === 0) return null;
 
   return (
     <>
-      <Modal
+      <ImageView
+        images={images}
+        imageIndex={imageIndex}
         visible={visible}
-        transparent={false}
-        animationType="fade"
         onRequestClose={handleClose}
-      >
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-          {/* Header */}
-          <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-            <TouchableOpacity
-              onPress={handleClose}
-              style={styles.closeButton}
-              accessibilityLabel="Close"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="close" size={iconSizes.lg} color={colors.onPrimary} />
-            </TouchableOpacity>
-            
-            <View style={styles.titleContainer}>
-              <Text style={styles.title} numberOfLines={1}>
-                {memoryTitle}
-              </Text>
-            </View>
-            
-            <TouchableOpacity
-              onPress={handleMenuPress}
-              style={styles.menuButton}
-              accessibilityLabel="More options"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="more-vert" size={iconSizes.lg} color={colors.onPrimary} />
-            </TouchableOpacity>
-          </View>
+        onImageIndexChange={setImageIndex}
+        HeaderComponent={HeaderComponent}
+        FooterComponent={FooterComponent}
+        swipeToCloseEnabled={true}
+        doubleTapToZoomEnabled={true}
+        backgroundColor="#000000"
+      />
 
-          {/* Photo Container */}
-          <View style={styles.photoContainer}>
-            {imageLoading && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.onPrimary} />
-              </View>
-            )}
-            {imageUrl ? (
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.photo}
-                resizeMode="contain"
-                onLoad={handleImageLoad}
-                onError={handleImageError}
-                accessibilityLabel={`Photo for ${memoryTitle}`}
-              />
-            ) : (
-              <View style={styles.errorContainer}>
-                <MaterialIcons name="broken-image" size={iconSizes.xl} color={colors.text.light} />
-                <Text style={styles.errorText}>Failed to load photo</Text>
-              </View>
-            )}
-          </View>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Action Sheet Modal */}
+      {/* Action Sheet Modal - Separate modal to work with ImageView */}
       <Modal
         visible={actionSheetVisible}
         transparent={true}
         animationType="fade"
         onRequestClose={() => setActionSheetVisible(false)}
+        statusBarTranslucent={true}
       >
         <TouchableWithoutFeedback onPress={() => setActionSheetVisible(false)}>
-          <View style={styles.actionSheetOverlay}>
+          <View style={styles.actionSheetOverlayContainer}>
             <TouchableWithoutFeedback>
               <View style={styles.actionSheet}>
                 <TouchableOpacity
@@ -182,6 +207,7 @@ const PhotoViewerModal = ({
                   onPress={handleEdit}
                   accessibilityLabel="Edit Memory"
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                 >
                   <MaterialIcons name="edit" size={iconSizes.md} color={colors.text.primary} />
                   <Text style={styles.actionSheetText}>Edit Memory</Text>
@@ -194,6 +220,7 @@ const PhotoViewerModal = ({
                   onPress={handleDelete}
                   accessibilityLabel="Delete Memory"
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                 >
                   <MaterialIcons name="delete" size={iconSizes.md} color={colors.error} />
                   <Text style={[styles.actionSheetText, styles.actionSheetTextDestructive]}>
@@ -205,9 +232,13 @@ const PhotoViewerModal = ({
                 
                 <TouchableOpacity
                   style={styles.actionSheetItem}
-                  onPress={() => setActionSheetVisible(false)}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setActionSheetVisible(false);
+                  }}
                   accessibilityLabel="Cancel"
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.actionSheetText, styles.actionSheetTextCancel]}>
                     Cancel
@@ -223,17 +254,26 @@ const PhotoViewerModal = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
+  headerOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
-  header: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingVertical: spacing.sm,
+    paddingTop: spacing.md,
+  },
+  locationContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  locationText: {
+    ...typography.body,
+    color: colors.onPrimary,
+    fontFamily: typography.fontFamily,
   },
   closeButton: {
     width: 44,
@@ -243,16 +283,6 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
   },
-  titleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  title: {
-    ...typography.body,
-    color: colors.onPrimary,
-    fontWeight: '600',
-  },
   menuButton: {
     width: 44,
     height: 44,
@@ -261,40 +291,45 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
   },
-  photoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000000',
+  footerOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    paddingBottom: spacing.lg,
   },
-  photo: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
-  },
-  loadingContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
+  teamsText: {
     ...typography.body,
-    color: colors.text.light,
-    marginTop: spacing.md,
+    color: colors.onPrimary,
+    fontFamily: typography.fontFamily,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
   },
-  actionSheetOverlay: {
+  scoreText: {
+    ...typography.bodySmall,
+    color: colors.onPrimary,
+    fontFamily: typography.fontFamily,
+    marginBottom: spacing.xs,
+  },
+  dateText: {
+    ...typography.bodySmall,
+    color: colors.onPrimary,
+    fontFamily: typography.fontFamily,
+  },
+  actionSheetOverlayContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   actionSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: colors.card,
     borderTopLeftRadius: borderRadius.lg,
     borderTopRightRadius: borderRadius.lg,
     paddingBottom: spacing.xl,
+    paddingTop: spacing.md,
   },
   actionSheetItem: {
     flexDirection: 'row',
@@ -309,6 +344,7 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.primary,
     marginLeft: spacing.md,
+    fontFamily: typography.fontFamily,
   },
   actionSheetTextDestructive: {
     color: colors.error,
@@ -326,4 +362,3 @@ const styles = StyleSheet.create({
 });
 
 export default PhotoViewerModal;
-

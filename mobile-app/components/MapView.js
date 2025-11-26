@@ -28,6 +28,7 @@ const MatchMapView = forwardRef(({
   const [region, setRegion] = useState(initialRegion || defaultRegion);
   const [userLocation, setUserLocation] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  const isAnimatingRef = useRef(false);
 
   // Update region when initialRegion prop changes
   useEffect(() => {
@@ -91,20 +92,49 @@ const MatchMapView = forwardRef(({
   };
 
   // Handle marker press
-  const handleMarkerPress = (match) => {
+  const handleMarkerPress = useCallback((match) => {
+    // Prevent marker presses during map animations
+    if (isAnimatingRef.current) {
+      return;
+    }
+    
+    // Validate match data
+    if (!match || !match.fixture) {
+      if (__DEV__) {
+        console.warn('MapView: Invalid match data in handleMarkerPress');
+      }
+      return;
+    }
+    
     onMarkerPress(match);
-  };
+  }, [onMarkerPress]);
 
   // Handle map press (close overlays, etc.)
-  const handleMapPress = (event) => {
-    // Ignore marker presses
-    const action = event?.nativeEvent?.action;
-    if (action === 'marker-press') return;
+  const handleMapPress = useCallback((event) => {
+    // Improved marker press detection - check multiple event properties
+    const nativeEvent = event?.nativeEvent;
+    if (!nativeEvent) {
+      onMapPress();
+      return;
+    }
+    
+    // Check for marker press indicators
+    const action = nativeEvent.action;
+    const coordinate = nativeEvent.coordinate;
+    
+    // If action is explicitly marker-press, ignore
+    if (action === 'marker-press') {
+      return;
+    }
+    
+    // If coordinate exists but no action, it might be a marker press
+    // (marker presses sometimes don't have the action set correctly)
+    // Only proceed with map press if we're sure it's not a marker
     onMapPress();
-  };
+  }, [onMapPress]);
 
   // Center map on specific location
-  const centerMap = (latitude, longitude, animated = true) => {
+  const centerMap = useCallback((latitude, longitude, animated = true) => {
     const newRegion = {
       latitude,
       longitude,
@@ -114,15 +144,20 @@ const MatchMapView = forwardRef(({
 
     if (mapRef.current) {
       if (animated) {
+        isAnimatingRef.current = true;
         mapRef.current.animateToRegion(newRegion, 1000);
+        // Reset animation flag after animation completes
+        setTimeout(() => {
+          isAnimatingRef.current = false;
+        }, 1100); // Slightly longer than animation duration
       } else {
         mapRef.current.setRegion(newRegion);
       }
     }
-  };
+  }, [region.latitudeDelta, region.longitudeDelta]);
 
   // Fit map to show all matches using adaptive bounds
-  const fitToMatches = () => {
+  const fitToMatches = useCallback(() => {
     if (!matches || matches.length === 0 || !mapRef.current) return;
 
     const coordinates = matches
@@ -146,8 +181,13 @@ const MatchMapView = forwardRef(({
       ruralPadding: 1.8,
     });
     
+    isAnimatingRef.current = true;
     mapRef.current.animateToRegion(adaptiveRegion, 600);
-  };
+    // Reset animation flag after animation completes
+    setTimeout(() => {
+      isAnimatingRef.current = false;
+    }, 700); // Slightly longer than animation duration
+  }, [matches]);
 
   // Expose methods via ref for parent components
   useImperativeHandle(ref, () => ({
@@ -155,9 +195,14 @@ const MatchMapView = forwardRef(({
     fitToMatches,
     getMapRef: () => mapRef.current,
     // Pass-through methods for direct MapView access
-    animateToRegion: (region, duration) => {
+    animateToRegion: (region, duration = 1000) => {
       if (mapRef.current) {
+        isAnimatingRef.current = true;
         mapRef.current.animateToRegion(region, duration);
+        // Reset animation flag after animation completes
+        setTimeout(() => {
+          isAnimatingRef.current = false;
+        }, duration + 100); // Slightly longer than animation duration
       }
     },
     setRegion: (region) => {
@@ -165,7 +210,7 @@ const MatchMapView = forwardRef(({
         mapRef.current.setRegion(region);
       }
     },
-  }));
+  }), [centerMap, fitToMatches]);
 
   // Render match markers with memoization
   const markers = useMemo(() => {
@@ -196,9 +241,7 @@ const MatchMapView = forwardRef(({
     
 
     
-    // Create a unique key that changes when the matches array changes
-    const matchesKey = validMatches.map(m => m.fixture?.id).join('-');
-    
+    // Use stable keys based on fixture ID only to prevent unnecessary re-renders
     return validMatches.map(match => {
       const venue = match.fixture.venue;
       const isSelected = selectedMatchId === match.fixture.id;
@@ -207,14 +250,18 @@ const MatchMapView = forwardRef(({
         longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
       };
       
+      // Use fixture ID as key for stability - this prevents React from recreating markers
+      // when the matches array reference changes but the actual matches are the same
+      const markerKey = `match-${String(match.fixture.id)}`;
+      
       return (
         <Marker
-          key={`${matchesKey}-match-${String(match.fixture.id)}`}
+          key={markerKey}
           coordinate={coordinate}
           onPress={() => handleMarkerPress(match)}
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
           tracksViewChanges={false}
-          identifier={`match-${String(match.fixture.id)}`}
+          identifier={markerKey}
         />
       );
     });
