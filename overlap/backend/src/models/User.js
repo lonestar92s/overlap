@@ -252,6 +252,14 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: ''
         },
+        startDate: {
+            type: Date,
+            default: null
+        },
+        endDate: {
+            type: Date,
+            default: null
+        },
         flights: [{
             flightNumber: {
                 type: String,

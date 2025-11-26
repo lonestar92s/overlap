@@ -44,8 +44,8 @@ export const ItineraryProvider = ({ children }) => {
   // Create a new itinerary
   const createItinerary = async (name, destination, startDate, endDate) => {
     try {
-      console.log('🆕 Creating itinerary with name:', name);
-      const response = await ApiService.createTrip(name);
+      console.log('🆕 Creating itinerary with name:', name, 'dates:', { startDate, endDate });
+      const response = await ApiService.createTrip(name, '', startDate, endDate);
       console.log('🆕 API response:', response);
       
       if (response.success && response.trip) {

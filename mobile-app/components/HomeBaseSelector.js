@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,11 @@ import {
   ScrollView,
   KeyboardAvoidingView
 } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { MaterialIcons } from '@expo/vector-icons';
 import LocationAutocomplete from './LocationAutocomplete';
 import { colors, spacing, typography, borderRadius, shadows, input, components } from '../styles/designTokens';
+import { formatDateToLocalString, getTodayLocalString, createDateRange } from '../utils/dateUtils';
 
 const HomeBaseSelector = ({ 
   visible, 
@@ -36,20 +38,49 @@ const HomeBaseSelector = ({
   );
   const [dateFrom, setDateFrom] = useState(
     homeBase?.dateRange?.from 
-      ? new Date(homeBase.dateRange.from).toISOString().split('T')[0]
-      : (tripDateRange?.from ? new Date(tripDateRange.from).toISOString().split('T')[0] : '')
+      ? formatDateToLocalString(new Date(homeBase.dateRange.from))
+      : (tripDateRange?.from ? formatDateToLocalString(new Date(tripDateRange.from)) : null)
   );
   const [dateTo, setDateTo] = useState(
     homeBase?.dateRange?.to 
-      ? new Date(homeBase.dateRange.to).toISOString().split('T')[0]
-      : (tripDateRange?.to ? new Date(tripDateRange.to).toISOString().split('T')[0] : '')
+      ? formatDateToLocalString(new Date(homeBase.dateRange.to))
+      : (tripDateRange?.to ? formatDateToLocalString(new Date(tripDateRange.to)) : null)
   );
+  const [selectedDates, setSelectedDates] = useState({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [notes, setNotes] = useState(homeBase?.notes || '');
   const [saving, setSaving] = useState(false);
   const scrollViewRef = useRef(null);
-  const dateFromInputRef = useRef(null);
-  const dateToInputRef = useRef(null);
   const notesInputRef = useRef(null);
+
+  // Initialize selected dates when dateFrom/dateTo change
+  useEffect(() => {
+    if (dateFrom && dateTo) {
+      const dateRange = createDateRange(dateFrom, dateTo);
+      const dates = {};
+      dateRange.forEach((dateStr, index) => {
+        dates[dateStr] = {
+          selected: true,
+          startingDay: index === 0,
+          endingDay: index === dateRange.length - 1,
+          color: index === 0 || index === dateRange.length - 1 ? '#1976d2' : '#e3f2fd',
+          textColor: index === 0 || index === dateRange.length - 1 ? 'white' : '#1976d2'
+        };
+      });
+      setSelectedDates(dates);
+    } else if (dateFrom) {
+      setSelectedDates({
+        [dateFrom]: {
+          selected: true,
+          startingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        }
+      });
+    } else {
+      setSelectedDates({});
+    }
+  }, [dateFrom, dateTo]);
 
   const handleLocationSelect = (location) => {
     if (location) {
@@ -66,6 +97,73 @@ const HomeBaseSelector = ({
         setName(location.city || '');
       }
     }
+  };
+
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return 'Select date';
+    // Parse date string safely without timezone conversion
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const onDayPress = (day) => {
+    const dateString = day.dateString;
+    
+    if (!dateFrom || (dateFrom && dateTo)) {
+      // Starting new selection
+      setDateFrom(dateString);
+      setDateTo(null);
+      setSelectedDates({
+        [dateString]: {
+          selected: true,
+          startingDay: true,
+          color: '#1976d2',
+          textColor: 'white'
+        }
+      });
+    } else if (dateFrom && !dateTo) {
+      // Selecting end date
+      if (dateString < dateFrom) {
+        // If selected date is before start date, make it the new start date
+        setDateFrom(dateString);
+        setDateTo(null);
+        setSelectedDates({
+          [dateString]: {
+            selected: true,
+            startingDay: true,
+            color: '#1976d2',
+            textColor: 'white'
+          }
+        });
+      } else {
+        // Valid end date selection
+        setDateTo(dateString);
+        
+        // Create range marking
+        const dateRange = createDateRange(dateFrom, dateString);
+        const range = {};
+        dateRange.forEach((dateStr, index) => {
+          range[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: index === 0 || index === dateRange.length - 1 ? '#1976d2' : '#e3f2fd',
+            textColor: index === 0 || index === dateRange.length - 1 ? 'white' : '#1976d2'
+          };
+        });
+        
+        setSelectedDates(range);
+        // Auto-close calendar after selecting date range
+        setTimeout(() => setShowDatePicker(false), 500);
+      }
+    }
+  };
+
+  const clearDates = () => {
+    setDateFrom(null);
+    setDateTo(null);
+    setSelectedDates({});
   };
 
   const handleSave = async () => {
@@ -85,17 +183,15 @@ const HomeBaseSelector = ({
       return;
     }
 
-    const fromDate = new Date(dateFrom);
-    const toDate = new Date(dateTo);
-    
-    if (fromDate > toDate) {
-      Alert.alert('Validation Error', 'Start date must be before end date');
-      return;
-    }
-
     setSaving(true);
 
     try {
+      // Parse date strings manually to avoid timezone issues
+      const parseDateString = (dateStr) => {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      };
+
       const homeBaseData = {
         name: name.trim(),
         type: type,
@@ -110,8 +206,8 @@ const HomeBaseSelector = ({
           lng: selectedLocation.lon
         },
         dateRange: {
-          from: fromDate.toISOString(),
-          to: toDate.toISOString()
+          from: parseDateString(dateFrom).toISOString(),
+          to: parseDateString(dateTo).toISOString()
         },
         notes: notes.trim()
       };
@@ -140,14 +236,16 @@ const HomeBaseSelector = ({
     );
     setDateFrom(
       homeBase?.dateRange?.from 
-        ? new Date(homeBase.dateRange.from).toISOString().split('T')[0]
-        : (tripDateRange?.from ? new Date(tripDateRange.from).toISOString().split('T')[0] : '')
+        ? formatDateToLocalString(new Date(homeBase.dateRange.from))
+        : (tripDateRange?.from ? formatDateToLocalString(new Date(tripDateRange.from)) : null)
     );
     setDateTo(
       homeBase?.dateRange?.to 
-        ? new Date(homeBase.dateRange.to).toISOString().split('T')[0]
-        : (tripDateRange?.to ? new Date(tripDateRange.to).toISOString().split('T')[0] : '')
+        ? formatDateToLocalString(new Date(homeBase.dateRange.to))
+        : (tripDateRange?.to ? formatDateToLocalString(new Date(tripDateRange.to)) : null)
     );
+    setSelectedDates({});
+    setShowDatePicker(false);
     setNotes(homeBase?.notes || '');
     onClose();
   };
@@ -251,44 +349,52 @@ const HomeBaseSelector = ({
             {/* Date Range */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Date Range *</Text>
-              <View style={styles.dateRow}>
-                <View style={styles.dateInputContainer}>
-                  <Text style={styles.dateLabel}>From</Text>
-                  <TextInput
-                    ref={dateFromInputRef}
-                    style={styles.dateInput}
-                    value={dateFrom}
-                    onChangeText={setDateFrom}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.text.light}
-                    accessibilityLabel="Start date"
-                    accessibilityHint="Enter the start date in YYYY-MM-DD format"
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
+              <TouchableOpacity
+                style={styles.dateRangeButton}
+                onPress={() => setShowDatePicker(!showDatePicker)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.dateRangeContent}>
+                  <View style={styles.dateSection}>
+                    <Text style={styles.dateLabel}>From</Text>
+                    <Text style={styles.dateValue}>{formatDisplayDate(dateFrom)}</Text>
+                  </View>
+                  <View style={styles.dateDivider} />
+                  <View style={styles.dateSection}>
+                    <Text style={styles.dateLabel}>To</Text>
+                    <Text style={styles.dateValue}>{formatDisplayDate(dateTo)}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {dateFrom && dateTo && (
+                <TouchableOpacity style={styles.clearDatesButton} onPress={clearDates}>
+                  <Text style={styles.clearDatesText}>Clear dates</Text>
+                </TouchableOpacity>
+              )}
+
+              {showDatePicker && (
+                <View style={styles.calendarContainer}>
+                  <Calendar
+                    onDayPress={onDayPress}
+                    markingType={'period'}
+                    markedDates={selectedDates}
+                    minDate={getTodayLocalString()}
+                    theme={{
+                      selectedDayBackgroundColor: '#1976d2',
+                      selectedDayTextColor: 'white',
+                      todayTextColor: '#1976d2',
+                      dayTextColor: '#333',
+                      textDisabledColor: '#ccc',
+                      arrowColor: '#1976d2',
+                      monthTextColor: '#333',
+                      textDayFontWeight: '500',
+                      textMonthFontWeight: 'bold',
+                      textDayHeaderFontWeight: '600',
                     }}
                   />
                 </View>
-                <View style={styles.dateInputContainer}>
-                  <Text style={styles.dateLabel}>To</Text>
-                  <TextInput
-                    ref={dateToInputRef}
-                    style={styles.dateInput}
-                    value={dateTo}
-                    onChangeText={setDateTo}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.text.light}
-                    accessibilityLabel="End date"
-                    accessibilityHint="Enter the end date in YYYY-MM-DD format"
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
-                    }}
-                  />
-                </View>
-              </View>
+              )}
             </View>
 
             {/* Notes */}
@@ -312,6 +418,9 @@ const HomeBaseSelector = ({
                 }}
               />
             </View>
+
+            {/* Spacer for keyboard */}
+            <View style={styles.keyboardSpacer} />
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -356,7 +465,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingVertical: spacing.lg,
-    paddingBottom: spacing.xxl + spacing.xl // Extra padding at bottom for keyboard
+    paddingBottom: spacing.xxl + spacing.xxl + spacing.lg // Extra padding at bottom for keyboard spacing
   },
   inputGroup: {
     marginBottom: spacing.xl + spacing.sm,
@@ -411,11 +520,18 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontWeight: '600',
   },
-  dateRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  dateRangeButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.cardGrey,
+    padding: spacing.md,
   },
-  dateInputContainer: {
+  dateRangeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateSection: {
     flex: 1,
   },
   dateLabel: {
@@ -423,13 +539,41 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: spacing.xs,
   },
-  dateInput: {
-    ...input,
+  dateValue: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  dateDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.md,
+  },
+  clearDatesButton: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  clearDatesText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  calendarContainer: {
+    marginTop: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    padding: spacing.sm,
+    ...shadows.small,
   },
   notesInput: {
     minHeight: 100,
     textAlignVertical: 'top',
     backgroundColor: colors.cardGrey
+  },
+  keyboardSpacer: {
+    minHeight: 200, // Extra space at bottom to ensure inputs stay above keyboard
   },
   saveButton: {
     backgroundColor: colors.primary,

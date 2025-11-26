@@ -18,6 +18,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useItineraries } from '../contexts/ItineraryContext';
+import CreateTripModal from '../components/CreateTripModal';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 // Use solid color background instead of gradient
@@ -45,9 +46,18 @@ const TripsListScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [createTripModalVisible, setCreateTripModalVisible] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [newTripName, setNewTripName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Refresh trips when screen comes into focus (e.g., when returning from trip overview)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshItineraries();
+    });
+    return unsubscribe;
+  }, [navigation, refreshItineraries]);
 
 
 
@@ -151,7 +161,24 @@ const TripsListScreen = ({ navigation }) => {
   };
 
   // Format date range for trip
-  const formatDateRange = (matches) => {
+  // Prefer stored dates, fallback to calculated dates from matches
+  const formatDateRange = (trip) => {
+    // First check if trip has stored dates
+    if (trip?.startDate && trip?.endDate) {
+      const startDate = new Date(trip.startDate);
+      const endDate = new Date(trip.endDate);
+      
+      const formatDate = (date) => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+      };
+      
+      return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+    }
+    
+    // Fallback to calculating from matches
+    const matches = trip?.matches || [];
     if (!matches || matches.length === 0) return null;
     
     const dates = matches
@@ -218,7 +245,7 @@ const TripsListScreen = ({ navigation }) => {
   const renderItineraryItem = ({ item }) => {
     const matchCount = item.matches?.length || 0;
     const savedCount = countSavedMatches(item.matches);
-    const dateRange = formatDateRange(item.matches);
+    const dateRange = formatDateRange(item);
     const stadiumImage = getStadiumImage(item.matches);
     
     return (
@@ -292,17 +319,22 @@ const TripsListScreen = ({ navigation }) => {
       <Icon name="flight" size={64} color={colors.text.light} />
       <Text style={styles.emptyStateTitle}>No trips planned yet</Text>
       <Text style={styles.emptyStateSubtitle}>
-        Start planning your football adventures by saving matches to new itineraries
+        Start planning your football adventures by creating a new trip
       </Text>
       <TouchableOpacity
         style={styles.createTripButton}
-        onPress={() => navigation.navigate('SearchTab')}
+        onPress={() => setCreateTripModalVisible(true)}
       >
-        <Icon name="search" size={20} color={colors.onPrimary} />
-        <Text style={styles.createTripButtonText}>Search for matches</Text>
+        <Icon name="add" size={20} color={colors.onPrimary} />
+        <Text style={styles.createTripButtonText}>Create Trip</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const handleTripCreated = () => {
+    // Refresh the trips list
+    refreshItineraries();
+  };
 
   if (loading) {
     return (
@@ -319,6 +351,14 @@ const TripsListScreen = ({ navigation }) => {
       {/* Header - Centered "Trips" Title */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trips</Text>
+        {itineraries.length > 0 && (
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setCreateTripModalVisible(true)}
+          >
+            <Icon name="add" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {itineraries.length > 0 ? (
@@ -443,6 +483,13 @@ const TripsListScreen = ({ navigation }) => {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Create Trip Modal */}
+      <CreateTripModal
+        visible={createTripModalVisible}
+        onClose={() => setCreateTripModalVisible(false)}
+        onTripCreated={handleTripCreated}
+      />
     </SafeAreaView>
   );
 };
@@ -456,8 +503,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg + spacing.xs, // ~86.5px from top (accounting for status bar)
     paddingBottom: spacing.md,
     paddingHorizontal: CARD_PADDING, // 24px padding to match card padding
-    alignItems: 'flex-start', // Left align
-    justifyContent: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.card,
     position: 'relative',
   },
@@ -467,6 +515,9 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     color: colors.text.primary,
     textAlign: 'left', // Left aligned as per Figma
+  },
+  headerButton: {
+    padding: spacing.xs,
   },
   contentContainer: {
     flex: 1,

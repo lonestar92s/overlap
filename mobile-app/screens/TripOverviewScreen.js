@@ -13,10 +13,12 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Dimensions
+  Dimensions,
+  Modal
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Calendar } from 'react-native-calendars';
 import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
@@ -25,6 +27,7 @@ import AddFlightModal from '../components/AddFlightModal';
 import HomeBaseSection from '../components/HomeBaseSection';
 import apiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
+import { createDateRange } from '../utils/dateUtils';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -41,7 +44,7 @@ import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../s
  * - Header structure: Same shadow, border, and layout patterns
  */
 const TripOverviewScreen = ({ navigation, route }) => {
-  const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary } = useItineraries();
+  const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary, updateItinerary } = useItineraries();
   const itineraryId = route?.params?.itineraryId;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [flightsExpanded, setFlightsExpanded] = useState(false);
   const [addFlightModalVisible, setAddFlightModalVisible] = useState(false);
   const [deletingFlightId, setDeletingFlightId] = useState(null);
+  const [editDatesModalVisible, setEditDatesModalVisible] = useState(false);
+  const [editStartDate, setEditStartDate] = useState(null);
+  const [editEndDate, setEditEndDate] = useState(null);
+  const [showEditCalendar, setShowEditCalendar] = useState(false);
+  const [editSelectedDates, setEditSelectedDates] = useState({});
+  const [isSavingDates, setIsSavingDates] = useState(false);
   const scrollViewRef = useRef(null);
   const notesInputRef = useRef(null);
   const descriptionInputRef = useRef(null);
@@ -295,15 +304,131 @@ const TripOverviewScreen = ({ navigation, route }) => {
     }
   };
 
+  // Save dates
+  const handleSaveDates = async () => {
+    if (!itinerary || !editStartDate || !editEndDate) return;
+    
+    if (new Date(editEndDate) < new Date(editStartDate)) {
+      Alert.alert('Error', 'End date must be after start date');
+      return;
+    }
+    
+    setIsSavingDates(true);
+    try {
+      const tripId = itinerary.id || itinerary._id;
+      
+      // Update via context which will update both local state and context state
+      const updatedItinerary = await updateItinerary(tripId, {
+        startDate: new Date(editStartDate).toISOString(),
+        endDate: new Date(editEndDate).toISOString()
+      });
+      
+      if (updatedItinerary) {
+        setItinerary(updatedItinerary);
+      }
+      
+      setEditDatesModalVisible(false);
+    } catch (error) {
+      console.error('Error saving dates:', error);
+      Alert.alert('Error', 'Failed to save dates. Please try again.');
+    } finally {
+      setIsSavingDates(false);
+    }
+  };
+
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return 'Select date';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const onEditDayPress = (day) => {
+    const selectedDate = day.dateString;
+    
+    if (!editStartDate || (editStartDate && editEndDate)) {
+      // Start new selection
+      setEditStartDate(selectedDate);
+      setEditEndDate(null);
+      setEditSelectedDates({
+        [selectedDate]: {
+          selected: true,
+          startingDay: true,
+          endingDay: true,
+          color: colors.primary,
+          textColor: '#ffffff',
+        }
+      });
+    } else {
+      // Complete selection
+      if (selectedDate < editStartDate) {
+        // Swap dates if end is before start
+        setEditStartDate(selectedDate);
+        setEditEndDate(editStartDate);
+        const dateRange = createDateRange(selectedDate, editStartDate);
+        const dates = {};
+        dateRange.forEach((dateStr, index) => {
+          dates[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: colors.primary,
+            textColor: index === 0 || index === dateRange.length - 1 ? '#ffffff' : colors.text.primary,
+          };
+        });
+        setEditSelectedDates(dates);
+      } else {
+        setEditEndDate(selectedDate);
+        const dateRange = createDateRange(editStartDate, selectedDate);
+        const dates = {};
+        dateRange.forEach((dateStr, index) => {
+          dates[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: colors.primary,
+            textColor: index === 0 || index === dateRange.length - 1 ? '#ffffff' : colors.text.primary,
+          };
+        });
+        setEditSelectedDates(dates);
+      }
+      // Auto-close calendar after selecting date range
+      setTimeout(() => setShowEditCalendar(false), 500);
+    }
+  };
+
   // Format date range for trip info card
+  // Prefer stored dates, fallback to calculated dates from matches
   const formatDateRange = () => {
+    // First check if trip has stored dates
+    if (itinerary?.startDate && itinerary?.endDate) {
+      const start = new Date(itinerary.startDate);
+      const end = new Date(itinerary.endDate);
+      
+      if (start.toDateString() === end.toDateString()) {
+        return start.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      }
+      
+      const startStr = start.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      const endStr = end.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      return `${startStr}-${endStr}`;
+    }
+    
+    // Fallback to calculating from matches
     if (!itinerary?.matches || itinerary.matches.length === 0) {
       return null;
     }
     
     const dates = itinerary.matches
       .map(m => new Date(m.date))
+      .filter(d => !isNaN(d.getTime()))
       .sort((a, b) => a - b);
+    
+    if (dates.length === 0) return null;
     
     const start = dates[0];
     const end = dates[dates.length - 1];
@@ -870,10 +995,55 @@ const TripOverviewScreen = ({ navigation, route }) => {
           <View style={styles.tripInfoHeader}>
             <Text style={styles.tripInfoTitle}>{itinerary.name}</Text>
             {formatDateRange() && (
-              <View style={styles.dateRangeContainer}>
+              <TouchableOpacity
+                style={styles.dateRangeContainer}
+                onPress={() => {
+                  // Initialize edit dates from current trip dates or calculated dates
+                  if (itinerary?.startDate && itinerary?.endDate) {
+                    const start = new Date(itinerary.startDate).toISOString().split('T')[0];
+                    const end = new Date(itinerary.endDate).toISOString().split('T')[0];
+                    setEditStartDate(start);
+                    setEditEndDate(end);
+                    const dateRange = createDateRange(start, end);
+                    const dates = {};
+                    dateRange.forEach((dateStr, index) => {
+                      dates[dateStr] = {
+                        selected: true,
+                        startingDay: index === 0,
+                        endingDay: index === dateRange.length - 1,
+                      };
+                    });
+                    setEditSelectedDates(dates);
+                  } else if (itinerary?.matches && itinerary.matches.length > 0) {
+                    const dates = itinerary.matches
+                      .map(m => new Date(m.date))
+                      .filter(d => !isNaN(d.getTime()))
+                      .sort((a, b) => a - b);
+                    if (dates.length > 0) {
+                      const start = dates[0].toISOString().split('T')[0];
+                      const end = dates[dates.length - 1].toISOString().split('T')[0];
+                      setEditStartDate(start);
+                      setEditEndDate(end);
+                      const dateRange = createDateRange(start, end);
+                      const datesObj = {};
+                      dateRange.forEach((dateStr, index) => {
+                        datesObj[dateStr] = {
+                          selected: true,
+                          startingDay: index === 0,
+                          endingDay: index === dateRange.length - 1,
+                        };
+                      });
+                      setEditSelectedDates(datesObj);
+                    }
+                  }
+                  setEditDatesModalVisible(true);
+                }}
+                activeOpacity={0.7}
+              >
                 <MaterialIcons name="calendar-today" size={21} color="rgba(0, 0, 0, 0.5)" />
                 <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
-              </View>
+                <MaterialIcons name="edit" size={16} color="rgba(0, 0, 0, 0.3)" style={styles.editIcon} />
+              </TouchableOpacity>
             )}
           </View>
           
@@ -958,27 +1128,25 @@ const TripOverviewScreen = ({ navigation, route }) => {
           {matchesExpanded && (
             <View style={styles.sectionContent}>
               {itinerary.matches && itinerary.matches.length > 0 ? (
-                <FlatList
-                  data={flatListData}
-                  scrollEnabled={false}
-                  renderItem={({ item }) => {
+                <View>
+                  {flatListData.map((item, index) => {
                     if (item.type === 'header') {
                       return (
-                        <View style={styles.dateHeader}>
+                        <View key={`header-${index}`} style={styles.dateHeader}>
                           <Text style={styles.dateHeaderText}>
                             {formatDateHeader(item.date)}
                           </Text>
                         </View>
                       );
                     } else {
-                      return renderMatchItem({ item });
+                      return (
+                        <View key={item.matchId || `match-${index}`}>
+                          {renderMatchItem({ item })}
+                        </View>
+                      );
                     }
-                  }}
-                  keyExtractor={(item, index) => {
-                    if (item.type === 'header') return `header-${index}`;
-                    return item.matchId || `match-${index}`;
-                  }}
-                />
+                  })}
+                </View>
               ) : (
                 renderEmptyState()
               )}
@@ -1390,6 +1558,94 @@ const TripOverviewScreen = ({ navigation, route }) => {
         homeBases={itinerary?.homeBases || []}
         onPlanningUpdated={handlePlanningUpdated}
       />
+
+      {/* Edit Dates Modal */}
+      <Modal
+        visible={editDatesModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setEditDatesModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.editDatesModalContainer}
+        >
+          <View style={styles.editDatesModalHeader}>
+            <Text style={styles.editDatesModalTitle}>Edit Trip Dates</Text>
+            <TouchableOpacity
+              onPress={() => setEditDatesModalVisible(false)}
+              style={styles.editDatesModalCloseButton}
+            >
+              <Icon name="close" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.editDatesModalContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.editDatesForm}>
+              <Text style={styles.editDatesLabel}>Trip Dates</Text>
+              <TouchableOpacity
+                style={styles.editDateButton}
+                onPress={() => setShowEditCalendar(!showEditCalendar)}
+              >
+                <Text style={styles.editDateButtonText}>
+                  {editStartDate && editEndDate
+                    ? `${formatDisplayDate(editStartDate)} - ${formatDisplayDate(editEndDate)}`
+                    : editStartDate
+                    ? `${formatDisplayDate(editStartDate)} - Select end date`
+                    : 'Select dates'}
+                </Text>
+              </TouchableOpacity>
+              
+              {showEditCalendar && (
+                <View style={styles.editCalendarContainer}>
+                  <Calendar
+                    onDayPress={onEditDayPress}
+                    markedDates={editSelectedDates}
+                    markingType="period"
+                    minDate={new Date().toISOString().split('T')[0]}
+                    theme={{
+                      selectedDayBackgroundColor: colors.primary,
+                      selectedDayTextColor: '#ffffff',
+                      todayTextColor: colors.primary,
+                      dayTextColor: '#2d4150',
+                      textDisabledColor: '#d9e1e8',
+                      arrowColor: colors.primary,
+                      monthTextColor: '#2d4150',
+                      indicatorColor: colors.primary,
+                      textDayFontWeight: '300',
+                      textMonthFontWeight: 'bold',
+                      textDayHeaderFontWeight: '300',
+                      textDayFontSize: 16,
+                      textMonthFontSize: 16,
+                      textDayHeaderFontSize: 13,
+                      calendarBackground: colors.card,
+                    }}
+                  />
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.editDatesSaveButton,
+                  (!editStartDate || !editEndDate || isSavingDates) && styles.editDatesSaveButtonDisabled
+                ]}
+                onPress={handleSaveDates}
+                disabled={!editStartDate || !editEndDate || isSavingDates}
+              >
+                {isSavingDates ? (
+                  <ActivityIndicator size="small" color={colors.onPrimary} />
+                ) : (
+                  <Text style={styles.editDatesSaveButtonText}>Save Dates</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1822,6 +2078,9 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: 'rgba(0, 0, 0, 0.5)',
   },
+  editIcon: {
+    marginLeft: spacing.xs,
+  },
   userSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2109,6 +2368,76 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.secondary,
     textAlign: 'center',
+  },
+  // Edit Dates Modal styles
+  editDatesModalContainer: {
+    flex: 1,
+    backgroundColor: colors.card,
+  },
+  editDatesModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  editDatesModalTitle: {
+    ...typography.h3,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  editDatesModalCloseButton: {
+    padding: spacing.xs + 1,
+  },
+  editDatesModalContent: {
+    flex: 1,
+    padding: spacing.lg,
+  },
+  editDatesForm: {
+    flex: 1,
+  },
+  editDatesLabel: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
+  editDateButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
+    backgroundColor: colors.cardGrey,
+    marginBottom: spacing.md,
+  },
+  editDateButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  editCalendarContainer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    ...shadows.small,
+  },
+  editDatesSaveButton: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md + spacing.xs,
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  editDatesSaveButtonDisabled: {
+    backgroundColor: colors.interactive.disabled,
+  },
+  editDatesSaveButtonText: {
+    color: colors.onPrimary,
+    ...typography.body,
+    fontWeight: '600',
   },
 });
 

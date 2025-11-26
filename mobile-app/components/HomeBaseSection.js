@@ -228,22 +228,25 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
 
 const styles = StyleSheet.create({
   sectionCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: borderRadius.md,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    ...shadows.small,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   sectionTitle: {
-    ...typography.h3,
+    ...typography.h1,
+    fontWeight: '500',
+    fontSize: 24,
     color: colors.text.primary,
-    fontWeight: '600',
   },
   sectionHeaderRight: {
     flexDirection: 'row',
@@ -256,7 +259,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.xs,
   },
   sectionContent: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
   },
   emptyState: {

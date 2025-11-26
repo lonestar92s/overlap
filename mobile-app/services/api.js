@@ -537,16 +537,20 @@ class ApiService {
     }
   }
 
-  async createTrip(name, description = '') {
+  async createTrip(name, description = '', startDate = null, endDate = null) {
     try {
       const token = await getAuthToken();
+      const body = { name, description };
+      if (startDate) body.startDate = startDate;
+      if (endDate) body.endDate = endDate;
+      
       const response = await fetch(`${this.baseURL}/trips`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ name, description })
+        body: JSON.stringify(body)
       });
       
       const data = await response.json();

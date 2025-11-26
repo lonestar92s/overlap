@@ -249,13 +249,17 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], o
                   )}
                   
                   <FlatList
-                    data={availableHomeBases}
+                    data={availableHomeBases.filter(hb => {
+                      // Filter out the selected home base from the list
+                      if (!planning.homeBaseId) return true;
+                      const hbId = String(hb._id || hb.id || '');
+                      const selectedId = String(planning.homeBaseId);
+                      return hbId !== selectedId && 
+                             hbId.toLowerCase() !== selectedId.toLowerCase();
+                    })}
                     keyExtractor={(item) => item._id?.toString() || item.id?.toString() || `homebase-${item.name}`}
                     renderItem={({ item }) => {
-                      const isSelected = planning.homeBaseId && (
-                        String(item._id || item.id) === String(planning.homeBaseId) ||
-                        String(item._id || item.id).toLowerCase() === String(planning.homeBaseId).toLowerCase()
-                      );
+                      const isSelected = false; // This will always be false since we filtered out selected items
                       
                       return (
                         <TouchableOpacity

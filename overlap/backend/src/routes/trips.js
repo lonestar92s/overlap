@@ -100,7 +100,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create a new trip (works without authentication)
 router.post('/', authenticateToken, async (req, res) => {
     try {
-        const { name, description, notes, matches, flights } = req.body;
+        const { name, description, notes, matches, flights, startDate, endDate } = req.body;
         
         // Auto-generate trip name from flights if not provided
         let tripName = name?.trim();
@@ -119,6 +119,22 @@ router.post('/', authenticateToken, async (req, res) => {
             });
         }
 
+        // Auto-calculate dates from matches if not provided
+        let calculatedStartDate = startDate ? new Date(startDate) : null;
+        let calculatedEndDate = endDate ? new Date(endDate) : null;
+        
+        if (!calculatedStartDate && matches && matches.length > 0) {
+            const matchDates = matches
+                .map(m => m.date ? new Date(m.date) : null)
+                .filter(d => d && !isNaN(d.getTime()))
+                .sort((a, b) => a - b);
+            
+            if (matchDates.length > 0) {
+                calculatedStartDate = matchDates[0];
+                calculatedEndDate = matchDates[matchDates.length - 1];
+            }
+        }
+
         if (!req.user) {
             // No user authenticated - create a temporary trip response
             // In a real app, you might want to store this locally or create a guest session
@@ -127,6 +143,8 @@ router.post('/', authenticateToken, async (req, res) => {
                 name: tripName,
                 description: description || '',
                 notes: notes || '',
+                startDate: calculatedStartDate,
+                endDate: calculatedEndDate,
                 flights: flights || [],
                 matches: matches || [],
                 createdAt: new Date(),
@@ -148,6 +166,8 @@ router.post('/', authenticateToken, async (req, res) => {
             name: tripName,
             description: description || '',
             notes: notes || '',
+            startDate: calculatedStartDate,
+            endDate: calculatedEndDate,
             flights: flights || [],
             matches: matches || [],
             createdAt: new Date(),
@@ -177,7 +197,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update a trip
 router.put('/:id', auth, async (req, res) => {
     try {
-        const { name, description, notes } = req.body;
+        const { name, description, notes, startDate, endDate } = req.body;
         
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
@@ -193,6 +213,8 @@ router.put('/:id', auth, async (req, res) => {
         if (name !== undefined) trip.name = name.trim();
         if (description !== undefined) trip.description = description;
         if (notes !== undefined) trip.notes = notes;
+        if (startDate !== undefined) trip.startDate = startDate ? new Date(startDate) : null;
+        if (endDate !== undefined) trip.endDate = endDate ? new Date(endDate) : null;
         trip.updatedAt = new Date();
 
         await user.save();

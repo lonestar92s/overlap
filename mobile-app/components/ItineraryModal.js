@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,11 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Calendar } from 'react-native-calendars';
 import { useItineraries } from '../contexts/ItineraryContext';
 import ErrorBoundary from './ErrorBoundary';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { createDateRange } from '../utils/dateUtils';
 
 const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const { itineraries, createItinerary, addMatchToItinerary } = useItineraries();
@@ -24,6 +26,29 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newItineraryName, setNewItineraryName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDates, setSelectedDates] = useState({});
+
+  // Initialize dates from match when modal opens or matchData changes
+  useEffect(() => {
+    if (matchData && visible) {
+      const matchDate = matchData.fixture?.date || matchData.date;
+      if (matchDate) {
+        const dateStr = new Date(matchDate).toISOString().split('T')[0];
+        setStartDate(dateStr);
+        setEndDate(dateStr);
+        setSelectedDates({
+          [dateStr]: {
+            selected: true,
+            startingDay: true,
+            endingDay: true,
+          }
+        });
+      }
+    }
+  }, [matchData, visible]);
 
   const handleSaveToExisting = async (itineraryId) => {
     try {
@@ -54,8 +79,8 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       const newItinerary = await createItinerary(
         newItineraryName.trim(),
         null, // destination
-        null, // startDate
-        null  // endDate
+        startDate ? new Date(startDate).toISOString() : null, // startDate
+        endDate ? new Date(endDate).toISOString() : null  // endDate
       );
 
       // Add the match to the new itinerary
@@ -71,6 +96,9 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       
       // Reset form
       setNewItineraryName('');
+      setStartDate(null);
+      setEndDate(null);
+      setSelectedDates({});
       setShowCreateForm(false);
     } catch (error) {
       if (__DEV__) {
@@ -83,6 +111,71 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       Alert.alert('Error', 'Failed to create itinerary');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return 'Select date';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const onDayPress = (day) => {
+    const selectedDate = day.dateString;
+    
+    if (!startDate || (startDate && endDate)) {
+      // Start new selection
+      setStartDate(selectedDate);
+      setEndDate(null);
+      setSelectedDates({
+        [selectedDate]: {
+          selected: true,
+          startingDay: true,
+          endingDay: true,
+          color: colors.primary,
+          textColor: '#ffffff',
+        }
+      });
+    } else {
+      // Complete selection
+      if (selectedDate < startDate) {
+        // Swap dates if end is before start
+        setStartDate(selectedDate);
+        setEndDate(startDate);
+        const dateRange = createDateRange(selectedDate, startDate);
+        const dates = {};
+        dateRange.forEach((dateStr, index) => {
+          dates[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: colors.primary,
+            textColor: index === 0 || index === dateRange.length - 1 ? '#ffffff' : colors.text.primary,
+          };
+        });
+        setSelectedDates(dates);
+      } else {
+        setEndDate(selectedDate);
+        const dateRange = createDateRange(startDate, selectedDate);
+        const dates = {};
+        dateRange.forEach((dateStr, index) => {
+          dates[dateStr] = {
+            selected: true,
+            startingDay: index === 0,
+            endingDay: index === dateRange.length - 1,
+            color: colors.primary,
+            textColor: index === 0 || index === dateRange.length - 1 ? '#ffffff' : colors.text.primary,
+          };
+        });
+        setSelectedDates(dates);
+      }
+      // Auto-close calendar after selecting date range
+      setTimeout(() => setShowCalendar(false), 500);
     }
   };
 
@@ -193,10 +286,28 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
                     <Text style={styles.itineraryName}>{itinerary.name}</Text>
                     <Text style={styles.itineraryDestination}>{itinerary.destination}</Text>
                     <Text style={styles.itineraryDates}>
-                      {itinerary.startDate && itinerary.endDate 
-                        ? `${new Date(itinerary.startDate).toLocaleDateString()} - ${new Date(itinerary.endDate).toLocaleDateString()}`
-                        : 'Dates TBD'
-                      }
+                      {(() => {
+                        // Prefer stored dates, fallback to calculated dates from matches
+                        if (itinerary.startDate && itinerary.endDate) {
+                          return `${new Date(itinerary.startDate).toLocaleDateString()} - ${new Date(itinerary.endDate).toLocaleDateString()}`;
+                        }
+                        
+                        // Fallback to calculating from matches
+                        if (itinerary.matches && itinerary.matches.length > 0) {
+                          const dates = itinerary.matches
+                            .map(m => new Date(m.date))
+                            .filter(d => !isNaN(d.getTime()))
+                            .sort((a, b) => a - b);
+                          
+                          if (dates.length > 0) {
+                            const start = dates[0];
+                            const end = dates[dates.length - 1];
+                            return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+                          }
+                        }
+                        
+                        return 'Dates TBD';
+                      })()}
                     </Text>
                     <Text style={styles.matchCount}>
                       {itinerary.matches.length} match{itinerary.matches.length !== 1 ? 'es' : ''}
@@ -231,6 +342,51 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
                   value={newItineraryName}
                   onChangeText={setNewItineraryName}
                 />
+                
+                {/* Date Range Selection */}
+                <View style={styles.dateSection}>
+                  <Text style={styles.dateLabel}>Trip Dates (optional)</Text>
+                  <TouchableOpacity
+                    style={styles.dateButton}
+                    onPress={() => setShowCalendar(!showCalendar)}
+                  >
+                    <Text style={styles.dateButtonText}>
+                      {startDate && endDate
+                        ? `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`
+                        : startDate
+                        ? `${formatDisplayDate(startDate)} - Select end date`
+                        : 'Select dates'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  {showCalendar && (
+                    <View style={styles.calendarContainer}>
+                      <Calendar
+                        onDayPress={onDayPress}
+                        markedDates={selectedDates}
+                        markingType="period"
+                        minDate={new Date().toISOString().split('T')[0]}
+                        theme={{
+                          selectedDayBackgroundColor: colors.primary,
+                          selectedDayTextColor: '#ffffff',
+                          todayTextColor: colors.primary,
+                          dayTextColor: '#2d4150',
+                          textDisabledColor: '#d9e1e8',
+                          arrowColor: colors.primary,
+                          monthTextColor: '#2d4150',
+                          indicatorColor: colors.primary,
+                          textDayFontWeight: '300',
+                          textMonthFontWeight: 'bold',
+                          textDayHeaderFontWeight: '300',
+                          textDayFontSize: 16,
+                          textMonthFontSize: 16,
+                          textDayHeaderFontSize: 13,
+                          calendarBackground: colors.card,
+                        }}
+                      />
+                    </View>
+                  )}
+                </View>
                 
                 <TouchableOpacity
                   style={[
@@ -395,6 +551,32 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     ...typography.body,
     fontWeight: '600',
+  },
+  dateSection: {
+    marginBottom: spacing.md + spacing.xs,
+  },
+  dateLabel: {
+    ...typography.body,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+    color: colors.text.primary,
+  },
+  dateButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
+    backgroundColor: colors.cardGrey,
+  },
+  dateButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  calendarContainer: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    ...shadows.small,
   },
 });
 
