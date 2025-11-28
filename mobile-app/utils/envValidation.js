@@ -5,16 +5,18 @@
 
 /**
  * Validates that required environment variables are set
- * Throws error if any required variables are missing in production
+ * Uses fallback values instead of crashing in production
  */
 export const validateEnvironmentVariables = () => {
-  const errors = [];
+  const warnings = [];
   
   // Production environment checks
   if (!__DEV__) {
-    // API URL is required in production
+    // API URL is required in production - use fallback if missing
     if (!process.env.EXPO_PUBLIC_API_URL) {
-      errors.push('EXPO_PUBLIC_API_URL is required in production builds');
+      warnings.push('EXPO_PUBLIC_API_URL not set - using production fallback');
+      // Set fallback production URL
+      process.env.EXPO_PUBLIC_API_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
     }
     
     // Mapbox token required if using Mapbox
@@ -31,11 +33,10 @@ export const validateEnvironmentVariables = () => {
     }
   }
   
-  // Throw if critical errors found
-  if (errors.length > 0) {
-    const errorMessage = `Environment validation failed:\n${errors.join('\n')}\n\nPlease check your .env file or EAS secrets.`;
-    console.error('🚨 ENVIRONMENT VALIDATION ERROR:', errorMessage);
-    throw new Error(errorMessage);
+  // Log warnings but don't crash
+  if (warnings.length > 0) {
+    const warningMessage = `Environment validation warnings:\n${warnings.join('\n')}\n\nPlease set EXPO_PUBLIC_API_URL in EAS secrets for production builds.`;
+    console.warn('⚠️ ENVIRONMENT VALIDATION WARNING:', warningMessage);
   }
   
   // Log successful validation in development

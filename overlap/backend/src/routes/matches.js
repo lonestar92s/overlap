@@ -373,6 +373,16 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     return R * c; // Distance in kilometers
 }
 
+// Helper function to create a consistent bounds hash for caching
+function createBoundsHash(bounds) {
+    // Round to 2 decimal places for cache efficiency (approximately 1km precision)
+    const neLat = Math.round(bounds.northeast.lat * 100) / 100;
+    const neLng = Math.round(bounds.northeast.lng * 100) / 100;
+    const swLat = Math.round(bounds.southwest.lat * 100) / 100;
+    const swLng = Math.round(bounds.southwest.lng * 100) / 100;
+    return `${neLat}-${neLng}-${swLat}-${swLng}`;
+}
+
 // Country coordinate mapping (approximate country centers for geographic filtering)
 const COUNTRY_COORDS = {
     'England': { lat: 52.3555, lng: -1.1743 },
@@ -662,30 +672,33 @@ router.get('/search', async (req, res) => {
                 }
             }
             
-            // Use country + date range for cache key (not exact bounds)
-            const cacheKey = `location-search:${searchCountry || 'unknown'}:${dateFrom}:${dateTo}:${season}`;
+            // Use country + bounds hash + date range for cache key
+            // Bounds hash ensures more granular caching while maintaining efficiency
+            const boundsHash = createBoundsHash(originalBounds);
+            const cacheKey = `location-search:${searchCountry || 'unknown'}:${boundsHash}:${dateFrom}:${dateTo}:${season}`;
             
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
                 console.log(`✅ Location-only search: Cache hit for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
-                // Still filter by original bounds (not buffered bounds) for display
-                // DEBUG: Include matches without coordinates for debugging
+                // Filter by original bounds (not buffered bounds) for display
+                // Only include matches with valid coordinates within exact bounds
                 const filteredMatches = cachedData.data.filter(match => {
                     const coords = match.fixture?.venue?.coordinates;
                     
-                    // Include matches with coordinates within bounds
+                    // Include matches with coordinates within exact bounds
                     if (coords && Array.isArray(coords) && coords.length === 2) {
                         const [lon, lat] = coords;
-                        return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                               lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                        // Validate coordinates are numbers
+                        if (typeof lon === 'number' && typeof lat === 'number' && 
+                            !isNaN(lon) && !isNaN(lat) &&
+                            lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                            return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                                   lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                        }
                     }
                     
-                    // DEBUG: Include matches without coordinates (marked for debugging)
-                    if (match.fixture?.venue?.missingCoordinates) {
-                        return true; // Include for debugging
-                    }
-                    
+                    // Exclude matches without valid coordinates
                     return false;
                 });
                 
@@ -1141,22 +1154,23 @@ router.get('/search', async (req, res) => {
             console.log(`✅ Location-only search: Cached ${transformedMatches.length} matches for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
             
             // Filter by original bounds (not buffered bounds) for this specific request
-            // DEBUG: Include matches without coordinates for debugging
+            // Only include matches with valid coordinates within exact bounds
             const filteredMatches = transformedMatches.filter(match => {
                 const coords = match.fixture?.venue?.coordinates;
                 
-                // Include matches with coordinates within bounds
+                // Include matches with coordinates within exact bounds
                 if (coords && Array.isArray(coords) && coords.length === 2) {
                     const [lon, lat] = coords;
-                    return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                           lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                    // Validate coordinates are numbers
+                    if (typeof lon === 'number' && typeof lat === 'number' && 
+                        !isNaN(lon) && !isNaN(lat) &&
+                        lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                        return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
+                               lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                    }
                 }
                 
-                // DEBUG: Include matches without coordinates (marked for debugging)
-                if (match.fixture?.venue?.missingCoordinates) {
-                    return true; // Include for debugging
-                }
-                
+                // Exclude matches without valid coordinates
                 return false;
             });
             

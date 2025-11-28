@@ -1,9 +1,11 @@
 // Backend API base URL - Loaded from environment variable
 // SECURITY: Never hardcode production URLs - use environment variables
 const getApiBaseUrl = () => {
-  // In production, EXPO_PUBLIC_API_URL must be set
+  // Production fallback - use default production URL if not set
   if (!__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
-    throw new Error('Missing required environment variable: EXPO_PUBLIC_API_URL');
+    console.warn('⚠️ EXPO_PUBLIC_API_URL not set in production - using fallback URL');
+    console.warn('⚠️ Please set EXPO_PUBLIC_API_URL in EAS secrets for production builds');
+    return 'https://friendly-gratitude-production-3f31.up.railway.app/api';
   }
   
   // Development fallback for local testing

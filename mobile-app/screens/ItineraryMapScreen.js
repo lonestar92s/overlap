@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MAP_PROVIDER } from '../utils/mapConfig';
 import HeartButton from '../components/HeartButton';
 import MatchCard from '../components/MatchCard';
+import HomeBaseCard from '../components/HomeBaseCard';
 import ApiService from '../services/api';
 import { useItineraries } from '../contexts/ItineraryContext';
 
@@ -18,6 +19,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   const { getItineraryById } = useItineraries();
   const [itinerary, setItinerary] = useState(null);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedHomeBase, setSelectedHomeBase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [autoFitKey, setAutoFitKey] = useState(0);
   const [venueCoordinates, setVenueCoordinates] = useState({});
@@ -193,6 +195,13 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   // Handle marker press
   const handleMarkerPress = (match) => {
     setSelectedMatch(match);
+    setSelectedHomeBase(null); // Clear home base selection when match is selected
+  };
+
+  // Handle home base press
+  const handleHomeBasePress = (homeBase) => {
+    setSelectedHomeBase(homeBase);
+    setSelectedMatch(null); // Clear match selection when home base is selected
   };
 
   // Handle match card close
@@ -200,10 +209,13 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     setSelectedMatch(null);
   };
 
-  // Handle map press to close match card
+  // Handle map press to close match card and home base card
   const handleMapPress = () => {
     if (selectedMatch) {
       setSelectedMatch(null);
+    }
+    if (selectedHomeBase) {
+      setSelectedHomeBase(null);
     }
   };
 
@@ -258,6 +270,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           matches={transformMatchesForMap(itinerary.matches || [])}
           homeBases={itinerary.homeBases || []}
           onMarkerPress={handleMarkerPress}
+          onHomeBasePress={handleHomeBasePress}
           autoFitKey={autoFitKey}
         />
       </View>
@@ -271,6 +284,18 @@ const ItineraryMapScreen = ({ navigation, route }) => {
             variant="overlay"
             showHeart={true}
             style={styles.matchCardStyle}
+          />
+        </View>
+      )}
+
+      {/* Selected Home Base Card Overlay */}
+      {selectedHomeBase && (
+        <View style={styles.homeBaseCardOverlay}>
+          <HomeBaseCard
+            homeBase={selectedHomeBase}
+            onPress={() => {}}
+            variant="overlay"
+            style={styles.homeBaseCardStyle}
           />
         </View>
       )}
@@ -360,6 +385,22 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   matchCardStyle: {
+    margin: 0,
+  },
+  homeBaseCardOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  homeBaseCardStyle: {
     margin: 0,
   },
 });

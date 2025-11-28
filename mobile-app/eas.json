@@ -9,13 +9,19 @@
       "distribution": "internal",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      },
+      "cache": {
+        "disabled": true
       }
     },
     "preview": {
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
     }
   },
   "submit": {

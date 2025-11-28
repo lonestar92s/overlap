@@ -329,9 +329,15 @@ const MapResultsScreen = ({ navigation, route }) => {
   // FIXED: Initialize filterData from initialMatches immediately on mount to prevent race condition
   useEffect(() => {
     // On mount, process initialMatches immediately if filterData is not ready
-    if (initialMatches && initialMatches.length > 0 && (!filterData || !filterData.matchIds || filterData.matchIds.length === 0)) {
-      console.log('🔧 [INIT] Processing filterData from initialMatches:', initialMatches.length);
-      processMatchesForFilters(initialMatches);
+    if (initialMatches && initialMatches.length > 0) {
+      const currentMatchIds = initialMatches.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
+      const previousMatchIds = filterData?.matchIds || [];
+      
+      // Only process if match IDs are different (avoid unnecessary updates)
+      if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
+        console.log('🔧 [INIT] Processing filterData from initialMatches:', initialMatches.length);
+        processMatchesForFilters(initialMatches);
+      }
     }
   }, []); // Run once on mount
 
@@ -342,6 +348,19 @@ const MapResultsScreen = ({ navigation, route }) => {
       processMatchesForFilters(matches);
     }
   }, [matches, processMatchesForFilters]);
+
+  // Validation logging: Track when filter data becomes ready
+  useEffect(() => {
+    if (filterData && filterData.matchIds && filterData.matchIds.length > 0) {
+      console.log('✅ [FILTER] Filter data ready:', {
+        countries: filterData.countries?.length || 0,
+        leagues: filterData.leagues?.length || 0,
+        teams: filterData.teams?.length || 0,
+        matchIds: filterData.matchIds.length,
+        totalMatches: matches.length
+      });
+    }
+  }, [filterData, matches.length]);
 
   // Set initial search region when component mounts
   // FIXED: Only run once on mount to prevent repeated initialization
@@ -946,7 +965,10 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // If filterData is not ready, return all matches (prevents race condition)
     if (!filterData || !filterData.matchIds || filterData.matchIds.length === 0) {
-      // Reduced logging - only log once when filterData becomes ready
+      // Log once when filterData is not ready (for debugging)
+      if (__DEV__ && matches.length > 0) {
+        console.log('⚠️ [FILTER] Filter data not ready, showing all matches:', matches.length);
+      }
       return matches;
     }
     
