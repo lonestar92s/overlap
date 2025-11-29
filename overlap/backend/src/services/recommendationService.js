@@ -596,6 +596,38 @@ class RecommendationService {
     }
 
     /**
+     * Get list of dismissed match IDs for a specific trip (for diagnostics)
+     */
+    getDismissedMatchIdsForTrip(user, tripId) {
+        const dismissedMatchIds = new Set();
+        
+        if (!user || !user.recommendationHistory || user.recommendationHistory.length === 0) {
+            return dismissedMatchIds;
+        }
+
+        if (!tripId || tripId === 'undefined' || tripId === 'null') {
+            return dismissedMatchIds;
+        }
+
+        const tripIdStr = String(tripId).trim();
+        
+        for (const entry of user.recommendationHistory) {
+            if (
+                entry.action === 'dismissed' &&
+                entry.tripId &&
+                entry.matchId
+            ) {
+                const entryTripIdStr = String(entry.tripId).trim();
+                if (entryTripIdStr === tripIdStr) {
+                    dismissedMatchIds.add(String(entry.matchId));
+                }
+            }
+        }
+
+        return dismissedMatchIds;
+    }
+
+    /**
      * Filter out matches that have been dismissed for a specific trip
      * Dismissals are permanent per trip (not time-limited, not global)
      */
