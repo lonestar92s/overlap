@@ -49,6 +49,10 @@ class RecommendationService {
                     }
                 };
             }
+
+            // Ensure tripId is a string for consistent comparison
+            const tripIdStr = String(tripId);
+            console.log(`🔍 Using tripId: ${tripIdStr} for filtering dismissed recommendations`);
             
             // Check cache first (unless force refresh)
             let cachedResult = null;
@@ -178,6 +182,7 @@ class RecommendationService {
                     trip,
                     userRadius,
                     user,
+                    tripIdStr,
                     maxRecommendationsPerDay
                 );
                 
@@ -255,7 +260,7 @@ class RecommendationService {
     /**
      * Generate multiple recommendations for a specific day (2-3 top matches)
      */
-    async generateRecommendationsForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius, user, maxRecommendations = 3) {
+    async generateRecommendationsForDay(day, savedMatchVenues, tripDates, restrictedLeagues, trip, userRadius, user, tripId, maxRecommendations = 3) {
         try {
             // Search for matches on this day and nearby dates
             const searchDates = this.getSearchDates(day, tripDates);
@@ -290,10 +295,12 @@ class RecommendationService {
             }
 
             // Filter out dismissed recommendations for this trip (permanent filter)
-            const tripId = trip._id ? String(trip._id) : String(trip.id);
+            console.log(`🔍 Filtering dismissed recommendations for trip ${tripId}, ${conflictFreeMatches.length} matches before filter`);
             const nonDismissedMatches = this.filterDismissedRecommendations(conflictFreeMatches, user, tripId);
+            console.log(`🔍 After filtering dismissed: ${nonDismissedMatches.length} matches remaining`);
 
             if (nonDismissedMatches.length === 0) {
+                console.log(`⚠️ No non-dismissed matches remaining after filtering for day ${day}`);
                 return [];
             }
 
@@ -590,25 +597,34 @@ class RecommendationService {
         }
 
         if (!tripId) {
+            console.log('⚠️ filterDismissedRecommendations: No tripId provided, returning all matches');
             return matches; // No tripId, can't filter
         }
 
         // Get dismissed matchIds for this specific trip
         const dismissedMatchIds = new Set();
+        const tripIdStr = String(tripId);
+        
         for (const entry of user.recommendationHistory) {
             if (
                 entry.action === 'dismissed' &&
                 entry.tripId &&
-                String(entry.tripId) === String(tripId) &&
                 entry.matchId
             ) {
-                dismissedMatchIds.add(String(entry.matchId));
+                const entryTripIdStr = String(entry.tripId);
+                // Compare tripIds (handle both ObjectId and string formats)
+                if (entryTripIdStr === tripIdStr || entryTripIdStr === tripId) {
+                    dismissedMatchIds.add(String(entry.matchId));
+                }
             }
         }
 
         if (dismissedMatchIds.size === 0) {
+            console.log(`✅ No dismissed matches found for trip ${tripId}, returning all ${matches.length} matches`);
             return matches; // No dismissals for this trip
         }
+
+        console.log(`🚫 Found ${dismissedMatchIds.size} dismissed matchIds for trip ${tripId}:`, Array.from(dismissedMatchIds));
 
         // Filter out dismissed matches
         const filtered = matches.filter(match => {
@@ -622,7 +638,7 @@ class RecommendationService {
             return !isDismissed;
         });
 
-        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripId}`);
+        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripId} (${filtered.length} remaining)`);
         return filtered;
     }
 
