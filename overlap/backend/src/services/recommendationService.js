@@ -297,10 +297,13 @@ class RecommendationService {
             // Filter out dismissed recommendations for this trip (permanent filter)
             console.log(`🔍 Filtering dismissed recommendations for trip ${tripId}, ${conflictFreeMatches.length} matches before filter`);
             const nonDismissedMatches = this.filterDismissedRecommendations(conflictFreeMatches, user, tripId);
-            console.log(`🔍 After filtering dismissed: ${nonDismissedMatches.length} matches remaining`);
+            console.log(`🔍 After filtering dismissed: ${nonDismissedMatches.length} matches remaining (had ${conflictFreeMatches.length} before filter)`);
 
             if (nonDismissedMatches.length === 0) {
-                console.log(`⚠️ No non-dismissed matches remaining after filtering for day ${day}`);
+                console.log(`⚠️ No non-dismissed matches remaining after filtering for day ${day}. This could mean:`);
+                console.log(`   - All matches were dismissed for this trip`);
+                console.log(`   - No matches passed the conflict filter`);
+                console.log(`   - Filter logic issue`);
                 return [];
             }
 
@@ -592,18 +595,28 @@ class RecommendationService {
      * Dismissals are permanent per trip (not time-limited, not global)
      */
     filterDismissedRecommendations(matches, user, tripId) {
+        // Early return if no matches to filter
+        if (!matches || matches.length === 0) {
+            console.log('⚠️ filterDismissedRecommendations: No matches provided, returning empty array');
+            return matches || [];
+        }
+
+        // Early return if no user or no recommendation history
         if (!user || !user.recommendationHistory || user.recommendationHistory.length === 0) {
+            console.log(`✅ filterDismissedRecommendations: No recommendation history, returning all ${matches.length} matches`);
             return matches; // No history, return all matches
         }
 
-        if (!tripId) {
-            console.log('⚠️ filterDismissedRecommendations: No tripId provided, returning all matches');
+        // Early return if no tripId
+        if (!tripId || tripId === 'undefined' || tripId === 'null') {
+            console.log(`⚠️ filterDismissedRecommendations: Invalid tripId (${tripId}), returning all ${matches.length} matches`);
             return matches; // No tripId, can't filter
         }
 
         // Get dismissed matchIds for this specific trip
         const dismissedMatchIds = new Set();
-        const tripIdStr = String(tripId);
+        const tripIdStr = String(tripId).trim();
+        console.log(`🔍 Checking recommendation history for tripId: ${tripIdStr} (${user.recommendationHistory.length} total history entries)`);
         
         for (const entry of user.recommendationHistory) {
             if (
@@ -611,20 +624,21 @@ class RecommendationService {
                 entry.tripId &&
                 entry.matchId
             ) {
-                const entryTripIdStr = String(entry.tripId);
+                const entryTripIdStr = String(entry.tripId).trim();
                 // Compare tripIds (handle both ObjectId and string formats)
-                if (entryTripIdStr === tripIdStr || entryTripIdStr === tripId) {
+                if (entryTripIdStr === tripIdStr) {
                     dismissedMatchIds.add(String(entry.matchId));
+                    console.log(`  → Found dismissed match ${entry.matchId} for trip ${tripIdStr}`);
                 }
             }
         }
 
         if (dismissedMatchIds.size === 0) {
-            console.log(`✅ No dismissed matches found for trip ${tripId}, returning all ${matches.length} matches`);
+            console.log(`✅ No dismissed matches found for trip ${tripIdStr}, returning all ${matches.length} matches`);
             return matches; // No dismissals for this trip
         }
 
-        console.log(`🚫 Found ${dismissedMatchIds.size} dismissed matchIds for trip ${tripId}:`, Array.from(dismissedMatchIds));
+        console.log(`🚫 Found ${dismissedMatchIds.size} dismissed matchIds for trip ${tripIdStr}:`, Array.from(dismissedMatchIds));
 
         // Filter out dismissed matches
         const filtered = matches.filter(match => {
@@ -632,13 +646,13 @@ class RecommendationService {
             const isDismissed = dismissedMatchIds.has(matchId);
             
             if (isDismissed) {
-                console.log(`🚫 Filtering out dismissed match ${matchId} for trip ${tripId}`);
+                console.log(`🚫 Filtering out dismissed match ${matchId} for trip ${tripIdStr}`);
             }
             
             return !isDismissed;
         });
 
-        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripId} (${filtered.length} remaining)`);
+        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripIdStr} (${filtered.length} remaining out of ${matches.length} original)`);
         return filtered;
     }
 

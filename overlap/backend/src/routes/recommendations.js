@@ -14,31 +14,37 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
         const { tripId } = req.params;
         const forceRefresh = req.query.forceRefresh === 'true' || req.query.forceRefresh === '1';
         
+        console.log(`📥 Trip recommendations endpoint called for tripId: ${tripId}, forceRefresh: ${forceRefresh}`);
+        
         if (forceRefresh) {
             console.log(`🔄 Force refresh requested for trip: ${tripId}`);
         }
         
         if (!req.user) {
+            console.log(`❌ No user authenticated for trip ${tripId}`);
             return res.status(401).json({
                 success: false,
                 message: 'Authentication required'
             });
         }
 
+        console.log(`👤 Getting user ${req.user.id} for trip recommendations`);
         // Get user with trip data
         const user = await User.findById(req.user.id);
         if (!user) {
+            console.log(`❌ User ${req.user.id} not found`);
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
 
+        console.log(`🔍 Looking for trip ${tripId} in user's ${user.trips?.length || 0} trips`);
         // Find the specific trip
         const trip = user.trips.id(tripId);
         if (!trip) {
             // Trip not found - could be deleted, clear cache and return empty
-            console.log(`Recommendations: Trip not found (may have been deleted): ${tripId}`);
+            console.log(`❌ Trip not found (may have been deleted): ${tripId}`);
             recommendationService.invalidateTripCache(tripId);
             return res.status(404).json({
                 success: false,
@@ -51,6 +57,7 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
             });
         }
 
+        console.log(`✅ Trip found: ${trip.name || tripId}, has ${trip.matches?.length || 0} matches`);
         // Generate recommendations (service will validate trip exists)
         const result = await recommendationService.getRecommendationsForTrip(
             tripId,
@@ -58,6 +65,8 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
             trip,
             forceRefresh
         );
+        
+        console.log(`📤 Returning ${result.recommendations?.length || 0} recommendations for trip ${tripId}`);
 
         // Set cache headers for client-side caching (shorter for force refresh)
         const cacheMaxAge = forceRefresh ? 0 : 3600; // No cache for force refresh, 1 hour otherwise
