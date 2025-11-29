@@ -1221,9 +1221,12 @@ router.get('/:id/travel-times', auth, async (req, res) => {
         const googleApiKey = process.env.GOOGLE_API_KEY;
 
         if (!googleApiKey) {
-            return res.status(500).json({
-                success: false,
-                message: 'Google Maps API key not configured'
+            // Return empty travel times instead of error - feature is unavailable but not a failure
+            console.warn('Google Maps API key not configured - travel times unavailable');
+            return res.json({
+                success: true,
+                travelTimes: {},
+                message: 'Travel times unavailable (Google Maps API key not configured)'
             });
         }
 

@@ -413,16 +413,14 @@ const AccountScreen = ({ navigation }) => {
           </>
         )}
         
-        {/* Logout button - show in Favorites tab for now */}
-        {activeTab === 'favorites' && (
+        {/* Logout button - visible on all tabs */}
         <Button
           title="Logout"
           onPress={handleLogout}
           buttonStyle={styles.logoutButton}
           titleStyle={styles.logoutButtonTitle}
-            containerStyle={{ marginTop: spacing.lg }}
+          containerStyle={{ marginTop: spacing.lg }}
         />
-        )}
       </View>
     </ScrollView>
     </SafeAreaView>

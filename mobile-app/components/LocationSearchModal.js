@@ -58,6 +58,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   
   // Ref to store the debounced search function so we can cancel it
   const debouncedSearchRef = useRef(null);
+  
+  // Ref to track if a search has been completed (to prevent showing "No locations found" too early)
+  const hasCompletedSearchRef = useRef(false);
 
   // Load recent searches
   useEffect(() => {
@@ -137,9 +140,11 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     if (!query || query.trim().length < 2) {
       setLocationResults([]);
       setLocationSearchLoading(false);
+      hasCompletedSearchRef.current = false;
       return;
     }
     setLocationSearchLoading(true);
+    hasCompletedSearchRef.current = false; // Reset flag when starting new search
     try {
       const response = await ApiService.searchLocations(query.trim(), 5);
       if (response.success && response.suggestions) {
@@ -147,9 +152,13 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       } else {
         setLocationResults([]);
       }
+      // Mark that search has completed
+      hasCompletedSearchRef.current = true;
     } catch (error) {
       console.error('Error searching locations:', error);
       setLocationResults([]);
+      // Mark that search has completed (even if it failed)
+      hasCompletedSearchRef.current = true;
     } finally {
       setLocationSearchLoading(false);
     }
@@ -201,6 +210,8 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     } else {
       setLocationResults([]);
       setLocationSearchLoading(false);
+      // Reset search completion flag when query is too short or not searching
+      hasCompletedSearchRef.current = false;
     }
   }, [locationSearchQuery, isSearchingLocation, location]);
 
@@ -220,12 +231,16 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       debouncedSearchRef.current.cancel();
     }
     
-    setLocation(selectedLocation);
     const displayText = `${selectedLocation.city}${selectedLocation.region ? `, ${selectedLocation.region}` : ''}, ${selectedLocation.country}`;
     
-    // IMPORTANT: Set isSearchingLocation to false FIRST to prevent useEffect from triggering another search
-    // when we update locationSearchQuery below
+    // IMPORTANT: Set location FIRST, then isSearchingLocation to false, to prevent race conditions
+    // This ensures the UI knows a location is selected before we hide the search results
+    setLocation(selectedLocation);
+    
+    // Set isSearchingLocation to false to hide search results UI
     setIsSearchingLocation(false);
+    
+    // Clear results after we've hidden the search UI to prevent showing "No locations found"
     setLocationResults([]);
     
     // Now update the query - this won't trigger a search because:
@@ -555,6 +570,10 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                     onChangeText={(text) => {
                       setLocationSearchQuery(text);
                       setIsSearchingLocation(text.trim().length > 0);
+                      // Reset search completion flag when user types
+                      if (text.trim().length < 2) {
+                        hasCompletedSearchRef.current = false;
+                      }
                     }}
                     onFocus={() => {
                       // Only set searching to true if we don't have a location selected
@@ -586,14 +605,14 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                 </View>
                 
                 {/* Location Search Results */}
-                {isSearchingLocation && locationSearchQuery.trim().length >= 2 && (
+                {isSearchingLocation && locationSearchQuery.trim().length >= 2 && !location && (
                   <View style={styles.locationResultsContainer}>
                     {locationSearchLoading && locationResults.length === 0 && (
                       <View style={styles.locationLoadingContainer}>
                         <ActivityIndicator size="small" color={colors.primary} />
                       </View>
                     )}
-                    {!locationSearchLoading && locationResults.length === 0 && locationSearchQuery.trim().length >= 2 && (
+                    {!locationSearchLoading && locationResults.length === 0 && locationSearchQuery.trim().length >= 2 && hasCompletedSearchRef.current && (
                       <View style={styles.locationEmptyContainer}>
                         <Text style={styles.locationEmptyText}>No locations found</Text>
                       </View>
@@ -617,8 +636,8 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                   </View>
                 )}
 
-                {/* Recent Searches - Only show when not searching */}
-                {!isSearchingLocation && recentSearches.length > 0 && (
+                {/* Recent Searches - Show when not actively searching OR when location is selected */}
+                {(!isSearchingLocation || location) && recentSearches.length > 0 && (
                   <View style={styles.recentSection}>
                     <Text style={styles.sectionLabel}>Recent searches</Text>
                     {recentSearches.map((search) => (

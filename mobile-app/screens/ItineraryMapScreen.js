@@ -87,7 +87,10 @@ const ItineraryMapScreen = ({ navigation, route }) => {
         const times = await ApiService.getTravelTimes(itineraryId);
         setTravelTimes(times || {});
       } catch (error) {
-        console.error('Error fetching travel times:', error);
+        // Only log non-API-key errors to avoid noise in console
+        if (!error.message?.includes('API key not configured')) {
+          console.error('Error fetching travel times:', error);
+        }
         setTravelTimes({});
       } finally {
         setTravelTimesLoading(false);
@@ -323,6 +326,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
                   : null
             }
             travelTimeLoading={travelTimesLoading}
+            homeBases={itinerary?.homeBases || []}
           />
         </View>
       )}

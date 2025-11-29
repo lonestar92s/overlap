@@ -1829,17 +1829,26 @@ class ApiService {
 
   async getRecommendations(tripId, forceRefresh = false) {
     try {
-      console.log('🎯 API Service - Getting recommendations for trip:', tripId);
+      console.log('🎯 API Service - Getting recommendations for trip:', tripId, forceRefresh ? '(force refresh)' : '');
       
-      // Check client-side cache first
+      // Check client-side cache first (only if not forcing refresh)
       if (!forceRefresh) {
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
+          console.log('⚡ API Service - Returning client-side cached recommendations');
           return cached;
         }
+      } else {
+        console.log('🔄 API Service - Force refresh - bypassing client cache');
       }
       
-      const response = await fetch(`${this.baseURL}/recommendations/trips/${tripId}/recommendations`, {
+      // Build URL with forceRefresh query parameter if needed
+      const url = new URL(`${this.baseURL}/recommendations/trips/${tripId}/recommendations`);
+      if (forceRefresh) {
+        url.searchParams.set('forceRefresh', 'true');
+      }
+      
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -1847,18 +1856,28 @@ class ApiService {
       });
       
       const data = await response.json();
-      console.log('🎯 API Service - Recommendations response:', { status: response.status, data });
+      console.log('🎯 API Service - Recommendations response:', { 
+        status: response.status, 
+        cached: data.cached,
+        recommendationCount: data.recommendations?.length || 0,
+        diagnostics: data.diagnostics ? {
+          reason: data.diagnostics.reason,
+          message: data.diagnostics.message
+        } : null
+      });
       
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch recommendations');
       }
       
-      // Cache the response
-      const cacheKey = `recommendations:${tripId}`;
-      recommendationCache.set(cacheKey, {
-        data,
-        timestamp: Date.now()
-      });
+      // Cache the response (only if not forcing refresh, or if we got a successful response)
+      if (!forceRefresh || (data.success && data.recommendations)) {
+        const cacheKey = `recommendations:${tripId}`;
+        recommendationCache.set(cacheKey, {
+          data,
+          timestamp: Date.now()
+        });
+      }
       
       return data;
     } catch (error) {

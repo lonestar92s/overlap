@@ -26,6 +26,7 @@ const MatchCard = ({
   showAttendancePrompt = false, // Show attendance prompt for past matches
   travelTime = null, // Travel time data: { duration, distance, homeBaseId }
   travelTimeLoading = false, // Loading state for travel time
+  homeBases = [], // Array of home bases to find the source location
   style = {},
 }) => {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
@@ -169,6 +170,26 @@ const MatchCard = ({
     }
     return 'Unknown Venue';
   }, [venue]);
+
+  // Calculate travel time context (from/to locations)
+  const travelTimeContext = useMemo(() => {
+    if (!travelTime || !homeBases?.length) {
+      return { from: null, to: null };
+    }
+
+    // Find home base name from homeBaseId
+    const homeBaseName = travelTime.homeBaseId
+      ? (homeBases.find(hb => 
+          String(hb._id) === String(travelTime.homeBaseId) || 
+          String(hb.id) === String(travelTime.homeBaseId)
+        )?.name || null)
+      : null;
+    
+    // Get venue name
+    const venueName = venue?.name || null;
+    
+    return { from: homeBaseName, to: venueName };
+  }, [travelTime, homeBases, venue]);
 
   // Image error handlers
   const handleHomeLogoError = () => {
@@ -345,6 +366,8 @@ const MatchCard = ({
           <TravelTimeDisplay 
             travelTime={travelTime} 
             loading={travelTimeLoading}
+            from={travelTimeContext.from}
+            to={travelTimeContext.to}
           />
         </View>
       )}

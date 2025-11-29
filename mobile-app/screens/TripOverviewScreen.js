@@ -20,15 +20,12 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { useItineraries } from '../contexts/ItineraryContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
 import AddFlightModal from '../components/AddFlightModal';
 import HomeBaseSection from '../components/HomeBaseSection';
-import ShareableTripView from '../components/ShareableTripView';
 import apiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
 import { createDateRange } from '../utils/dateUtils';
@@ -81,8 +78,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const descriptionInputRef = useRef(null);
   const notesSectionRef = useRef(null);
   const [notesSectionY, setNotesSectionY] = useState(0);
-  const [isSharing, setIsSharing] = useState(false);
-  const shareableViewRef = useRef(null);
 
   useEffect(() => {
     if (itineraryId) {
@@ -620,97 +615,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
     setSelectedMatch(null);
   };
 
-  const handleShareTrip = async () => {
-    if (!itinerary) {
-      Alert.alert('Error', 'Trip data not available');
-      return;
-    }
-
-    // Check if trip has any content to share
-    const hasContent = (itinerary.matches && itinerary.matches.length > 0) ||
-                       (itinerary.flights && itinerary.flights.length > 0) ||
-                       (itinerary.homeBases && itinerary.homeBases.length > 0);
-    
-    if (!hasContent) {
-      Alert.alert(
-        'Nothing to Share',
-        'Your trip doesn\'t have any matches, flights, or home bases to share yet.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setIsSharing(true);
-
-    try {
-      // Validate that the ref is attached
-      if (!shareableViewRef.current) {
-        throw new Error('Shareable view reference is not available. Please try again.');
-      }
-
-      // Wait for interactions to complete and view to be fully rendered
-      await InteractionManager.runAfterInteractions();
-
-      // Add a delay to ensure the view is fully laid out and rendered
-      // This is important for off-screen views that need to be captured
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Capture the shareable view as an image
-      let uri;
-      try {
-        uri = await captureRef(shareableViewRef, {
-          format: 'png',
-          quality: 1.0,
-          result: 'tmpfile',
-        });
-      } catch (captureError) {
-        console.error('Error capturing view:', captureError);
-        throw new Error('Failed to capture trip image. The view may not be ready yet.');
-      }
-
-      if (!uri) {
-        throw new Error('Failed to generate image. Please try again.');
-      }
-
-      // Check if sharing is available
-      let isAvailable;
-      try {
-        isAvailable = await Sharing.isAvailableAsync();
-      } catch (sharingCheckError) {
-        console.error('Error checking sharing availability:', sharingCheckError);
-        throw new Error('Unable to check if sharing is available on this device.');
-      }
-
-      if (!isAvailable) {
-        Alert.alert(
-          'Sharing Not Available',
-          'Sharing is not available on this device.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      // Share the image directly from the temporary file
-      try {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Share Trip',
-        });
-      } catch (shareError) {
-        console.error('Error sharing image:', shareError);
-        throw new Error('Failed to open share dialog. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error sharing trip:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to share trip. Please try again.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsSharing(false);
-    }
-  };
 
   // Group matches by date for chronological organization
   // This creates a hierarchical structure: Date Headers -> Matches for that date
@@ -1058,7 +962,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with back button, share button, and settings */}
+      {/* Header with back button and settings */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.backButtonIcon}
@@ -1068,18 +972,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </TouchableOpacity>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={handleShareTrip}
-            disabled={isSharing || !itinerary}
-          >
-            {isSharing ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <MaterialIcons name="share" size={16} color={colors.primary} />
-            )}
-          </TouchableOpacity>
-          
           <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => setModalVisible(true)}
@@ -1759,20 +1651,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Hidden ShareableTripView for image capture */}
-      {itinerary && (
-        <View 
-          ref={shareableViewRef}
-          style={styles.shareableViewContainer}
-          collapsable={false}
-        >
-          <ShareableTripView 
-            trip={itinerary}
-            width={800}
-            height={1200}
-          />
-        </View>
-      )}
     </SafeAreaView>
   );
 };
@@ -2165,28 +2043,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  shareButton: {
-    padding: spacing.xs,
-    width: 25,
-    height: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   settingsButton: {
     padding: spacing.xs,
     width: 25,
     height: 25,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  shareableViewContainer: {
-    position: 'absolute',
-    left: -10000,
-    top: -10000,
-    width: 800,
-    height: 1200,
-    overflow: 'hidden',
-    pointerEvents: 'none',
   },
   keyboardAvoidingView: {
     flex: 1,

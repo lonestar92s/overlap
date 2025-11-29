@@ -28,11 +28,12 @@ class RecommendationService {
      * @param {string} tripId - The trip ID
      * @param {Object} user - User object with subscription info
      * @param {Object} trip - Trip object with matches and dates
-     * @returns {Array} Array of recommendations
+     * @param {boolean} forceRefresh - If true, bypass cache and regenerate recommendations
+     * @returns {Object} Object with recommendations, cached flag, and diagnostics
      */
-    async getRecommendationsForTrip(tripId, user, trip) {
+    async getRecommendationsForTrip(tripId, user, trip, forceRefresh = false) {
         try {
-            console.log(`🎯 Generating recommendations for trip: ${tripId}`);
+            console.log(`🎯 Generating recommendations for trip: ${tripId}${forceRefresh ? ' (force refresh)' : ''}`);
             
             // Validate trip exists (prevent generating recommendations for deleted trips)
             if (!trip) {
@@ -41,38 +42,85 @@ class RecommendationService {
                 this.invalidateTripCache(tripId);
                 return {
                     recommendations: [],
-                    cached: false
+                    cached: false,
+                    diagnostics: {
+                        reason: 'trip_not_found',
+                        message: 'Trip not found or has been deleted'
+                    }
                 };
             }
             
-            // Check cache first
+            // Check cache first (unless force refresh)
+            let cachedResult = null;
             const cacheKey = this.generateCacheKey(tripId, user, trip);
-            const cachedResult = this.getFromCache(cacheKey);
-            if (cachedResult) {
-                console.log(`⚡ Returning cached recommendations for trip: ${tripId}`);
-                return {
-                    recommendations: cachedResult,
-                    cached: true
-                };
+            if (!forceRefresh) {
+                cachedResult = this.getFromCache(cacheKey);
+                if (cachedResult) {
+                    console.log(`⚡ Returning cached recommendations for trip: ${tripId} (cache key: ${cacheKey})`);
+                    // Handle both old format (array) and new format (object with recommendations and diagnostics)
+                    if (Array.isArray(cachedResult)) {
+                        // Legacy format - just an array
+                        return {
+                            recommendations: cachedResult,
+                            cached: true,
+                            diagnostics: null
+                        };
+                    } else {
+                        // New format - object with recommendations and diagnostics
+                        return {
+                            recommendations: cachedResult.recommendations || [],
+                            cached: true,
+                            diagnostics: cachedResult.diagnostics || null
+                        };
+                    }
+                } else {
+                    console.log(`💾 Cache miss for trip: ${tripId} (cache key: ${cacheKey})`);
+                }
+            } else {
+                console.log(`🔄 Force refresh requested - bypassing cache for trip: ${tripId}`);
             }
             
             // Get trip date range
             const tripDates = this.getTripDateRange(trip);
             if (!tripDates.start || !tripDates.end) {
-                console.log('❌ Invalid trip dates');
+                console.log('❌ Invalid trip dates - trip has no matches to determine date range');
+                const diagnostics = {
+                    reason: 'invalid_trip_dates',
+                    message: 'Trip has no matches to determine date range',
+                    tripInfo: {
+                        matchCount: trip.matches?.length || 0,
+                        hasMatches: (trip.matches?.length || 0) > 0
+                    }
+                };
+                // Don't cache empty results - they should be regenerated when matches are added
                 return {
                     recommendations: [],
-                    cached: false
+                    cached: false,
+                    diagnostics
                 };
             }
 
             // Get days without matches
             const daysWithoutMatches = this.getDaysWithoutMatches(trip, tripDates);
             if (daysWithoutMatches.length === 0) {
-                console.log('✅ Trip already has matches for all days');
+                console.log('✅ Trip already has matches for all days - no recommendations needed');
+                const diagnostics = {
+                    reason: 'all_days_have_matches',
+                    message: 'All days in trip already have matches',
+                    tripInfo: {
+                        matchCount: trip.matches?.length || 0,
+                        dateRange: {
+                            start: tripDates.start.toISOString().split('T')[0],
+                            end: tripDates.end.toISOString().split('T')[0]
+                        },
+                        daysWithMatches: trip.matches?.length || 0
+                    }
+                };
+                // Don't cache this - conditions might change if matches are removed
                 return {
                     recommendations: [],
-                    cached: false
+                    cached: false,
+                    diagnostics
                 };
             }
 
@@ -80,9 +128,24 @@ class RecommendationService {
             const savedMatchVenues = await this.extractVenuesFromTrip(trip);
             if (savedMatchVenues.length === 0) {
                 console.log('❌ No saved matches with coordinates to base recommendations on');
+                const diagnostics = {
+                    reason: 'no_venues_with_coordinates',
+                    message: 'Trip matches do not have venue coordinates for proximity search',
+                    tripInfo: {
+                        matchCount: trip.matches?.length || 0,
+                        dateRange: {
+                            start: tripDates.start.toISOString().split('T')[0],
+                            end: tripDates.end.toISOString().split('T')[0]
+                        },
+                        daysWithoutMatches: daysWithoutMatches.length,
+                        venuesWithCoordinates: 0
+                    }
+                };
+                // Don't cache empty results
                 return {
                     recommendations: [],
-                    cached: false
+                    cached: false,
+                    diagnostics
                 };
             }
 
@@ -98,8 +161,15 @@ class RecommendationService {
             const recommendations = [];
             const seenMatchIds = new Set(); // Track matchIds to prevent duplicates
             const maxRecommendationsPerDay = 3; // Show up to 3 recommendations per day
+            const debugInfo = {
+                daysProcessed: 0,
+                daysWithRecommendations: 0,
+                totalMatchesFound: 0,
+                totalMatchesFiltered: 0
+            };
             
             for (const day of daysWithoutMatches) {
+                debugInfo.daysProcessed++;
                 const dayRecommendations = await this.generateRecommendationsForDay(
                     day,
                     savedMatchVenues,
@@ -111,6 +181,10 @@ class RecommendationService {
                     maxRecommendationsPerDay
                 );
                 
+                if (dayRecommendations.length > 0) {
+                    debugInfo.daysWithRecommendations++;
+                }
+                
                 // Add all recommendations for this day (deduplication happens in generateRecommendationsForDay)
                 for (const recommendation of dayRecommendations) {
                     const matchId = String(recommendation.matchId || recommendation.match?.fixture?.id || recommendation.match?.id);
@@ -119,26 +193,61 @@ class RecommendationService {
                     if (!seenMatchIds.has(matchId)) {
                         seenMatchIds.add(matchId);
                         recommendations.push(recommendation);
+                        debugInfo.totalMatchesFound++;
                     } else {
                         console.log(`⚠️ Skipping duplicate recommendation for matchId: ${matchId}`);
+                        debugInfo.totalMatchesFiltered++;
                     }
                 }
             }
 
-            // Cache the results
-            this.setCache(cacheKey, recommendations);
+            // Build diagnostics
+            const diagnostics = {
+                reason: recommendations.length === 0 ? 'no_matches_found' : null,
+                message: recommendations.length === 0 
+                    ? 'No matches found matching criteria (proximity, date, conflicts, or scoring)' 
+                    : null,
+                tripInfo: {
+                    matchCount: trip.matches?.length || 0,
+                    dateRange: {
+                        start: tripDates.start.toISOString().split('T')[0],
+                        end: tripDates.end.toISOString().split('T')[0]
+                    },
+                    daysWithoutMatches: daysWithoutMatches.length,
+                    venuesWithCoordinates: savedMatchVenues.length,
+                    userRadius: userRadius
+                },
+                debugInfo
+            };
+
+            // Only cache non-empty results (or cache empty results with shorter expiry)
+            if (recommendations.length > 0) {
+                // Cache successful results with full expiry
+                this.setCache(cacheKey, { recommendations, diagnostics });
+                console.log(`✅ Generated ${recommendations.length} unique recommendations - cached`);
+            } else {
+                // Cache empty results with shorter expiry (1 hour instead of 24 hours)
+                this.setCache(cacheKey, { recommendations: [], diagnostics }, 60 * 60 * 1000);
+                console.log(`⚠️ Generated 0 recommendations - cached with short expiry (1 hour)`);
+            }
             
             console.log(`✅ Generated ${recommendations.length} unique recommendations`);
             return {
                 recommendations,
-                cached: false
+                cached: false,
+                diagnostics
             };
 
         } catch (error) {
             console.error('❌ Error generating recommendations:', error);
             return {
                 recommendations: [],
-                cached: false
+                cached: false,
+                diagnostics: {
+                    reason: 'error',
+                    message: `Error generating recommendations: ${error.message}`,
+                    error: error.message
+                }
             };
         }
     }
@@ -740,8 +849,10 @@ class RecommendationService {
             return null;
         }
 
-        // Check if cache has expired
-        if (Date.now() - cached.timestamp > this.cacheExpiry) {
+        // Check if cache has expired (use custom expiry if set, otherwise default)
+        const expiry = cached.expiry || this.cacheExpiry;
+        if (Date.now() - cached.timestamp > expiry) {
+            console.log(`⏰ Cache expired for key: ${key} (age: ${Math.round((Date.now() - cached.timestamp) / 1000 / 60)} minutes)`);
             this.cache.delete(key);
             return null;
         }
@@ -749,10 +860,12 @@ class RecommendationService {
         return cached.data;
     }
 
-    setCache(key, data) {
+    setCache(key, data, customExpiry = null) {
+        const expiry = customExpiry || this.cacheExpiry;
         this.cache.set(key, {
             data: data,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            expiry: expiry
         });
 
         // Clean up old cache entries periodically
@@ -762,7 +875,8 @@ class RecommendationService {
     cleanupCache() {
         const now = Date.now();
         for (const [key, value] of this.cache.entries()) {
-            if (now - value.timestamp > this.cacheExpiry) {
+            const expiry = value.expiry || this.cacheExpiry;
+            if (now - value.timestamp > expiry) {
                 this.cache.delete(key);
             }
         }

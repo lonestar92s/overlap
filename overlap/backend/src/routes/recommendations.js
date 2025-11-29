@@ -12,6 +12,11 @@ const router = express.Router();
 router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res) => {
     try {
         const { tripId } = req.params;
+        const forceRefresh = req.query.forceRefresh === 'true' || req.query.forceRefresh === '1';
+        
+        if (forceRefresh) {
+            console.log(`🔄 Force refresh requested for trip: ${tripId}`);
+        }
         
         if (!req.user) {
             return res.status(401).json({
@@ -38,7 +43,11 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found',
-                recommendations: []
+                recommendations: [],
+                diagnostics: {
+                    reason: 'trip_not_found',
+                    message: 'Trip not found or has been deleted'
+                }
             });
         }
 
@@ -46,29 +55,36 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
         const result = await recommendationService.getRecommendationsForTrip(
             tripId,
             user,
-            trip
+            trip,
+            forceRefresh
         );
 
-        // Set cache headers for client-side caching
+        // Set cache headers for client-side caching (shorter for force refresh)
+        const cacheMaxAge = forceRefresh ? 0 : 3600; // No cache for force refresh, 1 hour otherwise
         res.set({
-            'Cache-Control': 'private, max-age=3600', // Cache for 1 hour on client
+            'Cache-Control': `private, max-age=${cacheMaxAge}`, // Cache for 1 hour on client (or 0 for force refresh)
             'ETag': `"${tripId}-${user._id}-${Date.now()}"`, // Simple ETag for cache validation
             'Last-Modified': new Date().toUTCString()
         });
 
         res.json({
             success: true,
-            recommendations: result.recommendations || result, // Handle both formats for backward compatibility
+            recommendations: result.recommendations || [], // Handle both formats for backward compatibility
             tripId,
             generatedAt: new Date().toISOString(),
-            cached: result.cached || false
+            cached: result.cached || false,
+            diagnostics: result.diagnostics || null
         });
 
     } catch (error) {
         console.error('Error getting recommendations:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to get recommendations'
+            message: 'Failed to get recommendations',
+            diagnostics: {
+                reason: 'error',
+                message: `Error: ${error.message}`
+            }
         });
     }
 });
