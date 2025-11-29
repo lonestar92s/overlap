@@ -50,14 +50,27 @@ const TripsListScreen = ({ navigation }) => {
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [newTripName, setNewTripName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
 
-  // Refresh trips when screen comes into focus (e.g., when returning from trip overview)
+  // Only refresh on initial load (when we have no trips cached)
+  // For subsequent navigations, use cached data to avoid unnecessary API calls and re-renders
+  // Users can manually refresh using pull-to-refresh if needed
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      refreshItineraries();
+      // Only refresh if we haven't loaded trips yet (initial load)
+      if (!hasInitialLoad && itineraries.length === 0) {
+        refreshItineraries();
+      }
     });
     return unsubscribe;
-  }, [navigation, refreshItineraries]);
+  }, [navigation, refreshItineraries, hasInitialLoad, itineraries.length]);
+
+  // Track when initial load completes
+  useEffect(() => {
+    if (!loading && !hasInitialLoad) {
+      setHasInitialLoad(true);
+    }
+  }, [loading, hasInitialLoad]);
 
 
 
@@ -336,7 +349,8 @@ const TripsListScreen = ({ navigation }) => {
     refreshItineraries();
   };
 
-  if (loading) {
+  // Only show loading on initial load, not on subsequent navigations
+  if (loading && !hasInitialLoad) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />

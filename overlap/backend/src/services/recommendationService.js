@@ -160,6 +160,9 @@ class RecommendationService {
             // Get user's recommendation radius preference
             const userRadius = user.preferences?.recommendationRadius || this.defaultRadius;
 
+            // Get list of dismissed match IDs for this trip (for diagnostics)
+            const dismissedMatchIds = this.getDismissedMatchIdsForTrip(user, tripId);
+
             // Generate recommendations for each day without matches
             // Return 2-3 top recommendations per day
             const recommendations = [];
@@ -169,7 +172,8 @@ class RecommendationService {
                 daysProcessed: 0,
                 daysWithRecommendations: 0,
                 totalMatchesFound: 0,
-                totalMatchesFiltered: 0
+                totalMatchesFiltered: 0,
+                dismissedMatches: Array.from(dismissedMatchIds)
             };
             
             for (const day of daysWithoutMatches) {
@@ -182,7 +186,7 @@ class RecommendationService {
                     trip,
                     userRadius,
                     user,
-                    tripIdStr,
+                    tripId,
                     maxRecommendationsPerDay
                 );
                 
@@ -222,7 +226,8 @@ class RecommendationService {
                     venuesWithCoordinates: savedMatchVenues.length,
                     userRadius: userRadius
                 },
-                debugInfo
+                debugInfo,
+                dismissedMatches: Array.from(dismissedMatchIds)
             };
 
             // Only cache non-empty results (or cache empty results with shorter expiry)

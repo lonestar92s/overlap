@@ -1866,6 +1866,13 @@ class ApiService {
         } : null
       });
       
+      // Log dismissed matches if available
+      if (data.diagnostics?.dismissedMatches && data.diagnostics.dismissedMatches.length > 0) {
+        console.log('🚫 Dismissed matches filtered out:', data.diagnostics.dismissedMatches);
+      } else if (data.diagnostics?.dismissedMatches) {
+        console.log('✅ No dismissed matches for this trip');
+      }
+      
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch recommendations');
       }
