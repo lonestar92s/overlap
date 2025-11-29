@@ -2,6 +2,7 @@ const express = require('express');
 const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const axios = require('axios');
+const https = require('https');
 const { isTripCompleted } = require('../utils/tripUtils');
 const geocodingService = require('../services/geocodingService');
 
@@ -10,6 +11,19 @@ const router = express.Router();
 // API-Sports configuration
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
+
+// HTTPS agent for Google API requests
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
+
+// Google API configuration
+const googleApiConfig = {
+    headers: {
+        'Referer': 'http://localhost:3000'
+    },
+    httpsAgent
+};
 
 // Get all trips for the authenticated user (or empty array if not authenticated)
 // Supports query parameter: ?status=active|completed (optional)
@@ -1146,6 +1160,181 @@ router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete home base from trip',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// Get travel times from home bases to match venues
+router.get('/:id/travel-times', auth, async (req, res) => {
+    try {
+        const { matchId, homeBaseId } = req.query;
+        
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const trip = user.trips.id(req.params.id);
+        if (!trip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Trip not found'
+            });
+        }
+
+        // Filter matches if matchId is provided
+        let matchesToProcess = trip.matches || [];
+        if (matchId) {
+            matchesToProcess = matchesToProcess.filter(m => 
+                String(m.matchId) === String(matchId)
+            );
+        }
+
+        if (matchesToProcess.length === 0) {
+            return res.json({
+                success: true,
+                travelTimes: {}
+            });
+        }
+
+        // Filter home bases if homeBaseId is provided
+        let homeBasesToUse = trip.homeBases || [];
+        if (homeBaseId) {
+            homeBasesToUse = homeBasesToUse.filter(hb => 
+                String(hb._id) === String(homeBaseId)
+            );
+        }
+
+        if (homeBasesToUse.length === 0) {
+            return res.json({
+                success: true,
+                travelTimes: {},
+                message: 'No home bases found for this trip'
+            });
+        }
+
+        const travelTimes = {};
+        const googleApiKey = process.env.GOOGLE_API_KEY;
+
+        if (!googleApiKey) {
+            return res.status(500).json({
+                success: false,
+                message: 'Google Maps API key not configured'
+            });
+        }
+
+        // Process each match
+        for (const match of matchesToProcess) {
+            const matchDate = new Date(match.date);
+            
+            // Find applicable home base(s) for this match date
+            const applicableHomeBases = homeBasesToUse.filter(homeBase => {
+                if (!homeBase.dateRange || !homeBase.dateRange.from || !homeBase.dateRange.to) {
+                    return false;
+                }
+                const fromDate = new Date(homeBase.dateRange.from);
+                const toDate = new Date(homeBase.dateRange.to);
+                return matchDate >= fromDate && matchDate <= toDate;
+            });
+
+            if (applicableHomeBases.length === 0) {
+                // No home base matches this match date
+                travelTimes[match.matchId] = null;
+                continue;
+            }
+
+            // Prefer home base with coordinates, otherwise use first one
+            let selectedHomeBase = applicableHomeBases.find(hb => 
+                hb.coordinates && 
+                typeof hb.coordinates.lat === 'number' && 
+                typeof hb.coordinates.lng === 'number'
+            ) || applicableHomeBases[0];
+
+            // Check if home base has coordinates
+            if (!selectedHomeBase.coordinates || 
+                typeof selectedHomeBase.coordinates.lat !== 'number' || 
+                typeof selectedHomeBase.coordinates.lng !== 'number') {
+                travelTimes[match.matchId] = null;
+                continue;
+            }
+
+            // Get venue coordinates from match
+            let venueCoords = null;
+            if (match.venueData && match.venueData.coordinates) {
+                const coords = match.venueData.coordinates;
+                // Handle array format [longitude, latitude] (GeoJSON)
+                if (Array.isArray(coords) && coords.length === 2) {
+                    venueCoords = { lat: coords[1], lng: coords[0] };
+                }
+                // Handle object format { lat, lng }
+                else if (typeof coords === 'object' && coords.lat && coords.lng) {
+                    venueCoords = { lat: coords.lat, lng: coords.lng };
+                }
+            }
+
+            if (!venueCoords) {
+                travelTimes[match.matchId] = null;
+                continue;
+            }
+
+            // Calculate travel time using Google Maps Directions API
+            try {
+                const origin = `${selectedHomeBase.coordinates.lat},${selectedHomeBase.coordinates.lng}`;
+                const destination = `${venueCoords.lat},${venueCoords.lng}`;
+
+                const response = await axios.get(
+                    'https://maps.googleapis.com/maps/api/directions/json',
+                    {
+                        params: {
+                            origin,
+                            destination,
+                            mode: 'driving',
+                            key: googleApiKey
+                        },
+                        ...googleApiConfig
+                    }
+                );
+
+                if (response.data.status === 'OK' && response.data.routes && response.data.routes.length > 0) {
+                    const route = response.data.routes[0];
+                    const leg = route.legs[0];
+                    
+                    // Convert duration from seconds to minutes
+                    const durationMinutes = Math.round(leg.duration.value / 60);
+                    // Convert distance from meters to miles
+                    const distanceMiles = (leg.distance.value / 1609.34).toFixed(1);
+
+                    travelTimes[match.matchId] = {
+                        duration: durationMinutes, // minutes
+                        distance: parseFloat(distanceMiles), // miles
+                        homeBaseId: String(selectedHomeBase._id),
+                        durationText: leg.duration.text,
+                        distanceText: leg.distance.text
+                    };
+                } else {
+                    // API returned error or no route found
+                    console.warn(`Directions API error for match ${match.matchId}:`, response.data.status);
+                    travelTimes[match.matchId] = null;
+                }
+            } catch (error) {
+                console.error(`Error calculating travel time for match ${match.matchId}:`, error.message);
+                travelTimes[match.matchId] = null;
+            }
+        }
+
+        res.json({
+            success: true,
+            travelTimes
+        });
+    } catch (error) {
+        console.error('Error fetching travel times:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch travel times',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }

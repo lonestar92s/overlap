@@ -11,6 +11,7 @@ import HeartButton from './HeartButton';
 import PlanningStatusIndicator from './PlanningStatusIndicator';
 import ErrorBoundary from './ErrorBoundary';
 import AttendanceModal from './AttendanceModal';
+import TravelTimeDisplay from './TravelTimeDisplay';
 import { getMatchStatus, getMatchResult, formatMatchDate, isMatchPast } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
@@ -23,6 +24,8 @@ const MatchCard = ({
   showResults = false, // Only show detailed results for saved matches
   showRelativeTime = false, // Only show relative time on itinerary pages
   showAttendancePrompt = false, // Show attendance prompt for past matches
+  travelTime = null, // Travel time data: { duration, distance, homeBaseId }
+  travelTimeLoading = false, // Loading state for travel time
   style = {},
 }) => {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
@@ -336,6 +339,16 @@ const MatchCard = ({
         </Text>
       </View>
 
+      {/* Travel Time Display - only show in overlay variant (used in map view) */}
+      {variant === 'overlay' && (travelTime || travelTimeLoading) && (
+        <View style={styles.travelTimeContainer}>
+          <TravelTimeDisplay 
+            travelTime={travelTime} 
+            loading={travelTimeLoading}
+          />
+        </View>
+      )}
+
       {/* Planning Status Indicator - only show for matches with planning data */}
       {match.planning && (
         <PlanningStatusIndicator 
@@ -528,6 +541,10 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginLeft: 6,
     flex: 1,
+  },
+  travelTimeContainer: {
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
   },
   vsContent: {
     alignItems: 'center',

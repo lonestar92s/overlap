@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ const SearchModal = ({
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
   const [showCalendar, setShowCalendar] = useState(false);
+  const prevLocationRef = useRef(initialLocation);
 
   // Update state when initial values change
   useEffect(() => {
@@ -54,6 +55,19 @@ const SearchModal = ({
       setSelectedDates(dates);
     }
   }, [initialLocation, initialDateFrom, initialDateTo]);
+
+  // Auto-open calendar when location is first selected (transitions from null to a value)
+  useEffect(() => {
+    const prevLocation = prevLocationRef.current;
+    // Only open calendar if location changed from null/undefined to a truthy value
+    if (location && !prevLocation) {
+      if (__DEV__) {
+        console.log('[SearchModal] Location selected, auto-opening calendar:', location?.city, location?.country);
+      }
+      setShowCalendar(true);
+    }
+    prevLocationRef.current = location;
+  }, [location]);
 
   const formatDate = (date) => {
     if (!date) return null;

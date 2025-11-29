@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { View, StyleSheet, Alert, TouchableOpacity, Text, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import TravelTimeDisplay from './TravelTimeDisplay';
 import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
+import { colors, spacing, typography } from '../styles/designTokens';
 
 const MatchMapView = forwardRef(({
   matches = [],
@@ -14,6 +16,7 @@ const MatchMapView = forwardRef(({
   onMarkerPress = () => {},
   onHomeBasePress = () => {},
   selectedMatchId = null,
+  travelTimes = {},
   style = {},
   showLocationButton = true,
   onMapPress = () => {},
@@ -280,6 +283,8 @@ const MatchMapView = forwardRef(({
       // Use fixture ID as key for stability - this prevents React from recreating markers
       // when the matches array reference changes but the actual matches are the same
       const markerKey = `match-${String(match.fixture.id)}`;
+      const matchId = String(match.fixture.id);
+      const travelTime = travelTimes[matchId] || travelTimes[match.matchId] || null;
       
       return (
         <Marker
@@ -289,10 +294,26 @@ const MatchMapView = forwardRef(({
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
           tracksViewChanges={false}
           identifier={markerKey}
-        />
+        >
+          <Callout>
+            <View style={styles.calloutContainer}>
+              <Text style={styles.calloutTitle}>
+                {match.teams?.home?.name || 'Home'} vs {match.teams?.away?.name || 'Away'}
+              </Text>
+              {match.fixture?.venue?.name && (
+                <Text style={styles.calloutVenue}>{match.fixture.venue.name}</Text>
+              )}
+              {travelTime && (
+                <View style={styles.calloutTravelTime}>
+                  <TravelTimeDisplay travelTime={travelTime} />
+                </View>
+              )}
+            </View>
+          </Callout>
+        </Marker>
       );
     });
-  }, [matches, selectedMatchId, handleMarkerPress]);
+  }, [matches, selectedMatchId, handleMarkerPress, travelTimes]);
 
   // Render home base markers with memoization
   const homeBaseMarkers = useMemo(() => {
@@ -431,6 +452,25 @@ const styles = StyleSheet.create({
   },
   locationButtonInactive: {
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  calloutContainer: {
+    padding: spacing.sm,
+    minWidth: 150,
+    maxWidth: 200,
+  },
+  calloutTitle: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  calloutVenue: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  calloutTravelTime: {
+    marginTop: spacing.xs,
   },
 });
 

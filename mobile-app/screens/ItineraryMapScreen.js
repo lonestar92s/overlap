@@ -23,6 +23,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [autoFitKey, setAutoFitKey] = useState(0);
   const [venueCoordinates, setVenueCoordinates] = useState({});
+  const [travelTimes, setTravelTimes] = useState({});
+  const [travelTimesLoading, setTravelTimesLoading] = useState(false);
   
   // Conditional import for map component
   const MatchMapView = React.useMemo(() => {
@@ -66,6 +68,34 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
     loadItinerary();
   }, [itineraryId, getItineraryById]);
+
+  // Fetch travel times when itinerary and home bases are available
+  useEffect(() => {
+    const fetchTravelTimes = async () => {
+      if (!itinerary || !itinerary.homeBases || itinerary.homeBases.length === 0) {
+        setTravelTimes({});
+        return;
+      }
+
+      if (!itinerary.matches || itinerary.matches.length === 0) {
+        setTravelTimes({});
+        return;
+      }
+
+      try {
+        setTravelTimesLoading(true);
+        const times = await ApiService.getTravelTimes(itineraryId);
+        setTravelTimes(times || {});
+      } catch (error) {
+        console.error('Error fetching travel times:', error);
+        setTravelTimes({});
+      } finally {
+        setTravelTimesLoading(false);
+      }
+    };
+
+    fetchTravelTimes();
+  }, [itineraryId, itinerary?.matches, itinerary?.homeBases]);
 
   // Calculate map region to fit all matches and home bases
   const mapRegion = useMemo(() => {
@@ -272,6 +302,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           onMarkerPress={handleMarkerPress}
           onHomeBasePress={handleHomeBasePress}
           autoFitKey={autoFitKey}
+          travelTimes={travelTimes}
         />
       </View>
 
@@ -284,6 +315,14 @@ const ItineraryMapScreen = ({ navigation, route }) => {
             variant="overlay"
             showHeart={true}
             style={styles.matchCardStyle}
+            travelTime={
+              selectedMatch?.matchId 
+                ? travelTimes[selectedMatch.matchId] 
+                : selectedMatch?.fixture?.id 
+                  ? travelTimes[selectedMatch.fixture.id] 
+                  : null
+            }
+            travelTimeLoading={travelTimesLoading}
           />
         </View>
       )}

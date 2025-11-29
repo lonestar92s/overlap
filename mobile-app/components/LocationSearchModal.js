@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
@@ -43,8 +44,20 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
   const [whenExpanded, setWhenExpanded] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   
+  // Calendar month state - controls which month is displayed
+  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().split('T')[0]);
+  
   // Recent searches
   const [recentSearches, setRecentSearches] = useState([]);
+  
+  // Ref for location search TextInput
+  const locationInputRef = useRef(null);
+  
+  // Ref to track if we're in the middle of selecting a location (prevents double API calls)
+  const isSelectingLocationRef = useRef(false);
+  
+  // Ref to store the debounced search function so we can cancel it
+  const debouncedSearchRef = useRef(null);
 
   // Load recent searches
   useEffect(() => {
@@ -119,49 +132,139 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     }
   };
 
-  // Debounced location search
-  const performLocationSearch = useCallback(
-    debounce(async (query) => {
-      if (!query || query.trim().length < 2) {
+  // Location search function (not debounced)
+  const performLocationSearch = useCallback(async (query) => {
+    if (!query || query.trim().length < 2) {
+      setLocationResults([]);
+      setLocationSearchLoading(false);
+      return;
+    }
+    setLocationSearchLoading(true);
+    try {
+      const response = await ApiService.searchLocations(query.trim(), 5);
+      if (response.success && response.suggestions) {
+        setLocationResults(response.suggestions);
+      } else {
         setLocationResults([]);
-        setLocationSearchLoading(false);
-        return;
       }
-      setLocationSearchLoading(true);
-      try {
-        const response = await ApiService.searchLocations(query.trim(), 5);
-        if (response.success && response.suggestions) {
-          setLocationResults(response.suggestions);
-        } else {
-          setLocationResults([]);
-        }
-      } catch (error) {
-        console.error('Error searching locations:', error);
-        setLocationResults([]);
-      } finally {
-        setLocationSearchLoading(false);
+    } catch (error) {
+      console.error('Error searching locations:', error);
+      setLocationResults([]);
+    } finally {
+      setLocationSearchLoading(false);
+    }
+  }, []);
+
+  // Create debounced search function and store in ref
+  useEffect(() => {
+    // Cancel previous debounced function if it exists
+    if (debouncedSearchRef.current) {
+      debouncedSearchRef.current.cancel();
+    }
+    
+    // Create new debounced function
+    debouncedSearchRef.current = debounce(performLocationSearch, 350);
+    
+    // Cleanup on unmount or when performLocationSearch changes
+    return () => {
+      if (debouncedSearchRef.current) {
+        debouncedSearchRef.current.cancel();
       }
-    }, 350),
-    []
-  );
+    };
+  }, [performLocationSearch]);
 
   useEffect(() => {
+    // Don't trigger search if we're in the middle of selecting a location
+    if (isSelectingLocationRef.current) {
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Skipping search - location selection in progress');
+      }
+      return;
+    }
+    
+    // Don't trigger search if we already have a location selected
+    if (location) {
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Skipping search - location already selected');
+      }
+      return;
+    }
+    
     if (isSearchingLocation && locationSearchQuery.trim().length >= 2) {
-      setLocationSearchLoading(true);
-      performLocationSearch(locationSearchQuery);
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Triggering location search for:', locationSearchQuery);
+      }
+      // Use the debounced function from ref
+      if (debouncedSearchRef.current) {
+        debouncedSearchRef.current(locationSearchQuery);
+      }
     } else {
       setLocationResults([]);
       setLocationSearchLoading(false);
     }
-  }, [locationSearchQuery, isSearchingLocation, performLocationSearch]);
+  }, [locationSearchQuery, isSearchingLocation, location]);
 
   const handleLocationSelect = (selectedLocation) => {
+    if (__DEV__) {
+      console.log('[LocationSearchModal] Location selected:', selectedLocation?.city, selectedLocation?.country);
+    }
+    
+    // Set flag to prevent useEffect from triggering another search during selection
+    isSelectingLocationRef.current = true;
+    
+    // Cancel any pending debounced searches
+    if (debouncedSearchRef.current) {
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Cancelling pending debounced search');
+      }
+      debouncedSearchRef.current.cancel();
+    }
+    
     setLocation(selectedLocation);
     const displayText = `${selectedLocation.city}${selectedLocation.region ? `, ${selectedLocation.region}` : ''}, ${selectedLocation.country}`;
-    setLocationSearchQuery(displayText);
+    
+    // IMPORTANT: Set isSearchingLocation to false FIRST to prevent useEffect from triggering another search
+    // when we update locationSearchQuery below
     setIsSearchingLocation(false);
     setLocationResults([]);
+    
+    // Now update the query - this won't trigger a search because:
+    // 1. isSearchingLocation is already false
+    // 2. location will be set, which will prevent search in useEffect
+    // 3. isSelectingLocationRef flag is set
+    setLocationSearchQuery(displayText);
+    
+    // Clear the flag after a brief delay to allow state updates to complete
+    // Use a longer delay (500ms) to ensure debounced calls have time to be cancelled
+    setTimeout(() => {
+      isSelectingLocationRef.current = false;
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Location selection complete, flag cleared');
+      }
+    }, 500);
+    
     // Don't save to recent searches here - only save after successful search with dates
+    
+    // Blur the TextInput to prevent it from refocusing and triggering search again
+    if (locationInputRef.current) {
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Blurring location input');
+      }
+      locationInputRef.current.blur();
+    }
+    
+    // Dismiss keyboard after location selection
+    if (__DEV__) {
+      console.log('[LocationSearchModal] Dismissing keyboard');
+    }
+    Keyboard.dismiss();
+    
+    // Auto-open the "When" section (calendar) after location is selected
+    if (__DEV__) {
+      console.log('[LocationSearchModal] Auto-opening When section');
+    }
+    setWhenExpanded(true);
+    setShowCalendar(true);
   };
 
   const handleRecentSearchSelect = (search) => {
@@ -279,6 +382,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
     setDateFrom(null);
     setDateTo(null);
     setSelectedDates({});
+    setCurrentMonth(new Date().toISOString().split('T')[0]);
     clearRecentSearches();
   };
 
@@ -308,11 +412,13 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
         }
       };
 
-      console.log('🔍 Initial search bounds (unified):', {
-        center: { lat: location.lat, lng: location.lon },
-        viewportDelta,
-        bounds
-      });
+      if (__DEV__) {
+        console.log('🔍 Initial search bounds (unified):', {
+          center: { lat: location.lat, lng: location.lon },
+          viewportDelta,
+          bounds
+        });
+      }
 
       const response = await ApiService.searchMatchesByBounds({
         bounds,
@@ -441,6 +547,7 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                 <View style={styles.searchInputContainer}>
                   <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
                   <TextInput
+                    ref={locationInputRef}
                     style={styles.searchInput}
                     placeholder="Search by location"
                     placeholderTextColor="rgba(0, 0, 0, 0.5)"
@@ -449,7 +556,13 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
                       setLocationSearchQuery(text);
                       setIsSearchingLocation(text.trim().length > 0);
                     }}
-                    onFocus={() => setIsSearchingLocation(true)}
+                    onFocus={() => {
+                      // Only set searching to true if we don't have a location selected
+                      // This prevents re-triggering search after selection
+                      if (!location) {
+                        setIsSearchingLocation(true);
+                      }
+                    }}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -554,8 +667,14 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
               <View style={styles.calendarContainer}>
                 <Calendar
                   onDayPress={onDayPress}
+                  onMonthChange={(month) => {
+                    // Update currentMonth state when user navigates months
+                    const monthString = `${month.year}-${String(month.month).padStart(2, '0')}-01`;
+                    setCurrentMonth(monthString);
+                  }}
                   markedDates={selectedDates}
                   minDate={new Date().toISOString().split('T')[0]}
+                  current={currentMonth}
                   theme={{
                     backgroundColor: colors.card,
                     calendarBackground: colors.card,

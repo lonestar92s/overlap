@@ -4,7 +4,9 @@ import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import TravelTimeDisplay from './TravelTimeDisplay';
 import { MAPBOX_CONFIG } from '../utils/mapConfig';
+import { colors, spacing, typography } from '../styles/designTokens';
 
 // Set Mapbox access token from environment variable
 if (MAPBOX_CONFIG.accessToken) {
@@ -19,6 +21,7 @@ const MapboxMapView = ({
   onMarkerPress = () => {},
   onHomeBasePress = () => {},
   selectedMatchId = null,
+  travelTimes = {},
   style = {},
   showLocationButton = true,
   autoFitKey = 0,
@@ -196,6 +199,8 @@ useEffect(() => {
           // GeoJSON format: [longitude, latitude]
           const [longitude, latitude] = match.fixture.venue.coordinates;
           const isSelected = String(selectedMatchId) === String(match.fixture?.id);
+          const matchId = String(match.fixture?.id);
+          const travelTime = travelTimes[matchId] || travelTimes[match.matchId] || null;
 
           return (
             <Mapbox.PointAnnotation
@@ -212,6 +217,21 @@ useEffect(() => {
                   {match.teams.home.name.charAt(0)}{match.teams.away.name.charAt(0)}
                 </Text>
               </View>
+              <Mapbox.Callout>
+                <View style={styles.calloutContainer}>
+                  <Text style={styles.calloutTitle}>
+                    {match.teams?.home?.name || 'Home'} vs {match.teams?.away?.name || 'Away'}
+                  </Text>
+                  {match.fixture?.venue?.name && (
+                    <Text style={styles.calloutVenue}>{match.fixture.venue.name}</Text>
+                  )}
+                  {travelTime && (
+                    <View style={styles.calloutTravelTime}>
+                      <TravelTimeDisplay travelTime={travelTime} />
+                    </View>
+                  )}
+                </View>
+              </Mapbox.Callout>
             </Mapbox.PointAnnotation>
           );
         })}
@@ -356,6 +376,25 @@ const styles = StyleSheet.create({
   },
   locationButtonInactive: {
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  calloutContainer: {
+    padding: spacing.sm,
+    minWidth: 150,
+    maxWidth: 200,
+  },
+  calloutTitle: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  calloutVenue: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  calloutTravelTime: {
+    marginTop: spacing.xs,
   },
 });
 

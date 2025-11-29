@@ -1,0 +1,63 @@
+import React from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { colors, spacing, typography } from '../styles/designTokens';
+
+const TravelTimeDisplay = ({ travelTime, loading = false, style }) => {
+  if (loading) {
+    return (
+      <View style={[styles.container, style]}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.loadingText}>Calculating...</Text>
+      </View>
+    );
+  }
+
+  if (!travelTime) {
+    return null;
+  }
+
+  const { duration, distance } = travelTime;
+
+  return (
+    <View style={[styles.container, style]}>
+      <Icon name="directions-car" size={16} color={colors.text.secondary} />
+      <Text style={styles.text}>
+        {duration} min
+      </Text>
+      {distance && (
+        <>
+          <Text style={styles.separator}>•</Text>
+          <Text style={styles.text}>
+            {distance} mi
+          </Text>
+        </>
+      )}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  text: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+  },
+  separator: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginHorizontal: spacing.xs / 2,
+  },
+  loadingText: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginLeft: spacing.xs,
+  },
+});
+
+export default TravelTimeDisplay;
+

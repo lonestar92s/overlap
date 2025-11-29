@@ -243,11 +243,40 @@ const LocationAutocomplete = ({
   };
 
   const handleSelectLocation = (location) => {
+    if (__DEV__) {
+      console.log('[LocationAutocomplete] Location selected:', location?.city, location?.country);
+    }
+    
     const displayText = formatLocationDisplay(location);
     setInputValue(displayText);
     setOptions([]);
     if (onOptionsChange) onOptionsChange(false); // Notify parent that options are hidden
-    onSelect(location);
+    
+    // Try to blur the input if ref is available
+    if (inputRef.current && inputRef.current.blur) {
+      if (__DEV__) {
+        console.log('[LocationAutocomplete] Attempting to blur input via ref');
+      }
+      inputRef.current.blur();
+    } else if (__DEV__) {
+      console.log('[LocationAutocomplete] Input ref not available or blur method not found');
+    }
+    
+    // Dismiss keyboard immediately
+    if (__DEV__) {
+      console.log('[LocationAutocomplete] Dismissing keyboard immediately');
+    }
+    Keyboard.dismiss();
+    
+    // Call onSelect after a brief delay to ensure keyboard dismissal is processed
+    setTimeout(() => {
+      if (__DEV__) {
+        console.log('[LocationAutocomplete] Calling onSelect and dismissing keyboard again');
+      }
+      onSelect(location);
+      // Try dismissing again after state updates
+      Keyboard.dismiss();
+    }, 50);
   };
 
   const renderItem = ({ item, index }) => (
@@ -279,6 +308,7 @@ const LocationAutocomplete = ({
     <View style={[styles.container, style]}>
       <View style={styles.autocompleteWrapper}>
         <Autocomplete
+          ref={inputRef}
           data={options}
           value={inputValue}
           onChangeText={handleInputChange}

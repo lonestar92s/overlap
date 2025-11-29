@@ -902,6 +902,66 @@ class ApiService {
     }
   }
 
+  async getTravelTimes(tripId, matchIds = null) {
+    try {
+      if (!tripId) {
+        throw new Error('Trip ID is required');
+      }
+
+      const token = await getAuthToken();
+      let url = `${this.baseURL}/trips/${tripId}/travel-times`;
+      
+      // Add optional query parameters
+      const params = new URLSearchParams();
+      if (matchIds && Array.isArray(matchIds) && matchIds.length > 0) {
+        // If multiple match IDs, we can pass them as comma-separated or make multiple calls
+        // For now, we'll make a single call for all matches (backend handles filtering)
+        params.append('matchId', matchIds.join(','));
+      } else if (matchIds && typeof matchIds === 'string') {
+        params.append('matchId', matchIds);
+      }
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        },
+        30000 // Longer timeout for travel time calculations
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = data?.message || data?.error || 'Failed to fetch travel times';
+        console.error('Get travel times API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(errorMessage);
+      }
+
+      // Return travel times in format: { matchId: { duration, distance, homeBaseId } }
+      return data.travelTimes || {};
+    } catch (error) {
+      console.error('Error fetching travel times:', error);
+      console.error('Error details:', {
+        tripId,
+        matchIds,
+        message: error.message
+      });
+      throw error;
+    }
+  }
+
   async updateMatchPlanning(tripId, matchId, planningData) {
     try {
       console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });
