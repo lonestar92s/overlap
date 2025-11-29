@@ -789,14 +789,37 @@ class RecommendationService {
     // Helper methods
 
     getTripDateRange(trip) {
+        // First, check if trip has explicit startDate and endDate
+        if (trip.startDate && trip.endDate) {
+            const start = new Date(trip.startDate);
+            const end = new Date(trip.endDate);
+            
+            // Validate dates
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
+                console.log(`📅 Using trip startDate/endDate: ${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`);
+                return { start, end };
+            }
+        }
+
+        // Fall back to calculating from matches if no explicit dates
         if (!trip.matches || trip.matches.length === 0) {
+            console.log('⚠️ No trip dates and no matches - cannot determine date range');
             return { start: null, end: null };
         }
 
-        const dates = trip.matches.map(match => new Date(match.date));
+        const dates = trip.matches.map(match => new Date(match.date)).filter(d => !isNaN(d.getTime()));
+        if (dates.length === 0) {
+            console.log('⚠️ No valid match dates found');
+            return { start: null, end: null };
+        }
+
+        const calculatedStart = new Date(Math.min(...dates));
+        const calculatedEnd = new Date(Math.max(...dates));
+        console.log(`📅 Calculated date range from matches: ${calculatedStart.toISOString().split('T')[0]} to ${calculatedEnd.toISOString().split('T')[0]}`);
+        
         return {
-            start: new Date(Math.min(...dates)),
-            end: new Date(Math.max(...dates))
+            start: calculatedStart,
+            end: calculatedEnd
         };
     }
 
