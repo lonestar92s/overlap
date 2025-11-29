@@ -8,10 +8,12 @@ import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
 
 const MatchMapView = forwardRef(({
   matches = [],
+  recommendedMatches = [],
   homeBases = [],
   initialRegion = null,
   onRegionChange = () => {},
   onMarkerPress = () => {},
+  onRecommendedMatchPress = () => {},
   onHomeBasePress = () => {},
   selectedMatchId = null,
   travelTimes = {},
@@ -240,10 +242,21 @@ const MatchMapView = forwardRef(({
     onHomeBasePress(homeBase);
   }, [onHomeBasePress]);
 
+  // Handle recommended match marker press
+  const handleRecommendedMatchPress = useCallback((match) => {
+    // Prevent marker presses during map animations
+    if (isAnimatingRef.current) {
+      return;
+    }
+    onRecommendedMatchPress(match);
+  }, [onRecommendedMatchPress]);
+
   // Render match markers with memoization
   const markers = useMemo(() => {
     if (!matches || matches.length === 0) {
-      console.log('MapView: No matches, clearing all markers');
+      if (__DEV__) {
+        console.log('MapView: No matches, clearing all markers');
+      }
       return null;
     }
     
@@ -294,6 +307,54 @@ const MatchMapView = forwardRef(({
       );
     });
   }, [matches, selectedMatchId, handleMarkerPress]);
+
+  // Render recommended match markers with memoization (yellow pins)
+  const recommendedMarkers = useMemo(() => {
+    if (!recommendedMatches || recommendedMatches.length === 0) {
+      return null;
+    }
+    
+    const validRecommendedMatches = recommendedMatches.filter(match => {
+      const venue = match.fixture?.venue;
+      if (!venue || !venue.coordinates || !Array.isArray(venue.coordinates)) {
+        return false;
+      }
+      
+      // Ensure coordinates are valid numbers and within reasonable bounds
+      const [lon, lat] = venue.coordinates;
+      if (typeof lon !== 'number' || typeof lat !== 'number') {
+        return false;
+      }
+      
+      // Check if coordinates are within reasonable world bounds
+      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    return validRecommendedMatches.map(match => {
+      const venue = match.fixture.venue;
+      const coordinate = {
+        latitude: venue.coordinates[1],  // GeoJSON: [lon, lat]
+        longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
+      };
+      
+      const markerKey = `recommended-${String(match.fixture.id)}`;
+      
+      return (
+        <Marker
+          key={markerKey}
+          coordinate={coordinate}
+          onPress={() => handleRecommendedMatchPress(match)}
+          pinColor="#FFD700" // Yellow color for recommended matches
+          tracksViewChanges={false}
+          identifier={markerKey}
+        />
+      );
+    });
+  }, [recommendedMatches, handleRecommendedMatchPress]);
 
   // Render home base markers with memoization
   const homeBaseMarkers = useMemo(() => {
@@ -355,6 +416,7 @@ const MatchMapView = forwardRef(({
         moveOnMarkerPress={false} // Prevent map movement when pressing markers
       >
         {markers}
+        {recommendedMarkers}
         {homeBaseMarkers}
       </MapView>
       

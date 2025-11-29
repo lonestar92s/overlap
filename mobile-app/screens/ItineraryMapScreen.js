@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MAP_PROVIDER } from '../utils/mapConfig';
@@ -16,15 +17,18 @@ import { useItineraries } from '../contexts/ItineraryContext';
 
 const ItineraryMapScreen = ({ navigation, route }) => {
   const { itineraryId } = route.params;
-  const { getItineraryById } = useItineraries();
+  const { getItineraryById, addMatchToItinerary } = useItineraries();
   const [itinerary, setItinerary] = useState(null);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedRecommendation, setSelectedRecommendation] = useState(null);
   const [selectedHomeBase, setSelectedHomeBase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [autoFitKey, setAutoFitKey] = useState(0);
   const [venueCoordinates, setVenueCoordinates] = useState({});
   const [travelTimes, setTravelTimes] = useState({});
   const [travelTimesLoading, setTravelTimesLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   
   // Conditional import for map component
   const MatchMapView = React.useMemo(() => {
@@ -100,9 +104,33 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     fetchTravelTimes();
   }, [itineraryId, itinerary?.matches, itinerary?.homeBases]);
 
-  // Calculate map region to fit all matches and home bases
+  // Fetch recommendations for the trip
+  useEffect(() => {
+    const fetchRecommendations = async () => {
+      if (!itineraryId || !itinerary) {
+        return;
+      }
+
+      try {
+        setRecommendationsLoading(true);
+        const response = await ApiService.getRecommendations(itineraryId);
+        if (response.success && response.recommendations) {
+          setRecommendations(response.recommendations || []);
+        }
+      } catch (error) {
+        console.error('Error fetching recommendations:', error);
+        // Don't show error to user - recommendations are optional
+      } finally {
+        setRecommendationsLoading(false);
+      }
+    };
+
+    fetchRecommendations();
+  }, [itineraryId, itinerary]);
+
+  // Calculate map region to fit all matches, recommended matches, and home bases
   const mapRegion = useMemo(() => {
-    console.log('🗺️ ItineraryMapScreen - Calculating map region for matches and home bases:', itinerary?.matches, itinerary?.homeBases);
+    console.log('🗺️ ItineraryMapScreen - Calculating map region for matches, recommendations, and home bases:', itinerary?.matches, recommendations, itinerary?.homeBases);
     
     const allCoordinates = [];
 
@@ -142,6 +170,24 @@ const ItineraryMapScreen = ({ navigation, route }) => {
         .filter(coord => coord !== null);
       
       allCoordinates.push(...matchCoordinates);
+    }
+
+    // Extract coordinates from recommended matches
+    if (recommendations && recommendations.length > 0) {
+      const recommendedMatchCoordinates = recommendations
+        .map(recommendation => {
+          const match = recommendation.match || recommendation;
+          const coords = match.fixture?.venue?.coordinates;
+          
+          if (coords && Array.isArray(coords) && coords.length === 2) {
+            return { lat: coords[1], lng: coords[0] };  // GeoJSON: [lon, lat]
+          }
+          
+          return null;
+        })
+        .filter(coord => coord !== null);
+      
+      allCoordinates.push(...recommendedMatchCoordinates);
     }
 
     // Extract coordinates from home bases
@@ -190,7 +236,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       latitudeDelta: 0.8, // More generous default zoom
       longitudeDelta: 0.8, // More generous default zoom
     };
-  }, [itinerary]);
+  }, [itinerary, recommendations]);
 
   // Transform saved matches to the format expected by the map
   const transformMatchesForMap = (matches) => {
@@ -225,10 +271,38 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     });
   };
 
+  // Transform recommendations to the format expected by the map
+  const transformRecommendationsForMap = (recommendations) => {
+    return recommendations.map(recommendation => {
+      const match = recommendation.match;
+      return {
+        ...match,
+        id: match.id || match.matchId || match.fixture?.id,
+        fixture: {
+          id: match.id || match.matchId || match.fixture?.id,
+          date: match.fixture?.date,
+          venue: match.fixture?.venue
+        },
+        teams: match.teams,
+        league: match.league,
+        _isRecommendation: true, // Flag to identify as recommendation
+        _recommendationData: recommendation // Store full recommendation data
+      };
+    });
+  };
+
   // Handle marker press
   const handleMarkerPress = (match) => {
     setSelectedMatch(match);
+    setSelectedRecommendation(null);
     setSelectedHomeBase(null); // Clear home base selection when match is selected
+  };
+
+  // Handle recommended match marker press
+  const handleRecommendedMatchPress = (match) => {
+    setSelectedRecommendation(match);
+    setSelectedMatch(null);
+    setSelectedHomeBase(null);
   };
 
   // Handle home base press
@@ -242,13 +316,114 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     setSelectedMatch(null);
   };
 
+  // Handle recommendation card close
+  const handleCloseRecommendationCard = () => {
+    setSelectedRecommendation(null);
+  };
+
   // Handle map press to close match card and home base card
   const handleMapPress = () => {
     if (selectedMatch) {
       setSelectedMatch(null);
     }
+    if (selectedRecommendation) {
+      setSelectedRecommendation(null);
+    }
     if (selectedHomeBase) {
       setSelectedHomeBase(null);
+    }
+  };
+
+  // Handle dismissing a recommendation
+  const handleDismissRecommendation = async (recommendation) => {
+    try {
+      const recommendationData = recommendation._recommendationData || recommendation;
+      const matchId = recommendationData.matchId || recommendationData.match?.id || recommendationData.match?.fixture?.id;
+      
+      // Track that user dismissed the recommendation
+      await ApiService.trackRecommendation(
+        matchId,
+        'dismissed',
+        itineraryId,
+        recommendationData.recommendedForDate,
+        recommendationData.score,
+        recommendationData.reason
+      );
+
+      // Invalidate cache since user preferences have changed
+      ApiService.invalidateRecommendationCache(itineraryId);
+
+      // Remove the recommendation from the list
+      setRecommendations(prev => prev.filter(rec => {
+        const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
+        return String(recMatchId) !== String(matchId);
+      }));
+
+      // Close the card overlay
+      setSelectedRecommendation(null);
+    } catch (err) {
+      console.error('Error dismissing recommendation:', err);
+      Alert.alert('Error', 'Failed to dismiss recommendation');
+    }
+  };
+
+  // Handle adding recommendation to trip
+  const handleAddRecommendationToTrip = async (recommendation) => {
+    try {
+      const recommendationData = recommendation._recommendationData || recommendation;
+      const match = recommendationData.match || recommendation;
+      
+      // Track that user saved the recommendation
+      await ApiService.trackRecommendation(
+        recommendationData.matchId,
+        'saved',
+        itineraryId,
+        recommendationData.recommendedForDate,
+        recommendationData.score,
+        recommendationData.reason
+      );
+
+      // Invalidate cache since trip content has changed
+      ApiService.invalidateRecommendationCache(itineraryId);
+
+      // Format match data for the mobile app API
+      const formattedMatchData = {
+        matchId: match.id || match.matchId || match.fixture?.id,
+        homeTeam: {
+          name: match.teams?.home?.name,
+          logo: match.teams?.home?.logo
+        },
+        awayTeam: {
+          name: match.teams?.away?.name,
+          logo: match.teams?.away?.logo
+        },
+        league: match.league?.name,
+        venue: match.fixture?.venue?.name,
+        venueData: match.fixture?.venue,
+        date: match.fixture?.date
+      };
+
+      // Add match to trip
+      await addMatchToItinerary(itineraryId, formattedMatchData);
+      
+      // Remove the recommendation from the list
+      setRecommendations(prev => prev.filter(rec => {
+        const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
+        const matchId = recommendationData.matchId || match.id || match.matchId || match.fixture?.id;
+        return String(recMatchId) !== String(matchId);
+      }));
+
+      // Close the card overlay
+      setSelectedRecommendation(null);
+
+      // Refresh itinerary to show new match
+      const updatedItinerary = getItineraryById(itineraryId);
+      if (updatedItinerary) {
+        setItinerary(updatedItinerary);
+      }
+    } catch (err) {
+      console.error('Error adding recommendation to trip:', err);
+      Alert.alert('Error', 'Failed to add match to trip');
     }
   };
 
@@ -301,8 +476,10 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           initialRegion={mapRegion}
           onMapPress={handleMapPress}
           matches={transformMatchesForMap(itinerary.matches || [])}
+          recommendedMatches={transformRecommendationsForMap(recommendations)}
           homeBases={itinerary.homeBases || []}
           onMarkerPress={handleMarkerPress}
+          onRecommendedMatchPress={handleRecommendedMatchPress}
           onHomeBasePress={handleHomeBasePress}
           autoFitKey={autoFitKey}
           travelTimes={travelTimes}
@@ -328,6 +505,43 @@ const ItineraryMapScreen = ({ navigation, route }) => {
             travelTimeLoading={travelTimesLoading}
             homeBases={itinerary?.homeBases || []}
           />
+        </View>
+      )}
+
+      {/* Selected Recommendation Card Overlay */}
+      {selectedRecommendation && (
+        <View style={styles.recommendationCardOverlay}>
+          <MatchCard
+            match={selectedRecommendation}
+            onPress={() => {}}
+            variant="overlay"
+            showHeart={true}
+            style={styles.matchCardStyle}
+            travelTime={
+              selectedRecommendation?.matchId 
+                ? travelTimes[selectedRecommendation.matchId] 
+                : selectedRecommendation?.fixture?.id 
+                  ? travelTimes[selectedRecommendation.fixture.id] 
+                  : null
+            }
+            travelTimeLoading={travelTimesLoading}
+            homeBases={itinerary?.homeBases || []}
+          />
+          {/* Recommendation Actions */}
+          <View style={styles.recommendationActions}>
+            <TouchableOpacity
+              style={styles.addToTripButton}
+              onPress={() => handleAddRecommendationToTrip(selectedRecommendation)}
+            >
+              <Text style={styles.addToTripButtonText}>Add to Trip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dismissRecommendationButton}
+              onPress={() => handleDismissRecommendation(selectedRecommendation)}
+            >
+              <Text style={styles.dismissRecommendationButtonText}>Not Interested</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -445,6 +659,52 @@ const styles = StyleSheet.create({
   },
   homeBaseCardStyle: {
     margin: 0,
+  },
+  recommendationCardOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  recommendationActions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  addToTripButton: {
+    flex: 1,
+    backgroundColor: '#1976d2',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addToTripButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dismissRecommendationButton: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  dismissRecommendationButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

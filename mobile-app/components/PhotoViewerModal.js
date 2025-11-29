@@ -33,7 +33,9 @@ const PhotoViewerModal = ({
   // Update ref when memory changes
   useEffect(() => {
     memoryRef.current = memory;
-    console.log('Memory ref updated:', memory?.id || memory?._id);
+    if (__DEV__) {
+      console.log('Memory ref updated:', memory?.id || memory?._id);
+    }
   }, [memory]);
 
   // Get the photo URL
@@ -96,7 +98,9 @@ const PhotoViewerModal = ({
   }, [onClose]);
 
   const handleMenuPress = useCallback(() => {
-    console.log('handleMenuPress called, memory:', memory?.id || memory?._id);
+    if (__DEV__) {
+      console.log('handleMenuPress called, memory:', memory?.id || memory?._id);
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     if (Platform.OS === 'ios') {
@@ -124,12 +128,16 @@ const PhotoViewerModal = ({
   const handleEdit = useCallback(() => {
     // Get current memory value from ref to avoid stale closure issues
     const currentMemory = memoryRef.current || memory;
-    console.log('handleEdit called, memory from ref:', memoryRef.current?.id || memoryRef.current?._id);
-    console.log('handleEdit called, memory from prop:', memory?.id || memory?._id);
-    console.log('handleEdit called, currentMemory:', currentMemory?.id || currentMemory?._id);
+    if (__DEV__) {
+      console.log('handleEdit called, memory from ref:', memoryRef.current?.id || memoryRef.current?._id);
+      console.log('handleEdit called, memory from prop:', memory?.id || memory?._id);
+      console.log('handleEdit called, currentMemory:', currentMemory?.id || currentMemory?._id);
+    }
     
     if (!currentMemory) {
-      console.log('No memory available in handleEdit');
+      if (__DEV__) {
+        console.log('No memory available in handleEdit');
+      }
       return;
     }
     
@@ -138,10 +146,14 @@ const PhotoViewerModal = ({
     // Call onEdit immediately - it should handle navigation
     // Pass memory directly if onEdit accepts it, otherwise it will use selectedMemoryForViewer
     if (onEdit) {
-      console.log('Calling onEdit with memory:', currentMemory?.id || currentMemory?._id);
+      if (__DEV__) {
+        console.log('Calling onEdit with memory:', currentMemory?.id || currentMemory?._id);
+      }
       onEdit(currentMemory);
     } else {
-      console.log('onEdit is not defined');
+      if (__DEV__) {
+        console.log('onEdit is not defined');
+      }
     }
   }, [onEdit, memory]);
 

@@ -117,7 +117,9 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], o
       }
       onClose();
     } catch (error) {
-      console.error('Error saving planning details:', error);
+      if (__DEV__) {
+        console.error('Error saving planning details:', error);
+      }
       Alert.alert('Error', 'Failed to save planning details. Please try again.');
     } finally {
       setSaving(false);

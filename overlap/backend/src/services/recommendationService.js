@@ -289,6 +289,14 @@ class RecommendationService {
                 return [];
             }
 
+            // Filter out dismissed recommendations for this trip (permanent filter)
+            const tripId = trip._id ? String(trip._id) : String(trip.id);
+            const nonDismissedMatches = this.filterDismissedRecommendations(conflictFreeMatches, user, tripId);
+
+            if (nonDismissedMatches.length === 0) {
+                return [];
+            }
+
             // Extract user preferences for scoring
             const userPreferences = {
                 favoriteTeams: user.preferences?.favoriteTeams || [],
@@ -298,7 +306,7 @@ class RecommendationService {
             };
 
             // Score and rank matches
-            const scoredMatches = conflictFreeMatches.map(match => ({
+            const scoredMatches = nonDismissedMatches.map(match => ({
                 match,
                 score: this.scoreMatch(match, savedMatchVenues, day, trip, userPreferences)
             }));
@@ -570,6 +578,52 @@ class RecommendationService {
 
             return true; // No conflict
         });
+    }
+
+    /**
+     * Filter out matches that have been dismissed for a specific trip
+     * Dismissals are permanent per trip (not time-limited, not global)
+     */
+    filterDismissedRecommendations(matches, user, tripId) {
+        if (!user || !user.recommendationHistory || user.recommendationHistory.length === 0) {
+            return matches; // No history, return all matches
+        }
+
+        if (!tripId) {
+            return matches; // No tripId, can't filter
+        }
+
+        // Get dismissed matchIds for this specific trip
+        const dismissedMatchIds = new Set();
+        for (const entry of user.recommendationHistory) {
+            if (
+                entry.action === 'dismissed' &&
+                entry.tripId &&
+                String(entry.tripId) === String(tripId) &&
+                entry.matchId
+            ) {
+                dismissedMatchIds.add(String(entry.matchId));
+            }
+        }
+
+        if (dismissedMatchIds.size === 0) {
+            return matches; // No dismissals for this trip
+        }
+
+        // Filter out dismissed matches
+        const filtered = matches.filter(match => {
+            const matchId = String(match.id || match.fixture?.id);
+            const isDismissed = dismissedMatchIds.has(matchId);
+            
+            if (isDismissed) {
+                console.log(`🚫 Filtering out dismissed match ${matchId} for trip ${tripId}`);
+            }
+            
+            return !isDismissed;
+        });
+
+        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripId}`);
+        return filtered;
     }
 
     /**

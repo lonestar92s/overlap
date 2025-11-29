@@ -6,6 +6,7 @@ import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { colors, spacing, typography } from './styles/designTokens';
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -36,14 +37,16 @@ try {
   validateEnvironmentVariables();
 } catch (error) {
   // Log error but don't crash - validation should handle fallbacks
-  console.error('⚠️ Environment validation error:', error.message);
+  if (__DEV__) {
+    console.error('⚠️ Environment validation error:', error.message);
+  }
   // Don't throw - let the app continue with fallback values
 }
 
 // Loading screen component
 const LoadingScreen = () => (
   <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#1976d2" />
+    <ActivityIndicator size="large" color={colors.primary} />
   </View>
 );
 
@@ -55,7 +58,7 @@ function AuthStack() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        cardStyle: { backgroundColor: '#f5f5f5' }
+        cardStyle: { backgroundColor: colors.background }
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
@@ -82,9 +85,9 @@ function SearchStack() {
         initialRouteName="Search"
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#1976d2',
+            backgroundColor: colors.primary,
           },
-          headerTintColor: '#fff',
+          headerTintColor: colors.onPrimary,
           headerTitleStyle: {
             fontWeight: 'bold',
           },
@@ -190,7 +193,7 @@ function AppContent() {
 
   return (
     <NavigationContainer>
-      <StatusBar style="light" backgroundColor="#1976d2" />
+      <StatusBar style="light" backgroundColor={colors.primary} />
       {isAuthenticated() ? (
         <FilterProvider>
           <ItineraryProvider>
@@ -198,10 +201,10 @@ function AppContent() {
               initialRouteName="SearchTab"
               screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: '#1976d2',
-                tabBarInactiveTintColor: '#888',
-                tabBarStyle: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#eee' },
-                tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.text.secondary,
+                tabBarStyle: { backgroundColor: colors.card, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+                tabBarLabelStyle: { fontSize: typography.caption.fontSize, fontWeight: '500' },
                 tabBarIcon: ({ color, size }) => {
                   let iconName;
                   switch (route.name) {
@@ -251,7 +254,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
 });
 

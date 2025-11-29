@@ -60,7 +60,9 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
         const response = await ApiService.searchAirports(query, 10);
         setOriginResults(response.data || []);
       } catch (error) {
-        console.error('Error searching airports:', error);
+        if (__DEV__) {
+          console.error('Error searching airports:', error);
+        }
         setOriginResults([]);
       } finally {
         setOriginSearchLoading(false);
@@ -82,7 +84,9 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
         const response = await ApiService.searchAirports(query, 10);
         setDestinationResults(response.data || []);
       } catch (error) {
-        console.error('Error searching airports:', error);
+        if (__DEV__) {
+          console.error('Error searching airports:', error);
+        }
         setDestinationResults([]);
       } finally {
         setDestinationSearchLoading(false);
@@ -177,7 +181,9 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
         Alert.alert('Flight Not Found', 'Could not find this flight. Please verify the flight number, route, and date.');
       }
     } catch (error) {
-      console.error('Error looking up flight:', error);
+      if (__DEV__) {
+        console.error('Error looking up flight:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to look up flight. Please try again.');
     } finally {
       setLookingUp(false);
@@ -232,7 +238,9 @@ const AddFlightModal = ({ visible, onClose, tripId, onFlightAdded }) => {
         }
       ]);
     } catch (error) {
-      console.error('Error saving flight:', error);
+      if (__DEV__) {
+        console.error('Error saving flight:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to save flight to trip. Please try again.');
     } finally {
       setSaving(false);

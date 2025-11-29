@@ -131,7 +131,9 @@ const CreateTripModal = ({ visible, onClose, onTripCreated }) => {
       
       onClose();
     } catch (error) {
-      console.error('Error creating trip:', error);
+      if (__DEV__) {
+        console.error('Error creating trip:', error);
+      }
       Alert.alert('Error', 'Failed to create trip. Please try again.');
     } finally {
       setIsCreating(false);

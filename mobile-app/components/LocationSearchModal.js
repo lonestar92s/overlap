@@ -76,7 +76,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
         setRecentSearches(JSON.parse(stored));
       }
     } catch (error) {
-      console.error('Error loading recent searches:', error);
+      if (__DEV__) {
+        console.error('Error loading recent searches:', error);
+      }
     }
   };
 
@@ -122,7 +124,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       setRecentSearches(updated);
       await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
     } catch (error) {
-      console.error('Error saving recent search:', error);
+      if (__DEV__) {
+        console.error('Error saving recent search:', error);
+      }
     }
   };
 
@@ -131,7 +135,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       setRecentSearches([]);
       await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
     } catch (error) {
-      console.error('Error clearing recent searches:', error);
+      if (__DEV__) {
+        console.error('Error clearing recent searches:', error);
+      }
     }
   };
 
@@ -155,7 +161,9 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       // Mark that search has completed
       hasCompletedSearchRef.current = true;
     } catch (error) {
-      console.error('Error searching locations:', error);
+      if (__DEV__) {
+        console.error('Error searching locations:', error);
+      }
       setLocationResults([]);
       // Mark that search has completed (even if it failed)
       hasCompletedSearchRef.current = true;

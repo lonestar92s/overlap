@@ -13,10 +13,12 @@ if (MAPBOX_CONFIG.accessToken) {
 
 const MapboxMapView = ({
   matches = [],
+  recommendedMatches = [],
   homeBases = [],
   initialRegion = null,
   onRegionChange = () => {},
   onMarkerPress = () => {},
+  onRecommendedMatchPress = () => {},
   onHomeBasePress = () => {},
   selectedMatchId = null,
   travelTimes = {},
@@ -47,13 +49,13 @@ const MapboxMapView = ({
 
 // Auto-fit to markers only when explicitly triggered
 useEffect(() => {
-  if (matches && matches.length > 0 && mapReady && mapRef.current) {
+  if (((matches && matches.length > 0) || (recommendedMatches && recommendedMatches.length > 0)) && mapReady && mapRef.current) {
     const timer = setTimeout(() => {
       fitToMatches();
     }, 300);
     return () => clearTimeout(timer);
   }
-}, [autoFitKey, mapReady]);
+}, [autoFitKey, mapReady, matches, recommendedMatches]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -134,12 +136,20 @@ useEffect(() => {
     }
   };
 
-  // Fit map to show all matches and home bases
+  // Fit map to show all matches, recommended matches, and home bases
   const fitToMatches = () => {
     if (!mapRef.current) return;
 
     // Collect coordinates from matches (GeoJSON format: [longitude, latitude])
     const matchCoordinates = (matches || [])
+      .filter(match => match.fixture?.venue?.coordinates)
+      .map(match => [
+        match.fixture.venue.coordinates[0], // longitude (GeoJSON index 0)
+        match.fixture.venue.coordinates[1]  // latitude (GeoJSON index 1)
+      ]);
+
+    // Collect coordinates from recommended matches (GeoJSON format: [longitude, latitude])
+    const recommendedMatchCoordinates = (recommendedMatches || [])
       .filter(match => match.fixture?.venue?.coordinates)
       .map(match => [
         match.fixture.venue.coordinates[0], // longitude (GeoJSON index 0)
@@ -158,7 +168,7 @@ useEffect(() => {
       ]);
 
     // Combine all coordinates
-    const allCoordinates = [...matchCoordinates, ...homeBaseCoordinates];
+    const allCoordinates = [...matchCoordinates, ...recommendedMatchCoordinates, ...homeBaseCoordinates];
 
     if (allCoordinates.length > 0) {
       mapRef.current.fitBounds(allCoordinates, {
@@ -211,6 +221,29 @@ useEffect(() => {
               ]}>
                 <Text style={styles.markerText}>
                   {match.teams.home.name.charAt(0)}{match.teams.away.name.charAt(0)}
+                </Text>
+              </View>
+            </Mapbox.PointAnnotation>
+          );
+        })}
+
+        {/* Recommended match markers (yellow) */}
+        {recommendedMatches && recommendedMatches.map((match) => {
+          if (!match.fixture?.venue?.coordinates) return null;
+
+          // GeoJSON format: [longitude, latitude]
+          const [longitude, latitude] = match.fixture.venue.coordinates;
+
+          return (
+            <Mapbox.PointAnnotation
+              key={`recommended-${String(match.fixture?.id)}`}
+              id={`recommended-${String(match.fixture?.id)}`}
+              coordinate={[longitude, latitude]}
+              onSelected={() => onRecommendedMatchPress(match)}
+            >
+              <View style={styles.recommendedMarker}>
+                <Text style={styles.recommendedMarkerText}>
+                  {match.teams?.home?.name?.charAt(0) || 'H'}{match.teams?.away?.name?.charAt(0) || 'A'}
                 </Text>
               </View>
             </Mapbox.PointAnnotation>
@@ -335,6 +368,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  recommendedMarker: {
+    backgroundColor: '#FFD700', // Yellow color for recommended matches
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  recommendedMarkerText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   locationButton: {
     position: 'absolute',

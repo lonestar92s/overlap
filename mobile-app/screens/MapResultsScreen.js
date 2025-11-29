@@ -239,7 +239,9 @@ const MapResultsScreen = ({ navigation, route }) => {
 
         // If we still don't have any data, create some basic fallback data
         if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
-          console.log('No structured data found, creating fallback data');
+          if (__DEV__) {
+            console.log('No structured data found, creating fallback data');
+          }
           
           // Try to create some basic data from the first match
           const firstMatch = matches[0];
@@ -937,7 +939,9 @@ const MapResultsScreen = ({ navigation, route }) => {
       route.params.searchParams = newSearchParams;
       
     } catch (error) {
-      console.error('MapResultsScreen: Search update error:', error);
+      if (__DEV__) {
+        console.error('MapResultsScreen: Search update error:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to update search');
     } finally {
       setSearchLoading(false);
@@ -953,7 +957,9 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   const handleApplyFilters = (filters) => {
-    console.log('Applying filters:', filters);
+    if (__DEV__) {
+      console.log('Applying filters:', filters);
+    }
     updateSelectedFilters(filters);
     closeFilterModal();
   };
@@ -1315,13 +1321,15 @@ const MapResultsScreen = ({ navigation, route }) => {
 
       // Debug: Show league data info
       if (!item.league && !item.competition) {
-        console.log('⚠️ Match missing league data:', {
-          id: item.id,
-          hasLeague: !!item.league,
-          hasCompetition: !!item.competition,
-          competitionName: item.competition?.name,
-          leagueName: item.league?.name
-        });
+        if (__DEV__) {
+          console.log('⚠️ Match missing league data:', {
+            id: item.id,
+            hasLeague: !!item.league,
+            hasCompetition: !!item.competition,
+            competitionName: item.competition?.name,
+            leagueName: item.league?.name
+          });
+        }
       }
 
 
@@ -1384,10 +1392,14 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Manual search function
   // FIXED: Always allow search even if region hasn't changed - user should be able to re-search
   const handleSearchThisArea = async () => {
-    console.log('🔘 [SEARCH THIS AREA] Button clicked');
+    if (__DEV__) {
+      console.log('🔘 [SEARCH THIS AREA] Button clicked');
+    }
     
     if (!dateFrom || !dateTo) {
-      console.log('❌ [SEARCH THIS AREA] Missing dates:', { dateFrom, dateTo });
+      if (__DEV__) {
+        console.log('❌ [SEARCH THIS AREA] Missing dates:', { dateFrom, dateTo });
+      }
       Alert.alert('Error', 'Please select your travel dates');
       return;
     }
@@ -1395,36 +1407,42 @@ const MapResultsScreen = ({ navigation, route }) => {
     // Get the current map region - prefer mapRegion (most current), then debouncedMapRegion, then initialRegion
     let currentRegion = mapRegion || debouncedMapRegion || initialRegion;
     
-    console.log('🔍 [SEARCH THIS AREA] Region state:', {
-      hasMapRegion: !!mapRegion,
-      hasDebouncedMapRegion: !!debouncedMapRegion,
-      hasInitialRegion: !!initialRegion,
-      source: mapRegion ? 'mapRegion (current)' : debouncedMapRegion ? 'debouncedMapRegion' : 'initialRegion',
-      currentRegion: currentRegion ? {
-        center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
-        delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
-      } : null,
-      isSearching,
-      currentRequestId,
-      lastSuccessfulRequestId
-    });
+    if (__DEV__) {
+      console.log('🔍 [SEARCH THIS AREA] Region state:', {
+        hasMapRegion: !!mapRegion,
+        hasDebouncedMapRegion: !!debouncedMapRegion,
+        hasInitialRegion: !!initialRegion,
+        source: mapRegion ? 'mapRegion (current)' : debouncedMapRegion ? 'debouncedMapRegion' : 'initialRegion',
+        currentRegion: currentRegion ? {
+          center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
+          delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
+        } : null,
+        isSearching,
+        currentRequestId,
+        lastSuccessfulRequestId
+      });
+    }
     
     if (!currentRegion) {
-      console.log('❌ [SEARCH THIS AREA] No region available');
+      if (__DEV__) {
+        console.log('❌ [SEARCH THIS AREA] No region available');
+      }
       Alert.alert('Error', 'Unable to determine current map location. Please try again.');
       return;
     }
     
     // Always perform search - don't check if region has changed
     const requestId = currentRequestId + 1;
-    console.log('🚀 [SEARCH THIS AREA] Starting search:', {
-      requestId,
-      previousRequestId: currentRequestId,
-      region: {
-        center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
-        delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
-      }
-    });
+    if (__DEV__) {
+      console.log('🚀 [SEARCH THIS AREA] Starting search:', {
+        requestId,
+        previousRequestId: currentRequestId,
+        region: {
+          center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
+          delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
+        }
+      });
+    }
     
     setCurrentRequestId(requestId);
     setIsSearching(true);

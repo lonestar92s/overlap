@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,7 +15,9 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log the error for debugging
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    if (__DEV__) {
+      console.error('ErrorBoundary caught an error:', error, errorInfo);
+    }
     
     this.setState({
       error: error,
@@ -23,7 +26,9 @@ class ErrorBoundary extends React.Component {
 
     // Check if it's a timezone-related error
     if (error.message && error.message.includes('timeZone')) {
-      console.warn('Timezone error caught by ErrorBoundary:', error.message);
+      if (__DEV__) {
+        console.warn('Timezone error caught by ErrorBoundary:', error.message);
+      }
     }
   }
 
@@ -50,7 +55,12 @@ class ErrorBoundary extends React.Component {
             }
           </Text>
           
-          <TouchableOpacity style={styles.retryButton} onPress={this.handleRetry}>
+          <TouchableOpacity 
+            style={styles.retryButton} 
+            onPress={this.handleRetry}
+            accessibilityLabel="Try again"
+            accessibilityRole="button"
+          >
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
           
@@ -73,50 +83,49 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f8f9fa',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
   errorTitle: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: 'bold',
-    color: '#dc3545',
-    marginBottom: 10,
+    color: colors.error,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 14,
-    color: '#6c757d',
+    ...typography.bodySmall,
+    color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
+    marginBottom: spacing.lg,
   },
   retryButton: {
-    backgroundColor: '#007bff',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 5,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
   },
   retryButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: colors.onPrimary,
+    ...typography.button,
   },
   debugInfo: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 5,
+    marginTop: spacing.lg,
+    padding: spacing.sm,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: colors.border,
   },
   debugTitle: {
-    fontSize: 12,
+    ...typography.caption,
     fontWeight: 'bold',
-    color: '#6c757d',
-    marginBottom: 5,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
   },
   debugText: {
-    fontSize: 10,
-    color: '#6c757d',
+    ...typography.caption,
+    color: colors.text.secondary,
     fontFamily: 'monospace',
   },
 });

@@ -14,7 +14,7 @@ import PopularMatches from '../components/PopularMatches';
 import LocationSearchModal from '../components/LocationSearchModal';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
-// Popular destinations data (reused from SearchScreen.old.js)
+// Popular destinations data
 const popularDestinations = [
   { 
     id: '1', 

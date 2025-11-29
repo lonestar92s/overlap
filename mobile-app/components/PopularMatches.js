@@ -80,7 +80,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
         }
       }
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      if (__DEV__) {
+        console.error('Error fetching matches:', error);
+      }
       
       // Retry once if it's a timeout error
       if (error.message.includes('timeout') && retryCount < 1) {
