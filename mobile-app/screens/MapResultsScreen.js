@@ -1123,25 +1123,13 @@ const MapResultsScreen = ({ navigation, route }) => {
     return validMarkers;
   }, [displayFilteredMatches, matches]);
 
-  // Group upcoming matches by venue (coordinates preferred for same physical location, then id, then fallback)
-  // This handles cases where different competitions/clubs use different venue IDs for the same physical venue
+  // Group upcoming matches by venue ID (exact matches only)
+  // Only group by exact venue ID to avoid placing matches at wrong stadiums
   const venueGroups = useMemo(() => {
     if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
     const groupsMap = new Map();
     
-    // Helper function to calculate distance between two coordinates (in km)
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-      const R = 6371; // Earth's radius in km
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    };
-    
-    // First pass: group by venue ID (for exact matches)
+    // Group by venue ID (exact matches only)
     finalFilteredMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
@@ -1163,59 +1151,10 @@ const MapResultsScreen = ({ navigation, route }) => {
       groupsMap.get(key).matches.push(m);
     });
     
-    // Second pass: merge groups with coordinates within 50 meters (same physical location)
-    // This handles cases where different venue IDs represent the same physical venue
-    const mergedGroups = new Map();
-    const processedKeys = new Set();
-    
-    groupsMap.forEach((group, key) => {
-      if (processedKeys.has(key)) return;
-      
-      const venue = group.venue;
-      const coords = venue?.coordinates;
-      
-      // If this group has coordinates, check for nearby groups to merge
-      if (coords && Array.isArray(coords) && coords.length === 2) {
-        const [lon, lat] = coords;
-        let mergedKey = key;
-        let mergedGroup = { ...group };
-        
-        // Check all other groups for nearby coordinates
-        groupsMap.forEach((otherGroup, otherKey) => {
-          if (otherKey === key || processedKeys.has(otherKey)) return;
-          
-          const otherCoords = otherGroup.venue?.coordinates;
-          if (otherCoords && Array.isArray(otherCoords) && otherCoords.length === 2) {
-            const [otherLon, otherLat] = otherCoords;
-            const distance = calculateDistance(lat, lon, otherLat, otherLon);
-            
-            // If within 50 meters, merge the groups (same physical location)
-            if (distance < 0.05) {
-              // Merge matches from other group into this one
-              mergedGroup.matches.push(...otherGroup.matches);
-              processedKeys.add(otherKey);
-              
-              // Use the venue with more complete data (prefer one with ID if available)
-              if (!mergedGroup.venue.id && otherGroup.venue.id) {
-                mergedGroup.venue = { ...otherGroup.venue, coordinates: coords };
-              } else if (mergedGroup.venue.id && !otherGroup.venue.id) {
-                // Keep current venue but ensure coordinates are set
-                mergedGroup.venue = { ...mergedGroup.venue, coordinates: coords };
-              }
-              
-              console.log(`📍 Merged venue groups: ${mergedGroup.venue.name || 'Unknown'} (distance: ${(distance * 1000).toFixed(0)}m)`);
-            }
-          }
-        });
-        
-        mergedGroups.set(mergedKey, mergedGroup);
-        processedKeys.add(key);
-      } else {
-        // No coordinates, just add the group as-is
-        mergedGroups.set(key, group);
-        processedKeys.add(key);
-      }
-    });
+    // REMOVED: Coordinate-based merging - too risky, can merge different stadiums
+    // Only group by exact venue ID to avoid placing matches at wrong stadiums
+    // If venues have different IDs, they should be treated as separate venues
+    const mergedGroups = groupsMap;
     
     const groups = Array.from(mergedGroups.values());
     // Sort matches within each group chronologically

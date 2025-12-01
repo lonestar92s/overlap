@@ -812,7 +812,6 @@ router.get('/search', async (req, res) => {
             // Track venues that have been included - if one match at a venue is included,
             // all matches at that venue should be included (handles same venue, different competitions)
             const includedVenueIds = new Set();
-            const includedVenueCoords = new Map(); // Map of coordinate keys to venue IDs
             
             for (const match of uniqueFixtures) {
                 const leagueId = match.league?.id;
@@ -893,62 +892,9 @@ router.get('/search', async (req, res) => {
                     }
                 }
                 
-                // CRITICAL FIX: If venue lookup by ID succeeded but we have coordinates, 
-                // also check if there's an existing venue with matching coordinates (within 100m)
-                // This handles the case where different competitions/clubs use different venue IDs for the same physical location
-                if (venueInfo && venueInfo.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
-                    try {
-                        const Venue = require('../models/Venue');
-                        const [lon, lat] = venueInfo.coordinates;
-                        
-                        // Find venues with coordinates within 100 meters (0.001 degrees ≈ 111m)
-                        const nearbyVenues = await Venue.find({
-                            location: {
-                                $near: {
-                                    $geometry: {
-                                        type: 'Point',
-                                        coordinates: [lon, lat]
-                                    },
-                                    $maxDistance: 100 // 100 meters
-                                }
-                            },
-                            isActive: true
-                        }).limit(5);
-                        
-                        // If we find a venue with matching coordinates but different ID, use the existing venue's data
-                        // This ensures matches at the same physical location are grouped together
-                        if (nearbyVenues.length > 0) {
-                            const matchingVenue = nearbyVenues.find(v => {
-                                const vCoords = v.coordinates || v.location?.coordinates;
-                                if (!vCoords || !Array.isArray(vCoords) || vCoords.length !== 2) return false;
-                                
-                                // Check if coordinates are very close (within 50m)
-                                const distance = calculateDistanceKm(lat, lon, vCoords[1], vCoords[0]);
-                                return distance < 0.05; // 50 meters
-                            });
-                            
-                            if (matchingVenue && matchingVenue.venueId !== venueInfo.id) {
-                                // Same physical location, different venue ID - use the existing venue's data
-                                // But keep the original venue ID from the match so we don't lose the API reference
-                                venueInfo = {
-                                    id: venue?.id || venueInfo?.id || null, // Keep original ID from match
-                                    name: matchingVenue.name || venueInfo.name,
-                                    city: matchingVenue.city || venueInfo.city,
-                                    country: matchingVenue.country || venueInfo.country,
-                                    coordinates: matchingVenue.coordinates || matchingVenue.location?.coordinates || venueInfo.coordinates,
-                                    image: venueInfo?.image || matchingVenue.image || null,
-                                    // Add metadata to indicate this is a coordinate-matched venue
-                                    _coordinateMatched: true,
-                                    _matchedVenueId: matchingVenue.venueId
-                                };
-                                console.log(`📍 Coordinate-matched venue: ${venueInfo.name} (match venueId: ${venueInfo.id}, matched venueId: ${matchingVenue.venueId})`);
-                            }
-                        }
-                    } catch (coordinateMatchError) {
-                        // Don't fail if coordinate matching fails - just log and continue
-                        console.log(`⚠️ Coordinate matching failed for venue ${venueInfo.name}: ${coordinateMatchError.message}`);
-                    }
-                }
+                // REMOVED: Aggressive coordinate matching that could incorrectly match different stadiums
+                // Only use venue ID matching - coordinate matching is too error-prone in dense urban areas
+                // If venues have different IDs, they should be treated as separate venues
                 
                 // CRITICAL: If venue still has no coordinates but we have name/city, geocode and save it
                 // This ensures every match gets coordinates - the missing piece!
@@ -1196,14 +1142,9 @@ router.get('/search', async (req, res) => {
                     transformedMatches.push(transformed);
                     matchesByLeague[leagueId].transformed++;
                     
-                    // Track this venue as included - mark by both ID and coordinates
+                    // Track this venue as included by ID
                     if (venueInfo?.id) {
                         includedVenueIds.add(venueInfo.id);
-                    }
-                    if (venueInfo?.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
-                        const [lon, lat] = venueInfo.coordinates;
-                        const coordKey = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-                        includedVenueCoords.set(coordKey, venueInfo.id || null);
                     }
                 }
             }
@@ -1226,27 +1167,14 @@ router.get('/search', async (req, res) => {
                 // Check if this match is at a venue that was already included
                 let shouldIncludeByVenue = false;
                 
+                // Only match by exact venue ID - coordinate matching is too error-prone
+                // This ensures we only include matches at the exact same venue, not nearby different venues
                 if (venueId && includedVenueIds.has(venueId)) {
                     // Same venue ID as an included match
                     shouldIncludeByVenue = true;
                     console.log(`✅ Match included (same venue ID ${venueId}): ${match.teams?.home?.name} vs ${match.teams?.away?.name} (League: ${match.league.name}, ID: ${match.fixture.id})`);
-                } else if (venue?.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2) {
-                    // Check if coordinates match an included venue (within 50m)
-                    const [lon, lat] = venue.coordinates;
-                    const coordKey = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-                    
-                    // Check all included venue coordinates for proximity
-                    for (const [includedCoordKey, includedVenueId] of includedVenueCoords.entries()) {
-                        const [includedLat, includedLon] = includedCoordKey.split(',').map(Number);
-                        const distance = calculateDistanceKm(lat, lon, includedLat, includedLon);
-                        
-                        if (distance < 0.05) { // Within 50 meters
-                            shouldIncludeByVenue = true;
-                            console.log(`✅ Match included (same venue coordinates, distance: ${(distance * 1000).toFixed(0)}m): ${match.teams?.home?.name} vs ${match.teams?.away?.name} (League: ${match.league.name}, ID: ${match.fixture.id})`);
-                            break;
-                        }
-                    }
                 }
+                // REMOVED: Coordinate-based matching in second pass - too risky, can match different stadiums
                 
                 if (shouldIncludeByVenue) {
                     // Re-process this match to get venue info (similar to first pass, but simplified)
