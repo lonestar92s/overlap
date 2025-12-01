@@ -41,11 +41,9 @@ jobs:
           }
       
       - name: Run backend tests
-        run: npm test -- --testPathPattern="^(?!.*integration)" || npm test -- --testPathPattern="unit"
+        run: npm run test:unit
         env:
           NODE_ENV: test
-          # Skip integration tests that require MongoDB
-          SKIP_INTEGRATION_TESTS: true
       
       - name: Upload coverage reports
         if: matrix.node-version == '20.x'
