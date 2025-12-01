@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+
+jobs:
+  # Only deploy if tests pass
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    # Uncomment the line below once you have a workflow that runs tests
+    # needs: [test-workflow-job-name]
+    
+    defaults:
+      run:
+        working-directory: overlap/backend
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build (if needed)
+        run: |
+          if [ -f "package.json" ] && grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "No build script found, skipping..."
+          fi
+      
+      # Add your deployment steps here
+      # Examples:
+      # - Deploy to Railway
+      # - Deploy to Heroku
+      # - Deploy to AWS
+      # - Build and push Docker image
+      
+      - name: Deployment placeholder
+        run: |
+          echo "🚀 Add your deployment steps here"
+          echo "Examples:"
+          echo "- Railway: railway up"
+          echo "- Heroku: git push heroku main"
+          echo "- Docker: docker build && docker push"
+          echo "- AWS: aws deploy ..."
+
