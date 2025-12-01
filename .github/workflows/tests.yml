@@ -31,7 +31,19 @@ jobs:
           cache-dependency-path: overlap/backend/package-lock.json
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Try npm ci first (faster and more reliable)
+          # If lock file is out of sync, use npm install as fallback
+          if ! npm ci 2>&1 | tee /tmp/npm-ci.log; then
+            if grep -q "package.json and package-lock.json.*are in sync" /tmp/npm-ci.log || grep -q "can only install packages when" /tmp/npm-ci.log; then
+              echo "⚠️  package-lock.json is out of sync. Using npm install instead..."
+              echo "💡 Please run 'npm install' locally and commit the updated package-lock.json"
+              npm install
+            else
+              echo "❌ npm ci failed for a different reason"
+              exit 1
+            fi
+          fi
       
       - name: Run backend tests
         run: npm test
@@ -71,7 +83,19 @@ jobs:
           cache-dependency-path: mobile-app/package-lock.json
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Try npm ci first (faster and more reliable)
+          # If lock file is out of sync, use npm install as fallback
+          if ! npm ci 2>&1 | tee /tmp/npm-ci.log; then
+            if grep -q "package.json and package-lock.json.*are in sync" /tmp/npm-ci.log || grep -q "can only install packages when" /tmp/npm-ci.log; then
+              echo "⚠️  package-lock.json is out of sync. Using npm install instead..."
+              echo "💡 Please run 'npm install' locally and commit the updated package-lock.json"
+              npm install
+            else
+              echo "❌ npm ci failed for a different reason"
+              exit 1
+            fi
+          fi
       
       - name: Run mobile app tests
         run: npm test
