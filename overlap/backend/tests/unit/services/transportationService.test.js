@@ -165,7 +165,15 @@ describe('TransportationService', () => {
     });
 
     it('should throw error when all providers fail', async () => {
+      // Ensure all providers fail
       mockAmadeusProvider.searchFlights.mockRejectedValue(new Error('Provider failed'));
+      
+      // Make sure there are no other providers that could succeed
+      service.flightProviders.forEach(provider => {
+        if (provider !== mockAmadeusProvider) {
+          provider.searchFlights = jest.fn().mockRejectedValue(new Error('Provider failed'));
+        }
+      });
 
       await expect(service.searchFlights(mockSearchParams))
         .rejects.toThrow('All flight providers failed');
@@ -174,6 +182,13 @@ describe('TransportationService', () => {
     it('should include last error message in failure', async () => {
       const errorMessage = 'Network timeout';
       mockAmadeusProvider.searchFlights.mockRejectedValue(new Error(errorMessage));
+      
+      // Make sure all providers fail
+      service.flightProviders.forEach(provider => {
+        if (provider !== mockAmadeusProvider) {
+          provider.searchFlights = jest.fn().mockRejectedValue(new Error('Provider failed'));
+        }
+      });
 
       await expect(service.searchFlights(mockSearchParams))
         .rejects.toThrow(expect.stringContaining(errorMessage));
@@ -195,8 +210,15 @@ describe('TransportationService', () => {
 
     it('should handle malformed provider responses', async () => {
       mockAmadeusProvider.searchFlights.mockResolvedValue(null);
+      
+      // Make sure all other providers also fail so we test the error path
+      service.flightProviders.forEach(provider => {
+        if (provider !== mockAmadeusProvider) {
+          provider.searchFlights = jest.fn().mockRejectedValue(new Error('Provider failed'));
+        }
+      });
 
-      // Should handle null response gracefully
+      // Should handle null response gracefully - it should try next provider or fail
       await expect(service.searchFlights(mockSearchParams))
         .rejects.toThrow();
     });

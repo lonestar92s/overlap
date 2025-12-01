@@ -79,8 +79,8 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       // Set location state
       setLocation(initialLocation);
       
-      // Pre-populate search query with city name
-      const displayText = `${initialLocation.city}${initialLocation.region ? `, ${initialLocation.region}` : ''}, ${initialLocation.country}`;
+      // Pre-populate search query with city name (use description if available, otherwise simplified format)
+      const displayText = initialLocation.description || `${initialLocation.city}, ${initialLocation.country}`;
       setLocationSearchQuery(displayText);
       
       // Ensure location is marked as selected (not in search mode)
@@ -283,7 +283,8 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       debouncedSearchRef.current.cancel();
     }
     
-    const displayText = `${selectedLocation.city}${selectedLocation.region ? `, ${selectedLocation.region}` : ''}, ${selectedLocation.country}`;
+    // Use description if available (handles disambiguation), otherwise simplified format
+    const displayText = selectedLocation.description || `${selectedLocation.city}, ${selectedLocation.country}`;
     
     // IMPORTANT: Update the search query FIRST so the TextInput shows the selected location
     // This must happen before other state updates to ensure the input displays correctly

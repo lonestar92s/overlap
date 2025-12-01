@@ -4,7 +4,7 @@
  * Tests parsing functions in isolation without API calls
  */
 
-const { describe, it, expect, beforeEach, jest } = require('@jest/globals');
+const { describe, it, expect, beforeEach } = require('@jest/globals');
 
 // Mock OpenAI before importing the route
 jest.mock('openai', () => {
