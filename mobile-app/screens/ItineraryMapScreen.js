@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { MAP_PROVIDER } from '../utils/mapConfig';
 import HeartButton from '../components/HeartButton';
 import MatchCard from '../components/MatchCard';
@@ -104,29 +105,49 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     fetchTravelTimes();
   }, [itineraryId, itinerary?.matches, itinerary?.homeBases]);
 
-  // Fetch recommendations for the trip
+  // Fetch recommendations function
+  const fetchRecommendations = async (forceRefresh = false) => {
+    if (!itineraryId || !itinerary) {
+      return;
+    }
+
+    try {
+      setRecommendationsLoading(true);
+      const response = await ApiService.getRecommendations(itineraryId, forceRefresh);
+      if (response.success && response.recommendations) {
+        setRecommendations(response.recommendations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      // Don't show error to user - recommendations are optional
+    } finally {
+      setRecommendationsLoading(false);
+    }
+  };
+
+  // Fetch recommendations when itinerary loads
   useEffect(() => {
-    const fetchRecommendations = async () => {
-      if (!itineraryId || !itinerary) {
-        return;
-      }
-
-      try {
-        setRecommendationsLoading(true);
-        const response = await ApiService.getRecommendations(itineraryId);
-        if (response.success && response.recommendations) {
-          setRecommendations(response.recommendations || []);
-        }
-      } catch (error) {
-        console.error('Error fetching recommendations:', error);
-        // Don't show error to user - recommendations are optional
-      } finally {
-        setRecommendationsLoading(false);
-      }
-    };
-
     fetchRecommendations();
   }, [itineraryId, itinerary]);
+
+  // Refetch recommendations when screen comes into focus (to sync with other screens)
+  // Use a ref to track if this is the initial mount to avoid double-fetching
+  const isInitialMount = React.useRef(true);
+  
+  useFocusEffect(
+    React.useCallback(() => {
+      // Skip the first focus (initial mount) - recommendations are already fetched in useEffect
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      
+      // Only refetch if we have an itinerary loaded and we're coming back to the screen
+      if (itineraryId && itinerary) {
+        fetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
+      }
+    }, [itineraryId, itinerary])
+  );
 
   // Calculate map region to fit all matches, recommended matches, and home bases
   const mapRegion = useMemo(() => {
@@ -272,7 +293,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   };
 
   // Transform recommendations to the format expected by the map
-  const transformRecommendationsForMap = (recommendations) => {
+  // Memoize to ensure map updates when recommendations change
+  const transformedRecommendations = useMemo(() => {
     return recommendations.map(recommendation => {
       const match = recommendation.match;
       return {
@@ -289,7 +311,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
         _recommendationData: recommendation // Store full recommendation data
       };
     });
-  };
+  }, [recommendations]);
 
   // Handle marker press
   const handleMarkerPress = (match) => {
@@ -353,7 +375,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       // Invalidate cache since user preferences have changed
       ApiService.invalidateRecommendationCache(itineraryId);
 
-      // Remove the recommendation from the list
+      // Remove the recommendation from the list immediately
       setRecommendations(prev => prev.filter(rec => {
         const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
         return String(recMatchId) !== String(matchId);
@@ -361,6 +383,9 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
       // Close the card overlay
       setSelectedRecommendation(null);
+      
+      // Note: Other screens will pick up the change when they come into focus
+      // via the useFocusEffect hook that refetches recommendations
     } catch (err) {
       console.error('Error dismissing recommendation:', err);
       Alert.alert('Error', 'Failed to dismiss recommendation');
@@ -476,7 +501,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           initialRegion={mapRegion}
           onMapPress={handleMapPress}
           matches={transformMatchesForMap(itinerary.matches || [])}
-          recommendedMatches={transformRecommendationsForMap(recommendations)}
+          recommendedMatches={transformedRecommendations}
           homeBases={itinerary.homeBases || []}
           onMarkerPress={handleMarkerPress}
           onRecommendedMatchPress={handleRecommendedMatchPress}

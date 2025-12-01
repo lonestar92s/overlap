@@ -17,6 +17,7 @@ import {
   Modal,
   InteractionManager
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
@@ -149,6 +150,26 @@ const TripOverviewScreen = ({ navigation, route }) => {
       setLoading(false);
     }
   }, [itineraryId, getItineraryById]);
+
+  // Refetch recommendations when screen comes into focus (to sync with other screens)
+  // Use a ref to track if this is the initial mount to avoid double-fetching
+  const isInitialMount = React.useRef(true);
+  
+  useFocusEffect(
+    React.useCallback(() => {
+      // Skip the first focus (initial mount) - recommendations are already fetched in useEffect
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      
+      // Only refetch if we have an itinerary loaded and we're coming back to the screen
+      if (itinerary?.id || itinerary?._id) {
+        const tripId = itinerary.id || itinerary._id;
+        fetchRecommendations(tripId, true); // Force refresh to get latest (including dismissed items removed)
+      }
+    }, [itinerary])
+  );
 
   // Refresh itinerary after flight is added
   const handleFlightAdded = async () => {
@@ -590,9 +611,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
       // Invalidate cache since user preferences have changed
       apiService.invalidateRecommendationCache(itinerary.id || itinerary._id);
 
-      // Remove the recommendation from the list
+      // Remove the recommendation from the list immediately
       setRecommendations(prev => prev.filter(rec => rec.matchId !== recommendation.matchId));
       
+      // Note: Other screens will pick up the change when they come into focus
+      // via the useFocusEffect hook that refetches recommendations
     } catch (err) {
       console.error('Error dismissing recommendation:', err);
     }

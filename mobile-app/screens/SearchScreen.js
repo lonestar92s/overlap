@@ -20,39 +20,75 @@ const popularDestinations = [
     id: '1', 
     city: 'Madrid',
     country: 'Spain',
+    lat: 40.4168,
+    lon: -3.7038,
     image: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&h=300&fit=crop'
   },
   { 
     id: '2', 
     city: 'Rome',
-    country: 'Italy', 
+    country: 'Italy',
+    lat: 41.9028,
+    lon: 12.4964,
     image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop'
   },
   { 
     id: '3', 
     city: 'Berlin',
     country: 'Germany',
+    lat: 52.5200,
+    lon: 13.4050,
     image: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=400&h=300&fit=crop'
   },
   { 
     id: '4', 
     city: 'Milan',
     country: 'Italy',
+    lat: 45.4642,
+    lon: 9.1900,
     image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop'
   },
   { 
     id: '5', 
     city: 'Dortmund',
     country: 'Germany',
+    lat: 51.5136,
+    lon: 7.4653,
     image: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=400&h=300&fit=crop'
   },
 ];
 
 const SearchScreen = ({ navigation }) => {
   const [showLocationSearchModal, setShowLocationSearchModal] = useState(false);
+  const [initialLocation, setInitialLocation] = useState(null);
+
+  const handleDestinationPress = (destination) => {
+    // Convert destination to location object format expected by LocationSearchModal
+    const location = {
+      city: destination.city,
+      country: destination.country,
+      lat: destination.lat,
+      lon: destination.lon,
+      place_id: `${destination.city.toLowerCase()}-${destination.country.toLowerCase()}`,
+    };
+    setInitialLocation(location);
+    setShowLocationSearchModal(true);
+  };
+
+  const handleModalClose = () => {
+    setShowLocationSearchModal(false);
+    // Clear initial location after a brief delay to allow modal to process it
+    setTimeout(() => {
+      setInitialLocation(null);
+    }, 100);
+  };
 
   const renderDestinationCard = ({ item }) => (
-    <TouchableOpacity style={styles.destinationCard}>
+    <TouchableOpacity 
+      style={styles.destinationCard}
+      onPress={() => handleDestinationPress(item)}
+      activeOpacity={0.7}
+    >
       <Image 
         source={{ uri: item.image }} 
         style={styles.cardImage}
@@ -106,8 +142,9 @@ const SearchScreen = ({ navigation }) => {
 
       <LocationSearchModal
         visible={showLocationSearchModal}
-        onClose={() => setShowLocationSearchModal(false)}
+        onClose={handleModalClose}
         navigation={navigation}
+        initialLocation={initialLocation}
       />
     </SafeAreaView>
   );

@@ -25,7 +25,7 @@ import { colors, spacing, typography, borderRadius, shadows } from '../styles/de
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
 const MAX_RECENT_SEARCHES = 5;
 
-const LocationSearchModal = ({ visible, onClose, navigation }) => {
+const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = null }) => {
   const [activeTab, setActiveTab] = useState('matches'); // 'matches' or 'flights'
   const [location, setLocation] = useState(null);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
@@ -68,6 +68,50 @@ const LocationSearchModal = ({ visible, onClose, navigation }) => {
       loadRecentSearches();
     }
   }, [visible]);
+
+  // Handle initialLocation prop - pre-populate location when modal opens with initial location
+  useEffect(() => {
+    if (visible && initialLocation) {
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Pre-populating with initial location:', initialLocation.city, initialLocation.country);
+      }
+      
+      // Set location state
+      setLocation(initialLocation);
+      
+      // Pre-populate search query with city name
+      const displayText = `${initialLocation.city}${initialLocation.region ? `, ${initialLocation.region}` : ''}, ${initialLocation.country}`;
+      setLocationSearchQuery(displayText);
+      
+      // Ensure location is marked as selected (not in search mode)
+      setIsSearchingLocation(false);
+      setLocationResults([]);
+      
+      // Auto-expand the "When" section (calendar) when location is pre-populated
+      setWhenExpanded(true);
+      setShowCalendar(true);
+      
+      // Set flag to prevent search from triggering
+      isSelectingLocationRef.current = true;
+      
+      // Clear the flag after a brief delay
+      setTimeout(() => {
+        isSelectingLocationRef.current = false;
+      }, 500);
+    } else if (!visible) {
+      // Reset state when modal closes
+      setLocation(null);
+      setLocationSearchQuery('');
+      setDateFrom(null);
+      setDateTo(null);
+      setSelectedDates({});
+      setIsSearchingLocation(false);
+      setLocationResults([]);
+      setWhenExpanded(false);
+      setShowCalendar(false);
+      setCurrentMonth(new Date().toISOString().split('T')[0]);
+    }
+  }, [visible, initialLocation]);
 
   const loadRecentSearches = async () => {
     try {
