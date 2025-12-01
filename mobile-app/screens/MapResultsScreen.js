@@ -40,7 +40,47 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [dateTo, setDateTo] = useState(searchParams?.dateTo || null);
   
   // Map and matches state
-  const [matches, setMatches] = useState(initialMatches || []);
+  const [matches, setMatches] = useState(() => {
+    // Log venue coordinates for initial matches
+    if (__DEV__ && initialMatches && initialMatches.length > 0) {
+      console.log('📍 [VENUE COORDS] Initial matches venue coordinate analysis:');
+      initialMatches.forEach((match, idx) => {
+        const venue = match.fixture?.venue;
+        if (venue) {
+          const hasCoords = venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2;
+          const [lon, lat] = hasCoords ? venue.coordinates : [null, null];
+          
+          let source = 'UNKNOWN';
+          if (hasCoords && venue.id) {
+            // Has venueId and coordinates - most likely from MongoDB lookup by venueId
+            source = 'MongoDB (venueId lookup)';
+          } else if (hasCoords && !venue.id) {
+            // Has coordinates but no venueId - could be MongoDB (by name), API-Sports, or geocoded
+            // If venue has name/city, might be MongoDB by name fallback or geocoded
+            source = venue.name && venue.city ? 'MongoDB (name lookup) or Geocoded' : 'API-Sports or Geocoded';
+          } else if (!hasCoords && venue.id) {
+            // Has venueId but no coordinates - MongoDB lookup found venue but it has no coords
+            source = 'MongoDB (no coords in DB)';
+          } else if (!hasCoords && !venue.id) {
+            // No venueId and no coordinates - API-Sports only, no MongoDB match
+            source = 'API-Sports (no MongoDB match)';
+          }
+          
+          console.log(`  Initial Match ${idx + 1}: ${match.teams?.home?.name} vs ${match.teams?.away?.name}`, {
+            venueId: venue.id || 'null',
+            venueName: venue.name || 'Unknown',
+            venueCity: venue.city || 'Unknown',
+            coordinateSource: source,
+            hasCoordinates: hasCoords,
+            finalLatitude: lat !== null ? lat.toFixed(6) : 'N/A',
+            finalLongitude: lon !== null ? lon.toFixed(6) : 'N/A',
+            coordinates: hasCoords ? `[${lon.toFixed(6)}, ${lat.toFixed(6)}]` : 'null'
+          });
+        }
+      });
+    }
+    return initialMatches || [];
+  });
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [mapRegion, setMapRegion] = useState(initialRegion || null);
   
@@ -552,6 +592,47 @@ const MapResultsScreen = ({ navigation, route }) => {
           }
         });
         
+        // Log venue coordinate sources and final coordinates
+        if (__DEV__ && newMatches.length > 0) {
+          console.log('📍 [VENUE COORDS] Venue coordinate analysis:');
+          newMatches.forEach((match, idx) => {
+            const venue = match.fixture?.venue;
+            if (venue) {
+              const hasCoords = venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2;
+              const [lon, lat] = hasCoords ? venue.coordinates : [null, null];
+              
+              // Determine coordinate source based on available data
+              // Backend priority: MongoDB (by venueId) > MongoDB (by name) > API-Sports > Team.venue > Geocoded
+              let source = 'UNKNOWN';
+              if (hasCoords && venue.id) {
+                // Has venueId and coordinates - most likely from MongoDB lookup by venueId
+                source = 'MongoDB (venueId lookup)';
+              } else if (hasCoords && !venue.id) {
+                // Has coordinates but no venueId - could be MongoDB (by name), API-Sports, or geocoded
+                // If venue has name/city, might be MongoDB by name fallback or geocoded
+                source = venue.name && venue.city ? 'MongoDB (name lookup) or Geocoded' : 'API-Sports or Geocoded';
+              } else if (!hasCoords && venue.id) {
+                // Has venueId but no coordinates - MongoDB lookup found venue but it has no coords
+                source = 'MongoDB (no coords in DB)';
+              } else if (!hasCoords && !venue.id) {
+                // No venueId and no coordinates - API-Sports only, no MongoDB match
+                source = 'API-Sports (no MongoDB match)';
+              }
+              
+              console.log(`  Match ${idx + 1}: ${match.teams?.home?.name} vs ${match.teams?.away?.name}`, {
+                venueId: venue.id || 'null',
+                venueName: venue.name || 'Unknown',
+                venueCity: venue.city || 'Unknown',
+                coordinateSource: source,
+                hasCoordinates: hasCoords,
+                finalLatitude: lat !== null ? lat.toFixed(6) : 'N/A',
+                finalLongitude: lon !== null ? lon.toFixed(6) : 'N/A',
+                coordinates: hasCoords ? `[${lon.toFixed(6)}, ${lat.toFixed(6)}]` : 'null'
+              });
+            }
+          });
+        }
+        
         // Update matches efficiently - all markers will be displayed
         updateMatchesEfficiently(newMatches);
         
@@ -727,10 +808,16 @@ const MapResultsScreen = ({ navigation, route }) => {
   const getVenueGroupKey = useCallback((match) => {
     const venue = match?.fixture?.venue;
     if (!venue) return null;
-    if (venue.id != null) return `id:${venue.id}`;
+    // Prioritize coordinates for physical location matching (handles shared stadiums with different venue IDs)
+    // Round coordinates to 6 decimal places (~0.1m precision) to handle floating point differences
     if (venue.coordinates && venue.coordinates.length === 2) {
-      return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+      const [lon, lat] = venue.coordinates;
+      const roundedLon = Math.round(lon * 1000000) / 1000000;
+      const roundedLat = Math.round(lat * 1000000) / 1000000;
+      return `geo:${roundedLon},${roundedLat}`;
     }
+    // Fallback to venue ID if no coordinates available
+    if (venue.id != null) return `id:${venue.id}`;
     return null;
   }, []);
 
@@ -769,6 +856,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     try {
       // Map marker selects the venue group containing this match
       const key = getVenueGroupKey(match);
+      
       if (!venueGroups || venueGroups.length === 0) {
         if (__DEV__) {
           console.warn('MapResultsScreen: No venue groups available');
@@ -1123,15 +1211,24 @@ const MapResultsScreen = ({ navigation, route }) => {
     return validMarkers;
   }, [displayFilteredMatches, matches]);
 
-  // Group upcoming matches by venue (id preferred, fall back to coordinates)
+  // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {
     if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
     const groupsMap = new Map();
     finalFilteredMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
-      if (venue.id != null) key = `id:${venue.id}`;
-      else if (venue.coordinates && venue.coordinates.length === 2) key = `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+      // Prioritize coordinates for physical location matching (handles shared stadiums with different venue IDs)
+      // Round coordinates to 6 decimal places (~0.1m precision) to handle floating point differences
+      if (venue.coordinates && venue.coordinates.length === 2) {
+        const [lon, lat] = venue.coordinates;
+        const roundedLon = Math.round(lon * 1000000) / 1000000;
+        const roundedLat = Math.round(lat * 1000000) / 1000000;
+        key = `geo:${roundedLon},${roundedLat}`;
+      } else if (venue.id != null) {
+        // Fallback to venue ID if no coordinates available
+        key = `id:${venue.id}`;
+      }
       if (!key) return;
       if (!groupsMap.has(key)) {
         groupsMap.set(key, { key, venue, matches: [] });

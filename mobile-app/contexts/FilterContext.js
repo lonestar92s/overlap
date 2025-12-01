@@ -26,7 +26,6 @@ export const FilterProvider = ({ children }) => {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const updateFilterData = useCallback((data) => {
-    console.log('FilterContext updateFilterData called with:', data);
     setFilterData(data);
   }, []);
 

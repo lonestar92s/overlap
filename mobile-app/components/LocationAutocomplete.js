@@ -75,7 +75,7 @@ const LocationAutocomplete = ({
 
   useEffect(() => {
     if (value) {
-      const displayText = `${value.city}${value.region ? `, ${value.region}` : ''}, ${value.country}`;
+      const displayText = formatLocationDisplay(value);
       setInputValue(displayText);
     } else {
       setInputValue('');
@@ -125,7 +125,12 @@ const LocationAutocomplete = ({
 
   const formatLocationDisplay = (option) => {
     if (!option) return '';
-    return `${option.city}${option.region ? `, ${option.region}` : ''}, ${option.country}`;
+    // Use backend's description field if available (handles disambiguation)
+    // Otherwise fall back to simple format
+    if (option.description) {
+      return option.description;
+    }
+    return `${option.city}, ${option.country}`;
   };
 
   // Use ref for lastRequestTime to avoid recreating debounced function
@@ -298,7 +303,7 @@ const LocationAutocomplete = ({
           {item.city}
         </Text>
         <Text style={styles.locationSecondaryText}>
-          {`${item.region ? `${item.region}, ` : ''}${item.country}`}
+          {item.displayRegion ? `${item.displayRegion}, ${item.country}` : item.country}
         </Text>
       </View>
     </TouchableOpacity>

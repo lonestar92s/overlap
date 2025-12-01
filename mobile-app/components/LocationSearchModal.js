@@ -681,7 +681,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                         <View style={styles.locationResultText}>
                           <Text style={styles.locationResultTitle}>{result.city}</Text>
                           <Text style={styles.locationResultSubtitle}>
-                            {`${result.region ? `${result.region}, ` : ''}${result.country}`}
+                            {result.displayRegion ? `${result.displayRegion}, ${result.country}` : result.country}
                           </Text>
                         </View>
                       </TouchableOpacity>

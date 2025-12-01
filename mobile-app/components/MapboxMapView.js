@@ -204,14 +204,20 @@ useEffect(() => {
         {useMemo(() => {
           if (!matches || matches.length === 0) return null;
 
-          // Helper function to generate venue group key (same logic as MapResultsScreen)
+          // Helper function to generate venue group key (prioritizes coordinates for physical location matching)
           const getVenueGroupKey = (match) => {
             const venue = match?.fixture?.venue;
             if (!venue) return null;
-            if (venue.id != null) return `id:${venue.id}`;
+            // Prioritize coordinates for physical location matching (handles shared stadiums with different venue IDs)
+            // Round coordinates to 6 decimal places (~0.1m precision) to handle floating point differences
             if (venue.coordinates && venue.coordinates.length === 2) {
-              return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+              const [lon, lat] = venue.coordinates;
+              const roundedLon = Math.round(lon * 1000000) / 1000000;
+              const roundedLat = Math.round(lat * 1000000) / 1000000;
+              return `geo:${roundedLon},${roundedLat}`;
             }
+            // Fallback to venue ID if no coordinates available
+            if (venue.id != null) return `id:${venue.id}`;
             return null;
           };
 
