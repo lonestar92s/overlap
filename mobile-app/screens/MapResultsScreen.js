@@ -9,6 +9,7 @@ import {
   TouchableWithoutFeedback,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -24,8 +25,10 @@ import * as Haptics from 'expo-haptics';
 import HeartButton from '../components/HeartButton';
 import SearchModal from '../components/SearchModal';
 import FilterIcon from '../components/FilterIcon';
+import FilterChip from '../components/FilterChip';
 import MatchCard from '../components/MatchCard';
 import MatchMapView from '../components/MapView';
+import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
@@ -1166,6 +1169,145 @@ const MapResultsScreen = ({ navigation, route }) => {
            (selectedFilters.teams?.length || 0);
   };
 
+  // Get filter labels with metadata for chips
+  const getFilterLabels = useMemo(() => {
+    const labels = [];
+    
+    if (!filterData || !selectedFilters) return labels;
+    
+    // Country filters
+    selectedFilters.countries?.forEach(countryId => {
+      const country = filterData.countries?.find(c => c.id === countryId);
+      if (country) {
+        labels.push({ 
+          id: `country-${countryId}`, 
+          label: country.name, 
+          type: 'country', 
+          value: countryId 
+        });
+      }
+    });
+    
+    // League filters
+    selectedFilters.leagues?.forEach(leagueId => {
+      const league = filterData.leagues?.find(l => l.id === leagueId);
+      if (league) {
+        labels.push({ 
+          id: `league-${leagueId}`, 
+          label: league.name, 
+          type: 'league', 
+          value: leagueId 
+        });
+      }
+    });
+    
+    // Team filters
+    selectedFilters.teams?.forEach(teamId => {
+      const team = filterData.teams?.find(t => t.id === teamId);
+      if (team) {
+        labels.push({ 
+          id: `team-${teamId}`, 
+          label: team.name, 
+          type: 'team', 
+          value: teamId 
+        });
+      }
+    });
+    
+    return labels;
+  }, [filterData, selectedFilters]);
+
+  // Handler to remove a filter (with cascading logic)
+  const handleRemoveFilter = useCallback((type, value) => {
+    const newFilters = { ...selectedFilters };
+    
+    if (type === 'country') {
+      // Remove country
+      newFilters.countries = newFilters.countries.filter(id => id !== value);
+      
+      // Also remove related leagues
+      const countryLeagues = filterData.leagues
+        .filter(l => l.countryId === value)
+        .map(l => l.id);
+      newFilters.leagues = newFilters.leagues.filter(id => !countryLeagues.includes(id));
+      
+      // Also remove related teams
+      const countryTeams = filterData.teams
+        .filter(t => {
+          const teamLeague = filterData.leagues.find(l => l.id === t.leagueId);
+          return teamLeague?.countryId === value;
+        })
+        .map(t => t.id);
+      newFilters.teams = newFilters.teams.filter(id => !countryTeams.includes(id));
+    } else if (type === 'league') {
+      // Remove league
+      newFilters.leagues = newFilters.leagues.filter(id => id !== value);
+      
+      // Also remove related teams
+      const leagueTeams = filterData.teams
+        .filter(t => t.leagueId === value)
+        .map(t => t.id);
+      newFilters.teams = newFilters.teams.filter(id => !leagueTeams.includes(id));
+    } else if (type === 'team') {
+      // Remove team only
+      newFilters.teams = newFilters.teams.filter(id => id !== value);
+    }
+    
+    updateSelectedFilters(newFilters);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [selectedFilters, filterData, updateSelectedFilters]);
+
+  // Animated height for filter chips container
+  const filterChipsHeight = useRef(new Animated.Value(0)).current;
+  const filterChipsContentRef = useRef(null);
+  const [filterChipsMeasuredHeight, setFilterChipsMeasuredHeight] = useState(50); // Default height estimate
+
+  // Measure filter chips content height when filters change
+  const onFilterChipsContentLayout = useCallback((event) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0) {
+      setFilterChipsMeasuredHeight(height);
+    }
+  }, []);
+
+  // Animate filter chips container when filters change
+  useEffect(() => {
+    const hasFilters = getFilterLabels.length > 0;
+    
+    if (hasFilters) {
+      // Animate to measured height (or use default if not measured yet)
+      Animated.timing(filterChipsHeight, {
+        toValue: filterChipsMeasuredHeight,
+        duration: 250,
+        useNativeDriver: false, // height animation doesn't support native driver
+      }).start();
+    } else {
+      // Animate to 0
+      Animated.timing(filterChipsHeight, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [getFilterLabels.length, filterChipsMeasuredHeight, filterChipsHeight]);
+
+  // Animated search button position based on filter chips height
+  const searchButtonTopAnimated = useRef(new Animated.Value(160)).current;
+  
+  // Calculate dynamic search button position based on filter chips visibility
+  useEffect(() => {
+    const headerHeight = 120; // Approximate header height (60 paddingTop + 16 paddingBottom + content)
+    const filterChipsHeightValue = getFilterLabels.length > 0 ? filterChipsMeasuredHeight || 50 : 0;
+    const buttonSpacing = spacing.md; // 16px spacing
+    const targetTop = headerHeight + filterChipsHeightValue + buttonSpacing;
+    
+    Animated.timing(searchButtonTopAnimated, {
+      toValue: targetTop,
+      duration: 250,
+      useNativeDriver: false, // position animation doesn't support native driver
+    }).start();
+  }, [getFilterLabels.length, filterChipsMeasuredHeight, searchButtonTopAnimated]);
+
   // Render search summary
   const renderSearchSummary = () => (
     <TouchableOpacity 
@@ -1517,6 +1659,34 @@ const MapResultsScreen = ({ navigation, route }) => {
         </View>
       </View>
 
+      {/* Filter Chips Section - Animated */}
+      <Animated.View 
+        style={[
+          styles.filterChipsContainer,
+          {
+            height: filterChipsHeight,
+            overflow: 'hidden',
+          }
+        ]}
+      >
+        <ScrollView 
+          ref={filterChipsContentRef}
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsContent}
+          onLayout={onFilterChipsContentLayout}
+        >
+          {getFilterLabels.map(filter => (
+            <FilterChip
+              key={filter.id}
+              label={filter.label}
+              onRemove={() => handleRemoveFilter(filter.type, filter.value)}
+              type={filter.type}
+            />
+          ))}
+        </ScrollView>
+      </Animated.View>
+
       {/* Map Layer */}
       <MatchMapView
         ref={mapRef}
@@ -1536,22 +1706,30 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       {/* Floating Search Button */}
       {/* FIXED: Always show button - removed hasMovedFromInitial check to allow re-searching */}
-      <TouchableOpacity
-        style={styles.floatingSearchButton}
-        onPress={handleSearchThisArea}
-        disabled={isSearching}
+      {/* Dynamic positioning based on filter chips visibility - animated */}
+      <Animated.View
+        style={[
+          styles.floatingSearchButton,
+          { top: searchButtonTopAnimated }
+        ]}
       >
-        {isSearching ? (
-          <>
-            <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
-            <Text style={styles.floatingSearchText}>Searching...</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.floatingSearchText}>Search this area</Text>
-          </>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleSearchThisArea}
+          disabled={isSearching}
+          style={styles.floatingSearchButtonInner}
+        >
+          {isSearching ? (
+            <>
+              <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+              <Text style={styles.floatingSearchText}>Searching...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.floatingSearchText}>Search this area</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Bottom Sheet (hidden while overlay is open) */}
       <BottomSheet
@@ -1799,10 +1977,12 @@ const styles = StyleSheet.create({
   },
   floatingSearchButton: {
     position: 'absolute',
-    top: 160, // Increased padding from header (was 130, now 160 for better spacing)
+    // top is now set dynamically via animated value based on filter chips visibility
     left: '50%',
     transform: [{ translateX: -100 }],
     width: 200,
+  },
+  floatingSearchButtonInner: {
     backgroundColor: '#fff',
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -2124,6 +2304,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  filterChipsContainer: {
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  filterChipsContent: {
+    paddingRight: spacing.md,
   },
   loadingOverlay: {
     position: 'absolute',

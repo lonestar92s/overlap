@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -9,9 +9,11 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
+import { CheckBox, Button } from 'react-native-elements';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
+import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const FilterModal = ({ 
   visible, 
@@ -29,6 +31,29 @@ const FilterModal = ({
     leagues: [],
     teams: []
   });
+
+  // Helper function to get total filters count
+  const getTotalFilters = useCallback(() => {
+    return localFilters.countries.length + localFilters.leagues.length + localFilters.teams.length;
+  }, [localFilters]);
+
+  // Calculate fixed modal height to prevent resizing
+  const screenHeight = Dimensions.get('window').height;
+  const modalMaxHeight = screenHeight * 0.8; // 80% of screen
+  const headerHeight = 60; // Approximate header height
+  const availableFiltersHeight = 50; // Available filters summary
+  const activeFiltersHeight = 50; // Active filters summary (always rendered)
+  const footerHeight = 80; // Footer with buttons
+  
+  // Calculate current filters height based on whether filters are selected
+  const currentFiltersHeight = useMemo(() => {
+    return getTotalFilters() > 0 ? 80 : 0;
+  }, [getTotalFilters]);
+  
+  // Calculate content wrapper height - fixed to prevent modal resizing
+  const contentWrapperHeight = useMemo(() => {
+    return modalMaxHeight - headerHeight - availableFiltersHeight - activeFiltersHeight - currentFiltersHeight - footerHeight - (insets?.bottom || 0);
+  }, [modalMaxHeight, currentFiltersHeight, insets?.bottom]);
 
   // Initialize local filters when modal opens
   useEffect(() => {
@@ -209,34 +234,6 @@ const FilterModal = ({
     onClose();
   };
 
-  const getTotalFilters = () => {
-    const total = localFilters.countries.length + localFilters.leagues.length + localFilters.teams.length;
-    return total;
-  };
-
-  const renderCheckbox = (checked, onPress, disabled = false, label = '') => (
-    <TouchableOpacity
-      style={[
-        styles.checkbox,
-        checked && styles.checkboxChecked,
-        disabled && styles.checkboxDisabled
-      ]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked, disabled }}
-      accessibilityLabel={label || (checked ? 'Selected' : 'Unselected')}
-    >
-      {checked && (
-        <Ionicons 
-          name="checkmark" 
-          size={16} 
-          color={disabled ? '#ccc' : '#fff'} 
-        />
-      )}
-    </TouchableOpacity>
-  );
-
   const renderCountrySection = () => {
     if (!filterData.countries || filterData.countries.length === 0) {
       return (
@@ -263,21 +260,16 @@ const FilterModal = ({
           return (
             <View key={country.id} style={styles.filterItem}>
               <View style={styles.filterRow}>
-                <TouchableOpacity
-                  style={styles.filterItemContentLeft}
+                <CheckBox
+                  title={country.name}
+                  checked={isSelected}
                   onPress={() => handleCountryChange(country.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${country.name} filter`}
-                  accessibilityState={{ checked: isSelected }}
-                >
-                  {renderCheckbox(
-                    isSelected,
-                    () => handleCountryChange(country.id),
-                    false,
-                    `Select ${country.name}`
-                  )}
-                  <Text style={styles.filterItemText}>{country.name}</Text>
-                </TouchableOpacity>
+                  checkedColor={colors.primary}
+                  uncheckedColor={colors.text.secondary}
+                  containerStyle={styles.checkboxContainer}
+                  textStyle={styles.checkboxText}
+                  accessibilityLabel={`Filter by ${country.name}`}
+                />
                 <View style={styles.filterItemRight}>
                   <View style={styles.countChip}>
                     <Text style={styles.countText}>{country.count || 0}</Text>
@@ -286,7 +278,7 @@ const FilterModal = ({
                     setExpandedCountryId(prev => prev === country.id ? null : country.id);
                     setExpandedLeagueId(null);
                   }} style={styles.expandIconBtn}>
-                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text.secondary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -310,27 +302,22 @@ const FilterModal = ({
                       return (
                         <View key={league.id} style={styles.nestedItem}>
                           <View style={styles.filterRow}>
-                            <TouchableOpacity
-                              style={styles.filterItemContentLeft}
+                            <CheckBox
+                              title={league.name}
+                              checked={isLeagueSelected}
                               onPress={() => handleLeagueChange(league.id)}
-                              accessibilityRole="button"
-                              accessibilityLabel={`${league.name} league filter`}
-                              accessibilityState={{ checked: isLeagueSelected }}
-                            >
-                              {renderCheckbox(
-                                isLeagueSelected,
-                                () => handleLeagueChange(league.id),
-                                false,
-                                `Select ${league.name}`
-                              )}
-                              <Text style={styles.filterItemText}>{league.name}</Text>
-                            </TouchableOpacity>
+                              checkedColor={colors.primary}
+                              uncheckedColor={colors.text.secondary}
+                              containerStyle={styles.checkboxContainer}
+                              textStyle={styles.checkboxText}
+                              accessibilityLabel={`Filter by ${league.name} league`}
+                            />
                             <View style={styles.filterItemRight}>
                               <View style={styles.countChip}>
                                 <Text style={styles.countText}>{league.count || 0}</Text>
                               </View>
                               <TouchableOpacity onPress={() => setExpandedLeagueId(prev => prev === league.id ? null : league.id)} style={styles.expandIconBtn}>
-                                <Ionicons name={isLeagueExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+                                <Ionicons name={isLeagueExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text.secondary} />
                               </TouchableOpacity>
                             </View>
                           </View>
@@ -349,24 +336,21 @@ const FilterModal = ({
                                 .filter(team => team.leagueId === league.id)
                                 .map(team => (
                                   <View key={team.id} style={styles.nestedItem}>
-                                    <TouchableOpacity
-                                      style={styles.filterItemContent}
-                                      onPress={() => handleTeamChange(team.id)}
-                                      accessibilityRole="button"
-                                      accessibilityLabel={`${team.name} team filter`}
-                                      accessibilityState={{ checked: localFilters.teams.includes(team.id) }}
-                                    >
-                                      {renderCheckbox(
-                                        localFilters.teams.includes(team.id),
-                                        () => handleTeamChange(team.id),
-                                        false,
-                                        `Select ${team.name}`
-                                      )}
-                                      <Text style={styles.filterItemText}>{team.name}</Text>
+                                    <View style={styles.filterRow}>
+                                      <CheckBox
+                                        title={team.name}
+                                        checked={localFilters.teams.includes(team.id)}
+                                        onPress={() => handleTeamChange(team.id)}
+                                        checkedColor={colors.primary}
+                                        uncheckedColor={colors.text.secondary}
+                                        containerStyle={styles.checkboxContainer}
+                                        textStyle={styles.checkboxText}
+                                        accessibilityLabel={`Filter by ${team.name} team`}
+                                      />
                                       <View style={styles.countChip}>
                                         <Text style={styles.countText}>{team.count || 0}</Text>
                                       </View>
-                                    </TouchableOpacity>
+                                    </View>
                                   </View>
                                 ))}
                             </View>
@@ -424,37 +408,41 @@ const FilterModal = ({
             </View>
           )}
 
-          {/* Current Filters Summary */}
-          {getTotalFilters() > 0 && (
-            <View style={styles.currentFiltersSummary}>
-              <Text style={styles.currentFiltersTitle}>Currently Applied:</Text>
-              {localFilters.countries.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Countries: {localFilters.countries.length} selected
-                </Text>
-              )}
-              {localFilters.leagues.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Leagues: {localFilters.leagues.length} selected
-                </Text>
-              )}
-              {localFilters.teams.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Teams: {localFilters.teams.length} selected
-                </Text>
-              )}
-            </View>
-          )}
+          {/* Current Filters Summary - Always rendered to maintain fixed size */}
+          <View style={[
+            styles.currentFiltersSummary,
+            getTotalFilters() === 0 && styles.currentFiltersSummaryHidden
+          ]}>
+            <Text style={styles.currentFiltersTitle}>Currently Applied:</Text>
+            {localFilters.countries.length > 0 && (
+              <Text style={styles.currentFilterItem}>
+                Countries: {localFilters.countries.length} selected
+              </Text>
+            )}
+            {localFilters.leagues.length > 0 && (
+              <Text style={styles.currentFilterItem}>
+                Leagues: {localFilters.leagues.length} selected
+              </Text>
+            )}
+            {localFilters.teams.length > 0 && (
+              <Text style={styles.currentFilterItem}>
+                Teams: {localFilters.teams.length} selected
+              </Text>
+            )}
+          </View>
 
-          {/* Filter Content */}
-          <View style={styles.contentWrapper}>
+          {/* Filter Content - Fixed height to prevent modal resizing */}
+          <View style={[
+            styles.contentWrapper,
+            { height: contentWrapperHeight }
+          ]}>
             <ScrollView 
               style={styles.scrollView}
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
               contentContainerStyle={[
                 styles.scrollContent,
-                { paddingBottom: 20 + 72 + (insets?.bottom || 0) }
+                { paddingBottom: spacing.md + spacing.lg + (insets?.bottom || 0) }
               ]}
             >
 
@@ -497,8 +485,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modal: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
     width: '90%',
     maxHeight: '80%',
     elevation: 8,
@@ -514,96 +502,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.borderLight,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
+    ...typography.h2, // Uses design token fontFamily
+    color: colors.text.primary,
   },
   closeButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
   activeFiltersContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f8f9fa',
+    padding: spacing.md,
+    backgroundColor: colors.cardGrey,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.borderLight,
   },
   availableFiltersContainer: {
-    padding: 12,
-    backgroundColor: '#fff',
+    padding: spacing.sm,
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.borderLight,
   },
   availableFiltersText: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall, // Uses design token fontFamily
+    color: colors.text.secondary,
   },
   activeFiltersText: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodySmall, // Uses design token fontFamily
+    color: colors.text.secondary,
   },
   clearAllText: {
-    fontSize: 14,
-    color: '#007AFF',
+    ...typography.bodySmall, // Uses design token fontFamily
+    color: colors.primary,
     fontWeight: '500',
   },
   currentFiltersSummary: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
+    backgroundColor: colors.cardGrey,
+    padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.borderLight,
   },
   currentFiltersTitle: {
-    fontSize: 14,
+    ...typography.bodySmall, // Uses design token fontFamily
     fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
   },
   currentFilterItem: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
+    ...typography.caption, // Uses design token fontFamily
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
   },
   contentWrapper: {
-    flex: 1,
-    backgroundColor: 'white',
-    minHeight: 300, // Give explicit minimum height
+    backgroundColor: colors.card,
+    // height is set dynamically via inline style to maintain fixed modal size
+  },
+  currentFiltersSummaryHidden: {
+    height: 0,
+    padding: 0,
+    margin: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
-    paddingHorizontal: 16,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   section: {
-    padding: 16,
+    padding: spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    ...typography.h3, // Uses design token fontFamily
+    color: colors.text.primary,
   },
   selectAllText: {
-    fontSize: 14,
-    color: '#007AFF',
+    ...typography.bodySmall, // Uses design token fontFamily
+    color: colors.primary,
     fontWeight: '500',
   },
   filterItem: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   filterRow: {
     flexDirection: 'row',
@@ -614,121 +606,110 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   filterItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   expandIconBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginLeft: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginLeft: spacing.xs,
   },
   filterItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+  checkboxContainer: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
+    margin: 0,
+    marginLeft: 0,
+    marginRight: 0,
   },
-  checkboxChecked: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  checkboxDisabled: {
-    backgroundColor: '#f0f0f0',
-    borderColor: '#ccc',
-  },
-  filterItemText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
+  checkboxText: {
+    ...typography.body, // Uses design token fontFamily
+    color: colors.text.primary,
   },
   countChip: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.cardGrey,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
     minWidth: 40,
     alignItems: 'center',
   },
   countText: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption, // Uses design token fontFamily
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   nestedSection: {
-    marginLeft: 32,
-    marginTop: 8,
+    marginLeft: spacing.xl,
+    marginTop: spacing.sm,
   },
   nestedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   nestedTitle: {
-    fontSize: 16,
+    ...typography.body, // Uses design token fontFamily
     fontWeight: '500',
-    color: '#555',
+    color: colors.text.primary,
   },
   nestedItem: {
-    marginBottom: 6,
+    marginBottom: spacing.xs,
   },
   noDataText: {
-    fontSize: 14,
-    color: '#999',
+    ...typography.bodySmall, // Uses design token fontFamily
+    color: colors.text.light,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#f8f9fa',
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.cardGrey,
   },
   resetButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginRight: 8,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    marginRight: spacing.sm,
     alignItems: 'center',
   },
   resetButtonText: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.button, // Uses design token fontFamily
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   applyButton: {
     flex: 2,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
   },
   applyButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.interactive.disabled,
   },
   applyButtonText: {
-    fontSize: 16,
-    color: 'white',
+    ...typography.button, // Uses design token fontFamily
+    color: colors.onPrimary,
     fontWeight: '600',
   },
 });

@@ -672,10 +672,10 @@ router.get('/search', async (req, res) => {
                 }
             }
             
-            // Use country + bounds hash + date range for cache key
-            // Bounds hash ensures more granular caching while maintaining efficiency
-            const boundsHash = createBoundsHash(originalBounds);
-            const cacheKey = `location-search:${searchCountry || 'unknown'}:${boundsHash}:${dateFrom}:${dateTo}:${season}`;
+            // Use country + date range for cache key (country-level caching)
+            // This enables consistent results across different zoom levels and viewports
+            // All matches for the country are cached, then filtered by bounds when returning results
+            const cacheKey = `location-search:${searchCountry || 'unknown'}:${dateFrom}:${dateTo}:${season}`;
             
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
