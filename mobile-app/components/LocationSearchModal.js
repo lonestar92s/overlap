@@ -285,6 +285,10 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     
     const displayText = `${selectedLocation.city}${selectedLocation.region ? `, ${selectedLocation.region}` : ''}, ${selectedLocation.country}`;
     
+    // IMPORTANT: Update the search query FIRST so the TextInput shows the selected location
+    // This must happen before other state updates to ensure the input displays correctly
+    setLocationSearchQuery(displayText);
+    
     // IMPORTANT: Set location FIRST, then isSearchingLocation to false, to prevent race conditions
     // This ensures the UI knows a location is selected before we hide the search results
     setLocation(selectedLocation);
@@ -294,12 +298,6 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     
     // Clear results after we've hidden the search UI to prevent showing "No locations found"
     setLocationResults([]);
-    
-    // Now update the query - this won't trigger a search because:
-    // 1. isSearchingLocation is already false
-    // 2. location will be set, which will prevent search in useEffect
-    // 3. isSelectingLocationRef flag is set
-    setLocationSearchQuery(displayText);
     
     // Clear the flag after a brief delay to allow state updates to complete
     // Use a longer delay (500ms) to ensure debounced calls have time to be cancelled
@@ -312,19 +310,22 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     
     // Don't save to recent searches here - only save after successful search with dates
     
-    // Blur the TextInput to prevent it from refocusing and triggering search again
-    if (locationInputRef.current) {
-      if (__DEV__) {
-        console.log('[LocationSearchModal] Blurring location input');
+    // Blur the TextInput after a short delay to ensure the value update is visible
+    // This prevents the input from refocusing and triggering search again
+    setTimeout(() => {
+      if (locationInputRef.current) {
+        if (__DEV__) {
+          console.log('[LocationSearchModal] Blurring location input');
+        }
+        locationInputRef.current.blur();
       }
-      locationInputRef.current.blur();
-    }
-    
-    // Dismiss keyboard after location selection
-    if (__DEV__) {
-      console.log('[LocationSearchModal] Dismissing keyboard');
-    }
-    Keyboard.dismiss();
+      
+      // Dismiss keyboard after location selection
+      if (__DEV__) {
+        console.log('[LocationSearchModal] Dismissing keyboard');
+      }
+      Keyboard.dismiss();
+    }, 100);
     
     // Auto-open the "When" section (calendar) after location is selected
     if (__DEV__) {

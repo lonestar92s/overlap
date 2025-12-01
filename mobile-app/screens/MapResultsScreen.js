@@ -1123,22 +1123,101 @@ const MapResultsScreen = ({ navigation, route }) => {
     return validMarkers;
   }, [displayFilteredMatches, matches]);
 
-  // Group upcoming matches by venue (id preferred, fall back to coordinates)
+  // Group upcoming matches by venue (coordinates preferred for same physical location, then id, then fallback)
+  // This handles cases where different competitions/clubs use different venue IDs for the same physical venue
   const venueGroups = useMemo(() => {
     if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
     const groupsMap = new Map();
+    
+    // Helper function to calculate distance between two coordinates (in km)
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+    
+    // First pass: group by venue ID (for exact matches)
     finalFilteredMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
-      if (venue.id != null) key = `id:${venue.id}`;
-      else if (venue.coordinates && venue.coordinates.length === 2) key = `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+      
+      // Prefer venue ID if available
+      if (venue.id != null) {
+        key = `id:${venue.id}`;
+      } else if (venue.coordinates && venue.coordinates.length === 2) {
+        // Fallback to coordinates if no ID
+        const [lon, lat] = venue.coordinates;
+        key = `geo:${lat.toFixed(6)},${lon.toFixed(6)}`;
+      }
+      
       if (!key) return;
+      
       if (!groupsMap.has(key)) {
         groupsMap.set(key, { key, venue, matches: [] });
       }
       groupsMap.get(key).matches.push(m);
     });
-    const groups = Array.from(groupsMap.values());
+    
+    // Second pass: merge groups with coordinates within 50 meters (same physical location)
+    // This handles cases where different venue IDs represent the same physical venue
+    const mergedGroups = new Map();
+    const processedKeys = new Set();
+    
+    groupsMap.forEach((group, key) => {
+      if (processedKeys.has(key)) return;
+      
+      const venue = group.venue;
+      const coords = venue?.coordinates;
+      
+      // If this group has coordinates, check for nearby groups to merge
+      if (coords && Array.isArray(coords) && coords.length === 2) {
+        const [lon, lat] = coords;
+        let mergedKey = key;
+        let mergedGroup = { ...group };
+        
+        // Check all other groups for nearby coordinates
+        groupsMap.forEach((otherGroup, otherKey) => {
+          if (otherKey === key || processedKeys.has(otherKey)) return;
+          
+          const otherCoords = otherGroup.venue?.coordinates;
+          if (otherCoords && Array.isArray(otherCoords) && otherCoords.length === 2) {
+            const [otherLon, otherLat] = otherCoords;
+            const distance = calculateDistance(lat, lon, otherLat, otherLon);
+            
+            // If within 50 meters, merge the groups (same physical location)
+            if (distance < 0.05) {
+              // Merge matches from other group into this one
+              mergedGroup.matches.push(...otherGroup.matches);
+              processedKeys.add(otherKey);
+              
+              // Use the venue with more complete data (prefer one with ID if available)
+              if (!mergedGroup.venue.id && otherGroup.venue.id) {
+                mergedGroup.venue = { ...otherGroup.venue, coordinates: coords };
+              } else if (mergedGroup.venue.id && !otherGroup.venue.id) {
+                // Keep current venue but ensure coordinates are set
+                mergedGroup.venue = { ...mergedGroup.venue, coordinates: coords };
+              }
+              
+              console.log(`📍 Merged venue groups: ${mergedGroup.venue.name || 'Unknown'} (distance: ${(distance * 1000).toFixed(0)}m)`);
+            }
+          }
+        });
+        
+        mergedGroups.set(mergedKey, mergedGroup);
+        processedKeys.add(key);
+      } else {
+        // No coordinates, just add the group as-is
+        mergedGroups.set(key, group);
+        processedKeys.add(key);
+      }
+    });
+    
+    const groups = Array.from(mergedGroups.values());
     // Sort matches within each group chronologically
     groups.forEach(g => g.matches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)));
     // Sort groups by earliest match date
@@ -1260,28 +1339,43 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Animated height for filter chips container
   const filterChipsHeight = useRef(new Animated.Value(0)).current;
   const filterChipsContentRef = useRef(null);
-  const [filterChipsMeasuredHeight, setFilterChipsMeasuredHeight] = useState(50); // Default height estimate
+  const [filterChipsMeasuredHeight, setFilterChipsMeasuredHeight] = useState(null); // null until measured
+  const hasMeasuredRef = useRef(false);
 
   // Measure filter chips content height when filters change
   const onFilterChipsContentLayout = useCallback((event) => {
     const { height } = event.nativeEvent.layout;
-    if (height > 0) {
-      setFilterChipsMeasuredHeight(height);
+    if (height > 0 && getFilterLabels.length > 0) {
+      const measuredHeight = height + (spacing.sm * 2); // Add padding to measured height
+      setFilterChipsMeasuredHeight(measuredHeight);
+      hasMeasuredRef.current = true;
+      // Update height with measured value
+      filterChipsHeight.setValue(measuredHeight);
     }
-  }, []);
+  }, [getFilterLabels.length, filterChipsHeight]);
 
   // Animate filter chips container when filters change
   useEffect(() => {
     const hasFilters = getFilterLabels.length > 0;
     
     if (hasFilters) {
-      // Animate to measured height (or use default if not measured yet)
-      Animated.timing(filterChipsHeight, {
-        toValue: filterChipsMeasuredHeight,
-        duration: 250,
-        useNativeDriver: false, // height animation doesn't support native driver
-      }).start();
+      // Use measured height or fallback to a reasonable default (60px minimum)
+      const targetHeight = filterChipsMeasuredHeight || 60;
+      // If we haven't measured yet, set immediately to default so container is visible for measurement
+      if (!hasMeasuredRef.current) {
+        filterChipsHeight.setValue(targetHeight);
+      } else {
+        // We have a measurement, animate smoothly
+        Animated.timing(filterChipsHeight, {
+          toValue: targetHeight,
+          duration: 250,
+          useNativeDriver: false, // height animation doesn't support native driver
+        }).start();
+      }
     } else {
+      // Reset measurement flag when filters are cleared
+      hasMeasuredRef.current = false;
+      setFilterChipsMeasuredHeight(null);
       // Animate to 0
       Animated.timing(filterChipsHeight, {
         toValue: 0,
@@ -1666,25 +1760,31 @@ const MapResultsScreen = ({ navigation, route }) => {
           {
             height: filterChipsHeight,
             overflow: 'hidden',
+            opacity: getFilterLabels.length > 0 ? 1 : 0, // Fade in/out for better UX
           }
         ]}
+        pointerEvents={getFilterLabels.length > 0 ? 'auto' : 'none'} // Disable touches when hidden
       >
-        <ScrollView 
+        <View
           ref={filterChipsContentRef}
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterChipsContent}
           onLayout={onFilterChipsContentLayout}
+          style={{ minHeight: 60 }} // Ensure minimum height for measurement
         >
-          {getFilterLabels.map(filter => (
-            <FilterChip
-              key={filter.id}
-              label={filter.label}
-              onRemove={() => handleRemoveFilter(filter.type, filter.value)}
-              type={filter.type}
-            />
-          ))}
-        </ScrollView>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterChipsContent}
+          >
+            {getFilterLabels.map(filter => (
+              <FilterChip
+                key={filter.id}
+                label={filter.label}
+                onRemove={() => handleRemoveFilter(filter.type, filter.value)}
+                type={filter.type}
+              />
+            ))}
+          </ScrollView>
+        </View>
       </Animated.View>
 
       {/* Map Layer */}
