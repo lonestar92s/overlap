@@ -809,10 +809,6 @@ router.get('/search', async (req, res) => {
             let matchesFilteredOut = 0;
             let matchesByLeague = {}; // Track matches by league for logging
             
-            // Track venues that have been included - if one match at a venue is included,
-            // all matches at that venue should be included (handles same venue, different competitions)
-            const includedVenueIds = new Set();
-            
             for (const match of uniqueFixtures) {
                 const leagueId = match.league?.id;
                 if (!matchesByLeague[leagueId]) {
@@ -891,10 +887,6 @@ router.get('/search', async (req, res) => {
                         console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
                     }
                 }
-                
-                // REMOVED: Aggressive coordinate matching that could incorrectly match different stadiums
-                // Only use venue ID matching - coordinate matching is too error-prone in dense urban areas
-                // If venues have different IDs, they should be treated as separate venues
                 
                 // CRITICAL: If venue still has no coordinates but we have name/city, geocode and save it
                 // This ensures every match gets coordinates - the missing piece!
@@ -1141,134 +1133,7 @@ router.get('/search', async (req, res) => {
                 if (shouldInclude) {
                     transformedMatches.push(transformed);
                     matchesByLeague[leagueId].transformed++;
-                    
-                    // Track this venue as included by ID
-                    if (venueInfo?.id) {
-                        includedVenueIds.add(venueInfo.id);
-                    }
                 }
-            }
-            
-            // Second pass: Include any matches at venues that were already included, even if they would otherwise be filtered
-            // This ensures all matches at the same venue (same venue ID or same coordinates) are shown together
-            console.log(`🔍 Second pass: Checking ${uniqueFixtures.length - transformedMatches.length} remaining matches for venue matches`);
-            let secondPassIncluded = 0;
-            
-            for (const match of uniqueFixtures) {
-                // Skip if already included
-                if (transformedMatches.some(tm => tm.id === match.fixture.id)) {
-                    continue;
-                }
-                
-                const leagueId = match.league?.id;
-                const venue = match.fixture?.venue;
-                const venueId = venue?.id;
-                
-                // Check if this match is at a venue that was already included
-                let shouldIncludeByVenue = false;
-                
-                // Only match by exact venue ID - coordinate matching is too error-prone
-                // This ensures we only include matches at the exact same venue, not nearby different venues
-                if (venueId && includedVenueIds.has(venueId)) {
-                    // Same venue ID as an included match
-                    shouldIncludeByVenue = true;
-                    console.log(`✅ Match included (same venue ID ${venueId}): ${match.teams?.home?.name} vs ${match.teams?.away?.name} (League: ${match.league.name}, ID: ${match.fixture.id})`);
-                }
-                // REMOVED: Coordinate-based matching in second pass - too risky, can match different stadiums
-                
-                if (shouldIncludeByVenue) {
-                    // Re-process this match to get venue info (similar to first pass, but simplified)
-                    let venueInfo = null;
-                    if (venue?.id) {
-                        let apiVenueData = null;
-                        try {
-                            apiVenueData = await getVenueFromApiFootball(venue.id);
-                        } catch (error) {
-                            // Silent fail - will use fallbacks
-                        }
-                        
-                        const localVenue = await venueService.getVenueByApiId(venue.id);
-                        const localCoords = localVenue?.coordinates || localVenue?.location?.coordinates;
-                        
-                        if (localVenue && localCoords) {
-                            venueInfo = {
-                                id: venue.id,
-                                name: localVenue.name,
-                                city: localVenue.city,
-                                country: localVenue.country,
-                                coordinates: localCoords,
-                                image: apiVenueData?.image || null
-                            };
-                        } else if (apiVenueData) {
-                            const apiCoords = apiVenueData.coordinates || 
-                                             (Array.isArray(apiVenueData.location) ? apiVenueData.location : null) ||
-                                             (apiVenueData.lat && apiVenueData.lng ? [apiVenueData.lng, apiVenueData.lat] : null) ||
-                                             venue?.coordinates || null;
-                            
-                            venueInfo = {
-                                id: venue.id,
-                                name: apiVenueData.name || localVenue?.name || venue?.name,
-                                city: apiVenueData.city || localVenue?.city || venue?.city,
-                                country: apiVenueData.country || localVenue?.country || venue?.country,
-                                coordinates: apiCoords,
-                                image: apiVenueData.image || null
-                            };
-                        }
-                    }
-                    
-                    // Fallback to name-based lookup if needed
-                    if (!venueInfo || (!venueInfo.coordinates && venue?.name)) {
-                        const byName = await venueService.getVenueByName(venue?.name, venue?.city);
-                        if (byName && byName.coordinates) {
-                            venueInfo = {
-                                id: venue?.id || venueInfo?.id || null,
-                                name: byName.name || venue?.name,
-                                city: byName.city || venue?.city,
-                                country: byName.country || venue?.country || match.league?.country,
-                                coordinates: byName.coordinates,
-                                image: venueInfo?.image || null
-                            };
-                        }
-                    }
-                    
-                    // Create transformed match
-                    const transformed = {
-                        id: match.fixture.id,
-                        fixture: {
-                            id: match.fixture.id,
-                            date: match.fixture.date,
-                            venue: venueInfo || {
-                                id: venue?.id || null,
-                                name: venue?.name || 'Unknown Venue',
-                                city: venue?.city || 'Unknown City',
-                                country: venue?.country || match.league?.country || 'Unknown Country',
-                                coordinates: venue?.coordinates || null
-                            },
-                            status: match.fixture.status
-                        },
-                        league: {
-                            id: match.league.id,
-                            name: match.league.name,
-                            country: match.league.country,
-                            logo: match.league.logo
-                        },
-                        teams: {
-                            home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
-                            away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
-                        }
-                    };
-                    
-                    transformedMatches.push(transformed);
-                    if (!matchesByLeague[leagueId]) {
-                        matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
-                    }
-                    matchesByLeague[leagueId].transformed++;
-                    secondPassIncluded++;
-                }
-            }
-            
-            if (secondPassIncluded > 0) {
-                console.log(`✅ Second pass: Included ${secondPassIncluded} additional matches at venues that were already included`);
             }
             
             console.log(`📊 Location-only search filtering stats: ${transformedMatches.length} included, ${matchesWithoutCoords} without coordinates, ${matchesFilteredOut} filtered out (outside bounds)`);

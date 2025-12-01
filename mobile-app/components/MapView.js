@@ -251,7 +251,18 @@ const MatchMapView = forwardRef(({
     onRecommendedMatchPress(match);
   }, [onRecommendedMatchPress]);
 
-  // Render match markers with memoization
+  // Helper function to generate venue group key (same logic as MapResultsScreen)
+  const getVenueGroupKey = useCallback((match) => {
+    const venue = match?.fixture?.venue;
+    if (!venue) return null;
+    if (venue.id != null) return `id:${venue.id}`;
+    if (venue.coordinates && venue.coordinates.length === 2) {
+      return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+    }
+    return null;
+  }, []);
+
+  // Render match markers with memoization - grouped by venue
   const markers = useMemo(() => {
     if (!matches || matches.length === 0) {
       if (__DEV__) {
@@ -279,34 +290,49 @@ const MatchMapView = forwardRef(({
       
       return true;
     });
-    
 
-    
-    // Use stable keys based on fixture ID only to prevent unnecessary re-renders
-    return validMatches.map(match => {
-      const venue = match.fixture.venue;
-      const isSelected = selectedMatchId === match.fixture.id;
+    // Group matches by venue (same logic as MapResultsScreen)
+    const venueGroupsMap = new Map();
+    validMatches.forEach((match) => {
+      const key = getVenueGroupKey(match);
+      if (!key) return;
+      
+      if (!venueGroupsMap.has(key)) {
+        venueGroupsMap.set(key, {
+          key,
+          venue: match.fixture.venue,
+          matches: []
+        });
+      }
+      venueGroupsMap.get(key).matches.push(match);
+    });
+
+    // Create one marker per venue group
+    return Array.from(venueGroupsMap.values()).map((venueGroup) => {
+      // Use the first match from the venue group for marker display and selection check
+      const firstMatch = venueGroup.matches[0];
+      const venue = firstMatch.fixture.venue;
+      const isSelected = venueGroup.matches.some(m => m.fixture.id === selectedMatchId);
       const coordinate = {
         latitude: venue.coordinates[1],  // GeoJSON: [lon, lat]
         longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
       };
       
-      // Use fixture ID as key for stability - this prevents React from recreating markers
-      // when the matches array reference changes but the actual matches are the same
-      const markerKey = `match-${String(match.fixture.id)}`;
+      // Use venue key for marker identifier
+      const markerKey = `venue-${venueGroup.key}`;
       
       return (
         <Marker
           key={markerKey}
           coordinate={coordinate}
-          onPress={() => handleMarkerPress(match)}
+          onPress={() => handleMarkerPress(firstMatch)}
           pinColor={isSelected ? '#FF6B6B' : '#1976d2'}
           tracksViewChanges={false}
           identifier={markerKey}
         />
       );
     });
-  }, [matches, selectedMatchId, handleMarkerPress]);
+  }, [matches, selectedMatchId, handleMarkerPress, getVenueGroupKey]);
 
   // Render recommended match markers with memoization (yellow pins)
   const recommendedMarkers = useMemo(() => {

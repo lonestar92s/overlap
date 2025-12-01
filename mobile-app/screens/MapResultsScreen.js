@@ -1123,40 +1123,22 @@ const MapResultsScreen = ({ navigation, route }) => {
     return validMarkers;
   }, [displayFilteredMatches, matches]);
 
-  // Group upcoming matches by venue ID (exact matches only)
-  // Only group by exact venue ID to avoid placing matches at wrong stadiums
+  // Group upcoming matches by venue (id preferred, fall back to coordinates)
   const venueGroups = useMemo(() => {
     if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
     const groupsMap = new Map();
-    
-    // Group by venue ID (exact matches only)
     finalFilteredMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
-      
-      // Prefer venue ID if available
-      if (venue.id != null) {
-        key = `id:${venue.id}`;
-      } else if (venue.coordinates && venue.coordinates.length === 2) {
-        // Fallback to coordinates if no ID
-        const [lon, lat] = venue.coordinates;
-        key = `geo:${lat.toFixed(6)},${lon.toFixed(6)}`;
-      }
-      
+      if (venue.id != null) key = `id:${venue.id}`;
+      else if (venue.coordinates && venue.coordinates.length === 2) key = `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
       if (!key) return;
-      
       if (!groupsMap.has(key)) {
         groupsMap.set(key, { key, venue, matches: [] });
       }
       groupsMap.get(key).matches.push(m);
     });
-    
-    // REMOVED: Coordinate-based merging - too risky, can merge different stadiums
-    // Only group by exact venue ID to avoid placing matches at wrong stadiums
-    // If venues have different IDs, they should be treated as separate venues
-    const mergedGroups = groupsMap;
-    
-    const groups = Array.from(mergedGroups.values());
+    const groups = Array.from(groupsMap.values());
     // Sort matches within each group chronologically
     groups.forEach(g => g.matches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)));
     // Sort groups by earliest match date

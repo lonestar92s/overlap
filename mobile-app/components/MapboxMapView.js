@@ -200,32 +200,82 @@ useEffect(() => {
           />
         )}
 
-        {/* Match markers */}
-        {matches.map((match) => {
-          if (!match.fixture?.venue?.coordinates) return null;
+        {/* Match markers - grouped by venue */}
+        {useMemo(() => {
+          if (!matches || matches.length === 0) return null;
 
-          // GeoJSON format: [longitude, latitude]
-          const [longitude, latitude] = match.fixture.venue.coordinates;
-          const isSelected = String(selectedMatchId) === String(match.fixture?.id);
+          // Helper function to generate venue group key (same logic as MapResultsScreen)
+          const getVenueGroupKey = (match) => {
+            const venue = match?.fixture?.venue;
+            if (!venue) return null;
+            if (venue.id != null) return `id:${venue.id}`;
+            if (venue.coordinates && venue.coordinates.length === 2) {
+              return `geo:${venue.coordinates[0]},${venue.coordinates[1]}`;
+            }
+            return null;
+          };
 
-          return (
-            <Mapbox.PointAnnotation
-              key={`match-${String(match.fixture?.id)}`}
-              id={`match-${String(match.fixture?.id)}`}
-              coordinate={[longitude, latitude]}
-              onSelected={() => handleMarkerPress(match)}
-            >
-              <View style={[
-                styles.marker,
-                isSelected && styles.selectedMarker
-              ]}>
-                <Text style={styles.markerText}>
-                  {match.teams.home.name.charAt(0)}{match.teams.away.name.charAt(0)}
-                </Text>
-              </View>
-            </Mapbox.PointAnnotation>
-          );
-        })}
+          // Filter valid matches
+          const validMatches = matches.filter(match => {
+            const venue = match.fixture?.venue;
+            if (!venue || !venue.coordinates || !Array.isArray(venue.coordinates)) {
+              return false;
+            }
+            const [lon, lat] = venue.coordinates;
+            if (typeof lon !== 'number' || typeof lat !== 'number' ||
+                lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+              return false;
+            }
+            return true;
+          });
+
+          // Group matches by venue
+          const venueGroupsMap = new Map();
+          validMatches.forEach((match) => {
+            const key = getVenueGroupKey(match);
+            if (!key) return;
+            
+            if (!venueGroupsMap.has(key)) {
+              venueGroupsMap.set(key, {
+                key,
+                venue: match.fixture.venue,
+                matches: []
+              });
+            }
+            venueGroupsMap.get(key).matches.push(match);
+          });
+
+          // Create one marker per venue group
+          return Array.from(venueGroupsMap.values()).map((venueGroup) => {
+            // Use the first match from the venue group for marker display
+            const firstMatch = venueGroup.matches[0];
+            const venue = firstMatch.fixture.venue;
+            const [longitude, latitude] = venue.coordinates;
+            const isSelected = venueGroup.matches.some(m => 
+              String(m.fixture?.id) === String(selectedMatchId)
+            );
+
+            const markerKey = `venue-${venueGroup.key}`;
+
+            return (
+              <Mapbox.PointAnnotation
+                key={markerKey}
+                id={markerKey}
+                coordinate={[longitude, latitude]}
+                onSelected={() => handleMarkerPress(firstMatch)}
+              >
+                <View style={[
+                  styles.marker,
+                  isSelected && styles.selectedMarker
+                ]}>
+                  <Text style={styles.markerText}>
+                    {firstMatch.teams.home.name.charAt(0)}{firstMatch.teams.away.name.charAt(0)}
+                  </Text>
+                </View>
+              </Mapbox.PointAnnotation>
+            );
+          });
+        }, [matches, selectedMatchId, handleMarkerPress])}
 
         {/* Recommended match markers (yellow) */}
         {recommendedMatches && recommendedMatches.map((match) => {
