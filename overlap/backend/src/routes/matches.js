@@ -681,20 +681,19 @@ router.get('/search', async (req, res) => {
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
                 console.log(`✅ Location-only search: Cache hit for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
-                // Filter by original bounds (not buffered bounds) for display
-                // Only include matches with valid coordinates within exact bounds
+                // PHASE 1: Return ALL matches with valid coordinates from cache (buffer zone included)
+                // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern)
                 const filteredMatches = cachedData.data.filter(match => {
                     const coords = match.fixture?.venue?.coordinates;
                     
-                    // Include matches with coordinates within exact bounds
+                    // Only filter out matches WITHOUT valid coordinates
                     if (coords && Array.isArray(coords) && coords.length === 2) {
                         const [lon, lat] = coords;
-                        // Validate coordinates are numbers
+                        // Validate coordinates are numbers and within world bounds
                         if (typeof lon === 'number' && typeof lat === 'number' && 
                             !isNaN(lon) && !isNaN(lat) &&
                             lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                            return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                                   lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                            return true; // Include all matches with valid coordinates (buffer zone working!)
                         }
                     }
                     
@@ -711,6 +710,7 @@ router.get('/search', async (req, res) => {
                     data: filteredMatches, 
                     count: filteredMatches.length,
                     fromCache: true,
+                    bounds: originalBounds, // NEW: Tell client the requested viewport bounds
                     debug: {
                         withCoordinates: withCoords,
                         withoutCoordinates: withoutCoords,
@@ -1153,20 +1153,20 @@ router.get('/search', async (req, res) => {
             matchesCache.set(cacheKey, cacheData);
             console.log(`✅ Location-only search: Cached ${transformedMatches.length} matches for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
             
-            // Filter by original bounds (not buffered bounds) for this specific request
-            // Only include matches with valid coordinates within exact bounds
+            // PHASE 1: Return ALL matches with valid coordinates (buffer zone included)
+            // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern)
+            // This allows markers to appear smoothly as user pans without gaps
             const filteredMatches = transformedMatches.filter(match => {
                 const coords = match.fixture?.venue?.coordinates;
                 
-                // Include matches with coordinates within exact bounds
+                // Only filter out matches WITHOUT valid coordinates
                 if (coords && Array.isArray(coords) && coords.length === 2) {
                     const [lon, lat] = coords;
-                    // Validate coordinates are numbers
+                    // Validate coordinates are numbers and within world bounds
                     if (typeof lon === 'number' && typeof lat === 'number' && 
                         !isNaN(lon) && !isNaN(lat) &&
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        return lat >= originalBounds.southwest.lat && lat <= originalBounds.northeast.lat &&
-                               lon >= originalBounds.southwest.lng && lon <= originalBounds.northeast.lng;
+                        return true; // Include all matches with valid coordinates (buffer zone working!)
                     }
                 }
                 
@@ -1184,6 +1184,7 @@ router.get('/search', async (req, res) => {
                 count: filteredMatches.length,
                 fromCache: false,
                 totalMatches: transformedMatches.length, // Total matches in cache
+                bounds: originalBounds, // NEW: Tell client the requested viewport bounds
                 debug: {
                     withCoordinates: withCoords,
                     withoutCoordinates: withoutCoords,

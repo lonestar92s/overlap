@@ -1183,33 +1183,49 @@ const MapResultsScreen = ({ navigation, route }) => {
     return () => clearTimeout(timer);
   }, [mapRegion]);
 
-  // Get matches for map markers - show all loaded markers
-  // Native map library handles viewport culling and off-screen rendering
+  // Get matches for map markers - filter by viewport + buffer for smooth panning (Google Maps style)
+  // Backend returns matches in buffered area (30%), client filters by viewport (20% buffer)
   const mapMarkersMatches = useMemo(() => {
     const allMarkers = displayFilteredMatches || [];
     
-    // Filter out matches without valid coordinates
+    // Filter by viewport with buffer for smooth panning
     const validMarkers = allMarkers.filter(match => {
       const venue = match.fixture?.venue;
       const coordinates = venue?.coordinates;
-      const isValid = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
       
-      // Additional validation: check coordinates are numbers
-      if (isValid) {
-        const [lon, lat] = coordinates;
-        if (typeof lon !== 'number' || typeof lat !== 'number' ||
-            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-          return false;
-        }
+      // Validate coordinates exist and are valid
+      if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+        return false;
       }
       
-      return isValid;
+      const [lon, lat] = coordinates;
+      if (typeof lon !== 'number' || typeof lat !== 'number' ||
+          lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return false;
+      }
+      
+      // Filter by viewport with 20% client-side buffer for smooth panning
+      if (mapRegion) {
+        const bufferPercent = 0.2; // 20% buffer on frontend
+        const latBuffer = mapRegion.latitudeDelta * bufferPercent;
+        const lngBuffer = mapRegion.longitudeDelta * bufferPercent;
+        
+        const viewportBounds = {
+          north: mapRegion.latitude + (mapRegion.latitudeDelta / 2) + latBuffer,
+          south: mapRegion.latitude - (mapRegion.latitudeDelta / 2) - latBuffer,
+          east: mapRegion.longitude + (mapRegion.longitudeDelta / 2) + lngBuffer,
+          west: mapRegion.longitude - (mapRegion.longitudeDelta / 2) - lngBuffer
+        };
+        
+        return lat >= viewportBounds.south && lat <= viewportBounds.north &&
+               lon >= viewportBounds.west && lon <= viewportBounds.east;
+      }
+      
+      return true; // Show all if no viewport available
     });
     
-    // Reduced logging - markers update frequently during map interactions
-    
     return validMarkers;
-  }, [displayFilteredMatches, matches]);
+  }, [displayFilteredMatches, mapRegion]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {
@@ -1822,8 +1838,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         style={styles.map}
       />
       
-      {/* Floating Search Button */}
-      {/* FIXED: Always show button - removed hasMovedFromInitial check to allow re-searching */}
+      {/* Floating Search Button - Always visible like Google Maps */}
+      {/* User can re-search current area or trigger search after panning to new region */}
+      {/* Small pans use buffer zone data (no backend call), large pans trigger new search */}
       {/* Dynamic positioning based on filter chips visibility - animated */}
       <Animated.View
         style={[
@@ -1839,7 +1856,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           {isSearching ? (
             <>
               <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
-              <Text style={styles.floatingSearchText}>Searching...</Text>
+              <Text style={styles.floatingSearchText}>Loading more matches...</Text>
             </>
           ) : (
             <>

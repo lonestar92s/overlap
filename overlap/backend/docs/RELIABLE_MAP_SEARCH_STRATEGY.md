@@ -101,9 +101,9 @@ async function fetchWithRetry(url, maxRetries = 3) {
 - More reliable results
 - Partial results if some leagues fail
 
-#### 1.3 Buffer Zones
+#### 1.3 Buffer Zones (Dual-Buffer Approach)
 ```javascript
-// Expand bounds by 30% before fetching
+// Backend: Expand bounds by 30% before fetching
 function expandBounds(bounds, bufferPercent = 0.3) {
   const latSpan = bounds.northeast.lat - bounds.southwest.lat;
   const lngSpan = bounds.northeast.lng - bounds.southwest.lng;
@@ -119,47 +119,99 @@ function expandBounds(bounds, bufferPercent = 0.3) {
     }
   };
 }
-```
 
-**Benefits:**
-- No gaps when panning
-- Smoother user experience
-- Matches appear before entering viewport
-
----
-
-### Phase 2: Client-Side Filtering (Accuracy) 🎯
-
-**Goal:** Accurate display of matches in viewport
-
-#### 2.1 Backend: Return All Country Matches
-```javascript
-// Location-only search: Return all matches for country
-// Don't filter by bounds on backend
-if (isCityLevelSearch && isDomesticLeague) {
-  // Return all matches from country
-  return allCountryMatches;
+// Frontend: Filter by viewport with 20% buffer
+function filterByViewport(matches, mapRegion, bufferPercent = 0.2) {
+  const latBuffer = mapRegion.latitudeDelta * bufferPercent;
+  const lngBuffer = mapRegion.longitudeDelta * bufferPercent;
+  
+  const viewportBounds = {
+    north: mapRegion.latitude + (mapRegion.latitudeDelta / 2) + latBuffer,
+    south: mapRegion.latitude - (mapRegion.latitudeDelta / 2) - latBuffer,
+    east: mapRegion.longitude + (mapRegion.longitudeDelta / 2) + lngBuffer,
+    west: mapRegion.longitude - (mapRegion.longitudeDelta / 2) - lngBuffer
+  };
+  
+  return matches.filter(match => {
+    const [lon, lat] = match.fixture.venue.coordinates;
+    return lat >= viewportBounds.south && lat <= viewportBounds.north &&
+           lon >= viewportBounds.west && lon <= viewportBounds.east;
+  });
 }
 ```
 
-**Benefits:**
-- Complete dataset available
-- No missing matches
-- Consistent results
+**How It Works:**
+- **Backend Buffer (30%)**: Fetches matches in larger area, returns ALL with valid coordinates
+- **Frontend Buffer (20%)**: Filters viewport + buffer for display
+- **Total Buffer**: ~50% effective buffer zone for ultra-smooth panning
+- **"Search This Area"**: User can manually trigger new search for different region
 
-#### 2.2 Frontend: Filter by Viewport
+**Benefits:**
+- ✅ No gaps when panning (markers appear smoothly)
+- ✅ Smoother user experience (Google Maps/Airbnb pattern)
+- ✅ Matches appear before entering viewport
+- ✅ Backend returns consistent data (not filtered by exact bounds)
+- ✅ Frontend controls what's visible (responsive, instant)
+
+---
+
+### Phase 2: Client-Side Filtering (Accuracy) 🎯 ✅ IMPLEMENTED
+
+**Goal:** Accurate display of matches in viewport
+
+#### 2.1 Backend: Return All Matches with Valid Coordinates ✅
 ```javascript
-// Filter matches by visible viewport
-const visibleMatches = allMatches.filter(match => {
-  const [lon, lat] = match.fixture.venue.coordinates;
-  return isWithinViewport(lon, lat, mapRegion);
+// Backend returns ALL matches with valid coordinates (buffer zone included)
+// No filtering by originalBounds - client handles viewport filtering
+const filteredMatches = transformedMatches.filter(match => {
+  const coords = match.fixture?.venue?.coordinates;
+  if (coords && Array.isArray(coords) && coords.length === 2) {
+    const [lon, lat] = coords;
+    return typeof lon === 'number' && typeof lat === 'number' && 
+           !isNaN(lon) && !isNaN(lat) &&
+           lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90;
+  }
+  return false;
 });
 ```
 
 **Benefits:**
-- Only show matches in viewport
-- Instant zoom-out (data already loaded)
-- Accurate display
+- ✅ Complete dataset available (buffer zone working)
+- ✅ No missing matches
+- ✅ Consistent results (backend not filtering by exact bounds)
+
+#### 2.2 Frontend: Filter by Viewport with Buffer ✅
+```javascript
+// Filter matches by viewport + 20% buffer for smooth panning
+const mapMarkersMatches = useMemo(() => {
+  return displayFilteredMatches.filter(match => {
+    const [lon, lat] = match.fixture.venue.coordinates;
+    
+    if (mapRegion) {
+      const bufferPercent = 0.2; // 20% frontend buffer
+      const latBuffer = mapRegion.latitudeDelta * bufferPercent;
+      const lngBuffer = mapRegion.longitudeDelta * bufferPercent;
+      
+      const viewportBounds = {
+        north: mapRegion.latitude + (mapRegion.latitudeDelta / 2) + latBuffer,
+        south: mapRegion.latitude - (mapRegion.latitudeDelta / 2) - latBuffer,
+        east: mapRegion.longitude + (mapRegion.longitudeDelta / 2) + lngBuffer,
+        west: mapRegion.longitude - (mapRegion.longitudeDelta / 2) - lngBuffer
+      };
+      
+      return lat >= viewportBounds.south && lat <= viewportBounds.north &&
+             lon >= viewportBounds.west && lon <= viewportBounds.east;
+    }
+    return true;
+  });
+}, [displayFilteredMatches, mapRegion]);
+```
+
+**Benefits:**
+- ✅ Only show matches in viewport + buffer
+- ✅ Instant zoom-out (data already loaded)
+- ✅ Smooth panning (markers appear before viewport edge)
+- ✅ Accurate display
 
 ---
 
@@ -260,18 +312,18 @@ const venues = await Venue.find({
 
 ## Implementation Priority
 
-### Must Have (Fix Inconsistency)
-1. ✅ Country-level caching
-2. ✅ Retry logic
-3. ✅ Buffer zones
+### Must Have (Fix Inconsistency) ✅ COMPLETE
+1. ✅ Country-level caching (DONE)
+2. ✅ Retry logic (DONE)
+3. ✅ Buffer zones - Dual buffer approach (DONE)
 
-### Should Have (Improve Accuracy)
-4. ⚠️ Client-side filtering
-5. ⚠️ Request deduplication
+### Should Have (Improve Accuracy) ✅ COMPLETE
+4. ✅ Client-side filtering with viewport buffer (DONE)
+5. ✅ Request deduplication (DONE - using requestId tracking)
 
 ### Nice to Have (Performance)
-6. ⚠️ Parallel venue lookups
-7. ⚠️ Progressive loading
+6. ⚠️ Parallel venue lookups (PARTIALLY DONE)
+7. ⚠️ Progressive loading (NOT NEEDED - country-level caching sufficient)
 
 ---
 

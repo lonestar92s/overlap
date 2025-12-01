@@ -253,7 +253,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     
     if (isSearchingLocation && locationSearchQuery.trim().length >= 2) {
       if (__DEV__) {
-        console.log('[LocationSearchModal] Triggering location search for:', locationSearchQuery);
+      
       }
       // Use the debounced function from ref
       if (debouncedSearchRef.current) {
@@ -622,10 +622,15 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                     placeholderTextColor="rgba(0, 0, 0, 0.5)"
                     value={locationSearchQuery}
                     onChangeText={(text) => {
-                      setLocationSearchQuery(text);
-                      setIsSearchingLocation(text.trim().length > 0);
+                      // Capitalize first letter if starting fresh (previous input was empty)
+                      let processedText = text;
+                      if (locationSearchQuery.length === 0 && text.length > 0) {
+                        processedText = text.charAt(0).toUpperCase() + text.slice(1);
+                      }
+                      setLocationSearchQuery(processedText);
+                      setIsSearchingLocation(processedText.trim().length > 0);
                       // Reset search completion flag when user types
-                      if (text.trim().length < 2) {
+                      if (processedText.trim().length < 2) {
                         hasCompletedSearchRef.current = false;
                       }
                     }}

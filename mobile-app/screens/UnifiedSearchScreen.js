@@ -263,6 +263,17 @@ const UnifiedSearchScreen = () => {
     }
   };
 
+  // Handle text input change - capitalize first letter if starting fresh
+  const handleQueryChange = (text) => {
+    // If previous query was empty and new text has at least one character, capitalize first letter
+    if (query.length === 0 && text.length > 0) {
+      const capitalizedText = text.charAt(0).toUpperCase() + text.slice(1);
+      setQuery(capitalizedText);
+    } else {
+      setQuery(text);
+    }
+  };
+
   // Render search input
   const renderSearchInput = () => (
     <TouchableOpacity
@@ -280,7 +291,7 @@ const UnifiedSearchScreen = () => {
             placeholder="Search leagues, teams, or venues"
             placeholderTextColor={colors.text.light}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={handleQueryChange}
             autoFocus={true}
             autoCapitalize="none"
             autoCorrect={false}

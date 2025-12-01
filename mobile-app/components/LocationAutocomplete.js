@@ -213,8 +213,14 @@ const LocationAutocomplete = ({
   }, [fetchSuggestions]);
 
   const handleInputChange = (text) => {
-    setInputValue(text);
-    if (text.length === 0) {
+    // Capitalize first letter if starting fresh (previous input was empty)
+    let processedText = text;
+    if (inputValue.length === 0 && text.length > 0) {
+      processedText = text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    
+    setInputValue(processedText);
+    if (processedText.length === 0) {
       // Show "Matches near you" when input is empty but focused
       if (userLocation) {
         const nearYouOption = {
@@ -236,7 +242,7 @@ const LocationAutocomplete = ({
       onSelect(null);
     } else {
       if (onOptionsChange) onOptionsChange(true); // Notify parent that we're fetching options
-      debouncedFetchSuggestionsRef.current(text);
+      debouncedFetchSuggestionsRef.current(processedText);
     }
   };
 
