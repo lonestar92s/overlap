@@ -115,6 +115,10 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // State for smooth transitions between search results
   const [isTransitioningResults, setIsTransitioningResults] = useState(false);
+  
+  // Store original search bounds for filtering list view
+  // List should only show matches in original viewport, not the entire buffer zone
+  const [originalSearchBounds, setOriginalSearchBounds] = useState(null);
 
   
 
@@ -371,28 +375,37 @@ const MapResultsScreen = ({ navigation, route }) => {
   }, [filterData, updateFilterData]);
 
   // Process real match data for filters
-  // FIXED: Initialize filterData from initialMatches immediately on mount to prevent race condition
+  // FIXED: Process filter data from displayFilteredMatches (the filtered list) instead of all matches
+  // This ensures filter options match what's actually shown in the list and map
+  // Filter options will only show countries/leagues/teams from matches in the original search viewport
   useEffect(() => {
-    // On mount, process initialMatches immediately if filterData is not ready
-    if (initialMatches && initialMatches.length > 0) {
-      const currentMatchIds = initialMatches.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
+    // Filter data should be generated from the filtered list (displayFilteredMatches)
+    // This ensures filter options only show countries/leagues/teams that are actually visible
+    const matchesToProcess = displayFilteredMatches && displayFilteredMatches.length > 0 
+      ? displayFilteredMatches 
+      : (matches && matches.length > 0 ? matches : []);
+    
+    if (matchesToProcess.length > 0) {
+      const currentMatchIds = matchesToProcess.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
       const previousMatchIds = filterData?.matchIds || [];
       
       // Only process if match IDs are different (avoid unnecessary updates)
       if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
-        console.log('🔧 [INIT] Processing filterData from initialMatches:', initialMatches.length);
-        processMatchesForFilters(initialMatches);
+        const source = displayFilteredMatches && displayFilteredMatches.length > 0 
+          ? 'displayFilteredMatches (filtered by bounds)' 
+          : 'matches (all - no bounds filter yet)';
+        
+        console.log('🔧 [FILTER] Processing filterData:', {
+          source,
+          filteredCount: displayFilteredMatches?.length || 0,
+          totalMatches: matches.length,
+          processingCount: matchesToProcess.length,
+          note: 'Filter options will match visible matches only'
+        });
+        processMatchesForFilters(matchesToProcess);
       }
     }
-  }, []); // Run once on mount
-
-  // Process matches when they change (after initial mount)
-  useEffect(() => {
-    // Only process filter data if we have meaningful matches and they're different from current filter data
-    if (matches && matches.length > 0) {
-      processMatchesForFilters(matches);
-    }
-  }, [matches, processMatchesForFilters]);
+  }, [displayFilteredMatches, matches, originalSearchBounds, filterData, processMatchesForFilters]);
 
   // Validation logging: Track when filter data becomes ready
   useEffect(() => {
@@ -418,6 +431,20 @@ const MapResultsScreen = ({ navigation, route }) => {
       });
       setInitialSearchRegion(initialRegion);
       setMapRegion(initialRegion); // Also set mapRegion immediately
+      
+      // Set original search bounds from initialRegion for list filtering
+      const boundsFromRegion = {
+        northeast: {
+          lat: initialRegion.latitude + (initialRegion.latitudeDelta / 2),
+          lng: initialRegion.longitude + (initialRegion.longitudeDelta / 2)
+        },
+        southwest: {
+          lat: initialRegion.latitude - (initialRegion.latitudeDelta / 2),
+          lng: initialRegion.longitude - (initialRegion.longitudeDelta / 2)
+        }
+      };
+      setOriginalSearchBounds(boundsFromRegion);
+      console.log('📍 [INIT] Set original search bounds from initialRegion:', boundsFromRegion);
     }
   }, []); // Only run once on mount
 
@@ -537,6 +564,11 @@ const MapResultsScreen = ({ navigation, route }) => {
         },
       };
       
+      // Store these bounds immediately for list filtering (before backend response)
+      // This ensures list filters by new search area right away
+      setOriginalSearchBounds(bounds);
+      console.log('📍 [SEARCH] Set original search bounds (pre-request):', bounds);
+      
       console.log('🔍 [SEARCH] Starting bounds search:', {
         requestId,
         currentRequestId,
@@ -575,6 +607,16 @@ const MapResultsScreen = ({ navigation, route }) => {
       if (response.success) {
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
+        
+        // Store original search bounds for list filtering (from backend response)
+        // Backend returns the original viewport bounds - use these to filter list view
+        // This confirms/updates the bounds we set pre-request
+        if (response.bounds) {
+          setOriginalSearchBounds(response.bounds);
+          console.log('📍 [SEARCH] Updated original search bounds from backend:', response.bounds);
+        } else {
+          console.warn('⚠️ [SEARCH] Backend response missing bounds field - using pre-request bounds');
+        }
         
         // Ensure response.data is an array (defensive check)
         const newMatches = Array.isArray(response.data) ? response.data : [];
@@ -1158,15 +1200,56 @@ const MapResultsScreen = ({ navigation, route }) => {
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
   
-  // Get filtered matches for bottom drawer (NO viewport filtering - shows all matches from search)
+  // Get filtered matches for bottom drawer - filter by ORIGINAL search bounds only
+  // List shows matches in the original search viewport (not the buffer zone or current viewport)
+  // This matches Google Maps/Airbnb behavior: list stays constant, markers update with pan
   const displayFilteredMatches = useMemo(() => {
-    // Bottom drawer shows all matches from the search (filtered by user filters and date only)
-    // Does NOT filter by viewport - remains constant until new search
     const final = finalFilteredMatches || [];
     
-    // Reduced logging - this updates frequently
+    // Filter by original search bounds if available
+    if (originalSearchBounds) {
+      const filteredByOriginalBounds = final.filter(match => {
+        const venue = match.fixture?.venue;
+        const coordinates = venue?.coordinates;
+        
+        // Validate coordinates
+        if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+          return false;
+        }
+        
+        const [lon, lat] = coordinates;
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          return false;
+        }
+        
+        // Filter by ORIGINAL search bounds (exact viewport when search was made)
+        return lat >= originalSearchBounds.southwest.lat && 
+               lat <= originalSearchBounds.northeast.lat &&
+               lon >= originalSearchBounds.southwest.lng && 
+               lon <= originalSearchBounds.northeast.lng;
+      });
+      
+      if (__DEV__) {
+        console.log('📋 [LIST] Filtered by original bounds:', {
+          total: final.length,
+          inOriginalViewport: filteredByOriginalBounds.length,
+          filteredOut: final.length - filteredByOriginalBounds.length,
+          bounds: originalSearchBounds,
+          sampleMatch: final[0] ? {
+            name: `${final[0].teams?.home?.name} vs ${final[0].teams?.away?.name}`,
+            venue: final[0].fixture?.venue?.name,
+            coords: final[0].fixture?.venue?.coordinates
+          } : 'none'
+        });
+      }
+      
+      return filteredByOriginalBounds;
+    }
+    
+    // If no original bounds yet, return all (initial state)
     return final;
-  }, [finalFilteredMatches, matches, filteredMatches, selectedDateHeader]);
+  }, [finalFilteredMatches, originalSearchBounds]);
 
   // Debounced map region state - only updates after user stops panning/zooming
   // Used for "search this area" button visibility and other UI updates
@@ -1183,12 +1266,14 @@ const MapResultsScreen = ({ navigation, route }) => {
     return () => clearTimeout(timer);
   }, [mapRegion]);
 
-  // Get matches for map markers - filter by viewport + buffer for smooth panning (Google Maps style)
-  // Backend returns matches in buffered area (30%), client filters by viewport (20% buffer)
+  // Get matches for map markers - show same matches as list view (original search bounds only)
+  // Map and list are now consistent: both show only matches from original search viewport
+  // User must click "Search this area" to see matches in a different region
+  // This matches Google Maps behavior: search "London" shows only London results, even if you zoom out
   const mapMarkersMatches = useMemo(() => {
     const allMarkers = displayFilteredMatches || [];
     
-    // Filter by viewport with buffer for smooth panning
+    // Filter out matches without valid coordinates (for map display)
     const validMarkers = allMarkers.filter(match => {
       const venue = match.fixture?.venue;
       const coordinates = venue?.coordinates;
@@ -1204,28 +1289,19 @@ const MapResultsScreen = ({ navigation, route }) => {
         return false;
       }
       
-      // Filter by viewport with 20% client-side buffer for smooth panning
-      if (mapRegion) {
-        const bufferPercent = 0.2; // 20% buffer on frontend
-        const latBuffer = mapRegion.latitudeDelta * bufferPercent;
-        const lngBuffer = mapRegion.longitudeDelta * bufferPercent;
-        
-        const viewportBounds = {
-          north: mapRegion.latitude + (mapRegion.latitudeDelta / 2) + latBuffer,
-          south: mapRegion.latitude - (mapRegion.latitudeDelta / 2) - latBuffer,
-          east: mapRegion.longitude + (mapRegion.longitudeDelta / 2) + lngBuffer,
-          west: mapRegion.longitude - (mapRegion.longitudeDelta / 2) - lngBuffer
-        };
-        
-        return lat >= viewportBounds.south && lat <= viewportBounds.north &&
-               lon >= viewportBounds.west && lon <= viewportBounds.east;
-      }
-      
-      return true; // Show all if no viewport available
+      return true; // Include all matches with valid coordinates (already filtered by original bounds)
     });
     
+    if (__DEV__) {
+      console.log('🗺️ [MAP MARKERS] Displaying markers:', {
+        total: allMarkers.length,
+        withValidCoords: validMarkers.length,
+        note: 'Showing only matches from original search viewport'
+      });
+    }
+    
     return validMarkers;
-  }, [displayFilteredMatches, mapRegion]);
+  }, [displayFilteredMatches]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {

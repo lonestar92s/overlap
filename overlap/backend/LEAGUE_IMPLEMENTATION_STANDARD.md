@@ -13,11 +13,80 @@ The league implementation process is now **fully automated**. The system automat
 
 **No manual venue data preparation is required.**
 
+## Bulk Onboarding All Leagues
+
+You can now onboard **all available leagues** from API-Football in one operation using the bulk onboarding script.
+
+### Quick Start: Onboard All Leagues
+
+```bash
+cd overlap/backend
+node src/scripts/onboardAllLeagues.js
+```
+
+This script will:
+1. Fetch all active leagues from API-Football for the current season
+2. Filter for leagues with fixture coverage
+3. Onboard each league (league, teams, venues) using the automated onboarding service
+4. Handle rate limiting automatically (2 second delays between leagues)
+5. Provide a comprehensive summary of created/updated records
+
+**Prerequisites:**
+- MongoDB connection configured (`MONGO_PUBLIC_URL`, `MONGODB_URI`, or `MONGO_URL`)
+- API-Football API key (`API_SPORTS_KEY`)
+- Optional: LocationIQ API key (`LOCATIONIQ_API_KEY`) for geocoding venues
+
+**Note:** This process can take a while (potentially hours) depending on the number of leagues. The script processes leagues sequentially to respect API rate limits.
+
+### Dynamic League Loading
+
+After onboarding leagues to MongoDB, the system now uses **dynamic league loading** from the database** instead of hardcoded lists:
+
+- **Backend**: All league queries use `League.find()` from MongoDB
+- **Subscription Service**: Fetches accessible leagues from database (cached for 1 hour)
+- **Match Search**: Uses database queries for fallback/popular leagues
+- **Mobile App**: Uses `/api/leagues/relevant` endpoint (with hardcoded fallback)
+- **No Rate Limiting**: Once in MongoDB, all operations use database queries (no API calls)
+
+This means:
+- ✅ New leagues automatically appear in search results
+- ✅ No code changes needed when adding leagues
+- ✅ Matches from new leagues automatically show on the map
+- ✅ Subscription filtering works automatically
+
 ## Implementation Process
 
-### Step 1: Add League to Backend Import Script
+### Option 1: Bulk Onboard All Leagues (Recommended)
 
-Add the league to `bulkImportLeaguesTeamsVenues.js` in the `MAJOR_LEAGUES` array:
+Use the bulk onboarding script to automatically fetch and onboard all available leagues:
+
+```bash
+cd overlap/backend
+node src/scripts/onboardAllLeagues.js
+```
+
+This is the recommended approach as it:
+- Automatically discovers all available leagues
+- Requires no manual configuration
+- Ensures comprehensive coverage
+
+### Option 2: Onboard Individual Leagues via Admin Dashboard
+
+1. Access the Admin Dashboard in the web app
+2. Navigate to the "League Onboarding" tab
+3. Enter:
+   - League ID (from API-Football)
+   - League Name
+   - Country
+   - Country Code (optional, auto-detected)
+   - Tier (default: 1)
+4. Click "Onboard League"
+
+The system will automatically fetch teams, venues, and geocode coordinates.
+
+### Option 3: Manual Script-Based Onboarding (Legacy)
+
+For specific leagues, you can still add them to `bulkImportLeaguesTeamsVenues.js` in the `MAJOR_LEAGUES` array:
 
 ```javascript
 const MAJOR_LEAGUES = [
@@ -49,21 +118,7 @@ function getShortName(leagueName) {
 }
 ```
 
-### Step 3: Add League to Mobile App
-
-Add the league to `mobile-app/data/leagues.js` in the `LEAGUES` array:
-
-```javascript
-export const LEAGUES = [
-    // ... existing leagues ...
-    { id: '62', name: 'Ligue 2', country: 'France', countryCode: 'FR', tier: 2 },
-    { id: '262', name: 'Liga MX', country: 'Mexico', countryCode: 'MX', tier: 1 },
-];
-```
-
-**Note:** The `id` should be a string (e.g., `'62'`) in the mobile app.
-
-### Step 4: Run the Import Script
+### Step 3: Run the Import Script (if using Option 3)
 
 Execute the bulk import script to populate MongoDB:
 
@@ -80,7 +135,7 @@ The script will:
 5. Import/update venues (with automatic geocoding if needed)
 6. Print a summary of created/updated records
 
-### Step 5: Verify Implementation
+### Step 4: Verify Implementation
 
 After running the script, verify:
 
@@ -90,9 +145,12 @@ After running the script, verify:
    - Venues have coordinates
 
 2. **Mobile App Check**
-   - League appears in league picker
+   - League appears in league picker (if using API endpoint)
    - Search works for teams in the league
    - Map markers appear for venues
+   - Matches from the league appear in search results
+
+**Note:** The mobile app uses `/api/leagues/relevant` endpoint which dynamically loads leagues from MongoDB. Hardcoded league files (`mobile-app/data/leagues.js`) are now fallback only.
 
 ## Data Structure
 
@@ -176,6 +234,9 @@ The old manual process (using hardcoded venue data) is deprecated. All new leagu
 
 ## Reference
 
-- **Import Script**: `overlap/backend/src/scripts/bulkImportLeaguesTeamsVenues.js`
-- **Mobile App Data**: `mobile-app/data/leagues.js`
-- **League Model**: `overlap/backend/src/models/League.js` 
+- **Bulk Onboarding Script**: `overlap/backend/src/scripts/onboardAllLeagues.js` (recommended)
+- **Individual League Onboarding**: Admin Dashboard → League Onboarding tab
+- **Legacy Import Script**: `overlap/backend/src/scripts/bulkImportLeaguesTeamsVenues.js`
+- **Onboarding Service**: `overlap/backend/src/services/leagueOnboardingService.js`
+- **League Model**: `overlap/backend/src/models/League.js`
+- **Mobile App Data** (fallback): `mobile-app/data/leagues.js` 

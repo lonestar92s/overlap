@@ -89,9 +89,10 @@ const apiLimiter = rateLimit({
 });
 
 // Stricter rate limit for auth endpoints - 5 attempts per 15 minutes
+// In development, allow more attempts to avoid blocking during testing
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 login attempts per 15 minutes
+    max: process.env.NODE_ENV === 'production' ? 5 : 20, // 5 in production, 20 in development
     message: { error: 'Too many login attempts, please try again later.' },
     skipSuccessfulRequests: true, // Don't count successful requests
     standardHeaders: true,

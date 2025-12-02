@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,60 @@ import {
   Modal,
   SafeAreaView,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { POPULAR_LEAGUES, getAllLeagues } from '../data/leagues';
+import ApiService from '../services/api';
 
 const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showAllLeagues, setShowAllLeagues] = useState(false);
+  const [leagues, setLeagues] = useState([]);
+  const [popularLeagues, setPopularLeagues] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch leagues from API on mount
+  useEffect(() => {
+    const fetchLeagues = async () => {
+      try {
+        setLoading(true);
+        const response = await ApiService.getLeagues();
+        
+        if (response.success && response.data) {
+          // Transform API response to match component format
+          const apiLeagues = response.data.map(league => ({
+            id: league.id.toString(),
+            name: league.name,
+            country: league.country,
+            countryCode: league.countryCode,
+            tier: league.tier
+          }));
+          
+          setLeagues(apiLeagues);
+          
+          // Set popular leagues (top tier leagues, limit to 12)
+          const popular = apiLeagues
+            .filter(league => league.tier === 1)
+            .slice(0, 12);
+          setPopularLeagues(popular.length > 0 ? popular : apiLeagues.slice(0, 12));
+        } else {
+          // Fallback to hardcoded leagues if API fails
+          console.warn('Failed to fetch leagues from API, using fallback');
+          setLeagues(getAllLeagues());
+          setPopularLeagues(POPULAR_LEAGUES);
+        }
+      } catch (error) {
+        console.error('Error fetching leagues:', error);
+        // Fallback to hardcoded leagues on error
+        setLeagues(getAllLeagues());
+        setPopularLeagues(POPULAR_LEAGUES);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeagues();
+  }, []);
 
   const handleLeagueToggle = (leagueId) => {
     if (selectedLeagues.includes(leagueId)) {
@@ -24,7 +72,9 @@ const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
   };
 
   const handleSelectAll = () => {
-    const allLeagueIds = getAllLeagues().map(league => league.id);
+    const allLeagueIds = leagues.length > 0 
+      ? leagues.map(league => league.id)
+      : getAllLeagues().map(league => league.id);
     onLeaguesChange(allLeagueIds);
   };
 
@@ -37,7 +87,8 @@ const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
       return 'Select leagues...';
     }
     if (selectedLeagues.length === 1) {
-      const league = getAllLeagues().find(l => l.id === selectedLeagues[0]);
+      const allLeaguesList = leagues.length > 0 ? leagues : getAllLeagues();
+      const league = allLeaguesList.find(l => l.id === selectedLeagues[0] || l.id === selectedLeagues[0].toString());
       return league ? league.name : 'Unknown league';
     }
     return `${selectedLeagues.length} leagues selected`;
@@ -65,7 +116,11 @@ const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
     );
   };
 
-  const leaguesToShow = showAllLeagues ? getAllLeagues() : POPULAR_LEAGUES;
+  const leaguesToShow = loading 
+    ? [] 
+    : (showAllLeagues 
+        ? (leagues.length > 0 ? leagues : getAllLeagues())
+        : (popularLeagues.length > 0 ? popularLeagues : POPULAR_LEAGUES));
 
   return (
     <View style={[styles.container, style]}>
@@ -130,13 +185,25 @@ const LeaguePicker = ({ selectedLeagues, onLeaguesChange, style = {} }) => {
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={leaguesToShow}
-            renderItem={renderLeagueItem}
-            keyExtractor={(item, index) => (item.id || `league-${index}`).toString()}
-            style={styles.leaguesList}
-            showsVerticalScrollIndicator={false}
-          />
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#1976d2" />
+              <Text style={styles.loadingText}>Loading leagues...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={leaguesToShow}
+              renderItem={renderLeagueItem}
+              keyExtractor={(item, index) => (item.id || `league-${index}`).toString()}
+              style={styles.leaguesList}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No leagues available</Text>
+                </View>
+              }
+            />
+          )}
         </SafeAreaView>
       </Modal>
     </View>
@@ -284,6 +351,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#1976d2',
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#666',
   },
 });
 

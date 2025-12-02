@@ -1,3 +1,5 @@
+const League = require('../models/League');
+
 class SubscriptionService {
     constructor() {
         this.tierAccess = {
@@ -14,6 +16,9 @@ class SubscriptionService {
                 description: "Access to all leagues and premium features"
             }
         };
+        this._allLeaguesCache = null;
+        this._cacheExpiry = null;
+        this._cacheTTL = 60 * 60 * 1000; // 1 hour cache
     }
 
     hasLeagueAccess(user, leagueId) {
@@ -34,10 +39,61 @@ class SubscriptionService {
         return !tierConfig.restrictedLeagues.includes(leagueId);
     }
 
-    getAccessibleLeagues(user) {
-        // This method is now less useful since we use blacklist approach
-        // But keeping for compatibility - return all leagues except restricted ones
-        const allLeagues = ["39", "40", "41", "61", "140", "78", "207", "88", "94", "135", "144", "71", "253", "98", "2", "4", "13", "1"];
+    async getAllLeaguesFromDatabase() {
+        // Check cache first
+        if (this._allLeaguesCache && this._cacheExpiry && Date.now() < this._cacheExpiry) {
+            return this._allLeaguesCache;
+        }
+
+        try {
+            // Fetch all active leagues from database
+            const leagues = await League.find({ isActive: true }).select('apiId').lean();
+            const leagueIds = leagues.map(league => league.apiId.toString());
+            
+            // Update cache
+            this._allLeaguesCache = leagueIds;
+            this._cacheExpiry = Date.now() + this._cacheTTL;
+            
+            return leagueIds;
+        } catch (error) {
+            console.error('Error fetching leagues from database:', error);
+            // Fallback to empty array if database query fails
+            return [];
+        }
+    }
+
+    async getAccessibleLeagues(user) {
+        // Fetch all leagues from database (cached)
+        const allLeagues = await this.getAllLeaguesFromDatabase();
+        
+        if (allLeagues.length === 0) {
+            // Fallback to empty array if no leagues in database
+            console.warn('No leagues found in database, returning empty array');
+            return [];
+        }
+        
+        if (!user || !user.subscription) {
+            return allLeagues.filter(leagueId => !this.tierAccess.freemium.restrictedLeagues.includes(leagueId));
+        }
+        
+        const userTier = user.subscription.tier || "freemium";
+        const tierConfig = this.tierAccess[userTier];
+        
+        if (!tierConfig) {
+            return allLeagues.filter(leagueId => !this.tierAccess.freemium.restrictedLeagues.includes(leagueId));
+        }
+        
+        return allLeagues.filter(leagueId => !tierConfig.restrictedLeagues.includes(leagueId));
+    }
+
+    // Synchronous version for backward compatibility (uses cached data)
+    getAccessibleLeaguesSync(user) {
+        // Use cached data if available, otherwise return empty array
+        const allLeagues = this._allLeaguesCache || [];
+        
+        if (allLeagues.length === 0) {
+            return [];
+        }
         
         if (!user || !user.subscription) {
             return allLeagues.filter(leagueId => !this.tierAccess.freemium.restrictedLeagues.includes(leagueId));

@@ -55,7 +55,7 @@ router.get('/', authenticateToken, async (req, res) => {
         const leagues = await leagueService.getAllLeagues();
         
         // Filter leagues based on subscription
-        const accessibleLeagueIds = subscriptionService.getAccessibleLeagues(user);
+        const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
         const filteredLeagues = leagues.filter(league => 
             accessibleLeagueIds.includes(league.apiId)
         );
@@ -218,11 +218,14 @@ router.get('/relevant', async (req, res) => {
         // Fallback: if no relevant leagues found, include top European leagues plus international
         let response;
         if (relevantLeagues.length === 0) {
-            const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
+            // Fallback to popular leagues from database (top tier leagues)
             const fallbackLeagues = await League.find({ 
-                apiId: { $in: fallbackApiIds },
-                isActive: true 
-            }).lean();
+                isActive: true,
+                tier: 1
+            })
+            .sort({ country: 1, name: 1 })
+            .limit(8)
+            .lean();
             
             response = {
                 success: true,

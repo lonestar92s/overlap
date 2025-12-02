@@ -1839,8 +1839,16 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             }
             
             // Always include popular leagues as well to ensure diverse results
-            const popularLeagues = ['39', '140', '135', '78', '61', '94', '97', '88'];
-            targetLeagues = [...new Set([...targetLeagues, ...popularLeagues])]; // Combine and deduplicate
+            const popularLeaguesFromDb = await League.find({ 
+                isActive: true,
+                tier: 1
+            })
+            .sort({ country: 1, name: 1 })
+            .limit(8)
+            .select('apiId')
+            .lean();
+            const popularLeagueIds = popularLeaguesFromDb.map(l => l.apiId.toString());
+            targetLeagues = [...new Set([...targetLeagues, ...popularLeagueIds])]; // Combine and deduplicate
             console.log(`🔍 Expanded to include popular leagues: ${targetLeagues.join(', ')}`);
         } else if (activeTrips.length > 0) {
             // Extract leagues from active trips - need to convert names to IDs
@@ -1886,10 +1894,31 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 })
                 .filter(Boolean);
             
-            targetLeagues = extractedLeagueIds.length > 0 ? extractedLeagueIds : ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262'];
+            // Fallback to popular leagues from database if no extracted IDs
+            if (extractedLeagueIds.length === 0) {
+                const popularLeagues = await League.find({ 
+                    isActive: true,
+                    tier: 1
+                })
+                .sort({ country: 1, name: 1 })
+                .limit(10)
+                .select('apiId')
+                .lean();
+                targetLeagues = popularLeagues.map(l => l.apiId.toString());
+            } else {
+                targetLeagues = extractedLeagueIds;
+            }
         } else {
-            // Fallback to popular leagues
-            targetLeagues = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262'];
+            // Fallback to popular leagues from database
+            const popularLeagues = await League.find({ 
+                isActive: true,
+                tier: 1
+            })
+            .sort({ country: 1, name: 1 })
+            .limit(10)
+            .select('apiId')
+            .lean();
+            targetLeagues = popularLeagues.map(l => l.apiId.toString());
         }
 
         console.log(`🔍 Searching leagues: ${targetLeagues.join(', ')}`);
