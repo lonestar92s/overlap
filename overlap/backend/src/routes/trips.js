@@ -5,6 +5,7 @@ const axios = require('axios');
 const https = require('https');
 const { isTripCompleted } = require('../utils/tripUtils');
 const geocodingService = require('../services/geocodingService');
+const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 
 const router = express.Router();
 
@@ -423,6 +424,10 @@ router.post('/:id/matches', auth, async (req, res) => {
 
         trip.updatedAt = new Date();
         await user.save();
+
+        // Invalidate recommended matches cache (adding match affects trip-based recommendations)
+        const deletedCount = invalidateRecommendedMatchesCache(user.id);
+        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after adding match to trip`);
         
         // Check what was actually saved
         const savedMatch = trip.matches[trip.matches.length - 1];
@@ -459,6 +464,10 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         trip.matches = trip.matches.filter(match => match.matchId !== req.params.matchId);
         trip.updatedAt = new Date();
         await user.save();
+
+        // Invalidate recommended matches cache (removing match affects trip-based recommendations)
+        const deletedCount = invalidateRecommendedMatchesCache(user.id);
+        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after removing match from trip`);
 
         res.json({
             success: true,

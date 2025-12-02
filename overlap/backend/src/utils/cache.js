@@ -4,10 +4,11 @@ class Cache {
         this.ttl = ttl;
     }
 
-    set(key, value) {
+    set(key, value, customTtl = null) {
         this.cache.set(key, {
             data: value,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            ttl: customTtl || this.ttl
         });
     }
 
@@ -15,8 +16,11 @@ class Cache {
         const cached = this.cache.get(key);
         if (!cached) return null;
 
+        // Use custom TTL if set, otherwise use instance TTL
+        const ttl = cached.ttl !== undefined ? cached.ttl : this.ttl;
+
         // Check if cache entry is expired
-        if (Date.now() - cached.timestamp > this.ttl) {
+        if (Date.now() - cached.timestamp > ttl) {
             this.cache.delete(key);
             return null;
         }
@@ -32,10 +36,26 @@ class Cache {
     cleanup() {
         const now = Date.now();
         for (const [key, value] of this.cache.entries()) {
-            if (now - value.timestamp > this.ttl) {
+            const ttl = value.ttl !== undefined ? value.ttl : this.ttl;
+            if (now - value.timestamp > ttl) {
                 this.cache.delete(key);
             }
         }
+    }
+
+    // Delete entries matching a pattern (supports wildcard * at end)
+    deleteByPattern(pattern) {
+        let deletedCount = 0;
+        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        
+        for (const key of this.cache.keys()) {
+            if (regex.test(key)) {
+                this.cache.delete(key);
+                deletedCount++;
+            }
+        }
+        
+        return deletedCount;
     }
 
     // Get cache statistics
@@ -51,9 +71,18 @@ class Cache {
 const teamSearchCache = new Cache(30 * 60 * 1000);  // 30 minutes for team searches
 const matchesCache = new Cache(60 * 60 * 1000);     // 1 hour for matches
 const popularMatchesCache = new Cache(4 * 60 * 60 * 1000); // 4 hours for popular matches
+const recommendedMatchesCache = new Cache(24 * 60 * 60 * 1000); // 24 hours (daily) for recommended matches
+
+// Helper function to invalidate recommended matches cache for a user
+function invalidateRecommendedMatchesCache(userId) {
+    const pattern = `recommended_matches_${userId}_*`;
+    return recommendedMatchesCache.deleteByPattern(pattern);
+}
 
 module.exports = {
     teamSearchCache,
     matchesCache,
-    popularMatchesCache
+    popularMatchesCache,
+    recommendedMatchesCache,
+    invalidateRecommendedMatchesCache
 }; 

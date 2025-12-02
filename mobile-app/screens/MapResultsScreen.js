@@ -103,12 +103,16 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Request cancellation and tracking
   const [currentRequestId, setCurrentRequestId] = useState(0);
+  const currentRequestIdRef = useRef(0); // Ref for synchronous access in async callbacks
   const [isSearching, setIsSearching] = useState(false);
   const [lastSuccessfulRequestId, setLastSuccessfulRequestId] = useState(0);
   
   // Track if user has moved from initial search area
   const [hasMovedFromInitial, setHasMovedFromInitial] = useState(false);
   const [initialSearchRegion, setInitialSearchRegion] = useState(null);
+  
+  // Track matches excluded due to missing coordinates (for user awareness)
+  const [matchesWithoutCoords, setMatchesWithoutCoords] = useState(0);
   
   // Track when we're performing a bounds search to prevent auto-fitting
   const [isPerformingBoundsSearch, setIsPerformingBoundsSearch] = useState(false);
@@ -564,10 +568,10 @@ const MapResultsScreen = ({ navigation, route }) => {
         },
       };
       
-      // Store these bounds immediately for list filtering (before backend response)
-      // This ensures list filters by new search area right away
-      setOriginalSearchBounds(bounds);
-      console.log('📍 [SEARCH] Set original search bounds (pre-request):', bounds);
+      // Store pending bounds - we'll confirm them when response is received
+      // This prevents flickering if the request fails or returns different bounds
+      const pendingBounds = bounds;
+      console.log('📍 [SEARCH] Pending search bounds (awaiting confirmation):', pendingBounds);
       
       console.log('🔍 [SEARCH] Starting bounds search:', {
         requestId,
@@ -592,14 +596,18 @@ const MapResultsScreen = ({ navigation, route }) => {
       });
 
       // Check if this request is stale (replaced by a newer request)
-      const isSignificantlyStale = requestId < (currentRequestId - 1);
+      // STRICTER CHECK: Reject ALL older requests, not just those 2+ versions behind
+      // This prevents race conditions where rapid clicks cause old results to overwrite new ones
+      // Use ref for synchronous comparison since state updates are async
+      const latestRequestId = currentRequestIdRef.current;
+      const isStale = requestId < latestRequestId;
       
-      if (isSignificantlyStale) {
+      if (isStale) {
         console.log('⏭️ [SEARCH] REJECTED - Stale request:', {
           requestId,
-          currentRequestId,
+          latestRequestId,
           isStale: true,
-          reason: 'Replaced by newer request'
+          reason: 'Replaced by newer request (strict rejection)'
         });
         return;
       }
@@ -608,14 +616,16 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
         
-        // Store original search bounds for list filtering (from backend response)
-        // Backend returns the original viewport bounds - use these to filter list view
-        // This confirms/updates the bounds we set pre-request
+        // Store original search bounds for list filtering
+        // FIXED: Only set bounds on success, not before request (prevents flickering on failure)
+        // Prefer backend bounds, fallback to pendingBounds if backend doesn't return them
+        const confirmedBounds = response.bounds || pendingBounds;
+        setOriginalSearchBounds(confirmedBounds);
+        
         if (response.bounds) {
-          setOriginalSearchBounds(response.bounds);
-          console.log('📍 [SEARCH] Updated original search bounds from backend:', response.bounds);
+          console.log('📍 [SEARCH] Confirmed search bounds from backend:', response.bounds);
         } else {
-          console.warn('⚠️ [SEARCH] Backend response missing bounds field - using pre-request bounds');
+          console.log('📍 [SEARCH] Using pending bounds (backend did not return bounds):', pendingBounds);
         }
         
         // Ensure response.data is an array (defensive check)
@@ -624,10 +634,10 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         console.log('✅ [SEARCH] Results received:', {
           requestId,
-          currentRequestId,
+          latestRequestId,
           newMatchCount: newMatches.length,
           previousMatchCount,
-          willUpdate: !isSignificantlyStale,
+          willUpdate: !isStale,
           bounds: {
             center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
             delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
@@ -677,6 +687,13 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         // Update matches efficiently - all markers will be displayed
         updateMatchesEfficiently(newMatches);
+        
+        // Track matches excluded due to missing coordinates
+        const excludedCount = response.debug?.withoutCoordinates || 0;
+        setMatchesWithoutCoords(excludedCount);
+        if (excludedCount > 0) {
+          console.log(`⚠️ [SEARCH] ${excludedCount} matches excluded due to missing coordinates`);
+        }
         
         // Show user feedback if no results
         if (newMatches.length === 0) {
@@ -1791,6 +1808,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
     
     setCurrentRequestId(requestId);
+    currentRequestIdRef.current = requestId; // Update ref for synchronous access
     setIsSearching(true);
     await performBoundsSearch(currentRegion, requestId);
   };
@@ -1963,7 +1981,14 @@ const MapResultsScreen = ({ navigation, route }) => {
         handleComponent={() => (
           <View style={styles.customHandle}>
             <View style={styles.customHandleBar} />
-            <Text style={styles.customHandleText}>{displayFilteredMatches?.length || 0} results</Text>
+            <View style={styles.customHandleTextContainer}>
+              <Text style={styles.customHandleText}>{displayFilteredMatches?.length || 0} results</Text>
+              {matchesWithoutCoords > 0 && (
+                <Text style={styles.missingCoordsText}>
+                  ({matchesWithoutCoords} not shown - missing location)
+                </Text>
+              )}
+            </View>
           </View>
         )}
       >
@@ -2282,6 +2307,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontWeight: '600',
+  },
+  customHandleTextContainer: {
+    alignItems: 'center',
+  },
+  missingCoordsText: {
+    fontSize: 10,
+    color: '#F59E0B',
+    fontWeight: '500',
+    marginTop: 2,
   },
   collapsedIndicator: {
     alignItems: 'center',

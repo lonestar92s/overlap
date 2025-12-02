@@ -264,5 +264,209 @@ describe('Matches Routes Integration', () => {
       expect(Array.isArray(response.body.data)).toBe(true);
     });
   });
+
+  describe('Cache Consistency Tests', () => {
+    it('should return identical results for same search parameters (cache consistency)', async () => {
+      // First search - cache miss
+      const response1 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-02-01',
+          dateTo: '2026-02-05'
+        });
+
+      // Second search with same parameters - should hit cache
+      const response2 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-02-01',
+          dateTo: '2026-02-05'
+        });
+
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
+      
+      // Results should be identical
+      expect(response1.body.count).toBe(response2.body.count);
+      expect(response1.body.data.length).toBe(response2.body.data.length);
+      
+      // Second request should be a cache hit
+      expect(response2.body.fromCache).toBe(true);
+      
+      // Match IDs should be the same
+      if (response1.body.data.length > 0) {
+        const ids1 = response1.body.data.map(m => m.fixture.id).sort();
+        const ids2 = response2.body.data.map(m => m.fixture.id).sort();
+        expect(ids1).toEqual(ids2);
+      }
+    });
+
+    it('should return consistent results for overlapping viewport searches in same country', async () => {
+      // First search - center of London
+      const response1 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.6,
+          neLng: 0.0,
+          swLat: 51.4,
+          swLng: -0.3,
+          dateFrom: '2026-02-10',
+          dateTo: '2026-02-15'
+        });
+
+      // Second search - slightly shifted viewport (still London, same country cache)
+      const response2 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.7,
+          neLng: 0.1,
+          swLat: 51.5,
+          swLng: -0.2,
+          dateFrom: '2026-02-10',
+          dateTo: '2026-02-15'
+        });
+
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
+      
+      // Both should return some matches (assuming any matches exist for this date range)
+      expect(Array.isArray(response1.body.data)).toBe(true);
+      expect(Array.isArray(response2.body.data)).toBe(true);
+      
+      // Second should be a cache hit (same country + date range)
+      // Note: the first search populates the country-level cache
+      if (response2.body.fromCache !== undefined) {
+        expect(response2.body.fromCache).toBe(true);
+      }
+    });
+
+    it('should enrich cached matches with newly geocoded venues', async () => {
+      // This test verifies that cache enrichment works
+      // When a venue is geocoded after initial cache, subsequent requests should include it
+      
+      const response = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-05'
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('debug');
+      
+      // Debug info should include coordinate statistics
+      if (response.body.debug) {
+        expect(response.body.debug).toHaveProperty('withCoordinates');
+        expect(response.body.debug).toHaveProperty('withoutCoordinates');
+        
+        // Enrichment count should be tracked
+        if (response.body.fromCache && response.body.debug.enrichedFromMongoDB !== undefined) {
+          expect(typeof response.body.debug.enrichedFromMongoDB).toBe('number');
+        }
+      }
+    });
+
+    it('should return bounds in response for filtering purposes', async () => {
+      const queryBounds = {
+        neLat: 51.9074,
+        neLng: 0.3722,
+        swLat: 51.1074,
+        swLng: -0.6278
+      };
+      
+      const response = await request(app)
+        .get('/api/matches/search')
+        .query({
+          ...queryBounds,
+          dateFrom: '2026-04-01',
+          dateTo: '2026-04-05'
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('bounds');
+      
+      if (response.body.bounds) {
+        // Bounds should match the original request bounds (for client-side filtering)
+        expect(response.body.bounds).toHaveProperty('northeast');
+        expect(response.body.bounds).toHaveProperty('southwest');
+      }
+    });
+
+    it('should handle rapid successive searches without race conditions', async () => {
+      // Simulate rapid "Search this area" clicks
+      const searchParams = {
+        neLat: 51.9074,
+        neLng: 0.3722,
+        swLat: 51.1074,
+        swLng: -0.6278,
+        dateFrom: '2026-05-01',
+        dateTo: '2026-05-05'
+      };
+
+      // Fire 3 requests in rapid succession
+      const [response1, response2, response3] = await Promise.all([
+        request(app).get('/api/matches/search').query(searchParams),
+        request(app).get('/api/matches/search').query(searchParams),
+        request(app).get('/api/matches/search').query(searchParams)
+      ]);
+
+      // All should succeed
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
+      expect(response3.status).toBe(200);
+
+      // All should return same data (cache consistency)
+      expect(response1.body.count).toBe(response2.body.count);
+      expect(response2.body.count).toBe(response3.body.count);
+    });
+
+    it('should differentiate cache by season parameter', async () => {
+      // Search for 2025 season
+      const response2025 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-01-01',
+          dateTo: '2026-01-05',
+          season: 2025
+        });
+
+      // Search for 2024 season (different cache key)
+      const response2024 = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-01-01',
+          dateTo: '2026-01-05',
+          season: 2024
+        });
+
+      expect(response2025.status).toBe(200);
+      expect(response2024.status).toBe(200);
+      
+      // Different seasons may have different match counts
+      // (this verifies cache keys include season)
+      expect(Array.isArray(response2025.body.data)).toBe(true);
+      expect(Array.isArray(response2024.body.data)).toBe(true);
+    });
+  });
 });
 

@@ -12,7 +12,7 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const Team = require('../models/Team');
 const League = require('../models/League');
-const { matchesCache, popularMatchesCache } = require('../utils/cache');
+const { matchesCache, popularMatchesCache, recommendedMatchesCache } = require('../utils/cache');
 const { shouldFilterMatch } = require('../utils/matchStatus');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
@@ -384,26 +384,157 @@ function createBoundsHash(bounds) {
 }
 
 // Country coordinate mapping (approximate country centers for geographic filtering)
+// Expanded to cover more countries and reduce "unknown" cache key issues
 const COUNTRY_COORDS = {
+    // Western Europe
     'England': { lat: 52.3555, lng: -1.1743 },
-    'Spain': { lat: 40.4637, lng: -3.7492 },
-    'Germany': { lat: 51.1657, lng: 10.4515 },
+    'Scotland': { lat: 56.4907, lng: -4.2026 },
+    'Wales': { lat: 52.1307, lng: -3.7837 },
+    'Northern-Ireland': { lat: 54.7877, lng: -6.4923 },
+    'Ireland': { lat: 53.1424, lng: -7.6921 },
     'France': { lat: 46.6034, lng: 1.8883 },
-    'Italy': { lat: 41.8719, lng: 12.5674 },
+    'Spain': { lat: 40.4637, lng: -3.7492 },
     'Portugal': { lat: 39.3999, lng: -8.2245 },
+    'Italy': { lat: 41.8719, lng: 12.5674 },
+    'Germany': { lat: 51.1657, lng: 10.4515 },
     'Netherlands': { lat: 52.1326, lng: 5.2913 },
     'Belgium': { lat: 50.5039, lng: 4.4699 },
+    'Switzerland': { lat: 46.8182, lng: 8.2275 },
     'Austria': { lat: 47.5162, lng: 14.5501 },
+    
+    // Nordic countries
+    'Denmark': { lat: 56.2639, lng: 9.5018 },
+    'Sweden': { lat: 60.1282, lng: 18.6435 },
+    'Norway': { lat: 60.4720, lng: 8.4689 },
+    'Finland': { lat: 61.9241, lng: 25.7482 },
+    'Iceland': { lat: 64.9631, lng: -19.0208 },
+    
+    // Eastern Europe
+    'Poland': { lat: 51.9194, lng: 19.1451 },
+    'Czech-Republic': { lat: 49.8175, lng: 15.4730 },
+    'Czechia': { lat: 49.8175, lng: 15.4730 },
+    'Hungary': { lat: 47.1625, lng: 19.5033 },
+    'Romania': { lat: 45.9432, lng: 24.9668 },
+    'Bulgaria': { lat: 42.7339, lng: 25.4858 },
+    'Ukraine': { lat: 48.3794, lng: 31.1656 },
+    'Russia': { lat: 61.5240, lng: 105.3188 },
+    'Serbia': { lat: 44.0165, lng: 21.0059 },
     'Croatia': { lat: 45.1000, lng: 15.2000 },
+    'Slovenia': { lat: 46.1512, lng: 14.9955 },
+    'Slovakia': { lat: 48.6690, lng: 19.6990 },
+    'Bosnia-Herzegovina': { lat: 43.9159, lng: 17.6791 },
+    'Montenegro': { lat: 42.7087, lng: 19.3744 },
+    'North-Macedonia': { lat: 41.5124, lng: 21.7453 },
+    'Albania': { lat: 41.1533, lng: 20.1683 },
+    'Kosovo': { lat: 42.6026, lng: 20.9030 },
+    
+    // Southern Europe / Mediterranean
+    'Greece': { lat: 39.0742, lng: 21.8243 },
+    'Cyprus': { lat: 35.1264, lng: 33.4299 },
+    'Malta': { lat: 35.9375, lng: 14.3754 },
+    
+    // Middle East
     'Turkey': { lat: 38.9637, lng: 35.2433 },
     'Saudi Arabia': { lat: 23.8859, lng: 45.0792 },
+    'Saudi-Arabia': { lat: 23.8859, lng: 45.0792 },
+    'UAE': { lat: 23.4241, lng: 53.8478 },
+    'United-Arab-Emirates': { lat: 23.4241, lng: 53.8478 },
+    'Qatar': { lat: 25.3548, lng: 51.1839 },
+    'Israel': { lat: 31.0461, lng: 34.8516 },
+    'Iran': { lat: 32.4279, lng: 53.6880 },
+    
+    // Americas
     'USA': { lat: 39.8283, lng: -98.5795 },
-    'Brazil': { lat: -14.2350, lng: -51.9253 },
+    'Canada': { lat: 56.1304, lng: -106.3468 },
     'Mexico': { lat: 23.6345, lng: -102.5528 },
-    'Scotland': { lat: 56.4907, lng: -4.2026 },
-    'Switzerland': { lat: 46.8182, lng: 8.2275 },
-    'Finland': { lat: 64.0, lng: 26.0 }
+    'Brazil': { lat: -14.2350, lng: -51.9253 },
+    'Argentina': { lat: -38.4161, lng: -63.6167 },
+    'Colombia': { lat: 4.5709, lng: -74.2973 },
+    'Chile': { lat: -35.6751, lng: -71.5430 },
+    'Peru': { lat: -9.1900, lng: -75.0152 },
+    'Ecuador': { lat: -1.8312, lng: -78.1834 },
+    'Uruguay': { lat: -32.5228, lng: -55.7658 },
+    'Paraguay': { lat: -23.4425, lng: -58.4438 },
+    'Venezuela': { lat: 6.4238, lng: -66.5897 },
+    'Bolivia': { lat: -16.2902, lng: -63.5887 },
+    
+    // Asia
+    'Japan': { lat: 36.2048, lng: 138.2529 },
+    'South-Korea': { lat: 35.9078, lng: 127.7669 },
+    'China': { lat: 35.8617, lng: 104.1954 },
+    'India': { lat: 20.5937, lng: 78.9629 },
+    'Australia': { lat: -25.2744, lng: 133.7751 },
+    'Indonesia': { lat: -0.7893, lng: 113.9213 },
+    'Thailand': { lat: 15.8700, lng: 100.9925 },
+    'Vietnam': { lat: 14.0583, lng: 108.2772 },
+    'Malaysia': { lat: 4.2105, lng: 101.9758 },
+    'Singapore': { lat: 1.3521, lng: 103.8198 },
+    
+    // Africa
+    'Egypt': { lat: 26.8206, lng: 30.8025 },
+    'South-Africa': { lat: -30.5595, lng: 22.9375 },
+    'Morocco': { lat: 31.7917, lng: -7.0926 },
+    'Algeria': { lat: 28.0339, lng: 1.6596 },
+    'Tunisia': { lat: 33.8869, lng: 9.5375 },
+    'Nigeria': { lat: 9.0820, lng: 8.6753 },
+    'Ghana': { lat: 7.9465, lng: -1.0232 },
+    'Senegal': { lat: 14.4974, lng: -14.4524 },
+    'Cameroon': { lat: 7.3697, lng: 12.3547 },
+    'Ivory-Coast': { lat: 7.5400, lng: -5.5471 },
+    'Kenya': { lat: -0.0236, lng: 37.9062 }
 };
+
+// Helper function to detect country from bounds with improved fallback
+function detectCountryFromBounds(bounds) {
+    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
+    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+    
+    // Find the closest country within threshold
+    let searchCountry = null;
+    let minDistance = Infinity;
+    
+    // Increased threshold to 800km to catch more border regions
+    const DISTANCE_THRESHOLD = 800;
+    
+    for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
+        const distance = calculateDistanceKm(centerLat, centerLng, coords.lat, coords.lng);
+        if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
+            minDistance = distance;
+            searchCountry = countryName;
+        }
+    }
+    
+    // If no country found, use regional fallback
+    if (!searchCountry) {
+        // Define broad regional groupings as fallback
+        if (centerLat > 35 && centerLat < 71 && centerLng > -25 && centerLng < 60) {
+            // Europe/Middle East region - use "Europe" as fallback
+            searchCountry = 'Europe-Region';
+        } else if (centerLat > -55 && centerLat < 75 && centerLng > -170 && centerLng < -30) {
+            // Americas region
+            searchCountry = 'Americas-Region';
+        } else if (centerLat > -50 && centerLat < 75 && centerLng > 60 && centerLng < 180) {
+            // Asia-Pacific region
+            searchCountry = 'AsiaPacific-Region';
+        } else if (centerLat > -40 && centerLat < 40 && centerLng > -25 && centerLng < 60) {
+            // Africa region
+            searchCountry = 'Africa-Region';
+        } else {
+            // Ocean or very remote area - use coordinates as unique identifier
+            // Round to nearest degree to still allow some caching
+            const roundedLat = Math.round(centerLat);
+            const roundedLng = Math.round(centerLng);
+            searchCountry = `Remote-${roundedLat}-${roundedLng}`;
+        }
+    }
+    
+    return {
+        country: searchCountry,
+        centerLat,
+        centerLng,
+        distance: minDistance === Infinity ? null : minDistance
+    };
+}
 
 // Helper function to filter leagues by geographic relevance
 async function getRelevantLeagueIds(bounds) {
@@ -658,62 +789,93 @@ router.get('/search', async (req, res) => {
             };
             
             // PHASE 1: Country-Level Caching - Determine country from bounds center
-            const searchCenterLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-            const searchCenterLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+            // Uses improved detectCountryFromBounds with regional fallbacks
+            const countryDetection = detectCountryFromBounds(bounds);
+            const searchCountry = countryDetection.country;
+            const searchCenterLat = countryDetection.centerLat;
+            const searchCenterLng = countryDetection.centerLng;
             
-            // Find which country the search center is in
-            let searchCountry = null;
-            let minDistance = Infinity;
-            for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
-                const distance = calculateDistanceKm(searchCenterLat, searchCenterLng, coords.lat, coords.lng);
-                if (distance < minDistance && distance < 500) { // Within 500km of country center
-                    minDistance = distance;
-                    searchCountry = countryName;
-                }
-            }
+            console.log(`🌍 Country detection: ${searchCountry} (distance: ${countryDetection.distance ? countryDetection.distance.toFixed(0) + 'km' : 'N/A'})`);
             
             // Use country + date range for cache key (country-level caching)
             // This enables consistent results across different zoom levels and viewports
             // All matches for the country are cached, then filtered by bounds when returning results
-            const cacheKey = `location-search:${searchCountry || 'unknown'}:${dateFrom}:${dateTo}:${season}`;
+            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}`;
             
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
-                console.log(`✅ Location-only search: Cache hit for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo}`);
-                // PHASE 1: Return ALL matches with valid coordinates from cache (buffer zone included)
-                // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern)
-                const filteredMatches = cachedData.data.filter(match => {
+                console.log(`✅ Location-only search: Cache hit for ${searchCountry}, ${dateFrom} to ${dateTo}`);
+                
+                // CACHE CONSISTENCY FIX: Try to enrich matches that are missing coordinates
+                // This handles the case where venues were geocoded after cache was created
+                const matchesWithCoords = [];
+                const matchesMissingCoords = [];
+                let enrichedCount = 0;
+                
+                for (const match of cachedData.data) {
                     const coords = match.fixture?.venue?.coordinates;
                     
-                    // Only filter out matches WITHOUT valid coordinates
                     if (coords && Array.isArray(coords) && coords.length === 2) {
                         const [lon, lat] = coords;
-                        // Validate coordinates are numbers and within world bounds
                         if (typeof lon === 'number' && typeof lat === 'number' && 
                             !isNaN(lon) && !isNaN(lat) &&
                             lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                            return true; // Include all matches with valid coordinates (buffer zone working!)
+                            matchesWithCoords.push(match);
+                            continue;
                         }
                     }
                     
-                    // Exclude matches without valid coordinates
-                    return false;
-                });
+                    // Match is missing valid coordinates - try to enrich from MongoDB
+                    const venueId = match.fixture?.venue?.id;
+                    const venueName = match.fixture?.venue?.name;
+                    const venueCity = match.fixture?.venue?.city;
+                    
+                    let enrichedCoords = null;
+                    
+                    // Try lookup by venue ID first
+                    if (venueId) {
+                        const localVenue = await venueService.getVenueByApiId(venueId);
+                        if (localVenue?.coordinates) {
+                            enrichedCoords = localVenue.coordinates;
+                        }
+                    }
+                    
+                    // Fallback to name lookup
+                    if (!enrichedCoords && venueName) {
+                        const byName = await venueService.getVenueByName(venueName, venueCity);
+                        if (byName?.coordinates) {
+                            enrichedCoords = byName.coordinates;
+                        }
+                    }
+                    
+                    if (enrichedCoords) {
+                        // Update match with coordinates
+                        match.fixture.venue.coordinates = enrichedCoords;
+                        matchesWithCoords.push(match);
+                        enrichedCount++;
+                        console.log(`🔄 Cache enrichment: Added coordinates to ${venueName || 'Unknown venue'}`);
+                    } else {
+                        matchesMissingCoords.push(match);
+                    }
+                }
                 
-                // Count matches with/without coordinates for debugging
-                const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
-                const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;
+                // If we enriched any matches, update the cache
+                if (enrichedCount > 0) {
+                    console.log(`🔄 Cache enrichment: Updated ${enrichedCount} matches with coordinates`);
+                    matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
+                }
                 
                 return res.json({ 
                     success: true, 
-                    data: filteredMatches, 
-                    count: filteredMatches.length,
+                    data: matchesWithCoords, 
+                    count: matchesWithCoords.length,
                     fromCache: true,
-                    bounds: originalBounds, // NEW: Tell client the requested viewport bounds
+                    bounds: originalBounds,
                     debug: {
-                        withCoordinates: withCoords,
-                        withoutCoordinates: withoutCoords,
+                        withCoordinates: matchesWithCoords.length,
+                        withoutCoordinates: matchesMissingCoords.length,
+                        enrichedFromMongoDB: enrichedCount,
                         totalInCache: cachedData.data.length
                     }
                 });
@@ -1053,20 +1215,8 @@ router.get('/search', async (req, res) => {
                 const boundsLngSpan = bounds.northeast.lng - bounds.southwest.lng;
                 const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0; // Less than ~111km span
                 
-                // Determine search country from bounds center using COUNTRY_COORDS mapping
-                const searchCenterLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-                const searchCenterLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-                
-                // Find which country the search center is in by checking COUNTRY_COORDS
-                let searchCountry = null;
-                let minDistance = Infinity;
-                for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
-                    const distance = calculateDistanceKm(searchCenterLat, searchCenterLng, coords.lat, coords.lng);
-                    if (distance < minDistance && distance < 500) { // Within 500km of country center
-                        minDistance = distance;
-                        searchCountry = countryName;
-                    }
-                }
+                // Use the country detection that was done at the start of this search
+                // searchCountry is already defined from detectCountryFromBounds call above
                 
                 // For city-level searches: include all matches from domestic leagues in the same country
                 // This ensures Ligue 1 and Ligue 2 matches appear when searching in France
@@ -1776,7 +1926,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
 
         // Check cache first for recommended matches
         const cacheKey = `recommended_matches_${userId}_${days}_${limit}`;
-        const cachedData = popularMatchesCache.get(cacheKey);
+        const cachedData = recommendedMatchesCache.get(cacheKey);
         
         if (cachedData) {
             console.log('🔍 Recommended matches cache hit - returning cached data');
@@ -2463,8 +2613,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             }
         }
         
-        // Cache the recommended matches for future requests (shorter cache for personalized data)
-        popularMatchesCache.set(cacheKey, transformedMatches, 3600000); // 1 hour cache
+        // Cache the recommended matches for future requests (daily cache)
+        recommendedMatchesCache.set(cacheKey, transformedMatches);
         console.log('💾 Recommended matches cached for future requests');
         
         clearTimeout(timeout);

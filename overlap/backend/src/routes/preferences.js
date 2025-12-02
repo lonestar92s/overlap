@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
+const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 
 const router = express.Router();
 
@@ -84,6 +85,10 @@ router.put('/', auth, async (req, res) => {
     }
 
     try {
+        // Track if any recommendation-affecting preferences changed
+        const recommendationAffectingFields = ['favoriteTeams', 'favoriteLeagues', 'defaultLocation', 'recommendationRadius'];
+        const shouldInvalidateCache = updates.some(update => recommendationAffectingFields.includes(update));
+
         // Update each field in preferences
         updates.forEach(update => {
             if (update === 'notifications' && typeof req.body[update] === 'object') {
@@ -98,6 +103,13 @@ router.put('/', auth, async (req, res) => {
         });
 
         await req.user.save();
+
+        // Invalidate recommended matches cache if recommendation-affecting preferences changed
+        if (shouldInvalidateCache) {
+            const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id}`);
+        }
+
         res.json({ preferences: req.user.preferences });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -130,6 +142,10 @@ router.post('/teams', auth, async (req, res) => {
         if (!isAlreadyFavorite) {
             req.user.preferences.favoriteTeams.push({ teamId });
             await req.user.save();
+
+            // Invalidate recommended matches cache
+            const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite team`);
         }
         
         // Return populated favorite teams
@@ -148,6 +164,10 @@ router.delete('/teams/:teamId', auth, async (req, res) => {
             .filter(fav => fav.teamId.toString() !== teamId);
         
         await req.user.save();
+
+        // Invalidate recommended matches cache
+        const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite team`);
         
         // Return populated favorite teams
         await req.user.populate('preferences.favoriteTeams.teamId');
@@ -165,6 +185,10 @@ router.post('/leagues', auth, async (req, res) => {
         if (!req.user.preferences.favoriteLeagues.includes(leagueId)) {
             req.user.preferences.favoriteLeagues.push(leagueId);
             await req.user.save();
+
+            // Invalidate recommended matches cache
+            const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite league`);
         }
         
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
@@ -181,6 +205,11 @@ router.delete('/leagues/:leagueId', auth, async (req, res) => {
             .filter(league => league !== leagueId);
         
         await req.user.save();
+
+        // Invalidate recommended matches cache
+        const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite league`);
+        
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -199,6 +228,10 @@ router.post('/venues', auth, async (req, res) => {
         if (!exists) {
             req.user.preferences.favoriteVenues.push({ venueId: String(venueId) });
             await req.user.save();
+
+            // Invalidate recommended matches cache
+            const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite venue`);
         }
 
         res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
@@ -213,6 +246,11 @@ router.delete('/venues/:venueId', auth, async (req, res) => {
         const { venueId } = req.params;
         req.user.preferences.favoriteVenues = req.user.preferences.favoriteVenues.filter(v => v.venueId !== String(venueId));
         await req.user.save();
+
+        // Invalidate recommended matches cache
+        const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite venue`);
+        
         res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
     } catch (error) {
         res.status(400).json({ error: error.message });
