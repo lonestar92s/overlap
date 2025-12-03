@@ -1222,10 +1222,14 @@ class ApiService {
 
   // NEW: Bounds-based search for map integration
   async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [] }) {
+    const apiStartTime = performance.now();
+    
     try {
       // If no competitions or teams specified, use the location-only search endpoint
       if (competitions.length === 0 && teams.length === 0 && bounds && dateFrom && dateTo) {
-        console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');
+        if (__DEV__) {
+          console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');
+        }
         const params = new URLSearchParams();
         params.append('dateFrom', dateFrom);
         params.append('dateTo', dateTo);
@@ -1237,21 +1241,51 @@ class ApiService {
         }
         
         const url = `${this.baseURL}/matches/search?${params.toString()}`;
+        const networkStartTime = performance.now();
         const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
+        const networkEndTime = performance.now();
+        const networkDuration = networkEndTime - networkStartTime;
+        
+        const parseStartTime = performance.now();
         const data = await response.json();
+        const parseEndTime = performance.now();
+        const parseDuration = parseEndTime - parseStartTime;
+        
+        if (__DEV__) {
+          console.log(`⏱️ [API] Network: ${networkDuration.toFixed(2)}ms, Parse: ${parseDuration.toFixed(2)}ms`);
+          if (networkDuration > 5000) {
+            console.warn(`⚠️ [API] Slow network request: ${networkDuration.toFixed(2)}ms`);
+          }
+        }
         
         if (!response.ok) {
           throw new Error(data?.message || 'Failed to search matches');
         }
         
+        const apiEndTime = performance.now();
+        const totalApiDuration = apiEndTime - apiStartTime;
+        
+        if (__DEV__) {
+          console.log(`⏱️ [API] Total API duration: ${totalApiDuration.toFixed(2)}ms`);
+          if (totalApiDuration > 5000) {
+            console.warn(`⚠️ [API] Very slow API call: ${totalApiDuration.toFixed(2)}ms`);
+          }
+        }
+        
         return {
           success: true,
           data: data.data || [],
-          searchParams: { bounds, dateFrom, dateTo, competitions, teams }
+          searchParams: { bounds, dateFrom, dateTo, competitions, teams },
+          _performance: {
+            totalDuration: totalApiDuration,
+            networkDuration,
+            parseDuration,
+          }
         };
       }
 
       // Otherwise, use the legacy approach with competitions endpoint
+      const legacyStartTime = performance.now();
       // Use specified competitions or fetch relevant leagues from backend
       let targetLeagues;
       if (competitions.length > 0) {
@@ -1369,14 +1403,35 @@ class ApiService {
         return dateA.getTime() - dateB.getTime();
       });
 
+      const legacyEndTime = performance.now();
+      const legacyDuration = legacyEndTime - legacyStartTime;
+      const totalApiDuration = legacyEndTime - apiStartTime;
+      
+      if (__DEV__) {
+        console.log(`⏱️ [API] Legacy path - Total: ${totalApiDuration.toFixed(2)}ms, League fetch: ${legacyDuration.toFixed(2)}ms`);
+        if (totalApiDuration > 5000) {
+          console.warn(`⚠️ [API] Very slow API call (legacy): ${totalApiDuration.toFixed(2)}ms`);
+        }
+      }
+
       return {
         success: true,
         data: sortedMatches,
-        searchParams: { bounds, dateFrom, dateTo, competitions, teams }
+        searchParams: { bounds, dateFrom, dateTo, competitions, teams },
+        _performance: {
+          totalDuration: totalApiDuration,
+          legacyDuration,
+        }
       };
 
     } catch (error) {
-      console.error('Error in searchMatchesByBounds:', error);
+      const apiEndTime = performance.now();
+      const totalApiDuration = apiEndTime - apiStartTime;
+      
+      if (__DEV__) {
+        console.error(`❌ [API] Error after ${totalApiDuration.toFixed(2)}ms:`, error);
+      }
+      
       return { success: false, error: error.message || 'Failed to search matches' };
     }
   }

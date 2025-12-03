@@ -367,10 +367,13 @@ const MapResultsScreen = ({ navigation, route }) => {
   }, [sheetState, insets.bottom]);
 
   // Simplified search function - viewport only
-  const performBoundsSearch = async (region, requestId) => {
+  const performBoundsSearch = async (region, requestId, timer = null) => {
     if (!dateFrom || !dateTo || !region) return;
     
     setIsSearching(true);
+    
+    // Start API call phase
+    const stopApiPhase = timer ? timer.startPhase('API_CALL') : null;
     
     try {
       // FIXED: Use actual viewport dimensions instead of fixed size increments
@@ -424,6 +427,14 @@ const MapResultsScreen = ({ navigation, route }) => {
         teams: [],        // Explicitly no filters - search all matches
       });
 
+      // Stop API call phase
+      if (stopApiPhase) {
+        stopApiPhase({ matchCount: response.data?.length || 0, success: response.success });
+      }
+
+      // Start data processing phase
+      const stopProcessingPhase = timer ? timer.startPhase('DATA_PROCESSING') : null;
+
       // Check if this request is stale (replaced by a newer request)
       // STRICTER CHECK: Reject ALL older requests, not just those 2+ versions behind
       // This prevents race conditions where rapid clicks cause old results to overwrite new ones
@@ -467,22 +478,22 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         if (__DEV__) {
           console.log('✅ [SEARCH] Results received:', {
-          requestId,
-          latestRequestId,
-          newMatchCount: newMatches.length,
-          previousMatchCount,
-          willUpdate: !isStale,
-          bounds: {
-            center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
-            delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
-          }
+            requestId,
+            latestRequestId,
+            newMatchCount: newMatches.length,
+            previousMatchCount,
+            willUpdate: !isStale,
+            bounds: {
+              center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
+              delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
+            }
           });
         }
         
-        // Log venue coordinate sources and final coordinates
-        if (__DEV__ && newMatches.length > 0) {
-          console.log('📍 [VENUE COORDS] Venue coordinate analysis:');
-          newMatches.forEach((match, idx) => {
+        // Log venue coordinate sources and final coordinates (only in dev, and only for first few matches to avoid spam)
+        if (__DEV__ && newMatches.length > 0 && newMatches.length <= 10) {
+          console.log('📍 [VENUE COORDS] Venue coordinate analysis (first 10 matches):');
+          newMatches.slice(0, 10).forEach((match, idx) => {
             const venue = match.fixture?.venue;
             if (venue) {
               const hasCoords = venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2;
@@ -520,14 +531,35 @@ const MapResultsScreen = ({ navigation, route }) => {
           });
         }
         
+        // Start filter computation phase
+        const stopFilterPhase = timer ? timer.startPhase('FILTER_COMPUTATION') : null;
+        
         // Update matches efficiently - all markers will be displayed
         updateMatchesEfficiently(newMatches);
+        
+        // Stop filter computation phase
+        if (stopFilterPhase) {
+          stopFilterPhase({ matchCount: newMatches.length });
+        }
+        
+        // Start state update phase (before setState calls)
+        const stopStatePhase = timer ? timer.startPhase('STATE_UPDATE') : null;
         
         // Track matches excluded due to missing coordinates
         const excludedCount = response.debug?.withoutCoordinates || 0;
         setMatchesWithoutCoords(excludedCount);
         if (__DEV__ && excludedCount > 0) {
           console.log(`⚠️ [SEARCH] ${excludedCount} matches excluded due to missing coordinates`);
+        }
+        
+        // Stop state update phase (state updates are synchronous, so we stop immediately after)
+        if (stopStatePhase) {
+          stopStatePhase({ matchCount: newMatches.length });
+        }
+        
+        // Stop data processing phase
+        if (stopProcessingPhase) {
+          stopProcessingPhase({ matchCount: newMatches.length });
         }
         
         // Show user feedback if no results
@@ -1637,15 +1669,30 @@ const MapResultsScreen = ({ navigation, route }) => {
   useEffect(() => {
     // When search completes (isSearching goes from true to false) and we have matches
     if (!isSearching && searchTimerRef.current && matches.length > 0) {
-      // Use requestAnimationFrame to ensure rendering is complete
+      // Start rendering phase
+      const stopRenderingPhase = searchTimerRef.current.startPhase ? searchTimerRef.current.startPhase('RENDERING') : null;
+      
+      // Use requestAnimationFrame to ensure rendering is complete (map + list)
       requestAnimationFrame(() => {
-        if (searchTimerRef.current) {
-          const duration = searchTimerRef.current(true);
-          searchTimerRef.current = null;
-          if (__DEV__) {
-            console.log(`⏱️ [PERF] End-to-end search complete: ${duration.toFixed(2)}ms (button press → rendered)`);
+        // Use another frame to ensure both map and list have rendered
+        requestAnimationFrame(() => {
+          if (searchTimerRef.current) {
+            // Stop rendering phase
+            if (stopRenderingPhase) {
+              stopRenderingPhase({ matchCount: matches.length });
+            }
+            
+            // Stop state update phase if it was started
+            // (State updates happen synchronously, so we stop it here)
+            
+            // Stop the main timer
+            const duration = searchTimerRef.current.stop(true);
+            searchTimerRef.current = null;
+            if (__DEV__) {
+              console.log(`⏱️ [PERF] End-to-end search complete: ${duration.toFixed(2)}ms (button press → rendered)`);
+            }
           }
-        }
+        });
       });
     }
   }, [isSearching, matches.length]);
@@ -1751,8 +1798,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       });
     }
     
-    // Start end-to-end performance timer (from button press to rendered)
-    searchTimerRef.current = performanceTracker.startTimer(
+    // Start end-to-end performance timer with phase tracking (from button press to rendered)
+    const timer = performanceTracker.startTimerWithPhases(
       performanceTracker.MetricType.SEARCH_THIS_AREA,
       {
         bounds: {
@@ -1763,11 +1810,12 @@ const MapResultsScreen = ({ navigation, route }) => {
         requestId
       }
     );
+    searchTimerRef.current = timer;
     
     setCurrentRequestId(requestId);
     currentRequestIdRef.current = requestId; // Update ref for synchronous access
     setIsSearching(true);
-    await performBoundsSearch(currentRegion, requestId);
+    await performBoundsSearch(currentRegion, requestId, timer);
   };
 
   // Calculate initial region based on searched location

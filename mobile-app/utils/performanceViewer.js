@@ -69,12 +69,39 @@ export const getFormattedStats = async (type) => {
   output += `Slowest: ${formatDuration(stats.maxDuration)}\n`;
   output += `Success Rate: ${stats.successRate.toFixed(1)}%\n\n`;
   
+  // Add phase breakdown if available
+  if (stats.phaseStats && Object.keys(stats.phaseStats).length > 0) {
+    output += 'Phase Breakdown:\n';
+    for (const [phaseName, phaseStats] of Object.entries(stats.phaseStats)) {
+      output += `  ${phaseName}:\n`;
+      output += `    Avg: ${formatDuration(phaseStats.avgDuration)} (${phaseStats.percentageOfTotal.toFixed(1)}% of total)\n`;
+      output += `    Min: ${formatDuration(phaseStats.minDuration)}\n`;
+      output += `    Max: ${formatDuration(phaseStats.maxDuration)}\n`;
+    }
+    output += '\n';
+  }
+  
+  // Add bottlenecks if identified
+  if (stats.bottlenecks && stats.bottlenecks.length > 0) {
+    output += '⚠️ Identified Bottlenecks:\n';
+    stats.bottlenecks.forEach((bottleneck, index) => {
+      const severityIcon = bottleneck.severity === 'critical' ? '🔴' : bottleneck.severity === 'high' ? '🟠' : '🟡';
+      output += `  ${severityIcon} ${bottleneck.phase}: ${formatDuration(bottleneck.avgDuration)} (${bottleneck.percentageOfTotal.toFixed(1)}% of total)\n`;
+    });
+    output += '\n';
+  }
+  
   if (stats.recent && stats.recent.length > 0) {
     output += 'Recent Searches:\n';
     stats.recent.forEach((metric, index) => {
       const status = metric.success ? '✅' : '❌';
       const date = new Date(metric.timestamp).toLocaleTimeString();
       output += `  ${status} ${formatDuration(metric.duration)} - ${date}\n`;
+      if (metric.phaseTimings && metric.phaseTimings.length > 0) {
+        metric.phaseTimings.forEach(phase => {
+          output += `    ${phase.phase}: ${formatDuration(phase.duration)}\n`;
+        });
+      }
     });
   }
   
