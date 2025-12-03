@@ -1225,6 +1225,25 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // Filter by original search bounds if available
     if (originalSearchBounds) {
+      // Add a small exclusion buffer (5% shrink) to exclude matches right at the edge
+      // This makes the filtering stricter and prevents edge cases
+      const bufferPercent = 0.05; // 5% buffer
+      const latSpan = originalSearchBounds.northeast.lat - originalSearchBounds.southwest.lat;
+      const lngSpan = originalSearchBounds.northeast.lng - originalSearchBounds.southwest.lng;
+      const latBuffer = latSpan * bufferPercent;
+      const lngBuffer = lngSpan * bufferPercent;
+      
+      const strictBounds = {
+        northeast: {
+          lat: originalSearchBounds.northeast.lat - latBuffer,
+          lng: originalSearchBounds.northeast.lng - lngBuffer
+        },
+        southwest: {
+          lat: originalSearchBounds.southwest.lat + latBuffer,
+          lng: originalSearchBounds.southwest.lng + lngBuffer
+        }
+      };
+      
       const filteredByOriginalBounds = final.filter(match => {
         const venue = match.fixture?.venue;
         const coordinates = venue?.coordinates;
@@ -1240,11 +1259,11 @@ const MapResultsScreen = ({ navigation, route }) => {
           return false;
         }
         
-        // Filter by ORIGINAL search bounds (exact viewport when search was made)
-        return lat >= originalSearchBounds.southwest.lat && 
-               lat <= originalSearchBounds.northeast.lat &&
-               lon >= originalSearchBounds.southwest.lng && 
-               lon <= originalSearchBounds.northeast.lng;
+        // Filter by ORIGINAL search bounds with 5% exclusion buffer (stricter filtering)
+        return lat >= strictBounds.southwest.lat && 
+               lat <= strictBounds.northeast.lat &&
+               lon >= strictBounds.southwest.lng && 
+               lon <= strictBounds.northeast.lng;
       });
       
       if (__DEV__) {
@@ -1287,6 +1306,16 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Map and list are now consistent: both show only matches from original search viewport
   // User must click "Search this area" to see matches in a different region
   // This matches Google Maps behavior: search "London" shows only London results, even if you zoom out
+  // Track when matches update to force marker re-render
+  const [matchesUpdateTimestamp, setMatchesUpdateTimestamp] = useState(0);
+  
+  // Update timestamp when matches change to force marker re-render
+  useEffect(() => {
+    if (matches && matches.length > 0) {
+      setMatchesUpdateTimestamp(Date.now());
+    }
+  }, [matches.length]);
+  
   const mapMarkersMatches = useMemo(() => {
     // Use displayFilteredMatches which is already filtered by originalSearchBounds
     // This ensures markers only show matches from the searched viewport
@@ -1318,6 +1347,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         total: allMarkers.length,
         withValidCoords: validMarkers.length,
         note: 'Showing only matches from original search viewport',
+        updateTimestamp: matchesUpdateTimestamp,
         originalSearchBounds: originalSearchBounds ? {
           ne: { lat: originalSearchBounds.northeast.lat.toFixed(4), lng: originalSearchBounds.northeast.lng.toFixed(4) },
           sw: { lat: originalSearchBounds.southwest.lat.toFixed(4), lng: originalSearchBounds.southwest.lng.toFixed(4) }
@@ -1326,7 +1356,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
     
     return validMarkers;
-  }, [displayFilteredMatches, originalSearchBounds]);
+  }, [displayFilteredMatches, originalSearchBounds, matches, matchesUpdateTimestamp]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {

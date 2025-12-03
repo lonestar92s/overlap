@@ -916,8 +916,6 @@ router.get('/search', async (req, res) => {
                         totalInCache: cachedData.data.length
                     }
                 });
-                    // Return early if cache was valid (not invalidated)
-                    return;
                 }
             }
             
