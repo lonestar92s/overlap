@@ -1288,9 +1288,32 @@ const MapResultsScreen = ({ navigation, route }) => {
   // User must click "Search this area" to see matches in a different region
   // This matches Google Maps behavior: search "London" shows only London results, even if you zoom out
   const mapMarkersMatches = useMemo(() => {
-    const allMarkers = displayFilteredMatches || [];
+    // Use finalFilteredMatches (before originalSearchBounds filtering) for markers
+    // This allows markers to update dynamically as user pans/zooms
+    const allMarkers = finalFilteredMatches || [];
     
-    // Filter out matches without valid coordinates (for map display)
+    // Calculate current viewport bounds with 20% buffer (for smooth panning)
+    const currentRegion = debouncedMapRegion || mapRegion || initialRegion;
+    let viewportBounds = null;
+    
+    if (currentRegion) {
+      const bufferPercent = 0.2; // 20% buffer
+      const latBuffer = currentRegion.latitudeDelta * bufferPercent;
+      const lngBuffer = currentRegion.longitudeDelta * bufferPercent;
+      
+      viewportBounds = {
+        northeast: {
+          lat: currentRegion.latitude + (currentRegion.latitudeDelta / 2) + latBuffer,
+          lng: currentRegion.longitude + (currentRegion.longitudeDelta / 2) + lngBuffer
+        },
+        southwest: {
+          lat: currentRegion.latitude - (currentRegion.latitudeDelta / 2) - latBuffer,
+          lng: currentRegion.longitude - (currentRegion.longitudeDelta / 2) - lngBuffer
+        }
+      };
+    }
+    
+    // Filter markers by current viewport + buffer (Google Maps style)
     const validMarkers = allMarkers.filter(match => {
       const venue = match.fixture?.venue;
       const coordinates = venue?.coordinates;
@@ -1306,19 +1329,32 @@ const MapResultsScreen = ({ navigation, route }) => {
         return false;
       }
       
-      return true; // Include all matches with valid coordinates (already filtered by original bounds)
+      // Filter by current viewport + buffer (if viewport is available)
+      if (viewportBounds) {
+        return lat >= viewportBounds.southwest.lat && 
+               lat <= viewportBounds.northeast.lat &&
+               lon >= viewportBounds.southwest.lng && 
+               lon <= viewportBounds.northeast.lng;
+      }
+      
+      // If no viewport yet, include all valid matches
+      return true;
     });
     
     if (__DEV__) {
       console.log('🗺️ [MAP MARKERS] Displaying markers:', {
         total: allMarkers.length,
         withValidCoords: validMarkers.length,
-        note: 'Showing only matches from original search viewport'
+        note: viewportBounds ? 'Filtered by current viewport + 20% buffer' : 'Showing all matches (no viewport yet)',
+        viewportBounds: viewportBounds ? {
+          ne: { lat: viewportBounds.northeast.lat.toFixed(4), lng: viewportBounds.northeast.lng.toFixed(4) },
+          sw: { lat: viewportBounds.southwest.lat.toFixed(4), lng: viewportBounds.southwest.lng.toFixed(4) }
+        } : null
       });
     }
     
     return validMarkers;
-  }, [displayFilteredMatches]);
+  }, [finalFilteredMatches, debouncedMapRegion, mapRegion, initialRegion]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {

@@ -349,6 +349,24 @@ function isWithinBounds(coordinates, bounds, searchSessionId = 'unknown') {
     return result;
 }
 
+// Function to generate a bounds hash for cache key
+// Rounds bounds to ~10km grid to allow similar viewports to share cache
+function generateBoundsHash(bounds) {
+    if (!bounds || !bounds.northeast || !bounds.southwest) {
+        return 'unknown';
+    }
+    
+    // Round to ~10km precision (approximately 0.09 degrees)
+    const precision = 0.09;
+    const neLat = Math.round(bounds.northeast.lat / precision) * precision;
+    const neLng = Math.round(bounds.northeast.lng / precision) * precision;
+    const swLat = Math.round(bounds.southwest.lat / precision) * precision;
+    const swLng = Math.round(bounds.southwest.lng / precision) * precision;
+    
+    // Create a simple hash string
+    return `${neLat.toFixed(2)}_${neLng.toFixed(2)}_${swLat.toFixed(2)}_${swLng.toFixed(2)}`;
+}
+
 // Function to calculate distance between two points in miles
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 3959; // Earth's radius in miles
@@ -797,17 +815,36 @@ router.get('/search', async (req, res) => {
             
             console.log(`🌍 Country detection: ${searchCountry} (distance: ${countryDetection.distance ? countryDetection.distance.toFixed(0) + 'km' : 'N/A'})`);
             
-            // Use country + date range for cache key (country-level caching)
-            // This enables consistent results across different zoom levels and viewports
-            // All matches for the country are cached, then filtered by bounds when returning results
-            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}`;
+            // Generate bounds hash for cache key (rounded to ~10km grid)
+            // This allows similar viewports to share cache while preventing conflicts
+            const boundsHash = generateBoundsHash(originalBounds);
+            
+            // Use country + date range + bounds hash for cache key
+            // This prevents cache conflicts when different viewports are searched
+            // Similar viewports (within ~10km) will share cache, different ones won't conflict
+            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}:${boundsHash}`;
+            
+            console.log(`🔑 Cache key: ${cacheKey} (bounds hash: ${boundsHash})`);
             
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
                 console.log(`✅ Location-only search: Cache hit for ${searchCountry}, ${dateFrom} to ${dateTo}`);
                 
-                // CACHE CONSISTENCY FIX: Try to enrich matches that are missing coordinates
+                // CACHE VALIDATION: Check if cache seems incomplete
+                // For major countries, we expect more than just 1-2 matches
+                const majorCountries = ['England', 'Spain', 'Italy', 'Germany', 'France', 'Netherlands', 'Portugal'];
+                const isMajorCountry = majorCountries.includes(searchCountry);
+                const cachedMatchCount = cachedData.data?.length || 0;
+                
+                // If it's a major country and we only have 1-2 matches, cache might be incomplete
+                // This can happen if the first search had corrupted coordinates or API issues
+                if (isMajorCountry && cachedMatchCount <= 2) {
+                    console.log(`⚠️ Cache validation: Only ${cachedMatchCount} matches cached for major country ${searchCountry}. This seems incomplete, invalidating cache and refetching.`);
+                    matchesCache.delete(cacheKey);
+                    // Fall through to fresh fetch below
+                } else {
+                    // CACHE CONSISTENCY FIX: Try to enrich matches that are missing coordinates
                 // This handles the case where venues were geocoded after cache was created
                 const matchesWithCoords = [];
                 const matchesMissingCoords = [];
@@ -879,8 +916,12 @@ router.get('/search', async (req, res) => {
                         totalInCache: cachedData.data.length
                     }
                 });
+                    // Return early if cache was valid (not invalidated)
+                    return;
+                }
             }
             
+            // Cache miss or invalidated - fetch fresh data
             console.log(`🔍 Location-only search: Cache miss for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo} - fetching from API`);
             
             // Get relevant league IDs using geographic filtering (similar to /leagues/relevant)
