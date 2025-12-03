@@ -21,6 +21,7 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import ApiService from '../services/api';
 import { calculateSearchBounds } from '../utils/adaptiveBounds';
 import { processMatchesForFilterData } from '../utils/filterDataProcessor';
+import * as performanceTracker from '../utils/performanceTracker';
 import * as Haptics from 'expo-haptics';
 
 import HeartButton from '../components/HeartButton';
@@ -33,7 +34,10 @@ import { colors, spacing, typography, borderRadius } from '../styles/designToken
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
-  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters } = route.params || {};
+  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters, _performanceStartTime } = route.params || {};
+  
+  // Track initial search end-to-end performance (if coming from LocationSearchModal)
+  const initialSearchTimerRef = useRef(null);
   
   // Search state
   const [location, setLocation] = useState(searchParams?.location || null);
@@ -150,7 +154,11 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Use the extracted filter data processor utility
   const computeFilterData = useCallback((matchesToProcess) => {
-    return processMatchesForFilterData(matchesToProcess);
+    return performanceTracker.trackSyncPerformance(
+      performanceTracker.MetricType.FILTER_COMPUTATION,
+      () => processMatchesForFilterData(matchesToProcess),
+      { matchCount: matchesToProcess?.length || 0 }
+    );
   }, []);
 
   // Wrapper that updates context (for use in useEffect)
@@ -206,13 +214,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (filterData && filterData.matchIds && filterData.matchIds.length > 0) {
       if (__DEV__) {
-        console.log('✅ [FILTER] Filter data ready:', {
-          countries: filterData.countries?.length || 0,
-          leagues: filterData.leagues?.length || 0,
-          teams: filterData.teams?.length || 0,
-          matchIds: filterData.matchIds.length,
-          totalMatches: matches.length
-        });
+      
       }
     }
   }, [filterData, matches.length]);
@@ -1628,6 +1630,72 @@ const MapResultsScreen = ({ navigation, route }) => {
     );
   };
 
+  // Ref to store the performance timer stop function for end-to-end tracking
+  const searchTimerRef = useRef(null);
+
+  // Track when search completes and matches are rendered
+  useEffect(() => {
+    // When search completes (isSearching goes from true to false) and we have matches
+    if (!isSearching && searchTimerRef.current && matches.length > 0) {
+      // Use requestAnimationFrame to ensure rendering is complete
+      requestAnimationFrame(() => {
+        if (searchTimerRef.current) {
+          const duration = searchTimerRef.current(true);
+          searchTimerRef.current = null;
+          if (__DEV__) {
+            console.log(`⏱️ [PERF] End-to-end search complete: ${duration.toFixed(2)}ms (button press → rendered)`);
+          }
+        }
+      });
+    }
+  }, [isSearching, matches.length]);
+
+  // Track initial search end-to-end performance (from LocationSearchModal)
+  useEffect(() => {
+    if (_performanceStartTime && initialMatches && initialMatches.length > 0 && !initialSearchTimerRef.current) {
+      const startTime = _performanceStartTime;
+      initialSearchTimerRef.current = true; // Mark as tracking
+      
+      // Use requestAnimationFrame to ensure rendering is complete
+      requestAnimationFrame(() => {
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        
+        // Store the metric using the performance tracker
+        const metric = {
+          type: performanceTracker.MetricType.SEARCH_INITIAL,
+          duration,
+          timestamp: new Date().toISOString(),
+          success: true,
+          metadata: {
+            location: searchParams?.location,
+            dateRange: { from: searchParams?.dateFrom, to: searchParams?.dateTo },
+            matchCount: initialMatches.length,
+            startTime,
+            endTime,
+          },
+        };
+        
+        // Store metric (using internal function - we'll need to export it or use AsyncStorage directly)
+        import('@react-native-async-storage/async-storage').then(({ default: AsyncStorage }) => {
+          AsyncStorage.getItem('@performance_metrics').then(existing => {
+            const metrics = existing ? JSON.parse(existing) : [];
+            metrics.push(metric);
+            // Keep only last 100
+            if (metrics.length > 100) {
+              metrics.splice(0, metrics.length - 100);
+            }
+            AsyncStorage.setItem('@performance_metrics', JSON.stringify(metrics));
+          });
+        });
+        
+        if (__DEV__) {
+          console.log(`⏱️ [PERF] End-to-end initial search complete: ${duration.toFixed(2)}ms (button press → rendered)`);
+        }
+      });
+    }
+  }, [_performanceStartTime, initialMatches, searchParams]);
+
   // Manual search function
   // FIXED: Always allow search even if region hasn't changed - user should be able to re-search
   const handleSearchThisArea = async () => {
@@ -1682,6 +1750,19 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
       });
     }
+    
+    // Start end-to-end performance timer (from button press to rendered)
+    searchTimerRef.current = performanceTracker.startTimer(
+      performanceTracker.MetricType.SEARCH_THIS_AREA,
+      {
+        bounds: {
+          center: { lat: currentRegion.latitude, lng: currentRegion.longitude },
+          delta: { lat: currentRegion.latitudeDelta, lng: currentRegion.longitudeDelta }
+        },
+        dateRange: { from: dateFrom, to: dateTo },
+        requestId
+      }
+    );
     
     setCurrentRequestId(requestId);
     currentRequestIdRef.current = requestId; // Update ref for synchronous access

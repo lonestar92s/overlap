@@ -489,6 +489,10 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
         });
       }
 
+      // Track initial search performance (end-to-end: button press → rendered)
+      // We'll pass the search start time via route params and complete tracking in MapResultsScreen
+      const searchStartTime = performance.now();
+      
       const response = await ApiService.searchMatchesByBounds({
         bounds,
         dateFrom,
@@ -514,6 +518,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             longitudeDelta: viewportDelta,
           },
           hasWho: false,
+          _performanceStartTime: searchStartTime, // Pass start time for end-to-end tracking
         });
       } else {
         Alert.alert('Error', 'Failed to search matches');
