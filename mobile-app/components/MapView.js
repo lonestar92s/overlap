@@ -269,7 +269,6 @@ const MatchMapView = forwardRef(({
   }, []);
 
   // Render match markers with memoization - grouped by venue
-  // Use matches.length as part of the dependency to ensure markers update when matches change
   const markers = useMemo(() => {
     if (!matches || matches.length === 0) {
       if (__DEV__) {
@@ -315,8 +314,7 @@ const MatchMapView = forwardRef(({
     });
 
     // Create one marker per venue group
-    // Use matches.length in key to ensure markers update when matches change
-    const markerElements = Array.from(venueGroupsMap.values()).map((venueGroup) => {
+    return Array.from(venueGroupsMap.values()).map((venueGroup) => {
       // Use the first match from the venue group for marker display and selection check
       const firstMatch = venueGroup.matches[0];
       const venue = firstMatch.fixture.venue;
@@ -327,8 +325,7 @@ const MatchMapView = forwardRef(({
       };
       
       // Use venue key for marker identifier
-      // Include matches.length in key to force re-render when matches change
-      const markerKey = `venue-${venueGroup.key}-${matches.length}`;
+      const markerKey = `venue-${venueGroup.key}`;
       
       return (
         <Marker
@@ -341,17 +338,7 @@ const MatchMapView = forwardRef(({
         />
       );
     });
-    
-    if (__DEV__) {
-      console.log('MapView: Rendering markers', {
-        totalMatches: matches.length,
-        validMatches: validMatches.length,
-        markers: markerElements.length
-      });
-    }
-    
-    return markerElements;
-  }, [matches, matches.length, selectedMatchId, handleMarkerPress, getVenueGroupKey]);
+  }, [matches, selectedMatchId, handleMarkerPress, getVenueGroupKey]);
 
   // Render recommended match markers with memoization (yellow pins)
   const recommendedMarkers = useMemo(() => {

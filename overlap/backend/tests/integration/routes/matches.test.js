@@ -309,7 +309,7 @@ describe('Matches Routes Integration', () => {
       }
     });
 
-    it('should return consistent results for overlapping viewport searches in same country', async () => {
+    it('should use different cache keys for different viewports in same country', async () => {
       // First search - center of London
       const response1 = await request(app)
         .get('/api/matches/search')
@@ -322,7 +322,7 @@ describe('Matches Routes Integration', () => {
           dateTo: '2026-02-15'
         });
 
-      // Second search - slightly shifted viewport (still London, same country cache)
+      // Second search - slightly shifted viewport (different bounds hash = different cache key)
       const response2 = await request(app)
         .get('/api/matches/search')
         .query({
@@ -341,8 +341,40 @@ describe('Matches Routes Integration', () => {
       expect(Array.isArray(response1.body.data)).toBe(true);
       expect(Array.isArray(response2.body.data)).toBe(true);
       
-      // Second should be a cache hit (same country + date range)
-      // Note: the first search populates the country-level cache
+      // Second should be a cache miss (different viewport = different cache key)
+      // This prevents the bug where different viewports share the same cache
+      if (response2.body.fromCache !== undefined) {
+        expect(response2.body.fromCache).toBe(false);
+      }
+    });
+
+    it('should use same cache key for same viewport bounds', async () => {
+      // First search
+      const searchParams = {
+        neLat: 51.6,
+        neLng: 0.0,
+        swLat: 51.4,
+        swLng: -0.3,
+        dateFrom: '2026-02-20',
+        dateTo: '2026-02-25'
+      };
+      
+      const response1 = await request(app)
+        .get('/api/matches/search')
+        .query(searchParams);
+
+      // Second search with identical bounds - should hit cache
+      const response2 = await request(app)
+        .get('/api/matches/search')
+        .query(searchParams);
+
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
+      
+      // Results should be identical
+      expect(response1.body.count).toBe(response2.body.count);
+      
+      // Second should be a cache hit (same viewport = same cache key)
       if (response2.body.fromCache !== undefined) {
         expect(response2.body.fromCache).toBe(true);
       }

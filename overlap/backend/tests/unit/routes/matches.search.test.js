@@ -358,7 +358,78 @@ describe('Match Search Utilities', () => {
             const countryResult = detectCountryFromBounds(countryBounds);
             
             // Both should detect England (or at least same country)
+            // Note: Cache keys will differ due to bounds hash, but country detection should be same
             expect(cityResult.country).toBe(countryResult.country);
+        });
+    });
+
+    describe('Bounds Hash Generation', () => {
+        // Mock implementation matching the one in matches.js
+        function generateBoundsHash(bounds) {
+            if (!bounds || !bounds.northeast || !bounds.southwest) {
+                return 'unknown';
+            }
+            
+            const precision = 0.09;
+            const neLat = Math.round(bounds.northeast.lat / precision) * precision;
+            const neLng = Math.round(bounds.northeast.lng / precision) * precision;
+            const swLat = Math.round(bounds.southwest.lat / precision) * precision;
+            const swLng = Math.round(bounds.southwest.lng / precision) * precision;
+            
+            return `${neLat.toFixed(2)}_${neLng.toFixed(2)}_${swLat.toFixed(2)}_${swLng.toFixed(2)}`;
+        }
+
+        it('should generate same hash for identical bounds', () => {
+            const bounds = {
+                northeast: { lat: 51.6, lng: 0.0 },
+                southwest: { lat: 51.4, lng: -0.3 }
+            };
+            
+            const hash1 = generateBoundsHash(bounds);
+            const hash2 = generateBoundsHash(bounds);
+            
+            expect(hash1).toBe(hash2);
+        });
+
+        it('should generate same hash for bounds within ~10km (same grid cell)', () => {
+            // These bounds are within ~10km of each other, so they should round to same grid cell
+            const bounds1 = {
+                northeast: { lat: 51.605, lng: 0.005 },
+                southwest: { lat: 51.405, lng: -0.295 }
+            };
+            const bounds2 = {
+                northeast: { lat: 51.600, lng: 0.000 },
+                southwest: { lat: 51.400, lng: -0.300 }
+            };
+            
+            const hash1 = generateBoundsHash(bounds1);
+            const hash2 = generateBoundsHash(bounds2);
+            
+            // Should be same due to rounding to 0.09 degree precision
+            expect(hash1).toBe(hash2);
+        });
+
+        it('should generate different hash for significantly different bounds', () => {
+            const bounds1 = {
+                northeast: { lat: 51.6, lng: 0.0 },
+                southwest: { lat: 51.4, lng: -0.3 }
+            };
+            const bounds2 = {
+                northeast: { lat: 52.0, lng: 0.5 },
+                southwest: { lat: 51.8, lng: 0.2 }
+            };
+            
+            const hash1 = generateBoundsHash(bounds1);
+            const hash2 = generateBoundsHash(bounds2);
+            
+            // Should be different for different viewports
+            expect(hash1).not.toBe(hash2);
+        });
+
+        it('should handle missing bounds gracefully', () => {
+            expect(generateBoundsHash(null)).toBe('unknown');
+            expect(generateBoundsHash({})).toBe('unknown');
+            expect(generateBoundsHash({ northeast: {} })).toBe('unknown');
         });
     });
 });

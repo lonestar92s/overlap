@@ -1306,16 +1306,6 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Map and list are now consistent: both show only matches from original search viewport
   // User must click "Search this area" to see matches in a different region
   // This matches Google Maps behavior: search "London" shows only London results, even if you zoom out
-  // Track when matches update to force marker re-render
-  const [matchesUpdateTimestamp, setMatchesUpdateTimestamp] = useState(0);
-  
-  // Update timestamp when matches change to force marker re-render
-  useEffect(() => {
-    if (matches && matches.length > 0) {
-      setMatchesUpdateTimestamp(Date.now());
-    }
-  }, [matches.length]);
-  
   const mapMarkersMatches = useMemo(() => {
     // Use displayFilteredMatches which is already filtered by originalSearchBounds
     // This ensures markers only show matches from the searched viewport
@@ -1347,7 +1337,6 @@ const MapResultsScreen = ({ navigation, route }) => {
         total: allMarkers.length,
         withValidCoords: validMarkers.length,
         note: 'Showing only matches from original search viewport',
-        updateTimestamp: matchesUpdateTimestamp,
         originalSearchBounds: originalSearchBounds ? {
           ne: { lat: originalSearchBounds.northeast.lat.toFixed(4), lng: originalSearchBounds.northeast.lng.toFixed(4) },
           sw: { lat: originalSearchBounds.southwest.lat.toFixed(4), lng: originalSearchBounds.southwest.lng.toFixed(4) }
@@ -1356,7 +1345,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
     
     return validMarkers;
-  }, [displayFilteredMatches, originalSearchBounds, matches, matchesUpdateTimestamp]);
+  }, [displayFilteredMatches, originalSearchBounds]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
   const venueGroups = useMemo(() => {
