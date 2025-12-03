@@ -33,7 +33,9 @@ export const ItineraryProvider = ({ children }) => {
         setItineraries(normalizedTrips);
       }
     } catch (error) {
-      console.error('Error loading itineraries from API:', error);
+      if (__DEV__) {
+        console.error('Error loading itineraries from API:', error);
+      }
       // Fallback to empty array on error
       setItineraries([]);
     } finally {
@@ -44,20 +46,28 @@ export const ItineraryProvider = ({ children }) => {
   // Create a new itinerary
   const createItinerary = async (name, destination, startDate, endDate) => {
     try {
-      console.log('🆕 Creating itinerary with name:', name, 'dates:', { startDate, endDate });
+      if (__DEV__) {
+        console.log('🆕 Creating itinerary with name:', name, 'dates:', { startDate, endDate });
+      }
       const response = await ApiService.createTrip(name, '', startDate, endDate);
-      console.log('🆕 API response:', response);
+      if (__DEV__) {
+        console.log('🆕 API response:', response);
+      }
       
       if (response.success && response.trip) {
         const newItinerary = normalizeId(response.trip);
-        console.log('🆕 New itinerary normalized:', { id: newItinerary.id, _id: newItinerary._id });
+        if (__DEV__) {
+          console.log('🆕 New itinerary normalized:', { id: newItinerary.id, _id: newItinerary._id });
+        }
         setItineraries(prev => [...prev, newItinerary]);
         return newItinerary;
       } else {
         throw new Error('Failed to create trip via API');
       }
     } catch (error) {
-      console.error('Error creating itinerary via API:', error);
+      if (__DEV__) {
+        console.error('Error creating itinerary via API:', error);
+      }
       throw error;
     }
   };
@@ -65,33 +75,43 @@ export const ItineraryProvider = ({ children }) => {
   // Add a match to an itinerary
   const addMatchToItinerary = async (itineraryId, matchData) => {
     try {
-      console.log('➕ Adding match to itinerary:', { 
-        itineraryId, 
-        matchId: matchData.matchId,
-        matchData: JSON.stringify(matchData, null, 2) 
-      });
+      if (__DEV__) {
+        console.log('➕ Adding match to itinerary:', { 
+          itineraryId, 
+          matchId: matchData.matchId,
+          matchData: JSON.stringify(matchData, null, 2) 
+        });
+      }
       
       const response = await ApiService.addMatchToTrip(itineraryId, matchData);
-      console.log('➕ API response:', response);
+      if (__DEV__) {
+        console.log('➕ API response:', response);
+      }
       
       if (response.success && response.trip) {
         const updatedTrip = normalizeId(response.trip);
-        console.log('➕ Updated trip normalized:', { id: updatedTrip.id, _id: updatedTrip._id });
-        console.log('➕ Updated trip matches:', updatedTrip.matches.map(m => ({ matchId: m.matchId, fixtureId: m.fixtureId })));
+        if (__DEV__) {
+          console.log('➕ Updated trip normalized:', { id: updatedTrip.id, _id: updatedTrip._id });
+          console.log('➕ Updated trip matches:', updatedTrip.matches.map(m => ({ matchId: m.matchId, fixtureId: m.fixtureId })));
+        }
         
         // Update local state with the updated trip from API
         setItineraries(prev => {
           const updated = prev.map(itinerary => 
             idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
           );
-          console.log('➕ Local state updated, new itineraries count:', updated.length);
+          if (__DEV__) {
+            console.log('➕ Local state updated, new itineraries count:', updated.length);
+          }
           return updated;
         });
       } else {
         throw new Error('Failed to add match to trip via API');
       }
     } catch (error) {
-      console.error('Error adding match to itinerary via API:', error);
+      if (__DEV__) {
+        console.error('Error adding match to itinerary via API:', error);
+      }
       throw error;
     }
   };
@@ -99,14 +119,20 @@ export const ItineraryProvider = ({ children }) => {
   // Update match planning details
   const updateMatchPlanning = async (itineraryId, matchId, planningData) => {
     try {
-      console.log('📋 Updating match planning:', { itineraryId, matchId, planningData });
+      if (__DEV__) {
+        console.log('📋 Updating match planning:', { itineraryId, matchId, planningData });
+      }
       
       const response = await ApiService.updateMatchPlanning(itineraryId, matchId, planningData);
-      console.log('📋 Planning update response:', response);
+      if (__DEV__) {
+        console.log('📋 Planning update response:', response);
+      }
       
       if (response.success && response.data.trip) {
         const updatedTrip = normalizeId(response.data.trip);
-        console.log('📋 Updated trip from API:', updatedTrip);
+        if (__DEV__) {
+          console.log('📋 Updated trip from API:', updatedTrip);
+        }
         
         // Update local state with the updated trip from API
         setItineraries(prev => prev.map(itinerary => 
@@ -118,7 +144,9 @@ export const ItineraryProvider = ({ children }) => {
         throw new Error('Failed to update match planning via API');
       }
     } catch (error) {
-      console.error('Error updating match planning:', error);
+      if (__DEV__) {
+        console.error('Error updating match planning:', error);
+      }
       throw error;
     }
   };
@@ -148,7 +176,9 @@ export const ItineraryProvider = ({ children }) => {
           return;
         }
       } catch (apiError) {
-        console.log('🔄 Backend API not available, using local state update');
+        if (__DEV__) {
+          console.log('🔄 Backend API not available, using local state update');
+        }
       }
       
       // Fallback to local state update if API fails
@@ -167,7 +197,9 @@ export const ItineraryProvider = ({ children }) => {
         return itinerary;
       }));
     } catch (error) {
-      console.error('Error removing match from itinerary:', error);
+      if (__DEV__) {
+        console.error('Error removing match from itinerary:', error);
+      }
       throw error;
     }
   };
@@ -175,14 +207,20 @@ export const ItineraryProvider = ({ children }) => {
   // Update itinerary details
   const updateItinerary = async (itineraryId, updates) => {
     try {
-      console.log('🔄 Updating itinerary:', { itineraryId, updates });
+      if (__DEV__) {
+        console.log('🔄 Updating itinerary:', { itineraryId, updates });
+      }
       
       const response = await ApiService.updateTrip(itineraryId, updates);
-      console.log('🔄 API response:', response);
+      if (__DEV__) {
+        console.log('🔄 API response:', response);
+      }
       
       if (response.success && response.trip) {
         const updatedTrip = normalizeId(response.trip);
-        console.log('🔄 Updated trip from API:', updatedTrip);
+        if (__DEV__) {
+          console.log('🔄 Updated trip from API:', updatedTrip);
+        }
         
         // Update local state with the updated trip from API
         setItineraries(prev => prev.map(itinerary => 
@@ -194,7 +232,9 @@ export const ItineraryProvider = ({ children }) => {
         throw new Error('Failed to update trip via API');
       }
     } catch (error) {
-      console.error('Error updating itinerary via API:', error);
+      if (__DEV__) {
+        console.error('Error updating itinerary via API:', error);
+      }
       throw error;
     }
   };
@@ -202,7 +242,9 @@ export const ItineraryProvider = ({ children }) => {
   // Delete an itinerary
   const deleteItinerary = async (itineraryId) => {
     try {
-      console.log('🗑️ Attempting to delete itinerary:', itineraryId);
+      if (__DEV__) {
+        console.log('🗑️ Attempting to delete itinerary:', itineraryId);
+      }
       
       // Find the itinerary to get the correct ID format
       const itinerary = itineraries.find(it => 
@@ -211,24 +253,32 @@ export const ItineraryProvider = ({ children }) => {
       
       // Prefer _id for backend calls (MongoDB format), fallback to id
       const tripIdForApi = itinerary?._id || itinerary?.id || itineraryId;
-      console.log('🗑️ Using trip ID for API:', tripIdForApi, 'from itinerary:', itinerary?.name);
+      if (__DEV__) {
+        console.log('🗑️ Using trip ID for API:', tripIdForApi, 'from itinerary:', itinerary?.name);
+      }
       
       // Use the backend API - don't allow local-only deletion
       const response = await ApiService.deleteTrip(tripIdForApi);
-      console.log('🗑️ Backend delete response:', response);
+      if (__DEV__) {
+        console.log('🗑️ Backend delete response:', response);
+      }
       
       if (response.success) {
         // Only remove from local state if API deletion succeeded
         setItineraries(prev => prev.filter(it => 
           !idsEqual(it.id || it._id, itineraryId)
         ));
-        console.log('✅ Itinerary deleted successfully via API');
+        if (__DEV__) {
+          console.log('✅ Itinerary deleted successfully via API');
+        }
         return;
       } else {
         throw new Error('Failed to delete trip via API');
       }
     } catch (error) {
-      console.error('Error deleting itinerary:', error);
+      if (__DEV__) {
+        console.error('Error deleting itinerary:', error);
+      }
       // Re-throw the error so the UI can show an error message
       // Don't remove from local state if deletion failed
       throw error;
@@ -258,7 +308,9 @@ export const ItineraryProvider = ({ children }) => {
       }
       return null;
     } catch (error) {
-      console.error('Error refreshing itinerary:', error);
+      if (__DEV__) {
+        console.error('Error refreshing itinerary:', error);
+      }
       return null;
     }
   };

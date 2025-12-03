@@ -11,7 +11,16 @@ export const MAPBOX_CONFIG = {
 
 // Google Maps configuration
 export const GOOGLE_MAPS_CONFIG = {
-  apiKey: process.env.GOOGLE_API_KEY || 'YOUR_GOOGLE_MAPS_API_KEY', // From environment variable
+  // SECURITY: API key from environment variable
+  // In production, this should be set via EAS secrets
+  apiKey: process.env.GOOGLE_API_KEY || (__DEV__ ? '' : (() => {
+    if (__DEV__) {
+      console.warn('⚠️ GOOGLE_API_KEY not set - Google Maps features may not work');
+    } else {
+      console.error('❌ GOOGLE_API_KEY environment variable is required in production');
+    }
+    return '';
+  })()),
 };
 
 // Feature flags for map functionality

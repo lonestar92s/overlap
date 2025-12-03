@@ -10,7 +10,11 @@ const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
 const LOCATIONIQ_BASE_URL = 'https://us1.locationiq.com/v1';
 
 // API-Sports configuration
-const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
+// SECURITY: Require API key from environment - no fallback
+const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
+if (!API_SPORTS_KEY) {
+  throw new Error('API_SPORTS_KEY environment variable is required');
+}
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 
 const httpsAgent = new https.Agent({

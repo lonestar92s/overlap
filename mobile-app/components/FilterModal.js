@@ -13,6 +13,8 @@ import { CheckBox, Button } from 'react-native-elements';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
+import FilterSection from './FilterSection';
+import FilterAccordion from './FilterAccordion';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const FilterModal = ({ 
@@ -234,136 +236,95 @@ const FilterModal = ({
     onClose();
   };
 
-  const renderCountrySection = () => {
-    if (!filterData.countries || filterData.countries.length === 0) {
-      return (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Countries</Text>
-          <Text style={styles.noDataText}>No countries available from search results</Text>
-        </View>
-      );
-    }
+  // Render nested leagues section for a country
+  const renderLeaguesSection = useCallback((country) => {
+    const countryLeagues = filterData.leagues.filter(league => league.countryId === country.id);
+    
+    if (countryLeagues.length === 0) return null;
     
     return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Countries</Text>
-          <TouchableOpacity onPress={handleSelectAllCountries}>
+      <View style={styles.nestedSection}>
+        <View style={styles.nestedHeader}>
+          <Text style={styles.nestedTitle}>Leagues</Text>
+          <TouchableOpacity onPress={() => handleSelectAllLeagues(country.id)}>
             <Text style={styles.selectAllText}>Select All</Text>
           </TouchableOpacity>
         </View>
         
-        {filterData.countries.map(country => {
-          const isSelected = localFilters.countries.includes(country.id);
-          const isExpanded = expandedCountryId === country.id;
+        {countryLeagues.map(league => {
+          const isLeagueSelected = localFilters.leagues.includes(league.id);
+          const isLeagueExpanded = expandedLeagueId === league.id;
+          const leagueTeams = filterData.teams.filter(team => team.leagueId === league.id);
           
           return (
-            <View key={country.id} style={styles.filterItem}>
-              <View style={styles.filterRow}>
-                <CheckBox
-                  title={country.name}
-                  checked={isSelected}
-                  onPress={() => handleCountryChange(country.id)}
-                  checkedColor={colors.primary}
-                  uncheckedColor={colors.text.secondary}
-                  containerStyle={styles.checkboxContainer}
-                  textStyle={styles.checkboxText}
-                  accessibilityLabel={`Filter by ${country.name}`}
-                />
-                <View style={styles.filterItemRight}>
-                  <View style={styles.countChip}>
-                    <Text style={styles.countText}>{country.count || 0}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => {
-                    setExpandedCountryId(prev => prev === country.id ? null : country.id);
-                    setExpandedLeagueId(null);
-                  }} style={styles.expandIconBtn}>
-                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {/* Leagues accordion for this country */}
-              {isExpanded && (
+            <FilterAccordion
+              key={league.id}
+              id={league.id}
+              name={league.name}
+              count={league.count || 0}
+              checked={isLeagueSelected}
+              expanded={isLeagueExpanded}
+              onToggle={() => handleLeagueChange(league.id)}
+              onExpand={() => setExpandedLeagueId(prev => prev === league.id ? null : league.id)}
+              accessibilityLabel={`Filter by ${league.name} league`}
+            >
+              {isLeagueExpanded && leagueTeams.length > 0 && (
                 <View style={styles.nestedSection}>
                   <View style={styles.nestedHeader}>
-                    <Text style={styles.nestedTitle}>Leagues</Text>
-                    <TouchableOpacity onPress={() => handleSelectAllLeagues(country.id)}>
+                    <Text style={styles.nestedTitle}>Teams</Text>
+                    <TouchableOpacity onPress={() => handleSelectAllTeams(league.id)}>
                       <Text style={styles.selectAllText}>Select All</Text>
                     </TouchableOpacity>
                   </View>
                   
-                  {filterData.leagues
-                    .filter(league => league.countryId === country.id)
-                    .map(league => {
-                      const isLeagueSelected = localFilters.leagues.includes(league.id);
-                      const isLeagueExpanded = expandedLeagueId === league.id;
-                      
-                      return (
-                        <View key={league.id} style={styles.nestedItem}>
-                          <View style={styles.filterRow}>
-                            <CheckBox
-                              title={league.name}
-                              checked={isLeagueSelected}
-                              onPress={() => handleLeagueChange(league.id)}
-                              checkedColor={colors.primary}
-                              uncheckedColor={colors.text.secondary}
-                              containerStyle={styles.checkboxContainer}
-                              textStyle={styles.checkboxText}
-                              accessibilityLabel={`Filter by ${league.name} league`}
-                            />
-                            <View style={styles.filterItemRight}>
-                              <View style={styles.countChip}>
-                                <Text style={styles.countText}>{league.count || 0}</Text>
-                              </View>
-                              <TouchableOpacity onPress={() => setExpandedLeagueId(prev => prev === league.id ? null : league.id)} style={styles.expandIconBtn}>
-                                <Ionicons name={isLeagueExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text.secondary} />
-                              </TouchableOpacity>
-                            </View>
+                  {leagueTeams.map(team => (
+                    <View key={team.id} style={styles.nestedItem}>
+                      <View style={styles.filterRow}>
+                        <CheckBox
+                          title={team.name}
+                          checked={localFilters.teams.includes(team.id)}
+                          onPress={() => handleTeamChange(team.id)}
+                          checkedColor={colors.primary}
+                          uncheckedColor={colors.text.secondary}
+                          containerStyle={styles.checkboxContainer}
+                          textStyle={styles.checkboxText}
+                          accessibilityLabel={`Filter by ${team.name} team`}
+                        />
+                        <View style={styles.filterItemRight}>
+                          <View style={styles.countChip}>
+                            <Text style={styles.countText}>{team.count || 0}</Text>
                           </View>
-                          
-                          {/* Teams accordion for this league */}
-                          {isLeagueExpanded && (
-                            <View style={styles.nestedSection}>
-                              <View style={styles.nestedHeader}>
-                                <Text style={styles.nestedTitle}>Teams</Text>
-                                <TouchableOpacity onPress={() => handleSelectAllTeams(league.id)}>
-                                  <Text style={styles.selectAllText}>Select All</Text>
-                                </TouchableOpacity>
-                              </View>
-                              
-                              {filterData.teams
-                                .filter(team => team.leagueId === league.id)
-                                .map(team => (
-                                  <View key={team.id} style={styles.nestedItem}>
-                                    <View style={styles.filterRow}>
-                                      <CheckBox
-                                        title={team.name}
-                                        checked={localFilters.teams.includes(team.id)}
-                                        onPress={() => handleTeamChange(team.id)}
-                                        checkedColor={colors.primary}
-                                        uncheckedColor={colors.text.secondary}
-                                        containerStyle={styles.checkboxContainer}
-                                        textStyle={styles.checkboxText}
-                                        accessibilityLabel={`Filter by ${team.name} team`}
-                                      />
-                                      <View style={styles.countChip}>
-                                        <Text style={styles.countText}>{team.count || 0}</Text>
-                                      </View>
-                                    </View>
-                                  </View>
-                                ))}
-                            </View>
-                          )}
                         </View>
-                      );
-                    })}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               )}
-            </View>
+            </FilterAccordion>
           );
         })}
       </View>
+    );
+  }, [filterData, localFilters, expandedLeagueId, handleLeagueChange, handleTeamChange, handleSelectAllLeagues, handleSelectAllTeams]);
+
+  // Render country section using FilterSection component
+  const renderCountrySection = () => {
+    return (
+      <FilterSection
+        title="Countries"
+        items={filterData.countries || []}
+        selectedIds={localFilters.countries}
+        expandedId={expandedCountryId}
+        onItemToggle={handleCountryChange}
+        onItemExpand={(countryId) => {
+          setExpandedCountryId(prev => prev === countryId ? null : countryId);
+          setExpandedLeagueId(null);
+        }}
+        onSelectAll={handleSelectAllCountries}
+        getNestedItems={(country) => filterData.leagues.filter(league => league.countryId === country.id)}
+        renderNestedContent={(country) => renderLeaguesSection(country)}
+        emptyMessage="No countries available from search results"
+      />
     );
   };
 
@@ -576,52 +537,16 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.md,
   },
-  section: {
-    padding: spacing.md,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    ...typography.h3, // Uses design token fontFamily
-    color: colors.text.primary,
-  },
-  selectAllText: {
-    ...typography.bodySmall, // Uses design token fontFamily
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  filterItem: {
-    marginBottom: spacing.sm,
-  },
+  // Styles still used in renderLeaguesSection for nested teams
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  filterItemContentLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    paddingVertical: spacing.sm,
-  },
   filterItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: spacing.sm,
-  },
-  expandIconBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginLeft: spacing.xs,
-  },
-  filterItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
   },
   checkboxContainer: {
     backgroundColor: 'transparent',
@@ -632,7 +557,7 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   checkboxText: {
-    ...typography.body, // Uses design token fontFamily
+    ...typography.body,
     color: colors.text.primary,
   },
   countChip: {
@@ -644,7 +569,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   countText: {
-    ...typography.caption, // Uses design token fontFamily
+    ...typography.caption,
     color: colors.text.secondary,
     fontWeight: '500',
   },
@@ -659,19 +584,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   nestedTitle: {
-    ...typography.body, // Uses design token fontFamily
+    ...typography.body,
     fontWeight: '500',
     color: colors.text.primary,
   },
   nestedItem: {
     marginBottom: spacing.xs,
   },
-  noDataText: {
-    ...typography.bodySmall, // Uses design token fontFamily
-    color: colors.text.light,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: spacing.sm,
+  selectAllText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 
 const FilterContext = createContext();
 
@@ -10,59 +10,117 @@ export const useFilter = () => {
   return context;
 };
 
+// Action types
+const FILTER_ACTIONS = {
+  UPDATE_FILTER_DATA: 'UPDATE_FILTER_DATA',
+  UPDATE_SELECTED_FILTERS: 'UPDATE_SELECTED_FILTERS',
+  TOGGLE_FILTER_MODAL: 'TOGGLE_FILTER_MODAL',
+  OPEN_FILTER_MODAL: 'OPEN_FILTER_MODAL',
+  CLOSE_FILTER_MODAL: 'CLOSE_FILTER_MODAL',
+  CLEAR_ALL_FILTERS: 'CLEAR_ALL_FILTERS',
+};
+
+// Initial state
+const initialState = {
+  filterData: {
+    countries: [],
+    leagues: [],
+    teams: [],
+    matchIds: []
+  },
+  selectedFilters: {
+    countries: [],
+    leagues: [],
+    teams: []
+  },
+  filterModalVisible: false
+};
+
+// Reducer function
+const filterReducer = (state, action) => {
+  switch (action.type) {
+    case FILTER_ACTIONS.UPDATE_FILTER_DATA:
+      return {
+        ...state,
+        filterData: action.payload
+      };
+    
+    case FILTER_ACTIONS.UPDATE_SELECTED_FILTERS:
+      return {
+        ...state,
+        selectedFilters: action.payload
+      };
+    
+    case FILTER_ACTIONS.TOGGLE_FILTER_MODAL:
+      return {
+        ...state,
+        filterModalVisible: !state.filterModalVisible
+      };
+    
+    case FILTER_ACTIONS.OPEN_FILTER_MODAL:
+      return {
+        ...state,
+        filterModalVisible: true
+      };
+    
+    case FILTER_ACTIONS.CLOSE_FILTER_MODAL:
+      return {
+        ...state,
+        filterModalVisible: false
+      };
+    
+    case FILTER_ACTIONS.CLEAR_ALL_FILTERS:
+      return {
+        ...state,
+        selectedFilters: {
+          countries: [],
+          leagues: [],
+          teams: []
+        }
+      };
+    
+    default:
+      return state;
+  }
+};
+
 export const FilterProvider = ({ children }) => {
-  const [filterData, setFilterData] = useState({
-    countries: [],
-    leagues: [],
-    teams: []
-  });
-
-  const [selectedFilters, setSelectedFilters] = useState({
-    countries: [],
-    leagues: [],
-    teams: []
-  });
-
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [state, dispatch] = useReducer(filterReducer, initialState);
 
   const updateFilterData = useCallback((data) => {
-    setFilterData(data);
+    dispatch({ type: FILTER_ACTIONS.UPDATE_FILTER_DATA, payload: data });
   }, []);
 
   const updateSelectedFilters = useCallback((filters) => {
-    setSelectedFilters(filters);
+    dispatch({ type: FILTER_ACTIONS.UPDATE_SELECTED_FILTERS, payload: filters });
   }, []);
 
   const toggleFilterModal = useCallback(() => {
-    setFilterModalVisible(prev => !prev);
+    dispatch({ type: FILTER_ACTIONS.TOGGLE_FILTER_MODAL });
   }, []);
 
   const openFilterModal = useCallback(() => {
-    setFilterModalVisible(true);
+    dispatch({ type: FILTER_ACTIONS.OPEN_FILTER_MODAL });
   }, []);
 
   const closeFilterModal = useCallback(() => {
-    setFilterModalVisible(false);
+    dispatch({ type: FILTER_ACTIONS.CLOSE_FILTER_MODAL });
   }, []);
 
   const clearAllFilters = useCallback(() => {
-    setSelectedFilters({
-      countries: [],
-      leagues: [],
-      teams: []
-    });
+    dispatch({ type: FILTER_ACTIONS.CLEAR_ALL_FILTERS });
   }, []);
 
   const getTotalFilters = useCallback(() => {
-    return selectedFilters.countries.length + 
-           selectedFilters.leagues.length + 
-           selectedFilters.teams.length;
-  }, [selectedFilters]);
+    return state.selectedFilters.countries.length + 
+           state.selectedFilters.leagues.length + 
+           state.selectedFilters.teams.length;
+  }, [state.selectedFilters]);
 
-  const value = {
-    filterData,
-    selectedFilters,
-    filterModalVisible,
+  const value = useMemo(() => ({
+    filterData: state.filterData,
+    selectedFilters: state.selectedFilters,
+    filterModalVisible: state.filterModalVisible,
     updateFilterData,
     updateSelectedFilters,
     toggleFilterModal,
@@ -70,7 +128,18 @@ export const FilterProvider = ({ children }) => {
     closeFilterModal,
     clearAllFilters,
     getTotalFilters
-  };
+  }), [
+    state.filterData,
+    state.selectedFilters,
+    state.filterModalVisible,
+    updateFilterData,
+    updateSelectedFilters,
+    toggleFilterModal,
+    openFilterModal,
+    closeFilterModal,
+    clearAllFilters,
+    getTotalFilters
+  ]);
 
   return (
     <FilterContext.Provider value={value}>

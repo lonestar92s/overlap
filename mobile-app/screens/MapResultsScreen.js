@@ -20,6 +20,7 @@ import { useFilter } from '../contexts/FilterContext';
 import { useItineraries } from '../contexts/ItineraryContext';
 import ApiService from '../services/api';
 import { calculateSearchBounds } from '../utils/adaptiveBounds';
+import { processMatchesForFilterData } from '../utils/filterDataProcessor';
 import * as Haptics from 'expo-haptics';
 
 import HeartButton from '../components/HeartButton';
@@ -147,8 +148,12 @@ const MapResultsScreen = ({ navigation, route }) => {
     closeFilterModal
   } = useFilter();
 
-  // Process matches for filter data (extracted to reusable function)
-  // FIXED: Moved before useEffect to fix function definition order
+  // Use the extracted filter data processor utility
+  const computeFilterData = useCallback((matchesToProcess) => {
+    return processMatchesForFilterData(matchesToProcess);
+  }, []);
+
+  // Wrapper that updates context (for use in useEffect)
   const processMatchesForFilters = useCallback((matchesToProcess) => {
     if (!matchesToProcess || matchesToProcess.length === 0) return;
     
@@ -157,226 +162,10 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // Only update if match IDs are different (avoid unnecessary updates on map movement)
     if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
-        // Extract unique countries, leagues, and teams from matches
-        const countriesMap = new Map();
-        const leaguesMap = new Map();
-        const teamsMap = new Map();
-
-        matchesToProcess.forEach((match) => {
-          // Process country from area.name
-          let countryId = null;
-          let countryName = null;
-          
-          if (match.area?.name) {
-            countryId = match.area.code || match.area.id?.toString();
-            countryName = match.area.name;
-          }
-          
-          // Fallback: try to extract from league.country (backend returns this)
-          if (!countryId && match.league && match.league.country) {
-            countryId = match.league.country;
-            countryName = match.league.country;
-          }
-          
-          // Fallback: try to extract from venue or other fields
-          if (!countryId && match.venue && match.venue.country) {
-            if (typeof match.venue.country === 'string') {
-              countryId = match.venue.country;
-              countryName = match.venue.country;
-            } else if (match.venue.country.id) {
-              countryId = match.venue.country.id;
-              countryName = match.venue.country.name;
-            }
-          }
-
-          if (countryId) {
-            if (!countriesMap.has(countryId)) {
-              countriesMap.set(countryId, {
-                id: countryId,
-                name: countryName,
-                count: 1
-              });
-            } else {
-              countriesMap.get(countryId).count++;
-            }
-          }
-
-          // Process league from competition.name
-          let leagueId = null;
-          let leagueName = null;
-          
-          if (match.competition?.name) {
-            leagueId = match.competition.id || match.competition.code;
-            leagueName = match.competition.name;
-          }
-          
-          // Fallback: try match.league if competition doesn't exist
-          if (!leagueId && match.league) {
-            if (typeof match.league === 'string') {
-              leagueId = match.league;
-              leagueName = match.league;
-            } else if (match.league.id) {
-              leagueId = match.league.id;
-              leagueName = match.league.name;
-            } else if (match.league.name) {
-              leagueId = match.league.name;
-              leagueName = match.league.name;
-            }
-          }
-
-          if (leagueId) {
-            if (!leaguesMap.has(leagueId)) {
-              leaguesMap.set(leagueId, {
-                id: leagueId,
-                name: leagueName,
-                countryId: countryId || 'unknown',
-                count: 1
-              });
-            } else {
-              leaguesMap.get(leagueId).count++;
-            }
-          }
-
-          // Process teams from teams.home and teams.away
-          const processTeam = (team, teamType) => {
-            let teamId = null;
-            let teamName = null;
-            
-            if (team) {
-              if (typeof team === 'string') {
-                teamId = team;
-                teamName = team;
-              } else if (team.id) {
-                teamId = team.id;
-                teamName = team.name;
-              } else if (team.name) {
-                teamId = team.name;
-                teamName = team.name;
-              }
-            }
-
-            if (teamId) {
-              if (!teamsMap.has(teamId)) {
-                teamsMap.set(teamId, {
-                  id: teamId,
-                  name: teamName,
-                  countryId: countryId || 'unknown',
-                  leagueId: leagueId || 'unknown',
-                  count: 1
-                });
-              } else {
-                teamsMap.get(teamId).count++;
-              }
-            }
-          };
-
-          // Process home team from teams.home
-          if (match.teams?.home) {
-            processTeam(match.teams.home, 'home');
-          }
-          
-          // Process away team from teams.away
-          if (match.teams?.away) {
-            processTeam(match.teams.away, 'away');
-          }
-        });
-
-        const filterData = {
-          countries: Array.from(countriesMap.values()),
-          leagues: Array.from(leaguesMap.values()),
-          teams: Array.from(teamsMap.values()),
-          matchIds: currentMatchIds // Add match IDs to track changes
-        };
-
-        // If we still don't have any data, create some basic fallback data
-        if (filterData.countries.length === 0 && filterData.leagues.length === 0 && filterData.teams.length === 0) {
-          if (__DEV__) {
-            console.log('No structured data found, creating fallback data');
-          }
-          
-          // Try to create some basic data from the first match
-          const firstMatch = matches[0];
-          let fallbackData = {
-            countries: [],
-            leagues: [],
-            teams: [],
-            matchIds: currentMatchIds
-          };
-          
-          // Try to extract basic info from the first match
-          if (firstMatch) {
-            if (firstMatch.area?.name) {
-              fallbackData.countries.push({
-                id: firstMatch.area.code || firstMatch.area.id?.toString() || 'unknown',
-                name: firstMatch.area.name,
-                count: matches.length
-              });
-            }
-            
-            if (firstMatch.competition?.name) {
-              fallbackData.leagues.push({
-                id: firstMatch.competition.id || firstMatch.competition.code || 'unknown',
-                name: firstMatch.competition.name,
-                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
-                count: matches.length
-              });
-            }
-            
-            if (firstMatch.teams?.home?.name) {
-              fallbackData.teams.push({
-                id: firstMatch.teams.home.id || firstMatch.teams.home.name,
-                name: firstMatch.teams.home.name,
-                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
-                leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
-                count: 1
-              });
-            }
-            
-            if (firstMatch.teams?.away?.name) {
-              fallbackData.teams.push({
-                id: firstMatch.teams.away.id || firstMatch.teams.away.name,
-                name: firstMatch.teams.away.name,
-                countryId: firstMatch.area?.code || firstMatch.area?.id?.toString() || 'unknown',
-                leagueId: firstMatch.competition?.id || firstMatch.competition?.code || 'unknown',
-                count: 1
-              });
-            }
-          }
-          
-          // If we still don't have data, use generic fallback
-          if (fallbackData.countries.length === 0) {
-            fallbackData.countries.push({
-              id: 'unknown', 
-              name: 'Unknown Country', 
-              count: matches.length
-            });
-          }
-          
-          if (fallbackData.leagues.length === 0) {
-            fallbackData.leagues.push({
-              id: 'unknown', 
-              name: 'Unknown League', 
-              countryId: fallbackData.countries[0].id, 
-              count: matches.length
-            });
-          }
-          
-          if (fallbackData.teams.length === 0) {
-            fallbackData.teams.push({
-              id: 'unknown', 
-              name: 'Unknown Team', 
-              countryId: fallbackData.countries[0].id, 
-              leagueId: fallbackData.leagues[0].id, 
-              count: matches.length
-            });
-          }
-          
-          updateFilterData(fallbackData);
-        } else {
-          updateFilterData(filterData);
-        }
+      const computedData = computeFilterData(matchesToProcess);
+      updateFilterData(computedData);
     }
-  }, [filterData, updateFilterData]);
+  }, [filterData, updateFilterData, computeFilterData]);
 
   // Process real match data for filters
   // FIXED: Process filter data from displayFilteredMatches (the filtered list) instead of all matches
@@ -399,13 +188,15 @@ const MapResultsScreen = ({ navigation, route }) => {
           ? 'displayFilteredMatches (filtered by bounds)' 
           : 'matches (all - no bounds filter yet)';
         
-        console.log('🔧 [FILTER] Processing filterData:', {
-          source,
-          filteredCount: displayFilteredMatches?.length || 0,
-          totalMatches: matches.length,
-          processingCount: matchesToProcess.length,
-          note: 'Filter options will match visible matches only'
-        });
+        if (__DEV__) {
+          console.log('🔧 [FILTER] Processing filterData:', {
+            source,
+            filteredCount: displayFilteredMatches?.length || 0,
+            totalMatches: matches.length,
+            processingCount: matchesToProcess.length,
+            note: 'Filter options will match visible matches only'
+          });
+        }
         processMatchesForFilters(matchesToProcess);
       }
     }
@@ -414,25 +205,48 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Validation logging: Track when filter data becomes ready
   useEffect(() => {
     if (filterData && filterData.matchIds && filterData.matchIds.length > 0) {
-      console.log('✅ [FILTER] Filter data ready:', {
-        countries: filterData.countries?.length || 0,
-        leagues: filterData.leagues?.length || 0,
-        teams: filterData.teams?.length || 0,
-        matchIds: filterData.matchIds.length,
-        totalMatches: matches.length
-      });
+      if (__DEV__) {
+        console.log('✅ [FILTER] Filter data ready:', {
+          countries: filterData.countries?.length || 0,
+          leagues: filterData.leagues?.length || 0,
+          teams: filterData.teams?.length || 0,
+          matchIds: filterData.matchIds.length,
+          totalMatches: matches.length
+        });
+      }
     }
   }, [filterData, matches.length]);
+
+  // FIXED: Initialize filterData synchronously from initialMatches on mount
+  // This prevents race condition where getFilteredMatches runs before filterData is ready
+  useEffect(() => {
+    if (initialMatches && initialMatches.length > 0 && (!filterData || !filterData.matchIds || filterData.matchIds.length === 0)) {
+      const initialFilterData = computeFilterData(initialMatches);
+      if (initialFilterData && initialFilterData.matchIds.length > 0) {
+        updateFilterData(initialFilterData);
+        if (__DEV__) {
+          console.log('✅ [FILTER] Initialized filterData synchronously from initialMatches:', {
+            countries: initialFilterData.countries?.length || 0,
+            leagues: initialFilterData.leagues?.length || 0,
+            teams: initialFilterData.teams?.length || 0,
+            matchIds: initialFilterData.matchIds.length
+          });
+        }
+      }
+    }
+  }, []); // Only run once on mount
 
   // Set initial search region when component mounts
   // FIXED: Only run once on mount to prevent repeated initialization
   useEffect(() => {
     if (initialRegion && !initialSearchRegion) {
-      console.log('🗺️ [INIT] Setting initial region:', {
-        center: { lat: initialRegion.latitude.toFixed(4), lng: initialRegion.longitude.toFixed(4) },
-        delta: { lat: initialRegion.latitudeDelta.toFixed(4), lng: initialRegion.longitudeDelta.toFixed(4) },
-        initialMatchesCount: initialMatches?.length || 0
-      });
+      if (__DEV__) {
+        console.log('🗺️ [INIT] Setting initial region:', {
+          center: { lat: initialRegion.latitude.toFixed(4), lng: initialRegion.longitude.toFixed(4) },
+          delta: { lat: initialRegion.latitudeDelta.toFixed(4), lng: initialRegion.longitudeDelta.toFixed(4) },
+          initialMatchesCount: initialMatches?.length || 0
+        });
+      }
       setInitialSearchRegion(initialRegion);
       setMapRegion(initialRegion); // Also set mapRegion immediately
       
@@ -448,14 +262,18 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
       };
       setOriginalSearchBounds(boundsFromRegion);
-      console.log('📍 [INIT] Set original search bounds from initialRegion:', boundsFromRegion);
+      if (__DEV__) {
+        console.log('📍 [INIT] Set original search bounds from initialRegion:', boundsFromRegion);
+      }
     }
   }, []); // Only run once on mount
 
   // Apply pre-selected filters from natural language search
   useEffect(() => {
     if (preSelectedFilters && filterData) {
-      console.log('🎯 Applying pre-selected filters:', preSelectedFilters);
+      if (__DEV__) {
+        console.log('🎯 Applying pre-selected filters:', preSelectedFilters);
+      }
       
       // Convert pre-selected filter names to IDs by matching with filterData
       const selectedFilters = {
@@ -471,7 +289,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         );
         if (countryMatch) {
           selectedFilters.countries = [countryMatch.id];
-          console.log('🏴 Selected country:', countryMatch.name, countryMatch.id);
+          if (__DEV__) {
+            console.log('🏴 Selected country:', countryMatch.name, countryMatch.id);
+          }
         }
       }
 
@@ -485,7 +305,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         if (leagueMatches.length > 0) {
           selectedFilters.leagues = leagueMatches.map(l => l.id);
-          console.log('🏆 Selected leagues:', leagueMatches.map(l => l.name), selectedFilters.leagues);
+          if (__DEV__) {
+            console.log('🏆 Selected leagues:', leagueMatches.map(l => l.name), selectedFilters.leagues);
+          }
         }
       }
 
@@ -499,7 +321,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         
         if (teamMatches.length > 0) {
           selectedFilters.teams = teamMatches.map(t => t.id);
-          console.log('⚽ Selected teams:', teamMatches.map(t => t.name), selectedFilters.teams);
+          if (__DEV__) {
+            console.log('⚽ Selected teams:', teamMatches.map(t => t.name), selectedFilters.teams);
+          }
         }
       }
 
@@ -510,8 +334,10 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       if (hasFilters) {
         updateSelectedFilters(selectedFilters);
-        console.log('✅ Applied pre-selected filters:', selectedFilters);
-      } else {
+        if (__DEV__) {
+          console.log('✅ Applied pre-selected filters:', selectedFilters);
+        }
+      } else if (__DEV__) {
         console.log('⚠️ No matching filters found for pre-selected values');
       }
     }
@@ -571,9 +397,9 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Store pending bounds - we'll confirm them when response is received
       // This prevents flickering if the request fails or returns different bounds
       const pendingBounds = bounds;
-      console.log('📍 [SEARCH] Pending search bounds (awaiting confirmation):', pendingBounds);
-      
-      console.log('🔍 [SEARCH] Starting bounds search:', {
+      if (__DEV__) {
+        console.log('📍 [SEARCH] Pending search bounds (awaiting confirmation):', pendingBounds);
+        console.log('🔍 [SEARCH] Starting bounds search:', {
         requestId,
         currentRequestId,
         region: {
@@ -585,7 +411,8 @@ const MapResultsScreen = ({ navigation, route }) => {
           sw: { lat: bounds.southwest.lat.toFixed(4), lng: bounds.southwest.lng.toFixed(4) }
         },
         dateRange: { from: dateFrom, to: dateTo }
-      });
+        });
+      }
 
       const response = await ApiService.searchMatchesByBounds({
         bounds,
@@ -603,12 +430,14 @@ const MapResultsScreen = ({ navigation, route }) => {
       const isStale = requestId < latestRequestId;
       
       if (isStale) {
-        console.log('⏭️ [SEARCH] REJECTED - Stale request:', {
-          requestId,
-          latestRequestId,
-          isStale: true,
-          reason: 'Replaced by newer request (strict rejection)'
-        });
+        if (__DEV__) {
+          console.log('⏭️ [SEARCH] REJECTED - Stale request:', {
+            requestId,
+            latestRequestId,
+            isStale: true,
+            reason: 'Replaced by newer request (strict rejection)'
+          });
+        }
         return;
       }
 
@@ -622,17 +451,20 @@ const MapResultsScreen = ({ navigation, route }) => {
         const confirmedBounds = response.bounds || pendingBounds;
         setOriginalSearchBounds(confirmedBounds);
         
-        if (response.bounds) {
-          console.log('📍 [SEARCH] Confirmed search bounds from backend:', response.bounds);
-        } else {
-          console.log('📍 [SEARCH] Using pending bounds (backend did not return bounds):', pendingBounds);
+        if (__DEV__) {
+          if (response.bounds) {
+            console.log('📍 [SEARCH] Confirmed search bounds from backend:', response.bounds);
+          } else {
+            console.log('📍 [SEARCH] Using pending bounds (backend did not return bounds):', pendingBounds);
+          }
         }
         
         // Ensure response.data is an array (defensive check)
         const newMatches = Array.isArray(response.data) ? response.data : [];
         const previousMatchCount = matches.length;
         
-        console.log('✅ [SEARCH] Results received:', {
+        if (__DEV__) {
+          console.log('✅ [SEARCH] Results received:', {
           requestId,
           latestRequestId,
           newMatchCount: newMatches.length,
@@ -642,7 +474,8 @@ const MapResultsScreen = ({ navigation, route }) => {
             center: { lat: region.latitude.toFixed(4), lng: region.longitude.toFixed(4) },
             delta: { lat: region.latitudeDelta.toFixed(4), lng: region.longitudeDelta.toFixed(4) }
           }
-        });
+          });
+        }
         
         // Log venue coordinate sources and final coordinates
         if (__DEV__ && newMatches.length > 0) {
@@ -691,29 +524,33 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Track matches excluded due to missing coordinates
         const excludedCount = response.debug?.withoutCoordinates || 0;
         setMatchesWithoutCoords(excludedCount);
-        if (excludedCount > 0) {
+        if (__DEV__ && excludedCount > 0) {
           console.log(`⚠️ [SEARCH] ${excludedCount} matches excluded due to missing coordinates`);
         }
         
         // Show user feedback if no results
-        if (newMatches.length === 0) {
+        if (__DEV__ && newMatches.length === 0) {
           console.log('⚠️ [SEARCH] No results found for this area');
         }
       } else {
-        console.error('❌ [SEARCH] API error:', {
-          requestId,
-          error: response.error,
-          bounds
-        });
+        if (__DEV__) {
+          console.error('❌ [SEARCH] API error:', {
+            requestId,
+            error: response.error,
+            bounds
+          });
+        }
         Alert.alert('Search Error', response.error || 'Failed to search matches');
       }
     } catch (error) {
-      console.error('❌ [SEARCH] Error:', {
-        requestId,
-        currentRequestId,
-        error: error.message,
-        isRecentRequest: requestId >= (currentRequestId - 1)
-      });
+      if (__DEV__) {
+        console.error('❌ [SEARCH] Error:', {
+          requestId,
+          currentRequestId,
+          error: error.message,
+          isRecentRequest: requestId >= (currentRequestId - 1)
+        });
+      }
       // Only show error if this is still a recent request
       if (requestId >= (currentRequestId - 1)) {
         Alert.alert('Error', 'Failed to search matches');
@@ -722,9 +559,11 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Only clear searching if this is still a recent request
       const isRecentRequest = requestId >= (currentRequestId - 1);
       if (isRecentRequest) {
-        console.log('✅ [SEARCH] Completed:', { requestId, currentRequestId });
+        if (__DEV__) {
+          console.log('✅ [SEARCH] Completed:', { requestId, currentRequestId });
+        }
         setIsSearching(false);
-      } else {
+      } else if (__DEV__) {
         console.log('⏭️ [SEARCH] Skipping cleanup for stale request:', { requestId, currentRequestId });
       }
     }
@@ -739,15 +578,17 @@ const MapResultsScreen = ({ navigation, route }) => {
     const matchesRemoved = matchIdsBefore.filter(id => !matchIdsAfter.includes(id));
     const matchesAdded = matchIdsAfter.filter(id => !matchIdsBefore.includes(id));
     
-    console.log('🔄 [MATCHES] Updating:', {
-      previousCount,
-      newCount,
-      difference: newCount - previousCount,
-      matchesRemoved: matchesRemoved.length,
-      matchesAdded: matchesAdded.length,
-      removedIds: matchesRemoved.slice(0, 5), // Show first 5
-      addedIds: matchesAdded.slice(0, 5) // Show first 5
-    });
+    if (__DEV__) {
+      console.log('🔄 [MATCHES] Updating:', {
+        previousCount,
+        newCount,
+        difference: newCount - previousCount,
+        matchesRemoved: matchesRemoved.length,
+        matchesAdded: matchesAdded.length,
+        removedIds: matchesRemoved.slice(0, 5), // Show first 5
+        addedIds: matchesAdded.slice(0, 5) // Show first 5
+      });
+    }
     
     // Simply update the matches state - all markers will be displayed
     setMatches(newMatches);
@@ -756,12 +597,16 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Center map on markers and update mapRegion state immediately
   const centerMapOnMarkers = (markers) => {
     if (!markers || markers.length === 0) {
-      console.log('No markers to center on');
+      if (__DEV__) {
+        console.log('No markers to center on');
+      }
       return; // Don't move map if no results
     }
     
     if (!mapRef.current) {
-      console.log('Map ref not available');
+      if (__DEV__) {
+        console.log('Map ref not available');
+      }
       return;
     }
     
@@ -772,7 +617,9 @@ const MapResultsScreen = ({ navigation, route }) => {
     });
     
     if (validMarkers.length === 0) {
-      console.log('No valid markers with coordinates');
+      if (__DEV__) {
+        console.log('No valid markers with coordinates');
+      }
       return;
     }
     
@@ -801,12 +648,14 @@ const MapResultsScreen = ({ navigation, route }) => {
       longitudeDelta: newLngDelta,
     };
     
-    console.log('🎯 Centering map on markers:', {
-      markerCount: validMarkers.length,
-      center: { lat: centerLat, lng: centerLng },
-      newRegion,
-      previousZoom: mapRegion?.latitudeDelta || 0.5
-    });
+    if (__DEV__) {
+      console.log('🎯 Centering map on markers:', {
+        markerCount: validMarkers.length,
+        center: { lat: centerLat, lng: centerLng },
+        newRegion,
+        previousZoom: mapRegion?.latitudeDelta || 0.5
+      });
+    }
     
     // Update mapRegion state IMMEDIATELY so viewport filtering uses correct bounds
     setMapRegion(newRegion);

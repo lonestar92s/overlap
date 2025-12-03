@@ -1,20 +1,17 @@
 // Backend API base URL - Loaded from environment variable
 // SECURITY: Never hardcode production URLs - use environment variables
 const getApiBaseUrl = () => {
-  // Production fallback - use default production URL if not set
-  if (!__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
-    console.warn('⚠️ EXPO_PUBLIC_API_URL not set in production - using fallback URL');
-    console.warn('⚠️ Please set EXPO_PUBLIC_API_URL in EAS secrets for production builds');
-    return 'https://friendly-gratitude-production-3f31.up.railway.app/api';
-  }
-  
-  // Development fallback for local testing
-  // NOTE: localhost only works with Expo Dev Client on emulator/simulator
-  // For Expo Go or physical devices, set EXPO_PUBLIC_API_URL to your machine's IP address
-  if (__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
-    console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback');
-    console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');
-    return 'http://localhost:3001/api';
+  // SECURITY: Require API URL from environment - no hardcoded production URLs
+  if (!process.env.EXPO_PUBLIC_API_URL) {
+    if (__DEV__) {
+      // Development: Allow localhost fallback with warning
+      console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback for development');
+      console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');
+      return 'http://localhost:3001/api';
+    } else {
+      // Production: Fail fast - no fallback
+      throw new Error('EXPO_PUBLIC_API_URL environment variable is required in production. Set it in EAS secrets.');
+    }
   }
   
   return process.env.EXPO_PUBLIC_API_URL;
@@ -44,7 +41,9 @@ const getAuthToken = async () => {
       return storedToken;
     }
   } catch (error) {
-    console.error('Error getting token from storage:', error);
+    if (__DEV__) {
+      console.error('Error getting token from storage:', error);
+    }
   }
   
   // No token available
@@ -75,7 +74,9 @@ const login = async (email, password) => {
       return { success: false, error: data.error || 'Login failed' };
     }
   } catch (error) {
-    console.error('Login error:', error);
+    if (__DEV__) {
+      console.error('Login error:', error);
+    }
     return { success: false, error: 'Network error' };
   }
 };
@@ -99,7 +100,9 @@ const register = async (email, password) => {
       return { success: false, error: data.error || 'Registration failed' };
     }
   } catch (error) {
-    console.error('Registration error:', error);
+    if (__DEV__) {
+      console.error('Registration error:', error);
+    }
     return { success: false, error: 'Network error' };
   }
 };
