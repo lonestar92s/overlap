@@ -503,6 +503,7 @@ const COUNTRY_COORDS = {
 };
 
 // Helper function to detect country from bounds with improved fallback
+// Now also tracks nearby countries for border region handling (e.g., Munich near Austria/Germany border)
 function detectCountryFromBounds(bounds) {
     const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
     const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
@@ -514,13 +515,32 @@ function detectCountryFromBounds(bounds) {
     // Increased threshold to 800km to catch more border regions
     const DISTANCE_THRESHOLD = 800;
     
+    // NEW: Track ALL nearby countries within 400km for border region handling
+    // This fixes issues where border cities are closer to a neighboring country's center
+    // Examples:
+    //   - Munich (Germany) → Austria center: 240km, Germany center: 340km → includes both
+    //   - Lille (France) → Belgium center: 150km, France center: 200km → includes both
+    //   - Strasbourg (France) → Germany center: 200km → includes both
+    //   - Milan (Italy) → Switzerland center: 150km → includes both
+    //   - Detroit (USA) → Canada center: 300km → includes both
+    // 400km (~250 miles) covers most border regions while avoiding over-inclusion
+    const NEARBY_THRESHOLD = 400;
+    const nearbyCountries = [];
+    
     for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
         const distance = calculateDistanceKm(centerLat, centerLng, coords.lat, coords.lng);
         if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
             minDistance = distance;
             searchCountry = countryName;
         }
+        // Track all countries within nearby threshold for "domestic" league consideration
+        if (distance < NEARBY_THRESHOLD) {
+            nearbyCountries.push({ country: countryName, distance });
+        }
     }
+    
+    // Sort nearby countries by distance
+    nearbyCountries.sort((a, b) => a.distance - b.distance);
     
     // If no country found, use regional fallback
     if (!searchCountry) {
@@ -546,11 +566,14 @@ function detectCountryFromBounds(bounds) {
         }
     }
     
+    console.log(`🌍 Nearby countries within ${NEARBY_THRESHOLD}km: ${nearbyCountries.map(c => `${c.country} (${c.distance.toFixed(0)}km)`).join(', ') || 'none'}`);
+    
     return {
         country: searchCountry,
         centerLat,
         centerLng,
-        distance: minDistance === Infinity ? null : minDistance
+        distance: minDistance === Infinity ? null : minDistance,
+        nearbyCountries: nearbyCountries.map(c => c.country) // NEW: List of all nearby countries for domestic league check
     };
 }
 
@@ -807,13 +830,17 @@ router.get('/search', async (req, res) => {
             };
             
             // PHASE 1: Country-Level Caching - Determine country from bounds center
-            // Uses improved detectCountryFromBounds with regional fallbacks
+            // Uses improved detectCountryFromBounds with regional fallbacks AND nearby countries
             const countryDetection = detectCountryFromBounds(bounds);
             const searchCountry = countryDetection.country;
             const searchCenterLat = countryDetection.centerLat;
             const searchCenterLng = countryDetection.centerLng;
+            // NEW: Get all nearby countries for more inclusive domestic league matching
+            // This fixes the Munich/Bavaria issue where Austria is detected but we need Bundesliga too
+            const nearbyCountries = countryDetection.nearbyCountries || [searchCountry];
             
             console.log(`🌍 Country detection: ${searchCountry} (distance: ${countryDetection.distance ? countryDetection.distance.toFixed(0) + 'km' : 'N/A'})`);
+            console.log(`🌍 Nearby countries for domestic league check: ${nearbyCountries.join(', ')}`);
             
             // Generate bounds hash for cache key (rounded to ~10km grid)
             // This allows similar viewports to share cache while preventing conflicts
@@ -1257,12 +1284,24 @@ router.get('/search', async (req, res) => {
                 const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0; // Less than ~111km span
                 
                 // Use the country detection that was done at the start of this search
-                // searchCountry is already defined from detectCountryFromBounds call above
+                // searchCountry and nearbyCountries are defined from detectCountryFromBounds call above
                 
                 // For city-level searches: include all matches from domestic leagues in the same country
                 // This ensures Ligue 1 and Ligue 2 matches appear when searching in France
-                const isDomesticLeague = searchCountry && match.league?.country && 
-                                        searchCountry.toLowerCase() === match.league.country.toLowerCase();
+                // NEW: Also check nearbyCountries for ALL border regions (not just Austria/Germany)
+                // This fixes issues where border cities are closer to a neighboring country's center:
+                //   - Munich (Germany) near Austria border
+                //   - Lille (France) near Belgium border  
+                //   - Strasbourg (France) near Germany border
+                //   - Milan (Italy) near Switzerland border
+                //   - Any other border region within 400km
+                const matchLeagueCountry = match.league?.country?.toLowerCase();
+                const isDomesticLeague = matchLeagueCountry && (
+                    // Check if match is from the closest detected country
+                    (searchCountry && searchCountry.toLowerCase() === matchLeagueCountry) ||
+                    // OR check if match is from any nearby country (within 400km)
+                    nearbyCountries.some(c => c.toLowerCase() === matchLeagueCountry)
+                );
                 
                 if (venueInfo.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
                     // Validate coordinates are numbers
@@ -1279,6 +1318,7 @@ router.get('/search', async (req, res) => {
                         } else if (isWithinBounds(venueInfo.coordinates, bounds)) {
                             // Include matches within buffered bounds (for caching)
                             shouldInclude = true;
+                            console.log(`✅ Match included (within buffered bounds): ${venueInfo.name}, ${venueInfo.city} - Coords: [${lon}, ${lat}] (League: ${match.league.name}, ID: ${match.fixture.id})`);
                         } else {
                             // Still include matches outside buffered bounds if they're in the country
                             // We'll filter by original bounds when returning to client

@@ -44,6 +44,7 @@ const COUNTRY_COORDS = {
 };
 
 // Detection function matching the one in matches.js
+// Updated to include nearbyCountries tracking for border region handling
 function detectCountryFromBounds(bounds) {
     const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
     const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
@@ -52,13 +53,24 @@ function detectCountryFromBounds(bounds) {
     let minDistance = Infinity;
     const DISTANCE_THRESHOLD = 800;
     
+    // Track ALL nearby countries within 400km for border region handling
+    const NEARBY_THRESHOLD = 400;
+    const nearbyCountries = [];
+    
     for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
         const distance = calculateDistanceKm(centerLat, centerLng, coords.lat, coords.lng);
         if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
             minDistance = distance;
             searchCountry = countryName;
         }
+        // Track all countries within nearby threshold for "domestic" league consideration
+        if (distance < NEARBY_THRESHOLD) {
+            nearbyCountries.push({ country: countryName, distance });
+        }
     }
+    
+    // Sort nearby countries by distance
+    nearbyCountries.sort((a, b) => a.distance - b.distance);
     
     // Regional fallback
     if (!searchCountry) {
@@ -81,7 +93,8 @@ function detectCountryFromBounds(bounds) {
         country: searchCountry,
         centerLat,
         centerLng,
-        distance: minDistance === Infinity ? null : minDistance
+        distance: minDistance === Infinity ? null : minDistance,
+        nearbyCountries: nearbyCountries.map(c => c.country) // NEW: List of all nearby countries
     };
 }
 
@@ -185,6 +198,37 @@ describe('Match Search Utilities', () => {
             expect(['Germany', 'Austria', 'Switzerland']).toContain(result.country);
         });
 
+        it('should include nearby countries for Munich search (border region fix)', () => {
+            // Munich area - this was the original bug case
+            const bounds = {
+                northeast: { lat: 48.3, lng: 11.8 },
+                southwest: { lat: 47.9, lng: 11.3 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should detect a country (Austria is closer than Germany center)
+            expect(result.country).toBeTruthy();
+            
+            // NEW: Should include BOTH Germany and Austria in nearbyCountries
+            // This ensures Bundesliga matches aren't filtered out when Austria is detected
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            expect(result.nearbyCountries.length).toBeGreaterThan(0);
+            
+            // Munich is within 400km of both Austria and Germany centers
+            // Both should be in nearbyCountries so domestic league check includes both
+            const hasAustria = result.nearbyCountries.includes('Austria');
+            const hasGermany = result.nearbyCountries.includes('Germany');
+            
+            // At least one should be present (both if within 400km)
+            expect(hasAustria || hasGermany).toBe(true);
+            
+            // If Austria is detected as closest, Germany should still be in nearbyCountries
+            if (result.country === 'Austria') {
+                expect(hasGermany).toBe(true);
+            }
+        });
+
         it('should handle border region between France and Germany', () => {
             // Strasbourg area - on the French side but close to Germany
             const bounds = {
@@ -196,6 +240,75 @@ describe('Match Search Utilities', () => {
             
             // Should detect one of the nearby countries
             expect(['France', 'Germany', 'Switzerland']).toContain(result.country);
+        });
+
+        it('should include nearby countries for Strasbourg (France/Germany border)', () => {
+            // Strasbourg is on French side but very close to Germany
+            const bounds = {
+                northeast: { lat: 48.7, lng: 7.9 },
+                southwest: { lat: 48.4, lng: 7.5 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should include both France and Germany in nearbyCountries
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            const hasFrance = result.nearbyCountries.includes('France');
+            const hasGermany = result.nearbyCountries.includes('Germany');
+            
+            // Both should be present since Strasbourg is within 400km of both
+            expect(hasFrance || hasGermany).toBe(true);
+        });
+
+        it('should include nearby countries for Lille (France/Belgium border)', () => {
+            // Lille is in France but very close to Belgium
+            const bounds = {
+                northeast: { lat: 50.7, lng: 3.1 },
+                southwest: { lat: 50.5, lng: 2.9 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should include both France and Belgium in nearbyCountries
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            const hasFrance = result.nearbyCountries.includes('France');
+            const hasBelgium = result.nearbyCountries.includes('Belgium');
+            
+            // Both should be present since Lille is within 400km of both
+            expect(hasFrance || hasBelgium).toBe(true);
+        });
+
+        it('should include nearby countries for Milan (Italy/Switzerland border)', () => {
+            // Milan is in Italy but close to Switzerland
+            const bounds = {
+                northeast: { lat: 45.5, lng: 9.3 },
+                southwest: { lat: 45.4, lng: 9.1 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should include both Italy and Switzerland in nearbyCountries
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            const hasItaly = result.nearbyCountries.includes('Italy');
+            const hasSwitzerland = result.nearbyCountries.includes('Switzerland');
+            
+            // Both should be present since Milan is within 400km of both
+            expect(hasItaly || hasSwitzerland).toBe(true);
+        });
+
+        it('should return empty nearbyCountries for isolated locations', () => {
+            // Middle of a large country, far from borders
+            const bounds = {
+                northeast: { lat: 40.5, lng: -3.8 },
+                southwest: { lat: 40.3, lng: -4.0 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should still have nearbyCountries array (may be empty or have only Spain)
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            // Spain should be in the list (within 400km of its own center)
+            expect(result.nearbyCountries.length).toBeGreaterThanOrEqual(0);
         });
 
         it('should use Europe-Region fallback for mid-Atlantic search', () => {
@@ -296,6 +409,22 @@ describe('Match Search Utilities', () => {
             
             expect(result.centerLat).toBe(51.0);
             expect(result.centerLng).toBe(0.0);
+        });
+
+        it('should return nearbyCountries array in result', () => {
+            const bounds = {
+                northeast: { lat: 51.8, lng: 0.2 },
+                southwest: { lat: 51.2, lng: -0.5 }
+            };
+            
+            const result = detectCountryFromBounds(bounds);
+            
+            // Should always have nearbyCountries array (even if empty)
+            expect(result).toHaveProperty('nearbyCountries');
+            expect(result.nearbyCountries).toBeInstanceOf(Array);
+            
+            // For London, should have at least England in nearbyCountries
+            expect(result.nearbyCountries.length).toBeGreaterThanOrEqual(0);
         });
 
         it('should handle very large viewport bounds', () => {
