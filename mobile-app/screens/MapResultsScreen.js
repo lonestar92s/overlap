@@ -458,23 +458,24 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Update the last successful request ID
         setLastSuccessfulRequestId(requestId);
         
-        // Store original search bounds for list filtering
-        // FIXED: Only set bounds on success, not before request (prevents flickering on failure)
-        // Prefer backend bounds, fallback to pendingBounds if backend doesn't return them
+        // Update original search bounds to the new search area
+        // This ensures the list filters by the current search area
         const confirmedBounds = response.bounds || pendingBounds;
         setOriginalSearchBounds(confirmedBounds);
-        
-        if (__DEV__) {
-          if (response.bounds) {
-            console.log('📍 [SEARCH] Confirmed search bounds from backend:', response.bounds);
-          } else {
-            console.log('📍 [SEARCH] Using pending bounds (backend did not return bounds):', pendingBounds);
-          }
-        }
         
         // Ensure response.data is an array (defensive check)
         const newMatches = Array.isArray(response.data) ? response.data : [];
         const previousMatchCount = matches.length;
+        
+        if (__DEV__) {
+          console.log('📍 [SEARCH] Updated search bounds:', {
+            previous: originalSearchBounds,
+            new: confirmedBounds,
+            fromBackend: !!response.bounds,
+            totalMatchesBeforeMerge: matches.length,
+            newMatchesFromSearch: newMatches.length
+          });
+        }
         
         if (__DEV__) {
           console.log('✅ [SEARCH] Results received:', {
@@ -603,29 +604,53 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
-  // Simplified marker updates
+  // Merge matches from multiple searches instead of replacing
   const updateMatchesEfficiently = (newMatches) => {
+    // Create a Map to dedupe by match ID
+    const matchesMap = new Map();
+    
+    // Add existing matches first
+    matches.forEach(match => {
+      const matchId = match.fixture?.id || match.id;
+      if (matchId) {
+        matchesMap.set(matchId, match);
+      }
+    });
+    
+    // Add new matches (will overwrite duplicates, keeping the latest version)
+    newMatches.forEach(match => {
+      const matchId = match.fixture?.id || match.id;
+      if (matchId) {
+        matchesMap.set(matchId, match);
+      }
+    });
+    
+    // Convert back to array
+    const mergedMatches = Array.from(matchesMap.values());
+    
     const previousCount = matches.length;
     const newCount = newMatches.length;
+    const mergedCount = mergedMatches.length;
     const matchIdsBefore = matches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
-    const matchIdsAfter = newMatches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
+    const matchIdsAfter = mergedMatches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
     const matchesRemoved = matchIdsBefore.filter(id => !matchIdsAfter.includes(id));
     const matchesAdded = matchIdsAfter.filter(id => !matchIdsBefore.includes(id));
     
     if (__DEV__) {
-      console.log('🔄 [MATCHES] Updating:', {
+      console.log('🔄 [MATCHES] Merging:', {
         previousCount,
         newCount,
-        difference: newCount - previousCount,
+        mergedCount,
+        difference: mergedCount - previousCount,
         matchesRemoved: matchesRemoved.length,
         matchesAdded: matchesAdded.length,
-        removedIds: matchesRemoved.slice(0, 5), // Show first 5
-        addedIds: matchesAdded.slice(0, 5) // Show first 5
+        removedIds: matchesRemoved.slice(0, 5),
+        addedIds: matchesAdded.slice(0, 5)
       });
     }
     
-    // Simply update the matches state - all markers will be displayed
-    setMatches(newMatches);
+    // Update with merged matches
+    setMatches(mergedMatches);
   };
 
   // Center map on markers and update mapRegion state immediately
@@ -1100,9 +1125,9 @@ const MapResultsScreen = ({ navigation, route }) => {
     return dateFiltered;
   }, [filteredMatches, selectedDateHeader]);
   
-  // Get filtered matches for bottom drawer - filter by ORIGINAL search bounds only
-  // List shows matches in the original search viewport (not the buffer zone or current viewport)
-  // This matches Google Maps/Airbnb behavior: list stays constant, markers update with pan
+  // Get filtered matches for bottom drawer - filter by CURRENT search bounds
+  // List shows matches in the current search viewport
+  // Matches from multiple searches are merged, then filtered by latest search bounds
   const displayFilteredMatches = useMemo(() => {
     const final = finalFilteredMatches || [];
     
@@ -1136,17 +1161,30 @@ const MapResultsScreen = ({ navigation, route }) => {
           return false;
         }
         
-        const [lon, lat] = coordinates;
+        const [lon, lat] = coordinates; // Backend returns [lng, lat]
         if (typeof lon !== 'number' || typeof lat !== 'number' ||
             lon < -180 || lon > 180 || lat < -90 || lat > 90) {
           return false;
         }
         
-        // Filter by ORIGINAL search bounds with 5% exclusion buffer (stricter filtering)
-        return lat >= strictBounds.southwest.lat && 
-               lat <= strictBounds.northeast.lat &&
-               lon >= strictBounds.southwest.lng && 
-               lon <= strictBounds.northeast.lng;
+        // Filter by CURRENT search bounds with 5% exclusion buffer
+        const inBounds = lat >= strictBounds.southwest.lat && 
+                         lat <= strictBounds.northeast.lat &&
+                         lon >= strictBounds.southwest.lng && 
+                         lon <= strictBounds.northeast.lng;
+        
+        // Debug logging for first few matches
+        if (__DEV__ && final.indexOf(match) < 3) {
+          console.log('🔍 [FILTER DEBUG] Match bounds check:', {
+            matchName: `${match.teams?.home?.name} vs ${match.teams?.away?.name}`,
+            coordinates: { lon, lat },
+            strictBounds,
+            originalSearchBounds,
+            inBounds
+          });
+        }
+        
+        return inBounds;
       });
       
       if (__DEV__) {
@@ -1155,10 +1193,21 @@ const MapResultsScreen = ({ navigation, route }) => {
           inOriginalViewport: filteredByOriginalBounds.length,
           filteredOut: final.length - filteredByOriginalBounds.length,
           bounds: originalSearchBounds,
+          strictBounds: strictBounds, // Add strict bounds for debugging
           sampleMatch: final[0] ? {
             name: `${final[0].teams?.home?.name} vs ${final[0].teams?.away?.name}`,
             venue: final[0].fixture?.venue?.name,
-            coords: final[0].fixture?.venue?.coordinates
+            coords: final[0].fixture?.venue?.coordinates,
+            parsed: final[0].fixture?.venue?.coordinates ? {
+              lon: final[0].fixture.venue.coordinates[0],
+              lat: final[0].fixture.venue.coordinates[1]
+            } : null,
+            // Add bounds check result
+            inBounds: final[0].fixture?.venue?.coordinates ? 
+              (final[0].fixture.venue.coordinates[1] >= strictBounds.southwest.lat &&
+               final[0].fixture.venue.coordinates[1] <= strictBounds.northeast.lat &&
+               final[0].fixture.venue.coordinates[0] >= strictBounds.southwest.lng &&
+               final[0].fixture.venue.coordinates[0] <= strictBounds.northeast.lng) : false
           } : 'none'
         });
       }
