@@ -336,7 +336,6 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
 // Function to check if coordinates are within bounds
 function isWithinBounds(coordinates, bounds, searchSessionId = 'unknown') {
     if (!coordinates || !bounds || coordinates.length !== 2) {
-        console.log(`🚫 [${searchSessionId}] isWithinBounds failed validation: coords=${JSON.stringify(coordinates)}, bounds=${JSON.stringify(bounds)}`);
         return false;
     }
     const [lon, lat] = coordinates;
@@ -344,7 +343,8 @@ function isWithinBounds(coordinates, bounds, searchSessionId = 'unknown') {
     const result = lat >= southwest.lat && lat <= northeast.lat &&
            lon >= southwest.lng && lon <= northeast.lng;
     
-    console.log(`🔍 [${searchSessionId}] Bounds check: venue coords [${lon}, ${lat}] vs bounds NE[${northeast.lat}, ${northeast.lng}] SW[${southwest.lat}, ${southwest.lng}] = ${result}`);
+    // Removed verbose logging - only log in debug mode if needed
+    // console.log(`🔍 [${searchSessionId}] Bounds check: venue coords [${lon}, ${lat}] vs bounds NE[${northeast.lat}, ${northeast.lng}] SW[${southwest.lat}, ${southwest.lng}] = ${result}`);
     
     return result;
 }
@@ -814,8 +814,33 @@ router.get('/search', async (req, res) => {
                 southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
             };
             
+            // Validate bounds
+            if (isNaN(originalBounds.northeast.lat) || isNaN(originalBounds.northeast.lng) ||
+                isNaN(originalBounds.southwest.lat) || isNaN(originalBounds.southwest.lng)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Invalid bounds parameters - all coordinates must be valid numbers' 
+                });
+            }
+            
             const boundsLatSpan = originalBounds.northeast.lat - originalBounds.southwest.lat;
             const boundsLngSpan = originalBounds.northeast.lng - originalBounds.southwest.lng;
+            
+            // Validate bounds span (prevent unreasonably large bounds)
+            if (boundsLatSpan <= 0 || boundsLngSpan <= 0) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Invalid bounds - northeast must be greater than southwest' 
+                });
+            }
+            
+            if (boundsLatSpan > 90 || boundsLngSpan > 180) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Bounds too large - please zoom in and search a smaller area' 
+                });
+            }
+            
             const bufferPercent = 0.3; // 30% buffer
             
             const bounds = {
@@ -964,20 +989,42 @@ router.get('/search', async (req, res) => {
                         console.log(`🔄 Cache enrichment: Updated ${enrichedCount} matches with coordinates (batch query used)`);
                         matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
                     }
-                
-                return res.json({ 
-                    success: true, 
-                    data: matchesWithCoords, 
-                    count: matchesWithCoords.length,
-                    fromCache: true,
-                    bounds: originalBounds,
-                    debug: {
-                        withCoordinates: matchesWithCoords.length,
-                        withoutCoordinates: matchesMissingCoords.length,
-                        enrichedFromMongoDB: enrichedCount,
-                        totalInCache: cachedData.data.length
-                    }
-                });
+                    
+                    // Filter cached matches by original bounds (not the buffered bounds used for caching)
+                    // This ensures we only return matches within the user's requested viewport
+                    const filteredByOriginalBounds = matchesWithCoords.filter(match => {
+                        const coords = match.fixture?.venue?.coordinates;
+                        if (!coords || !Array.isArray(coords) || coords.length !== 2) {
+                            return false;
+                        }
+                        
+                        const [lon, lat] = coords;
+                        if (typeof lon !== 'number' || typeof lat !== 'number' || 
+                            isNaN(lon) || isNaN(lat) ||
+                            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+                            return false;
+                        }
+                        
+                        // Filter by original bounds (user's requested viewport)
+                        return isWithinBounds(coords, originalBounds);
+                    });
+                    
+                    console.log(`✅ Cache hit: Returning ${filteredByOriginalBounds.length} matches filtered by original bounds (from ${matchesWithCoords.length} total in cache)`);
+                    
+                    return res.json({ 
+                        success: true, 
+                        data: filteredByOriginalBounds, 
+                        count: filteredByOriginalBounds.length,
+                        fromCache: true,
+                        bounds: originalBounds,
+                        debug: {
+                            withCoordinates: matchesWithCoords.length,
+                            filteredByBounds: filteredByOriginalBounds.length,
+                            withoutCoordinates: matchesMissingCoords.length,
+                            enrichedFromMongoDB: enrichedCount,
+                            totalInCache: cachedData.data.length
+                        }
+                    });
                     // Return early if cache was valid (not invalidated)
                     return;
                 }
@@ -1734,8 +1781,17 @@ router.get('/search', async (req, res) => {
 
         res.json({ success: true, data: { matches, count: matches.length } });
     } catch (error) {
-        console.error('Error searching matches:', error);
-        res.status(500).json({ success: false, message: 'Failed to search matches', error: error.message });
+        console.error('❌ Error in /matches/search:', {
+            error: error.message,
+            stack: error.stack?.split('\n').slice(0, 5).join('\n'),
+            query: req.query
+        });
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to search matches', 
+            error: error.message,
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 

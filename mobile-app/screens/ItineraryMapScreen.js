@@ -15,6 +15,8 @@ import MatchCard from '../components/MatchCard';
 import HomeBaseCard from '../components/HomeBaseCard';
 import ApiService from '../services/api';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { useRecommendations } from '../hooks/useRecommendations';
+import { transformRecommendationsForMap, transformMatchesForMap } from '../utils/recommendationTransformers';
 
 const ItineraryMapScreen = ({ navigation, route }) => {
   const { itineraryId } = route.params;
@@ -28,8 +30,16 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   const [venueCoordinates, setVenueCoordinates] = useState({});
   const [travelTimes, setTravelTimes] = useState({});
   const [travelTimesLoading, setTravelTimesLoading] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
-  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
+  
+  // Use recommendations hook
+  const { 
+    recommendations, 
+    loading: recommendationsLoading, 
+    error: recommendationsError,
+    refetch: refetchRecommendations,
+    dismiss: dismissRecommendation,
+    addToTrip: addRecommendationToTrip
+  } = useRecommendations(itineraryId, { autoFetch: !!itineraryId });
   
   // Conditional import for map component
   const MatchMapView = React.useMemo(() => {
@@ -105,30 +115,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     fetchTravelTimes();
   }, [itineraryId, itinerary?.matches, itinerary?.homeBases]);
 
-  // Fetch recommendations function
-  const fetchRecommendations = async (forceRefresh = false) => {
-    if (!itineraryId || !itinerary) {
-      return;
-    }
-
-    try {
-      setRecommendationsLoading(true);
-      const response = await ApiService.getRecommendations(itineraryId, forceRefresh);
-      if (response.success && response.recommendations) {
-        setRecommendations(response.recommendations || []);
-      }
-    } catch (error) {
-      console.error('Error fetching recommendations:', error);
-      // Don't show error to user - recommendations are optional
-    } finally {
-      setRecommendationsLoading(false);
-    }
-  };
-
-  // Fetch recommendations when itinerary loads
-  useEffect(() => {
-    fetchRecommendations();
-  }, [itineraryId, itinerary]);
+  // Recommendations are automatically fetched by useRecommendations hook
 
   // Refetch recommendations when screen comes into focus (to sync with other screens)
   // Use a ref to track if this is the initial mount to avoid double-fetching
@@ -144,7 +131,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       
       // Only refetch if we have an itinerary loaded and we're coming back to the screen
       if (itineraryId && itinerary) {
-        fetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
+        refetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
       }
     }, [itineraryId, itinerary])
   );
@@ -260,57 +247,14 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   }, [itinerary, recommendations]);
 
   // Transform saved matches to the format expected by the map
-  const transformMatchesForMap = (matches) => {
-    return matches.map(match => {
-      // Transform the saved match data back to the structure expected by MatchMapView
-      let venueData = match.venueData;
-      
-      // If venueData doesn't have coordinates, try to create a basic venue object
-      if (!venueData || !venueData.coordinates) {
-        venueData = {
-          name: match.venue || 'Unknown Venue',
-          city: match.venueData?.city || 'Unknown City',
-          country: match.venueData?.country || 'Unknown Country',
-          coordinates: null // Will be filtered out by map component
-        };
-      }
-      
-      return {
-        ...match,
-        id: match.matchId,
-        fixture: {
-          id: match.matchId,
-          date: match.date,
-          venue: venueData
-        },
-        teams: {
-          home: match.homeTeam,
-          away: match.awayTeam
-        },
-        league: { name: match.league }
-      };
-    });
-  };
+  const transformedMatches = useMemo(() => {
+    return transformMatchesForMap(itinerary?.matches || []);
+  }, [itinerary?.matches]);
 
   // Transform recommendations to the format expected by the map
   // Memoize to ensure map updates when recommendations change
   const transformedRecommendations = useMemo(() => {
-    return recommendations.map(recommendation => {
-      const match = recommendation.match;
-      return {
-        ...match,
-        id: match.id || match.matchId || match.fixture?.id,
-        fixture: {
-          id: match.id || match.matchId || match.fixture?.id,
-          date: match.fixture?.date,
-          venue: match.fixture?.venue
-        },
-        teams: match.teams,
-        league: match.league,
-        _isRecommendation: true, // Flag to identify as recommendation
-        _recommendationData: recommendation // Store full recommendation data
-      };
-    });
+    return transformRecommendationsForMap(recommendations);
   }, [recommendations]);
 
   // Handle marker press
@@ -359,33 +303,9 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   // Handle dismissing a recommendation
   const handleDismissRecommendation = async (recommendation) => {
     try {
-      const recommendationData = recommendation._recommendationData || recommendation;
-      const matchId = recommendationData.matchId || recommendationData.match?.id || recommendationData.match?.fixture?.id;
-      
-      // Track that user dismissed the recommendation
-      await ApiService.trackRecommendation(
-        matchId,
-        'dismissed',
-        itineraryId,
-        recommendationData.recommendedForDate,
-        recommendationData.score,
-        recommendationData.reason
-      );
-
-      // Invalidate cache since user preferences have changed
-      ApiService.invalidateRecommendationCache(itineraryId);
-
-      // Remove the recommendation from the list immediately
-      setRecommendations(prev => prev.filter(rec => {
-        const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
-        return String(recMatchId) !== String(matchId);
-      }));
-
+      await dismissRecommendation(recommendation);
       // Close the card overlay
       setSelectedRecommendation(null);
-      
-      // Note: Other screens will pick up the change when they come into focus
-      // via the useFocusEffect hook that refetches recommendations
     } catch (err) {
       console.error('Error dismissing recommendation:', err);
       Alert.alert('Error', 'Failed to dismiss recommendation');
@@ -395,49 +315,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   // Handle adding recommendation to trip
   const handleAddRecommendationToTrip = async (recommendation) => {
     try {
-      const recommendationData = recommendation._recommendationData || recommendation;
-      const match = recommendationData.match || recommendation;
+      await addRecommendationToTrip(recommendation, addMatchToItinerary);
       
-      // Track that user saved the recommendation
-      await ApiService.trackRecommendation(
-        recommendationData.matchId,
-        'saved',
-        itineraryId,
-        recommendationData.recommendedForDate,
-        recommendationData.score,
-        recommendationData.reason
-      );
-
-      // Invalidate cache since trip content has changed
-      ApiService.invalidateRecommendationCache(itineraryId);
-
-      // Format match data for the mobile app API
-      const formattedMatchData = {
-        matchId: match.id || match.matchId || match.fixture?.id,
-        homeTeam: {
-          name: match.teams?.home?.name,
-          logo: match.teams?.home?.logo
-        },
-        awayTeam: {
-          name: match.teams?.away?.name,
-          logo: match.teams?.away?.logo
-        },
-        league: match.league?.name,
-        venue: match.fixture?.venue?.name,
-        venueData: match.fixture?.venue,
-        date: match.fixture?.date
-      };
-
-      // Add match to trip
-      await addMatchToItinerary(itineraryId, formattedMatchData);
-      
-      // Remove the recommendation from the list
-      setRecommendations(prev => prev.filter(rec => {
-        const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
-        const matchId = recommendationData.matchId || match.id || match.matchId || match.fixture?.id;
-        return String(recMatchId) !== String(matchId);
-      }));
-
       // Close the card overlay
       setSelectedRecommendation(null);
 
@@ -500,7 +379,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           style={styles.map}
           initialRegion={mapRegion}
           onMapPress={handleMapPress}
-          matches={transformMatchesForMap(itinerary.matches || [])}
+          matches={transformedMatches}
           recommendedMatches={transformedRecommendations}
           homeBases={itinerary.homeBases || []}
           onMarkerPress={handleMarkerPress}

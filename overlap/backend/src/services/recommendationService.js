@@ -981,9 +981,14 @@ class RecommendationService {
 
     // Cache methods
     generateCacheKey(tripId, user, trip) {
-        // Create a cache key based on trip ID, user subscription, and trip content
+        // Create a cache key based on trip ID, user subscription, trip dates, and trip content
         const userKey = `${user._id}-${user.subscription?.tier || 'freemium'}-${user.preferences?.recommendationRadius || this.defaultRadius}`;
-        const tripKey = `${tripId}-${trip.matches?.length || 0}-${JSON.stringify(trip.matches?.map(m => m.id).sort())}`;
+        // Include trip dates in cache key so date changes invalidate cache
+        const startDate = trip.startDate ? new Date(trip.startDate).toISOString() : 'null';
+        const endDate = trip.endDate ? new Date(trip.endDate).toISOString() : 'null';
+        // Create hash of match IDs for cache key
+        const matchesHash = JSON.stringify(trip.matches?.map(m => m.id || m.matchId).sort() || []);
+        const tripKey = `${tripId}-${trip.matches?.length || 0}-${startDate}-${endDate}-${matchesHash}`;
         return `recommendations:${userKey}:${tripKey}`;
     }
 

@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   recommendedMarker: {
-    backgroundColor: '#FFD700', // Yellow color for recommended matches
+    backgroundColor: '#FFD700', // Yellow color for recommended matches (using design token: colors.markers.recommended)
     borderRadius: 20,
     width: 40,
     height: 40,

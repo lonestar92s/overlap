@@ -30,6 +30,7 @@ import HomeBaseSection from '../components/HomeBaseSection';
 import apiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows, zIndex } from '../styles/designTokens';
 import { createDateRange } from '../utils/dateUtils';
+import { useRecommendations } from '../hooks/useRecommendations';
 
 /**
  * TripOverviewScreen - Shows detailed view of a saved itinerary
@@ -52,9 +53,18 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [planningModalVisible, setPlanningModalVisible] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
-  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  
+  // Use recommendations hook
+  const tripId = itinerary?.id || itinerary?._id;
+  const { 
+    recommendations, 
+    loading: recommendationsLoading, 
+    error: recommendationsError,
+    refetch: refetchRecommendations,
+    dismiss: dismissRecommendation,
+    addToTrip: addRecommendationToTrip
+  } = useRecommendations(tripId, { autoFetch: !!tripId });
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -110,10 +120,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(tripData);
             setDescriptionText(tripData.description || '');
             setNotesText(tripData.notes || '');
-            // Always fetch recommendations (will use cache if available, or fetch fresh)
-            // Fetch in background - if cache exists, it will return immediately
-            // If no cache, it will fetch and update
-            fetchRecommendations(tripData.id || tripData._id);
+            // Recommendations are automatically fetched by useRecommendations hook
             // Fetch scores for completed matches
             if (tripData.matches && tripData.matches.length > 0) {
               fetchScores(tripData.id || tripData._id);
@@ -137,8 +144,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(foundItinerary);
             setDescriptionText(foundItinerary.description || '');
             setNotesText(foundItinerary.notes || '');
-            // Always fetch recommendations
-            fetchRecommendations(foundItinerary.id || foundItinerary._id);
+            // Recommendations are automatically fetched by useRecommendations hook
           }
         } finally {
           setLoading(false);
@@ -165,8 +171,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
       
       // Only refetch if we have an itinerary loaded and we're coming back to the screen
       if (itinerary?.id || itinerary?._id) {
-        const tripId = itinerary.id || itinerary._id;
-        fetchRecommendations(tripId, true); // Force refresh to get latest (including dismissed items removed)
+        refetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
       }
     }, [itinerary])
   );
@@ -464,51 +469,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
     return `${startStr}-${endStr}`;
   };
 
-  const fetchRecommendations = async (tripId, forceRefresh = false) => {
-    // Only show loading if we don't have cached data
-    const hasCache = apiService.getCachedRecommendations(tripId);
-    if (!hasCache) {
-      setRecommendationsLoading(true);
-    }
-    
-    try {
-      const data = await apiService.getRecommendations(tripId, forceRefresh);
-      if (data.success) {
-        // Deduplicate recommendations by matchId (in case backend returns duplicates)
-        const recommendations = data.recommendations || [];
-        const seenMatchIds = new Set();
-        const uniqueRecommendations = recommendations.filter(rec => {
-          const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
-          if (seenMatchIds.has(matchId)) {
-            console.log(`⚠️ Filtering duplicate recommendation in UI for matchId: ${matchId}`);
-            return false;
-          }
-          seenMatchIds.add(matchId);
-          return true;
-        });
-        
-        setRecommendations(uniqueRecommendations);
-        
-        // Track that user viewed recommendations (only if not cached)
-        // Use a Set to prevent duplicate tracking calls
-        if (!data.cached) {
-          const trackedMatchIds = new Set();
-          uniqueRecommendations.forEach(rec => {
-            const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
-            if (!trackedMatchIds.has(matchId)) {
-              trackedMatchIds.add(matchId);
-              trackRecommendation(matchId, 'viewed', tripId, rec.recommendedForDate, rec.score, rec.reason);
-            }
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching recommendations:', err);
-    } finally {
-      setRecommendationsLoading(false);
-    }
-  };
-
   const fetchScores = async (tripId) => {
     setScoresLoading(true);
     try {
@@ -544,52 +504,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
     }
   };
 
-  const trackRecommendation = async (matchId, action, tripId, recommendedDate, score, reason) => {
-    try {
-      await apiService.trackRecommendation(matchId, action, tripId, recommendedDate, score, reason);
-    } catch (err) {
-      console.error('Error tracking recommendation:', err);
-    }
-  };
-
   const handleAddRecommendationToTrip = async (recommendation) => {
     try {
-      // Track that user saved the recommendation
-      await trackRecommendation(
-        recommendation.matchId, 
-        'saved', 
-        itinerary.id || itinerary._id, 
-        recommendation.recommendedForDate, 
-        recommendation.score, 
-        recommendation.reason
-      );
-
-      // Invalidate cache since trip content has changed
-      apiService.invalidateRecommendationCache(itinerary.id || itinerary._id);
-
-      // Format match data for the mobile app API
-      const formattedMatchData = {
-        matchId: recommendation.match.id || recommendation.match.matchId,
-        homeTeam: {
-          name: recommendation.match.teams.home.name,
-          logo: recommendation.match.teams.home.logo
-        },
-        awayTeam: {
-          name: recommendation.match.teams.away.name,
-          logo: recommendation.match.teams.away.logo
-        },
-        league: recommendation.match.league.name,
-        venue: recommendation.match.fixture.venue.name,
-        venueData: recommendation.match.fixture.venue,
-        date: recommendation.match.fixture.date
-      };
-
-      // Add match to trip
-      await addMatchToItinerary(itinerary.id || itinerary._id, formattedMatchData);
-      
-      // Remove the recommendation from the list
-      setRecommendations(prev => prev.filter(rec => rec.matchId !== recommendation.matchId));
-      
+      await addRecommendationToTrip(recommendation, addMatchToItinerary);
     } catch (err) {
       console.error('Error adding recommendation to trip:', err);
       Alert.alert('Error', 'Failed to add match to trip');
@@ -598,26 +515,10 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   const handleDismissRecommendation = async (recommendation) => {
     try {
-      // Track that user dismissed the recommendation
-      await trackRecommendation(
-        recommendation.matchId, 
-        'dismissed', 
-        itinerary.id || itinerary._id, 
-        recommendation.recommendedForDate, 
-        recommendation.score, 
-        recommendation.reason
-      );
-
-      // Invalidate cache since user preferences have changed
-      apiService.invalidateRecommendationCache(itinerary.id || itinerary._id);
-
-      // Remove the recommendation from the list immediately
-      setRecommendations(prev => prev.filter(rec => rec.matchId !== recommendation.matchId));
-      
-      // Note: Other screens will pick up the change when they come into focus
-      // via the useFocusEffect hook that refetches recommendations
+      await dismissRecommendation(recommendation);
     } catch (err) {
       console.error('Error dismissing recommendation:', err);
+      Alert.alert('Error', 'Failed to dismiss recommendation');
     }
   };
 
@@ -1203,6 +1104,20 @@ const TripOverviewScreen = ({ navigation, route }) => {
                   <ActivityIndicator size="small" color={colors.secondary} />
                   <Text style={styles.loadingText}>Loading recommendations...</Text>
                 </View>
+              ) : recommendationsError ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{recommendationsError}</Text>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => refetchRecommendations(true)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : recommendations.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No recommendations available</Text>
+                </View>
               ) : (
                 <RecommendationsCarousel
                   recommendations={recommendations}
@@ -1782,6 +1697,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl * 1.25,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.error,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
+    marginTop: spacing.sm,
+  },
+  retryButtonText: {
+    ...typography.body,
+    color: colors.onPrimary,
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   errorTitle: {
     ...typography.h3,

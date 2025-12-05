@@ -380,7 +380,7 @@ const MatchMapView = forwardRef(({
           key={markerKey}
           coordinate={coordinate}
           onPress={() => handleRecommendedMatchPress(match)}
-          pinColor="#FFD700" // Yellow color for recommended matches
+          pinColor="#FFD700" // Yellow color for recommended matches (using design token: colors.markers.recommended)
           tracksViewChanges={false}
           identifier={markerKey}
         />

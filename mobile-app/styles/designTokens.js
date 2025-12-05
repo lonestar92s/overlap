@@ -60,6 +60,11 @@ export const colors = {
     liveIndicatorBg: '#fff3e0', // Light orange for live indicator
     defaultBg: '#F8F8F8', // Default/neutral state background
   },
+  
+  // Map marker colors
+  markers: {
+    recommended: '#FFD700', // Yellow/gold for recommended match markers
+  },
 };
 
 export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };

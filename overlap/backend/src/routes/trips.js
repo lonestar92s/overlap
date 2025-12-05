@@ -6,8 +6,21 @@ const https = require('https');
 const { isTripCompleted } = require('../utils/tripUtils');
 const geocodingService = require('../services/geocodingService');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
+const recommendationService = require('../services/recommendationService');
 
 const router = express.Router();
+
+// Helper function to invalidate trip recommendations cache
+// Centralizes cache invalidation pattern for all trip mutations
+function invalidateTripRecommendations(tripId) {
+    try {
+        recommendationService.invalidateTripCache(tripId);
+        console.log(`🗑️ Invalidated recommendation cache for trip: ${tripId}`);
+    } catch (error) {
+        console.warn(`⚠️ Failed to invalidate recommendation cache for trip ${tripId}:`, error.message);
+        // Don't throw - cache invalidation failure shouldn't break the request
+    }
+}
 
 // API-Sports configuration
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
@@ -224,6 +237,10 @@ router.put('/:id', auth, async (req, res) => {
             });
         }
 
+        // Track if dates changed (affects recommendations)
+        const datesChanged = (startDate !== undefined && trip.startDate?.toISOString() !== (startDate ? new Date(startDate).toISOString() : null)) ||
+                            (endDate !== undefined && trip.endDate?.toISOString() !== (endDate ? new Date(endDate).toISOString() : null));
+
         // Update allowed fields
         if (name !== undefined) trip.name = name.trim();
         if (description !== undefined) trip.description = description;
@@ -233,6 +250,12 @@ router.put('/:id', auth, async (req, res) => {
         trip.updatedAt = new Date();
 
         await user.save();
+
+        // Invalidate recommendation cache if dates changed (dates are part of cache key)
+        if (datesChanged) {
+            invalidateTripRecommendations(req.params.id);
+            console.log(`🗑️ Invalidated recommendation cache for trip ${req.params.id} due to date changes`);
+        }
 
         res.json({
             success: true,
@@ -425,7 +448,10 @@ router.post('/:id/matches', auth, async (req, res) => {
         trip.updatedAt = new Date();
         await user.save();
 
-        // Invalidate recommended matches cache (adding match affects trip-based recommendations)
+        // Invalidate trip-specific recommendation cache (adding match affects trip-based recommendations)
+        invalidateTripRecommendations(req.params.id);
+        
+        // Also invalidate user-level recommended matches cache for consistency
         const deletedCount = invalidateRecommendedMatchesCache(user.id);
         console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after adding match to trip`);
         
@@ -465,7 +491,10 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         trip.updatedAt = new Date();
         await user.save();
 
-        // Invalidate recommended matches cache (removing match affects trip-based recommendations)
+        // Invalidate trip-specific recommendation cache (removing match affects trip-based recommendations)
+        invalidateTripRecommendations(req.params.id);
+        
+        // Also invalidate user-level recommended matches cache for consistency
         const deletedCount = invalidateRecommendedMatchesCache(user.id);
         console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after removing match from trip`);
 

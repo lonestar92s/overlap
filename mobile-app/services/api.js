@@ -1248,6 +1248,17 @@ class ApiService {
     try {
       // If no competitions or teams specified, use the location-only search endpoint
       if (competitions.length === 0 && teams.length === 0 && bounds && dateFrom && dateTo) {
+        // Validate bounds before making request
+        if (bounds.northeast && bounds.southwest) {
+          const latSpan = bounds.northeast.lat - bounds.southwest.lat;
+          const lngSpan = bounds.northeast.lng - bounds.southwest.lng;
+          if (latSpan <= 0 || lngSpan <= 0 || latSpan > 90 || lngSpan > 180) {
+            if (__DEV__) {
+              console.error('❌ [API] Invalid bounds:', { bounds, latSpan, lngSpan });
+            }
+            throw new Error('Invalid map bounds - please try zooming in or searching a smaller area');
+          }
+        }
         if (__DEV__) {
           console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');
         }
@@ -1268,7 +1279,19 @@ class ApiService {
         const networkDuration = networkEndTime - networkStartTime;
         
         const parseStartTime = performance.now();
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          // If JSON parsing fails, we still want to check response status
+          if (__DEV__) {
+            console.error('❌ [API] Failed to parse JSON response:', parseError);
+          }
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText || 'Failed to search matches'}`);
+          }
+          throw new Error('Failed to parse response');
+        }
         const parseEndTime = performance.now();
         const parseDuration = parseEndTime - parseStartTime;
         
@@ -1280,7 +1303,16 @@ class ApiService {
         }
         
         if (!response.ok) {
-          throw new Error(data?.message || 'Failed to search matches');
+          const errorMessage = data?.message || data?.error || `HTTP ${response.status}: ${response.statusText || 'Failed to search matches'}`;
+          if (__DEV__) {
+            console.error('❌ [API] Response not OK:', {
+              status: response.status,
+              statusText: response.statusText,
+              data: data,
+              url: url
+            });
+          }
+          throw new Error(errorMessage);
         }
         
         const apiEndTime = performance.now();
@@ -1450,7 +1482,17 @@ class ApiService {
       const totalApiDuration = apiEndTime - apiStartTime;
       
       if (__DEV__) {
-        console.error(`❌ [API] Error after ${totalApiDuration.toFixed(2)}ms:`, error);
+        console.error(`❌ [API] Error after ${totalApiDuration.toFixed(2)}ms:`, {
+          error: error,
+          message: error.message,
+          name: error.name,
+          stack: error.stack?.split('\n').slice(0, 3).join('\n')
+        });
+      }
+      
+      // Don't return error for cancelled requests - let the caller handle it
+      if (error.message === 'Request was cancelled' || error.name === 'AbortError') {
+        throw error; // Re-throw so caller can handle cancellation
       }
       
       return { success: false, error: error.message || 'Failed to search matches' };
