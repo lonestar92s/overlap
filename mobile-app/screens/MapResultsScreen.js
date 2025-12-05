@@ -128,6 +128,9 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Store original search bounds for filtering list view
   // List should only show matches in original viewport, not the entire buffer zone
   const [originalSearchBounds, setOriginalSearchBounds] = useState(null);
+  
+  // AbortController for request cancellation
+  const abortControllerRef = useRef(null);
 
   
 
@@ -370,6 +373,18 @@ const MapResultsScreen = ({ navigation, route }) => {
   const performBoundsSearch = async (region, requestId, timer = null) => {
     if (!dateFrom || !dateTo || !region) return;
     
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      if (__DEV__) {
+        console.log('🛑 [SEARCH] Cancelling previous request');
+      }
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
     setIsSearching(true);
     
     // Start API call phase
@@ -425,6 +440,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         dateTo,
         competitions: [], // Explicitly no filters - search all matches
         teams: [],        // Explicitly no filters - search all matches
+        signal: abortController.signal, // Pass AbortSignal for cancellation
       });
 
       // Stop API call phase
@@ -578,6 +594,14 @@ const MapResultsScreen = ({ navigation, route }) => {
         Alert.alert('Search Error', response.error || 'Failed to search matches');
       }
     } catch (error) {
+      // Don't show error if request was cancelled
+      if (error.message === 'Request was cancelled' || error.name === 'AbortError') {
+        if (__DEV__) {
+          console.log('⏭️ [SEARCH] Request cancelled:', { requestId, currentRequestId });
+        }
+        return; // Silently return if cancelled
+      }
+      
       if (__DEV__) {
         console.error('❌ [SEARCH] Error:', {
           requestId,
@@ -598,6 +622,10 @@ const MapResultsScreen = ({ navigation, route }) => {
           console.log('✅ [SEARCH] Completed:', { requestId, currentRequestId });
         }
         setIsSearching(false);
+        // Clear abort controller if this was the active request
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
+        }
       } else if (__DEV__) {
         console.log('⏭️ [SEARCH] Skipping cleanup for stale request:', { requestId, currentRequestId });
       }

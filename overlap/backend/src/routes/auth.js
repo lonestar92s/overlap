@@ -5,6 +5,7 @@ const { WorkOS } = require('@workos-inc/node');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
+const emailService = require('../services/emailService');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -396,15 +397,23 @@ router.post('/forgot-password', [
 
         await user.save({ validateBeforeSave: false });
 
-        // In production, send email with reset link
-        // For now, we'll log it and return instructions
-        const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
+        // Build reset URL
+        // For mobile apps, we'll use a deep link format: app://reset-password/:token
+        // For web, we'll use: https://domain.com/reset-password/:token
+        // For now, we'll use the API endpoint which can redirect or return JSON
+        const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+        const resetUrl = `${baseUrl}/api/auth/reset-password/${resetToken}`;
         
-        console.log('Password reset link:', resetUrl);
-        console.log('Email:', user.email);
-        
-        // TODO: Integrate email service (nodemailer, SendGrid, etc.)
-        // await sendPasswordResetEmail(user.email, resetUrl);
+        // Send email with reset link
+        try {
+            const emailSent = await emailService.sendPasswordResetEmail(user.email, resetUrl);
+            if (!emailSent) {
+                console.error('⚠️  Failed to send password reset email, but continuing...');
+            }
+        } catch (error) {
+            // Log error but don't fail the request (security: always return success)
+            console.error('❌ Error sending password reset email:', error.message);
+        }
 
         res.json({
             message: 'If an account with that email exists, a password reset link has been sent.',

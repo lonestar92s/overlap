@@ -191,6 +191,101 @@ eas build
 # Creates production build where __DEV__ = false
 ```
 
+## Email Service Configuration (SendGrid)
+
+The backend uses SendGrid for sending password reset emails. The email service supports multiple providers with graceful fallback.
+
+### Setup SendGrid
+
+1. **Sign up for SendGrid:**
+   - Go to [sendgrid.com](https://sendgrid.com) and create a free account
+   - Free tier includes 100 emails/day
+
+2. **Create an API Key:**
+   - Go to Settings → API Keys
+   - Click "Create API Key"
+   - Name it (e.g., "Flight Match Finder")
+   - Select "Full Access" or "Restricted Access" with "Mail Send" permission
+   - Copy the API key (you'll only see it once!)
+
+3. **Verify Sender Email:**
+   - Go to Settings → Sender Authentication
+   - Verify a single sender email (for development)
+   - Or set up domain authentication (for production)
+
+4. **Set Environment Variables:**
+
+   **For Local Development (.env file):**
+   ```env
+   EMAIL_PROVIDER=sendgrid
+   SENDGRID_API_KEY=SG.your_api_key_here
+   SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+   ```
+
+   **For Production (Railway/Platform):**
+   - Add the same variables in your hosting platform's environment settings
+   - Railway: Variables tab → Add each variable
+   - Never commit API keys to git!
+
+### Email Service Modes
+
+The email service supports three modes:
+
+1. **SendGrid (Recommended for Production):**
+   ```env
+   EMAIL_PROVIDER=sendgrid
+   SENDGRID_API_KEY=your_key
+   SENDGRID_FROM_EMAIL=your_email@domain.com
+   ```
+
+2. **Nodemailer (Alternative SMTP):**
+   ```env
+   EMAIL_PROVIDER=nodemailer
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASS=your_app_password
+   SMTP_FROM=your_email@gmail.com
+   ```
+
+3. **Console (Development Default):**
+   ```env
+   EMAIL_PROVIDER=console
+   # No additional config needed
+   # Emails will be logged to console
+   ```
+
+### Testing Email Service
+
+**In Development:**
+- Defaults to console mode (emails logged to console)
+- Perfect for testing without sending real emails
+- Check server logs for email content
+
+**In Production:**
+- Must configure SendGrid or Nodemailer
+- Real emails will be sent to users
+- Monitor SendGrid dashboard for delivery status
+
+### Troubleshooting Email Service
+
+**Error: "@sendgrid/mail package not installed"**
+```bash
+cd overlap/backend
+npm install @sendgrid/mail
+```
+
+**Emails not sending:**
+- Check `SENDGRID_API_KEY` is set correctly
+- Verify sender email is verified in SendGrid
+- Check SendGrid dashboard for delivery errors
+- Review server logs for error messages
+
+**Using console mode in production:**
+- Service will warn you in logs
+- Emails won't actually be sent
+- Configure SendGrid for production use
+
 ## Important Notes
 
 1. **Backend `NODE_ENV`:**
@@ -208,6 +303,7 @@ eas build
    - Never expose sensitive tokens in production
    - Use environment variables for API keys
    - Keep `.env` files out of version control
+   - SendGrid API keys are sensitive - treat like passwords
 
 ## Troubleshooting
 

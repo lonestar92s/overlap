@@ -842,16 +842,12 @@ router.get('/search', async (req, res) => {
             console.log(`🌍 Country detection: ${searchCountry} (distance: ${countryDetection.distance ? countryDetection.distance.toFixed(0) + 'km' : 'N/A'})`);
             console.log(`🌍 Nearby countries for domestic league check: ${nearbyCountries.join(', ')}`);
             
-            // Generate bounds hash for cache key (rounded to ~10km grid)
-            // This allows similar viewports to share cache while preventing conflicts
-            const boundsHash = generateBoundsHash(originalBounds);
+            // Use country + date range for cache key (no bounds hash for better cache hit rate)
+            // This allows all searches in the same country/date range to share cache
+            // Frontend will filter by bounds, backend returns all country matches
+            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}`;
             
-            // Use country + date range + bounds hash for cache key
-            // This prevents cache conflicts when different viewports are searched
-            // Similar viewports (within ~10km) will share cache, different ones won't conflict
-            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}:${boundsHash}`;
-            
-            console.log(`🔑 Cache key: ${cacheKey} (bounds hash: ${boundsHash})`);
+            console.log(`🔑 Cache key: ${cacheKey}`);
             
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
@@ -871,64 +867,103 @@ router.get('/search', async (req, res) => {
                     matchesCache.delete(cacheKey);
                     // Fall through to fresh fetch below
                 } else {
-                    // CACHE CONSISTENCY FIX: Try to enrich matches that are missing coordinates
-                // This handles the case where venues were geocoded after cache was created
-                const matchesWithCoords = [];
-                const matchesMissingCoords = [];
-                let enrichedCount = 0;
-                
-                for (const match of cachedData.data) {
-                    const coords = match.fixture?.venue?.coordinates;
+                    // CACHE CONSISTENCY FIX: Batch enrich matches that are missing coordinates
+                    // This handles the case where venues were geocoded after cache was created
+                    const matchesWithCoords = [];
+                    const matchesMissingCoords = [];
+                    const matchesNeedingEnrichment = [];
                     
-                    if (coords && Array.isArray(coords) && coords.length === 2) {
-                        const [lon, lat] = coords;
-                        if (typeof lon === 'number' && typeof lat === 'number' && 
-                            !isNaN(lon) && !isNaN(lat) &&
-                            lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                    // First pass: separate matches with valid coords from those needing enrichment
+                    for (const match of cachedData.data) {
+                        const coords = match.fixture?.venue?.coordinates;
+                        
+                        if (coords && Array.isArray(coords) && coords.length === 2) {
+                            const [lon, lat] = coords;
+                            if (typeof lon === 'number' && typeof lat === 'number' && 
+                                !isNaN(lon) && !isNaN(lat) &&
+                                lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                                matchesWithCoords.push(match);
+                                continue;
+                            }
+                        }
+                        
+                        // Match needs enrichment
+                        matchesNeedingEnrichment.push(match);
+                    }
+                    
+                    // Batch enrichment: collect all venue IDs and names
+                    const venueIds = [];
+                    const venueNameLookups = [];
+                    
+                    for (const match of matchesNeedingEnrichment) {
+                        const venueId = match.fixture?.venue?.id;
+                        const venueName = match.fixture?.venue?.name;
+                        const venueCity = match.fixture?.venue?.city;
+                        
+                        if (venueId) {
+                            venueIds.push(venueId);
+                        }
+                        if (venueName) {
+                            venueNameLookups.push({ match, name: venueName, city: venueCity });
+                        }
+                    }
+                    
+                    // Batch query all venues by ID at once (single database query)
+                    let venueMapById = new Map();
+                    if (venueIds.length > 0) {
+                        const Venue = require('../models/Venue');
+                        const venues = await Venue.find({ 
+                            venueId: { $in: venueIds },
+                            isActive: true 
+                        });
+                        
+                        venues.forEach(venue => {
+                            const coords = venue.coordinates || venue.location?.coordinates;
+                            if (coords && Array.isArray(coords) && coords.length === 2) {
+                                venueMapById.set(venue.venueId, coords);
+                            }
+                        });
+                        
+                        console.log(`🔄 Cache enrichment: Batch queried ${venueIds.length} venue IDs, found ${venueMapById.size} with coordinates`);
+                    }
+                    
+                    // Enrich matches using batch results
+                    let enrichedCount = 0;
+                    for (const match of matchesNeedingEnrichment) {
+                        const venueId = match.fixture?.venue?.id;
+                        const venueName = match.fixture?.venue?.name;
+                        const venueCity = match.fixture?.venue?.city;
+                        
+                        let enrichedCoords = null;
+                        
+                        // Try batch lookup by venue ID first
+                        if (venueId && venueMapById.has(venueId)) {
+                            enrichedCoords = venueMapById.get(venueId);
+                        }
+                        
+                        // Fallback to name lookup (still individual queries, but less common)
+                        if (!enrichedCoords && venueName) {
+                            const byName = await venueService.getVenueByName(venueName, venueCity);
+                            if (byName?.coordinates) {
+                                enrichedCoords = byName.coordinates;
+                            }
+                        }
+                        
+                        if (enrichedCoords) {
+                            // Update match with coordinates
+                            match.fixture.venue.coordinates = enrichedCoords;
                             matchesWithCoords.push(match);
-                            continue;
+                            enrichedCount++;
+                        } else {
+                            matchesMissingCoords.push(match);
                         }
                     }
                     
-                    // Match is missing valid coordinates - try to enrich from MongoDB
-                    const venueId = match.fixture?.venue?.id;
-                    const venueName = match.fixture?.venue?.name;
-                    const venueCity = match.fixture?.venue?.city;
-                    
-                    let enrichedCoords = null;
-                    
-                    // Try lookup by venue ID first
-                    if (venueId) {
-                        const localVenue = await venueService.getVenueByApiId(venueId);
-                        if (localVenue?.coordinates) {
-                            enrichedCoords = localVenue.coordinates;
-                        }
+                    // If we enriched any matches, update the cache
+                    if (enrichedCount > 0) {
+                        console.log(`🔄 Cache enrichment: Updated ${enrichedCount} matches with coordinates (batch query used)`);
+                        matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
                     }
-                    
-                    // Fallback to name lookup
-                    if (!enrichedCoords && venueName) {
-                        const byName = await venueService.getVenueByName(venueName, venueCity);
-                        if (byName?.coordinates) {
-                            enrichedCoords = byName.coordinates;
-                        }
-                    }
-                    
-                    if (enrichedCoords) {
-                        // Update match with coordinates
-                        match.fixture.venue.coordinates = enrichedCoords;
-                        matchesWithCoords.push(match);
-                        enrichedCount++;
-                        console.log(`🔄 Cache enrichment: Added coordinates to ${venueName || 'Unknown venue'}`);
-                    } else {
-                        matchesMissingCoords.push(match);
-                    }
-                }
-                
-                // If we enriched any matches, update the cache
-                if (enrichedCount > 0) {
-                    console.log(`🔄 Cache enrichment: Updated ${enrichedCount} matches with coordinates`);
-                    matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
-                }
                 
                 return res.json({ 
                     success: true, 

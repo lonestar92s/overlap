@@ -286,20 +286,41 @@ class ApiService {
   }
 
   // Helper method to create fetch requests with timeout
-  async fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  // Supports external AbortSignal for request cancellation
+  async fetchWithTimeout(url, options = {}, timeoutMs = 15000, externalSignal = null) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    // Combine external signal with timeout signal
+    let combinedSignal = controller.signal;
+    if (externalSignal) {
+      // If external signal is aborted, abort immediately
+      if (externalSignal.aborted) {
+        clearTimeout(timeoutId);
+        throw new Error('Request was cancelled');
+      }
+      // Listen to external signal and abort controller if needed
+      externalSignal.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        controller.abort();
+      });
+      // Use external signal as primary, timeout as secondary
+      combinedSignal = externalSignal;
+    }
     
     try {
       const response = await fetch(url, { 
         ...options, 
-        signal: controller.signal 
+        signal: combinedSignal 
       });
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || error.message === 'Request was cancelled') {
+        if (externalSignal?.aborted) {
+          throw new Error('Request was cancelled');
+        }
         throw new Error('Request timed out - please try again');
       }
       throw error;
@@ -1221,7 +1242,7 @@ class ApiService {
   }
 
   // NEW: Bounds-based search for map integration
-  async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [] }) {
+  async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [], signal = null }) {
     const apiStartTime = performance.now();
     
     try {
@@ -1242,7 +1263,7 @@ class ApiService {
         
         const url = `${this.baseURL}/matches/search?${params.toString()}`;
         const networkStartTime = performance.now();
-        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
+        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000, signal);
         const networkEndTime = performance.now();
         const networkDuration = networkEndTime - networkStartTime;
         
@@ -1361,7 +1382,7 @@ class ApiService {
             const headers = { 'Content-Type': 'application/json' };
             const token = await getAuthToken();
             if (token) headers['Authorization'] = `Bearer ${token}`;
-            const response = await fetch(url, { method: 'GET', headers });
+            const response = await fetch(url, { method: 'GET', headers, signal });
             if (!response.ok) {
               if (response.status === 403) {
                 return { success: false, data: { response: [] }, league, restricted: true };

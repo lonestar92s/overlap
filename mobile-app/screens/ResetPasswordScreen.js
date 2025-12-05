@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,38 +12,50 @@ import {
 } from 'react-native';
 import { Input, Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useAuth } from '../contexts/AuthContext';
+import ApiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
-const RegisterScreen = ({ navigation }) => {
-  const { register, loading } = useAuth();
-  const [email, setEmail] = useState('');
+const ResetPasswordScreen = ({ navigation, route }) => {
+  const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // Get token from route params (for deep linking) or use state
+  useEffect(() => {
+    if (route?.params?.token) {
+      setToken(route.params.token);
+    }
+  }, [route?.params?.token]);
+
+  // Password validation helpers
+  const validatePassword = (pwd) => {
+    const requirements = {
+      length: pwd.length >= 8,
+      uppercase: /[A-Z]/.test(pwd),
+      lowercase: /[a-z]/.test(pwd),
+      number: /[0-9]/.test(pwd),
+    };
+    return requirements;
+  };
 
   const validateForm = () => {
     const newErrors = {};
     
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
+    if (!token.trim()) {
+      newErrors.token = 'Reset token is required';
     }
     
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
     } else {
-      // Check password complexity requirements
-      const hasUppercase = /[A-Z]/.test(password);
-      const hasLowercase = /[a-z]/.test(password);
-      const hasNumber = /[0-9]/.test(password);
-      
-      if (!hasUppercase || !hasLowercase || !hasNumber) {
+      const requirements = validatePassword(password);
+      if (!requirements.length) {
+        newErrors.password = 'Password must be at least 8 characters';
+      } else if (!requirements.uppercase || !requirements.lowercase || !requirements.number) {
         newErrors.password = 'Password must contain uppercase, lowercase, and a number';
       }
     }
@@ -58,26 +70,44 @@ const RegisterScreen = ({ navigation }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleRegister = async () => {
+  const handleResetPassword = async () => {
     if (!validateForm()) return;
 
     try {
-      const result = await register(email.trim().toLowerCase(), password);
+      setLoading(true);
+      const response = await ApiService.resetPassword(token.trim(), password);
       
-      if (result.success) {
-        Alert.alert('Success', 'Account created successfully! Welcome to Flight Match Finder!');
-        // Navigation will be handled by App.js based on auth state
+      if (response.success) {
+        Alert.alert(
+          'Success',
+          'Your password has been reset successfully. Please sign in with your new password.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('Login')
+            }
+          ]
+        );
       } else {
-        Alert.alert('Registration Failed', result.error || 'Please try again');
+        Alert.alert('Reset Failed', response.error || 'Failed to reset password. The link may have expired.');
       }
     } catch (error) {
+      console.error('Reset password error:', error);
       Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const navigateToLogin = () => {
     navigation.navigate('Login');
   };
+
+  const navigateToForgotPassword = () => {
+    navigation.navigate('ForgotPassword');
+  };
+
+  const passwordRequirements = validatePassword(password);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -87,30 +117,35 @@ const RegisterScreen = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.header}>
-            <MaterialIcons name="sports-soccer" size={80} color={colors.primary} />
-            <Text style={styles.title}>Join the Community</Text>
-            <Text style={styles.subtitle}>Create your account to start planning football trips</Text>
+            <MaterialIcons name="lock-reset" size={80} color={colors.primary} />
+            <Text style={styles.title}>Reset Your Password</Text>
+            <Text style={styles.subtitle}>
+              Enter your new password below
+            </Text>
           </View>
 
           <View style={styles.form}>
-            <Input
-              label="Email"
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              leftIcon={<MaterialIcons name="email" size={20} color={colors.text.secondary} />}
-              errorMessage={errors.email}
-              containerStyle={styles.inputContainer}
-              inputStyle={styles.input}
-              labelStyle={styles.label}
-            />
+            {!route?.params?.token && (
+              <Input
+                label="Reset Token"
+                placeholder="Enter reset token from email"
+                value={token}
+                onChangeText={setToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+                leftIcon={<MaterialIcons name="vpn-key" size={20} color={colors.text.secondary} />}
+                errorMessage={errors.token}
+                containerStyle={styles.inputContainer}
+                inputStyle={styles.input}
+                labelStyle={styles.label}
+                accessibilityLabel="Reset token input"
+                accessibilityHint="Enter the reset token you received in your email"
+              />
+            )}
 
             <Input
-              label="Password"
-              placeholder="Create a password"
+              label="New Password"
+              placeholder="Enter your new password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -132,11 +167,12 @@ const RegisterScreen = ({ navigation }) => {
               containerStyle={styles.inputContainer}
               inputStyle={styles.input}
               labelStyle={styles.label}
+              accessibilityLabel="New password input"
             />
 
             <Input
               label="Confirm Password"
-              placeholder="Confirm your password"
+              placeholder="Confirm your new password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
@@ -158,42 +194,52 @@ const RegisterScreen = ({ navigation }) => {
               containerStyle={styles.inputContainer}
               inputStyle={styles.input}
               labelStyle={styles.label}
+              accessibilityLabel="Confirm password input"
             />
 
             <View style={styles.passwordRequirements}>
               <Text style={styles.requirementsTitle}>Password Requirements:</Text>
-              <Text style={[styles.requirement, password.length >= 8 && styles.requirementMet]}>
+              <Text style={[styles.requirement, passwordRequirements.length && styles.requirementMet]}>
                 • At least 8 characters
               </Text>
-              <Text style={[styles.requirement, /[A-Z]/.test(password) && styles.requirementMet]}>
+              <Text style={[styles.requirement, passwordRequirements.uppercase && styles.requirementMet]}>
                 • One uppercase letter
               </Text>
-              <Text style={[styles.requirement, /[a-z]/.test(password) && styles.requirementMet]}>
+              <Text style={[styles.requirement, passwordRequirements.lowercase && styles.requirementMet]}>
                 • One lowercase letter
               </Text>
-              <Text style={[styles.requirement, /[0-9]/.test(password) && styles.requirementMet]}>
+              <Text style={[styles.requirement, passwordRequirements.number && styles.requirementMet]}>
                 • One number
               </Text>
             </View>
 
             <Button
-              title="Create Account"
-              onPress={handleRegister}
+              title="Reset Password"
+              onPress={handleResetPassword}
               loading={loading}
               disabled={loading}
-              buttonStyle={styles.registerButton}
+              buttonStyle={styles.resetButton}
               titleStyle={styles.buttonTitle}
               containerStyle={styles.buttonContainer}
+              accessibilityLabel="Reset password button"
+              accessibilityRole="button"
             />
 
-            <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Already have an account? </Text>
+            <View style={styles.linkContainer}>
               <TouchableOpacity 
                 onPress={navigateToLogin}
-                accessibilityLabel="Sign in"
+                accessibilityLabel="Back to login"
                 accessibilityRole="link"
               >
-                <Text style={styles.loginLink}>Sign In</Text>
+                <Text style={styles.linkText}>Back to Login</Text>
+              </TouchableOpacity>
+              <Text style={styles.linkSeparator}>•</Text>
+              <TouchableOpacity 
+                onPress={navigateToForgotPassword}
+                accessibilityLabel="Request new reset link"
+                accessibilityRole="link"
+              >
+                <Text style={styles.linkText}>Request New Link</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -273,7 +319,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginBottom: spacing.lg,
   },
-  registerButton: {
+  resetButton: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.sm,
     paddingVertical: spacing.md,
@@ -282,20 +328,22 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: colors.onPrimary,
   },
-  loginContainer: {
+  linkContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loginText: {
-    ...typography.bodySmall,
-    color: colors.text.secondary,
-  },
-  loginLink: {
+  linkText: {
     ...typography.bodySmall,
     color: colors.primary,
     fontWeight: '600',
   },
+  linkSeparator: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginHorizontal: spacing.sm,
+  },
 });
 
-export default RegisterScreen;
+export default ResetPasswordScreen;
+
