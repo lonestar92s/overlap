@@ -10,8 +10,10 @@ import {
   Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { CommonActions } from '@react-navigation/native';
 import PopularMatches from '../components/PopularMatches';
 import LocationSearchModal from '../components/LocationSearchModal';
+import TripCountdownWidget from '../components/TripCountdownWidget';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 // Popular destinations data
@@ -105,6 +107,21 @@ const SearchScreen = ({ navigation }) => {
     console.log('Match pressed:', match);
   };
 
+  const handleTripPress = (trip) => {
+    // Navigate to trip overview screen in TripsTab, ensuring TripsList is in the stack
+    // so the back button goes to TripsList instead of SearchScreen
+    // First navigate to TripsTab (which shows TripsList by default)
+    navigation.navigate('TripsTab');
+    // Then use requestAnimationFrame to ensure the tab switch completes
+    // before navigating to TripOverview, which will push it on top of TripsList
+    requestAnimationFrame(() => {
+      navigation.navigate('TripsTab', {
+        screen: 'TripOverview',
+        params: { itineraryId: trip.id || trip._id }
+      });
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
@@ -120,6 +137,8 @@ const SearchScreen = ({ navigation }) => {
           <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
           <Text style={styles.startLapButtonText}>Start your lap</Text>
         </TouchableOpacity>
+
+        <TripCountdownWidget onTripPress={handleTripPress} />
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Popular Destinations</Text>

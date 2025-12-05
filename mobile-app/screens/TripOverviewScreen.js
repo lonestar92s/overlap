@@ -93,6 +93,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (itineraryId) {
       // Load cached recommendations immediately (synchronously) for instant display
+      // Note: The useRecommendations hook will handle loading recommendations automatically
+      // We just log here for debugging - the hook manages its own state
       const cachedRecs = apiService.getCachedRecommendations(itineraryId);
       if (cachedRecs && cachedRecs.success && cachedRecs.recommendations) {
         const recommendations = cachedRecs.recommendations || [];
@@ -105,8 +107,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
           seenMatchIds.add(matchId);
           return true;
         });
-        setRecommendations(uniqueRecommendations);
-        console.log('⚡ Loaded cached recommendations immediately:', uniqueRecommendations.length);
+        // Recommendations are managed by useRecommendations hook - no need to set manually
+        console.log('⚡ Cached recommendations available:', uniqueRecommendations.length);
       }
 
       // Always fetch fresh data from API on mount to ensure we have latest flights
@@ -132,8 +134,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
               setItinerary(foundItinerary);
               setDescriptionText(foundItinerary.description || '');
               setNotesText(foundItinerary.notes || '');
-              // Always fetch recommendations
-              fetchRecommendations(foundItinerary.id || foundItinerary._id);
+              // Recommendations are automatically fetched by useRecommendations hook
+              // The hook will fetch when tripId becomes available
             }
           }
         } catch (error) {
