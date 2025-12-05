@@ -308,12 +308,43 @@ useEffect(() => {
 
         {/* Home base markers */}
         {homeBases && homeBases.map((homeBase) => {
-          if (!homeBase.coordinates || typeof homeBase.coordinates.lat !== 'number' || typeof homeBase.coordinates.lng !== 'number') {
+          const coords = homeBase.coordinates;
+          if (!coords) {
+            return null;
+          }
+          
+          // Try to get lat/lng, handling different formats and string-to-number conversion
+          let lat = coords.lat;
+          let lng = coords.lng;
+          
+          // Handle alternative property names
+          if (lat === undefined || lat === null) {
+            lat = coords.latitude;
+          }
+          if (lng === undefined || lng === null) {
+            lng = coords.longitude || coords.lon;
+          }
+          
+          // Convert strings to numbers if needed
+          if (typeof lat === 'string') {
+            lat = parseFloat(lat);
+          }
+          if (typeof lng === 'string') {
+            lng = parseFloat(lng);
+          }
+          
+          // Validate coordinates are numbers
+          if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+            return null;
+          }
+          
+          // Check if coordinates are within reasonable world bounds
+          if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
             return null;
           }
 
           // GeoJSON format: [longitude, latitude]
-          const [longitude, latitude] = [homeBase.coordinates.lng, homeBase.coordinates.lat];
+          const [longitude, latitude] = [lng, lat];
 
           return (
             <Mapbox.PointAnnotation

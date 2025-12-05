@@ -31,6 +31,7 @@ import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { validateEnvironmentVariables } from './utils/envValidation';
+import { FEATURE_FLAGS } from './utils/featureFlags';
 
 // Validate environment variables on app startup
 // This now uses fallbacks instead of crashing
@@ -236,7 +237,9 @@ function AppContent() {
               })}
             >
               <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
-              <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
+              {FEATURE_FLAGS.enableUnifiedSearchTab && (
+                <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
+              )}
               <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
               <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
               <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />

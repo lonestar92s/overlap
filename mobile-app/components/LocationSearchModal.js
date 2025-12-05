@@ -13,6 +13,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Keyboard,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
@@ -20,6 +21,7 @@ import { debounce } from 'lodash';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FlightSearchTab from './FlightSearchTab';
+import FilterChip from './FilterChip';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
@@ -42,6 +44,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // Collapsible states
   const [whereExpanded, setWhereExpanded] = useState(true);
   const [whenExpanded, setWhenExpanded] = useState(false);
+  const [whoExpanded, setWhoExpanded] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   
   // Calendar month state - controls which month is displayed
@@ -50,8 +53,18 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // Recent searches
   const [recentSearches, setRecentSearches] = useState([]);
   
+  // Who section state
+  const [selectedLeagues, setSelectedLeagues] = useState([]); // Array of league objects with {id, name, badge, type: 'league'}
+  const [selectedTeams, setSelectedTeams] = useState([]); // Array of team objects with {id, name, badge, type: 'team'}
+  const [whoSearchQuery, setWhoSearchQuery] = useState('');
+  const [whoSearchResults, setWhoSearchResults] = useState({ leagues: [], teams: [] });
+  const [whoSearchLoading, setWhoSearchLoading] = useState(false);
+  
   // Ref for location search TextInput
   const locationInputRef = useRef(null);
+  
+  // Ref for who search TextInput
+  const whoInputRef = useRef(null);
   
   // Ref to track if we're in the middle of selecting a location (prevents double API calls)
   const isSelectingLocationRef = useRef(false);
@@ -59,8 +72,14 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // Ref to store the debounced search function so we can cancel it
   const debouncedSearchRef = useRef(null);
   
+  // Ref to store the debounced unified search function
+  const debouncedWhoSearchRef = useRef(null);
+  
   // Ref to track if a search has been completed (to prevent showing "No locations found" too early)
   const hasCompletedSearchRef = useRef(false);
+  
+  // Ref to track if a unified search has been completed
+  const hasCompletedWhoSearchRef = useRef(false);
 
   // Load recent searches
   useEffect(() => {
@@ -110,6 +129,12 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       setWhenExpanded(false);
       setShowCalendar(false);
       setCurrentMonth(new Date().toISOString().split('T')[0]);
+      // Reset Who section
+      setSelectedLeagues([]);
+      setSelectedTeams([]);
+      setWhoSearchQuery('');
+      setWhoSearchResults({ leagues: [], teams: [] });
+      setWhoExpanded(false);
     }
   }, [visible, initialLocation]);
 
@@ -216,6 +241,41 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     }
   }, []);
 
+  // Unified search function for Who section (leagues and teams only)
+  const performWhoSearch = useCallback(async (query) => {
+    if (!query || query.trim().length < 2) {
+      setWhoSearchResults({ leagues: [], teams: [] });
+      setWhoSearchLoading(false);
+      hasCompletedWhoSearchRef.current = false;
+      return;
+    }
+    setWhoSearchLoading(true);
+    hasCompletedWhoSearchRef.current = false; // Reset flag when starting new search
+    try {
+      const response = await ApiService.searchUnified(query.trim());
+      if (response.success && response.results) {
+        // Filter out venues - only show leagues and teams
+        setWhoSearchResults({
+          leagues: response.results.leagues || [],
+          teams: response.results.teams || [],
+        });
+      } else {
+        setWhoSearchResults({ leagues: [], teams: [] });
+      }
+      // Mark that search has completed
+      hasCompletedWhoSearchRef.current = true;
+    } catch (error) {
+      if (__DEV__) {
+        console.error('Error searching unified:', error);
+      }
+      setWhoSearchResults({ leagues: [], teams: [] });
+      // Mark that search has completed (even if it failed)
+      hasCompletedWhoSearchRef.current = true;
+    } finally {
+      setWhoSearchLoading(false);
+    }
+  }, []);
+
   // Create debounced search function and store in ref
   useEffect(() => {
     // Cancel previous debounced function if it exists
@@ -233,6 +293,24 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       }
     };
   }, [performLocationSearch]);
+
+  // Create debounced unified search function and store in ref
+  useEffect(() => {
+    // Cancel previous debounced function if it exists
+    if (debouncedWhoSearchRef.current) {
+      debouncedWhoSearchRef.current.cancel();
+    }
+    
+    // Create new debounced function
+    debouncedWhoSearchRef.current = debounce(performWhoSearch, 350);
+    
+    // Cleanup on unmount or when performWhoSearch changes
+    return () => {
+      if (debouncedWhoSearchRef.current) {
+        debouncedWhoSearchRef.current.cancel();
+      }
+    };
+  }, [performWhoSearch]);
 
   useEffect(() => {
     // Don't trigger search if we're in the middle of selecting a location
@@ -266,6 +344,21 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       hasCompletedSearchRef.current = false;
     }
   }, [locationSearchQuery, isSearchingLocation, location]);
+
+  // Handle unified search for Who section
+  useEffect(() => {
+    if (whoSearchQuery.trim().length >= 2) {
+      // Use the debounced function from ref
+      if (debouncedWhoSearchRef.current) {
+        debouncedWhoSearchRef.current(whoSearchQuery);
+      }
+    } else {
+      setWhoSearchResults({ leagues: [], teams: [] });
+      setWhoSearchLoading(false);
+      // Reset search completion flag when query is too short
+      hasCompletedWhoSearchRef.current = false;
+    }
+  }, [whoSearchQuery]);
 
   const handleLocationSelect = (selectedLocation) => {
     if (__DEV__) {
@@ -396,6 +489,170 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     return 'Add Dates';
   };
 
+  const formatWhoValue = () => {
+    const totalSelected = selectedLeagues.length + selectedTeams.length;
+    if (totalSelected === 0) return 'Add who';
+    if (totalSelected === 1) {
+      const item = selectedLeagues[0] || selectedTeams[0];
+      return item.name;
+    }
+    if (totalSelected === 2) {
+      const items = [...selectedLeagues, ...selectedTeams];
+      return `${items[0].name}, ${items[1].name}`;
+    }
+    return `${totalSelected} selected`;
+  };
+
+  const handleLeagueSelect = (league) => {
+    // Check if already selected
+    if (selectedLeagues.some(l => l.id === league.id)) {
+      return;
+    }
+    setSelectedLeagues([...selectedLeagues, { ...league, type: 'league' }]);
+    // Clear search query and results after selection
+    setWhoSearchQuery('');
+    setWhoSearchResults({ leagues: [], teams: [] });
+    // Blur input
+    if (whoInputRef.current) {
+      whoInputRef.current.blur();
+    }
+    Keyboard.dismiss();
+  };
+
+  const handleTeamSelect = (team) => {
+    // Check if already selected
+    if (selectedTeams.some(t => t.id === team.id)) {
+      return;
+    }
+    setSelectedTeams([...selectedTeams, { ...team, type: 'team' }]);
+    // Clear search query and results after selection
+    setWhoSearchQuery('');
+    setWhoSearchResults({ leagues: [], teams: [] });
+    // Blur input
+    if (whoInputRef.current) {
+      whoInputRef.current.blur();
+    }
+    Keyboard.dismiss();
+  };
+
+  const handleRemoveLeague = (leagueId) => {
+    setSelectedLeagues(selectedLeagues.filter(l => l.id !== leagueId));
+  };
+
+  const handleRemoveTeam = (teamId) => {
+    setSelectedTeams(selectedTeams.filter(t => t.id !== teamId));
+  };
+
+  // Search validation logic
+  const canSearch = () => {
+    const hasLocation = !!location;
+    const hasDates = !!(dateFrom && dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+    
+    // Traditional search: location + dates required
+    if (!hasWho) {
+      return hasLocation && hasDates;
+    }
+    
+    // Who-based search: dates required, location optional
+    return hasDates;
+  };
+
+  // Calculate initial region from match coordinates (for Who-based searches without location)
+  const calculateRegionFromMatches = (matches) => {
+    if (!matches || matches.length === 0) {
+      return null;
+    }
+
+    // Extract all valid venue coordinates from matches
+    const coordinates = [];
+    matches.forEach((match) => {
+      const venue = match?.fixture?.venue;
+      if (venue?.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2) {
+        const [lon, lat] = venue.coordinates;
+        // Validate coordinates
+        if (typeof lat === 'number' && typeof lon === 'number' &&
+            lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+          coordinates.push({ lat, lng: lon });
+        }
+      }
+    });
+
+    if (coordinates.length === 0) {
+      return null;
+    }
+
+    // Calculate bounds
+    const lats = coordinates.map(coord => coord.lat);
+    const lngs = coordinates.map(coord => coord.lng);
+    
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    // Calculate center
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    // Calculate spans with padding
+    const latSpan = maxLat - minLat;
+    const lngSpan = maxLng - minLng;
+
+    // Clamp deltas to valid ranges to prevent MapKit crashes
+    // MapKit requires: latitudeDelta: 0-180, longitudeDelta: 0-360
+    // Practical limits for map views: max ~50 degrees
+    const MAX_LAT_DELTA = 50.0;
+    const MAX_LNG_DELTA = 50.0;
+    const MIN_DELTA = 0.1;
+    const PADDING_MULTIPLIER = 2.5;
+
+    let latitudeDelta = Math.max(MIN_DELTA, latSpan * PADDING_MULTIPLIER);
+    let longitudeDelta = Math.max(MIN_DELTA, lngSpan * PADDING_MULTIPLIER);
+
+    // Clamp to maximum values
+    latitudeDelta = Math.min(latitudeDelta, MAX_LAT_DELTA);
+    longitudeDelta = Math.min(longitudeDelta, MAX_LNG_DELTA);
+
+    // Validate center coordinates
+    if (isNaN(centerLat) || isNaN(centerLng) || 
+        centerLat < -90 || centerLat > 90 || 
+        centerLng < -180 || centerLng > 180) {
+      if (__DEV__) {
+        console.warn('⚠️ Invalid center coordinates calculated from matches:', { centerLat, centerLng });
+      }
+      return null;
+    }
+
+    // Validate deltas
+    if (isNaN(latitudeDelta) || isNaN(longitudeDelta) || 
+        latitudeDelta <= 0 || longitudeDelta <= 0 ||
+        latitudeDelta > MAX_LAT_DELTA || longitudeDelta > MAX_LNG_DELTA) {
+      if (__DEV__) {
+        console.warn('⚠️ Invalid deltas calculated from matches:', { latitudeDelta, longitudeDelta });
+      }
+      return null;
+    }
+
+    const region = {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta,
+      longitudeDelta,
+    };
+
+    if (__DEV__) {
+      console.log('🗺️ Calculated region from matches (validated):', {
+        matchCount: matches.length,
+        coordinateCount: coordinates.length,
+        region,
+        spans: { lat: latSpan, lng: lngSpan }
+      });
+    }
+
+    return region;
+  };
+
   const onDayPress = (day) => {
     const dateString = day.dateString;
     
@@ -452,73 +709,169 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     setDateTo(null);
     setSelectedDates({});
     setCurrentMonth(new Date().toISOString().split('T')[0]);
+    // Clear Who section
+    setSelectedLeagues([]);
+    setSelectedTeams([]);
+    setWhoSearchQuery('');
+    setWhoSearchResults({ leagues: [], teams: [] });
+    setWhoExpanded(false);
     clearRecentSearches();
   };
 
   const handleSearch = async () => {
-    if (!location) {
-      Alert.alert('Error', 'Please select a location');
-      return;
-    }
-    if (!dateFrom || !dateTo) {
-      Alert.alert('Error', 'Please select your travel dates');
-      return;
+    const hasLocation = !!location;
+    const hasDates = !!(dateFrom && dateTo);
+    const hasWho = (selectedLeagues.length + selectedTeams.length) > 0;
+
+    // Validation: Traditional search requires location + dates
+    if (!hasWho) {
+      if (!hasLocation) {
+        Alert.alert('Error', 'Please select a location');
+        return;
+      }
+      if (!hasDates) {
+        Alert.alert('Error', 'Please select your travel dates');
+        return;
+      }
+    } else {
+      // Who-based search: dates required, location optional
+      if (!hasDates) {
+        Alert.alert('Error', 'Please select your travel dates');
+        return;
+      }
     }
 
     setLoading(true);
     try {
-      // FIXED: Use same viewport-based bounds calculation as "Search this area"
-      // This ensures consistent search areas between initial search and "search this area"
-      const viewportDelta = 0.5; // Default viewport size (matches initialRegion)
-      const bounds = {
-        northeast: {
-          lat: location.lat + (viewportDelta / 2),
-          lng: location.lon + (viewportDelta / 2),
-        },
-        southwest: {
-          lat: location.lat - (viewportDelta / 2),
-          lng: location.lon - (viewportDelta / 2),
-        }
-      };
-
-      if (__DEV__) {
-        console.log('🔍 Initial search bounds (unified):', {
-          center: { lat: location.lat, lng: location.lon },
-          viewportDelta,
-          bounds
-        });
-      }
-
       // Track initial search performance (end-to-end: button press → rendered)
-      // We'll pass the search start time via route params and complete tracking in MapResultsScreen
       const searchStartTime = performance.now();
       
-      const response = await ApiService.searchMatchesByBounds({
-        bounds,
-        dateFrom,
-        dateTo,
-      });
+      let response;
+      let initialRegion = null;
+      let matches = [];
+      let preSelectedFilters = null;
 
-      if (response.success) {
-        // Save to recent searches after successful search
-        await saveRecentSearch(location, dateFrom, dateTo);
-        
-        onClose(); // Close modal before navigating
-        navigation.navigate('MapResults', {
-          searchParams: {
-            location,
-            dateFrom,
-            dateTo,
-          },
-          matches: response.data || [],
-          initialRegion: {
+      if (hasWho) {
+        // Who-based search using searchAggregatedMatches
+        const apiParams = {
+          competitions: selectedLeagues.map(l => String(l.id)),
+          teams: selectedTeams.map(t => String(t.id)),
+          dateFrom,
+          dateTo,
+        };
+
+        // Add optional location bounds if location is provided
+        if (hasLocation) {
+          const viewportDelta = 0.5;
+          apiParams.bounds = {
+            northeast: {
+              lat: location.lat + (viewportDelta / 2),
+              lng: location.lon + (viewportDelta / 2),
+            },
+            southwest: {
+              lat: location.lat - (viewportDelta / 2),
+              lng: location.lon - (viewportDelta / 2),
+            }
+          };
+          initialRegion = {
             latitude: location.lat,
             longitude: location.lon,
             latitudeDelta: viewportDelta,
             longitudeDelta: viewportDelta,
+          };
+        }
+
+        if (__DEV__) {
+          console.log('🔍 Who-based search params:', apiParams);
+        }
+
+        response = await ApiService.searchAggregatedMatches(apiParams);
+        matches = response?.data || [];
+
+        // If no location was provided, calculate initialRegion from match coordinates
+        if (!hasLocation) {
+          if (matches.length > 0) {
+            const calculatedRegion = calculateRegionFromMatches(matches);
+            if (calculatedRegion) {
+              initialRegion = calculatedRegion;
+              if (__DEV__) {
+                console.log('🗺️ Using calculated region from matches (no location provided):', initialRegion);
+              }
+            }
+            // If no valid coordinates found in matches, leave initialRegion as null
+            // MapResultsScreen will handle it appropriately
+          }
+          // If no matches found, leave initialRegion as null
+          // This allows MapResultsScreen to show appropriate state
+          // User can then use "Search this area" to search in a specific region
+        }
+
+        // Prepare preSelectedFilters for MapResultsScreen
+        // Include both IDs and names so chips can display even if filterData isn't ready
+        preSelectedFilters = {
+          leagues: selectedLeagues.map(l => ({
+            id: String(l.id),
+            name: l.name
+          })),
+          teams: selectedTeams.map(t => ({
+            id: String(t.id),
+            name: t.name
+          })),
+        };
+      } else {
+        // Traditional bounds-based search
+        const viewportDelta = 0.5;
+        const bounds = {
+          northeast: {
+            lat: location.lat + (viewportDelta / 2),
+            lng: location.lon + (viewportDelta / 2),
           },
-          hasWho: false,
-          _performanceStartTime: searchStartTime, // Pass start time for end-to-end tracking
+          southwest: {
+            lat: location.lat - (viewportDelta / 2),
+            lng: location.lon - (viewportDelta / 2),
+          }
+        };
+
+        if (__DEV__) {
+          console.log('🔍 Initial search bounds (unified):', {
+            center: { lat: location.lat, lng: location.lon },
+            viewportDelta,
+            bounds
+          });
+        }
+
+        response = await ApiService.searchMatchesByBounds({
+          bounds,
+          dateFrom,
+          dateTo,
+        });
+        matches = response?.data || [];
+        initialRegion = {
+          latitude: location.lat,
+          longitude: location.lon,
+          latitudeDelta: viewportDelta,
+          longitudeDelta: viewportDelta,
+        };
+      }
+
+      if (response.success) {
+        // Save to recent searches after successful search (only if location is selected)
+        if (hasLocation) {
+          await saveRecentSearch(location, dateFrom, dateTo);
+        }
+        
+        onClose(); // Close modal before navigating
+        navigation.navigate('MapResults', {
+          searchParams: {
+            location: hasLocation ? location : null,
+            dateFrom,
+            dateTo,
+          },
+          matches,
+          initialRegion,
+          hasWho,
+          preSelectedFilters,
+          _performanceStartTime: searchStartTime,
         });
       } else {
         Alert.alert('Error', 'Failed to search matches');
@@ -783,19 +1136,153 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             )}
           </View>
 
-          {/* Who Card - Placeholder (non-functional for location-only search) */}
+          {/* Who Card - Collapsible */}
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
+            <TouchableOpacity
+              style={styles.cardHeader}
+              onPress={() => setWhoExpanded(!whoExpanded)}
+              activeOpacity={0.7}
+            >
               <View>
                 <Text style={styles.cardLabel}>Who</Text>
-                <Text style={styles.cardValue}>Add who</Text>
+                <Text style={styles.cardValue}>{formatWhoValue()}</Text>
               </View>
               <MaterialIcons
-                name="keyboard-arrow-down"
+                name={whoExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
                 size={24}
                 color={colors.text.primary}
               />
-            </View>
+            </TouchableOpacity>
+
+            {whoExpanded && (
+              <View style={styles.cardContent}>
+                {/* Who Search Input */}
+                <View style={styles.searchInputContainer}>
+                  <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
+                  <TextInput
+                    ref={whoInputRef}
+                    style={styles.searchInput}
+                    placeholder="Search leagues or teams"
+                    placeholderTextColor="rgba(0, 0, 0, 0.5)"
+                    value={whoSearchQuery}
+                    onChangeText={(text) => {
+                      // Capitalize first letter if starting fresh
+                      let processedText = text;
+                      if (whoSearchQuery.length === 0 && text.length > 0) {
+                        processedText = text.charAt(0).toUpperCase() + text.slice(1);
+                      }
+                      setWhoSearchQuery(processedText);
+                      // Reset search completion flag when user types
+                      if (processedText.trim().length < 2) {
+                        hasCompletedWhoSearchRef.current = false;
+                      }
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {whoSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWhoSearchQuery('');
+                        setWhoSearchResults({ leagues: [], teams: [] });
+                      }}
+                      style={styles.clearSearchButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialIcons name="close" size={20} color="rgba(0, 0, 0, 0.5)" />
+                    </TouchableOpacity>
+                  )}
+                  {whoSearchLoading && whoSearchQuery.length === 0 && (
+                    <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" style={styles.searchLoadingIndicator} />
+                  )}
+                </View>
+
+                {/* Selected Items as Chips */}
+                {(selectedLeagues.length > 0 || selectedTeams.length > 0) && (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={styles.chipsContainer}
+                    contentContainerStyle={styles.chipsContent}
+                  >
+                    {selectedLeagues.map(league => (
+                      <FilterChip
+                        key={`league-${league.id}`}
+                        label={league.name}
+                        onRemove={() => handleRemoveLeague(league.id)}
+                        type="league"
+                      />
+                    ))}
+                    {selectedTeams.map(team => (
+                      <FilterChip
+                        key={`team-${team.id}`}
+                        label={team.name}
+                        onRemove={() => handleRemoveTeam(team.id)}
+                        type="team"
+                      />
+                    ))}
+                  </ScrollView>
+                )}
+
+                {/* Who Search Results */}
+                {whoSearchQuery.trim().length >= 2 && (
+                  <View style={styles.locationResultsContainer}>
+                    {whoSearchLoading && whoSearchResults.leagues.length === 0 && whoSearchResults.teams.length === 0 && (
+                      <View style={styles.locationLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      </View>
+                    )}
+                    {!whoSearchLoading && whoSearchResults.leagues.length === 0 && whoSearchResults.teams.length === 0 && whoSearchQuery.trim().length >= 2 && hasCompletedWhoSearchRef.current && (
+                      <View style={styles.locationEmptyContainer}>
+                        <Text style={styles.locationEmptyText}>No leagues or teams found</Text>
+                      </View>
+                    )}
+                    {/* League Results */}
+                    {whoSearchResults.leagues.map((league) => (
+                      <TouchableOpacity
+                        key={`league-${league.id}`}
+                        style={styles.locationResultItem}
+                        onPress={() => handleLeagueSelect(league)}
+                        activeOpacity={0.7}
+                      >
+                        {league.badge ? (
+                          <Image source={{ uri: league.badge }} style={styles.resultIcon} />
+                        ) : (
+                          <MaterialIcons name="emoji-events" size={40} color={colors.text.primary} />
+                        )}
+                        <View style={styles.locationResultText}>
+                          <Text style={styles.locationResultTitle}>{league.name}</Text>
+                          <Text style={styles.locationResultSubtitle}>
+                            {league.country || 'League'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    {/* Team Results */}
+                    {whoSearchResults.teams.map((team) => (
+                      <TouchableOpacity
+                        key={`team-${team.id}`}
+                        style={styles.locationResultItem}
+                        onPress={() => handleTeamSelect(team)}
+                        activeOpacity={0.7}
+                      >
+                        {team.badge ? (
+                          <Image source={{ uri: team.badge }} style={styles.resultIcon} />
+                        ) : (
+                          <MaterialIcons name="sports-soccer" size={40} color={colors.text.primary} />
+                        )}
+                        <View style={styles.locationResultText}>
+                          <Text style={styles.locationResultTitle}>{team.name}</Text>
+                          <Text style={styles.locationResultSubtitle}>
+                            {team.city ? `${team.city}, ${team.country || ''}` : team.country || 'Team'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
           </ScrollView>
                  </KeyboardAvoidingView>
@@ -820,9 +1307,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.enterButton, (!location || !dateFrom || !dateTo) && styles.enterButtonDisabled]}
+              style={[styles.enterButton, (!canSearch()) && styles.enterButtonDisabled]}
               onPress={handleSearch}
-              disabled={loading || !location || !dateFrom || !dateTo}
+              disabled={loading || !canSearch()}
               accessibilityLabel="Search for matches"
               accessibilityRole="button"
             >
@@ -1078,6 +1565,17 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '700',
     color: 'rgba(0, 0, 0, 0.5)',
+  },
+  chipsContainer: {
+    marginTop: spacing.sm,
+  },
+  chipsContent: {
+    paddingRight: spacing.md,
+  },
+  resultIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.sm,
   },
 });
 

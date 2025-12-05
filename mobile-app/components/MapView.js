@@ -165,16 +165,53 @@ const MatchMapView = forwardRef(({
   const fitToMatches = useCallback(() => {
     if (!mapRef.current) return;
 
-    // Collect coordinates from matches
+    // Collect coordinates from matches with strict validation
     const matchCoordinates = (matches || [])
       .filter(match => {
-        const venue = match.fixture?.venue;
-        return venue?.coordinates && venue.coordinates.length === 2;
+        const venue = match?.fixture?.venue;
+        if (!venue || !venue.coordinates || !Array.isArray(venue.coordinates) || venue.coordinates.length !== 2) {
+          return false;
+        }
+        
+        const [lon, lat] = venue.coordinates;
+        
+        // Validate coordinates are valid numbers (not null, undefined, or NaN)
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            isNaN(lon) || isNaN(lat) ||
+            lon === null || lat === null ||
+            lon === undefined || lat === undefined) {
+          if (__DEV__) {
+            console.warn('⚠️ Invalid coordinates in fitToMatches, skipping:', {
+              match: match?.teams?.home?.name || 'Unknown',
+              coordinates: venue.coordinates,
+              lon,
+              lat
+            });
+          }
+          return false;
+        }
+        
+        // Validate coordinate bounds
+        if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          if (__DEV__) {
+            console.warn('⚠️ Coordinates out of bounds in fitToMatches, skipping:', {
+              match: match?.teams?.home?.name || 'Unknown',
+              lon,
+              lat
+            });
+          }
+          return false;
+        }
+        
+        return true;
       })
-      .map(match => ({
-        latitude: match.fixture.venue.coordinates[1],  // GeoJSON: [lon, lat]
-        longitude: match.fixture.venue.coordinates[0], // So lat is index 1, lon is index 0
-      }));
+      .map(match => {
+        const [lon, lat] = match.fixture.venue.coordinates;
+        return {
+          latitude: lat,  // GeoJSON: [lon, lat]
+          longitude: lon, // So lat is index 1, lon is index 0
+        };
+      });
 
     // Collect coordinates from home bases
     const homeBaseCoordinates = (homeBases || [])
@@ -193,12 +230,13 @@ const MatchMapView = forwardRef(({
     if (allCoordinates.length === 0) return;
 
     // Use adaptive bounds calculation for better coverage
+    // Reduced maxSpan from 5.0 to 2.0 for better regional zoom (e.g., UK Premier League)
     const adaptiveRegion = calculateAdaptiveBounds(allCoordinates, {
       minSpan: 0.1,
-      maxSpan: 5.0,
-      basePadding: 2.0,
-      urbanPadding: 3.0,
-      ruralPadding: 1.8,
+      maxSpan: 2.0,
+      basePadding: 1.5,
+      urbanPadding: 2.0,
+      ruralPadding: 1.5,
     });
     
     isAnimatingRef.current = true;
@@ -255,16 +293,52 @@ const MatchMapView = forwardRef(({
   const getVenueGroupKey = useCallback((match) => {
     const venue = match?.fixture?.venue;
     if (!venue) return null;
+    
     // Prioritize coordinates for physical location matching (handles shared stadiums with different venue IDs)
     // Round coordinates to 6 decimal places (~0.1m precision) to handle floating point differences
-    if (venue.coordinates && venue.coordinates.length === 2) {
+    if (venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2) {
       const [lon, lat] = venue.coordinates;
-      const roundedLon = Math.round(lon * 1000000) / 1000000;
-      const roundedLat = Math.round(lat * 1000000) / 1000000;
-      return `geo:${roundedLon},${roundedLat}`;
+      
+      // Validate coordinates are valid numbers (not null, undefined, or NaN)
+      if (typeof lon !== 'number' || typeof lat !== 'number' ||
+          isNaN(lon) || isNaN(lat) ||
+          lon === null || lat === null ||
+          lon === undefined || lat === undefined) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid coordinates in getVenueGroupKey:', {
+            match: match?.teams?.home?.name || 'Unknown',
+            coordinates: venue.coordinates,
+            lon,
+            lat
+          });
+        }
+        // Fall through to venue ID check
+      } else {
+        // Both coordinates are valid numbers - use them
+        const roundedLon = Math.round(lon * 1000000) / 1000000;
+        const roundedLat = Math.round(lat * 1000000) / 1000000;
+        
+        // Final validation - ensure rounded values are still valid
+        if (!isNaN(roundedLon) && !isNaN(roundedLat)) {
+          return `geo:${roundedLon},${roundedLat}`;
+        }
+      }
     }
-    // Fallback to venue ID if no coordinates available
-    if (venue.id != null) return `id:${venue.id}`;
+    
+    // Fallback to venue ID if no coordinates available or coordinates are invalid
+    if (venue.id != null && venue.id !== undefined && venue.id !== 'null' && venue.id !== 'undefined') {
+      return `id:${venue.id}`;
+    }
+    
+    if (__DEV__) {
+      console.warn('⚠️ No valid key for venue:', {
+        match: match?.teams?.home?.name || 'Unknown',
+        venueId: venue.id,
+        hasCoordinates: !!venue.coordinates,
+        coordinates: venue.coordinates
+      });
+    }
+    
     return null;
   }, []);
 
@@ -274,7 +348,7 @@ const MatchMapView = forwardRef(({
       if (__DEV__) {
         console.log('MapView: No matches, clearing all markers');
       }
-      return null;
+      return []; // Return empty array instead of null to prevent crashes
     }
     
     const validMatches = matches.filter(match => {
@@ -314,20 +388,55 @@ const MatchMapView = forwardRef(({
     });
 
     // Create one marker per venue group
-    return Array.from(venueGroupsMap.values()).map((venueGroup) => {
+    // Build array of valid markers only (never include null/undefined)
+    const markerArray = [];
+    Array.from(venueGroupsMap.values()).forEach((venueGroup) => {
       // Use the first match from the venue group for marker display and selection check
       const firstMatch = venueGroup.matches[0];
+      if (!firstMatch || !firstMatch.fixture || !firstMatch.fixture.venue) {
+        return; // Skip invalid matches
+      }
+      
       const venue = firstMatch.fixture.venue;
+      if (!venue.coordinates || !Array.isArray(venue.coordinates) || venue.coordinates.length !== 2) {
+        return; // Skip matches without valid coordinates
+      }
+      
+      const [lon, lat] = venue.coordinates;
+      
+      // Validate coordinate values before creating marker
+      if (typeof lon !== 'number' || typeof lat !== 'number' ||
+          isNaN(lon) || isNaN(lat) ||
+          lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return; // Skip invalid coordinates
+      }
+      
       const isSelected = venueGroup.matches.some(m => m.fixture.id === selectedMatchId);
       const coordinate = {
-        latitude: venue.coordinates[1],  // GeoJSON: [lon, lat]
-        longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
+        latitude: lat,  // GeoJSON: [lon, lat]
+        longitude: lon, // So lat is index 1, lon is index 0
       };
       
-      // Use venue key for marker identifier
+      // Use venue key for marker identifier - ensure it's always a valid string
+      if (!venueGroup.key || typeof venueGroup.key !== 'string') {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid venueGroup.key, skipping marker:', venueGroup);
+        }
+        return; // Skip if key is invalid
+      }
+      
       const markerKey = `venue-${venueGroup.key}`;
       
-      return (
+      // Validate markerKey is not undefined/null
+      if (!markerKey) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid markerKey, skipping marker');
+        }
+        return;
+      }
+      
+      // Only push valid markers to array
+      const markerComponent = (
         <Marker
           key={markerKey}
           coordinate={coordinate}
@@ -337,13 +446,35 @@ const MatchMapView = forwardRef(({
           identifier={markerKey}
         />
       );
+      
+      // Final safety check - ensure component is not null/undefined
+      if (!markerComponent) {
+        if (__DEV__) {
+          console.warn('⚠️ Marker component is null/undefined, skipping');
+        }
+        return;
+      }
+      
+      markerArray.push(markerComponent);
     });
+    
+    // Final safety filter - remove any null/undefined that might have slipped through
+    const filteredMarkers = markerArray.filter(marker => marker != null);
+    
+    if (__DEV__ && filteredMarkers.length !== markerArray.length) {
+      console.warn('⚠️ Filtered out null/undefined markers:', {
+        original: markerArray.length,
+        filtered: filteredMarkers.length
+      });
+    }
+    
+    return filteredMarkers; // Always return an array, never null
   }, [matches, selectedMatchId, handleMarkerPress, getVenueGroupKey]);
 
   // Render recommended match markers with memoization (yellow pins)
   const recommendedMarkers = useMemo(() => {
     if (!recommendedMatches || recommendedMatches.length === 0) {
-      return null;
+      return []; // Return empty array instead of null to prevent crashes
     }
     
     const validRecommendedMatches = recommendedMatches.filter(match => {
@@ -366,16 +497,52 @@ const MatchMapView = forwardRef(({
       return true;
     });
     
-    return validRecommendedMatches.map(match => {
+    // Build array of valid markers only (never include null/undefined)
+    const recommendedMarkerArray = [];
+    validRecommendedMatches.forEach(match => {
+      if (!match || !match.fixture || !match.fixture.venue) {
+        return; // Skip invalid matches
+      }
+      
       const venue = match.fixture.venue;
+      if (!venue.coordinates || !Array.isArray(venue.coordinates) || venue.coordinates.length !== 2) {
+        return; // Skip matches without valid coordinates
+      }
+      
+      const [lon, lat] = venue.coordinates;
+      
+      // Validate coordinate values before creating marker
+      if (typeof lon !== 'number' || typeof lat !== 'number' ||
+          isNaN(lon) || isNaN(lat) ||
+          lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return; // Skip invalid coordinates
+      }
+      
       const coordinate = {
-        latitude: venue.coordinates[1],  // GeoJSON: [lon, lat]
-        longitude: venue.coordinates[0], // So lat is index 1, lon is index 0
+        latitude: lat,  // GeoJSON: [lon, lat]
+        longitude: lon, // So lat is index 1, lon is index 0
       };
       
-      const markerKey = `recommended-${String(match.fixture.id)}`;
+      const matchId = match.fixture?.id;
+      if (!matchId) {
+        if (__DEV__) {
+          console.warn('⚠️ Match missing fixture.id, skipping recommended marker');
+        }
+        return; // Skip if no valid ID
+      }
       
-      return (
+      const markerKey = `recommended-${String(matchId)}`;
+      
+      // Validate markerKey is not undefined/null
+      if (!markerKey) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid markerKey, skipping recommended marker');
+        }
+        return;
+      }
+      
+      // Only push valid markers to array
+      const markerComponent = (
         <Marker
           key={markerKey}
           coordinate={coordinate}
@@ -385,38 +552,126 @@ const MatchMapView = forwardRef(({
           identifier={markerKey}
         />
       );
+      
+      // Final safety check - ensure component is not null/undefined
+      if (!markerComponent) {
+        if (__DEV__) {
+          console.warn('⚠️ Recommended marker component is null/undefined, skipping');
+        }
+        return;
+      }
+      
+      recommendedMarkerArray.push(markerComponent);
     });
+    
+    // Final safety filter - remove any null/undefined that might have slipped through
+    const filteredRecommended = recommendedMarkerArray.filter(marker => marker != null);
+    
+    if (__DEV__ && filteredRecommended.length !== recommendedMarkerArray.length) {
+      console.warn('⚠️ Filtered out null/undefined recommended markers:', {
+        original: recommendedMarkerArray.length,
+        filtered: filteredRecommended.length
+      });
+    }
+    
+    return filteredRecommended; // Always return an array, never null
   }, [recommendedMatches, handleRecommendedMatchPress]);
 
   // Render home base markers with memoization
   const homeBaseMarkers = useMemo(() => {
     if (!homeBases || homeBases.length === 0) {
-      return null;
+      return []; // Return empty array instead of null to prevent crashes
     }
     
     const validHomeBases = homeBases.filter(homeBase => {
       const coords = homeBase.coordinates;
-      if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+      
+      // Handle missing or null coordinates
+      if (!coords) {
+        return false;
+      }
+      
+      // Try to get lat/lng, handling different formats and string-to-number conversion
+      let lat = coords.lat;
+      let lng = coords.lng;
+      
+      // Handle alternative property names
+      if (lat === undefined || lat === null) {
+        lat = coords.latitude;
+      }
+      if (lng === undefined || lng === null) {
+        lng = coords.longitude || coords.lon;
+      }
+      
+      // Convert strings to numbers if needed
+      if (typeof lat === 'string') {
+        lat = parseFloat(lat);
+      }
+      if (typeof lng === 'string') {
+        lng = parseFloat(lng);
+      }
+      
+      // Validate coordinates are numbers
+      if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
         return false;
       }
       
       // Check if coordinates are within reasonable world bounds
-      if (coords.lng < -180 || coords.lng > 180 || coords.lat < -90 || coords.lat > 90) {
+      if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
         return false;
       }
+      
+      // Store normalized coordinates back for use in marker creation
+      homeBase._normalizedCoords = { lat, lng };
       
       return true;
     });
     
-    return validHomeBases.map(homeBase => {
+    // Build array of valid markers only (never include null/undefined)
+    const homeBaseMarkerArray = [];
+    validHomeBases.forEach(homeBase => {
+      if (!homeBase) {
+        return; // Skip invalid home bases
+      }
+      
+      // Use normalized coordinates if available, otherwise fall back to original
+      const coords = homeBase._normalizedCoords || homeBase.coordinates;
+      if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+        return; // Skip home bases without valid coordinates
+      }
+      
+      // Validate coordinate values before creating marker
+      if (isNaN(coords.lat) || isNaN(coords.lng) ||
+          coords.lat < -90 || coords.lat > 90 ||
+          coords.lng < -180 || coords.lng > 180) {
+        return; // Skip invalid coordinates
+      }
+      
       const coordinate = {
-        latitude: homeBase.coordinates.lat,
-        longitude: homeBase.coordinates.lng,
+        latitude: coords.lat,
+        longitude: coords.lng,
       };
       
-      const markerKey = `homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`;
+      const homeBaseId = homeBase._id || homeBase.id || homeBase.name;
+      if (!homeBaseId) {
+        if (__DEV__) {
+          console.warn('⚠️ Home base missing ID/name, skipping marker');
+        }
+        return; // Skip if no valid ID
+      }
       
-      return (
+      const markerKey = `homebase-${String(homeBaseId)}`;
+      
+      // Validate markerKey is not undefined/null
+      if (!markerKey) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid markerKey, skipping home base marker');
+        }
+        return;
+      }
+      
+      // Only push valid markers to array
+      const markerComponent = (
         <Marker
           key={markerKey}
           coordinate={coordinate}
@@ -426,8 +681,103 @@ const MatchMapView = forwardRef(({
           identifier={markerKey}
         />
       );
+      
+      // Final safety check - ensure component is not null/undefined
+      if (!markerComponent) {
+        if (__DEV__) {
+          console.warn('⚠️ Home base marker component is null/undefined, skipping');
+        }
+        return;
+      }
+      
+      homeBaseMarkerArray.push(markerComponent);
     });
+    
+    // Final safety filter - remove any null/undefined that might have slipped through
+    const filteredHomeBases = homeBaseMarkerArray.filter(marker => marker != null);
+    
+    if (__DEV__ && filteredHomeBases.length !== homeBaseMarkerArray.length) {
+      console.warn('⚠️ Filtered out null/undefined home base markers:', {
+        original: homeBaseMarkerArray.length,
+        filtered: filteredHomeBases.length
+      });
+    }
+    
+    return filteredHomeBases; // Always return an array, never null
   }, [homeBases, handleHomeBasePress]);
+
+  // Final safety filter: Create safe arrays right before rendering to prevent null children
+  // This is critical to prevent crashes when React Native Maps receives null markers during re-renders
+  // We need to be extremely strict - filter out ANY falsy values and ensure only valid React elements
+  const safeMarkers = useMemo(() => {
+    try {
+      if (!markers || !Array.isArray(markers)) return [];
+      const filtered = markers.filter(marker => {
+        // Strict check: must be truthy AND have a valid React element structure
+        if (!marker) return false;
+        if (marker === null || marker === undefined) return false;
+        // Check if it's a valid React element (has type property)
+        if (typeof marker === 'object' && marker.type) return true;
+        return false;
+      });
+      // Final safety check - ensure no null/undefined slipped through
+      return filtered.filter(m => m != null && m !== undefined);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('⚠️ [MapView] Error creating safeMarkers:', error);
+      }
+      return [];
+    }
+  }, [markers]);
+
+  const safeRecommendedMarkers = useMemo(() => {
+    try {
+      if (!recommendedMarkers || !Array.isArray(recommendedMarkers)) return [];
+      const filtered = recommendedMarkers.filter(marker => {
+        if (!marker) return false;
+        if (marker === null || marker === undefined) return false;
+        if (typeof marker === 'object' && marker.type) return true;
+        return false;
+      });
+      return filtered.filter(m => m != null && m !== undefined);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('⚠️ [MapView] Error creating safeRecommendedMarkers:', error);
+      }
+      return [];
+    }
+  }, [recommendedMarkers]);
+
+  const safeHomeBaseMarkers = useMemo(() => {
+    try {
+      if (!homeBaseMarkers || !Array.isArray(homeBaseMarkers)) return [];
+      const filtered = homeBaseMarkers.filter(marker => {
+        if (!marker) return false;
+        if (marker === null || marker === undefined) return false;
+        if (typeof marker === 'object' && marker.type) return true;
+        return false;
+      });
+      return filtered.filter(m => m != null && m !== undefined);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('⚠️ [MapView] Error creating safeHomeBaseMarkers:', error);
+      }
+      return [];
+    }
+  }, [homeBaseMarkers]);
+
+  // Log if we filtered out any null markers (for debugging)
+  if (__DEV__) {
+    if (safeMarkers.length !== markers.length || 
+        safeRecommendedMarkers.length !== recommendedMarkers.length ||
+        safeHomeBaseMarkers.length !== homeBaseMarkers.length) {
+      console.warn('⚠️ [MapView] Filtered out null/undefined markers before render:', {
+        markers: { original: markers.length, safe: safeMarkers.length },
+        recommended: { original: recommendedMarkers.length, safe: safeRecommendedMarkers.length },
+        homeBases: { original: homeBaseMarkers.length, safe: safeHomeBaseMarkers.length }
+      });
+    }
+  }
 
   return (
     <View style={[styles.container, style]}>
@@ -447,9 +797,9 @@ const MatchMapView = forwardRef(({
         mapType="standard"
         moveOnMarkerPress={false} // Prevent map movement when pressing markers
       >
-        {markers}
-        {recommendedMarkers}
-        {homeBaseMarkers}
+        {Array.isArray(safeMarkers) && safeMarkers.length > 0 ? safeMarkers : null}
+        {Array.isArray(safeRecommendedMarkers) && safeRecommendedMarkers.length > 0 ? safeRecommendedMarkers : null}
+        {Array.isArray(safeHomeBaseMarkers) && safeHomeBaseMarkers.length > 0 ? safeHomeBaseMarkers : null}
       </MapView>
       
       {/* Custom Location Button */}

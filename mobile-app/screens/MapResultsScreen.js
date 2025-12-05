@@ -273,6 +273,38 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, []); // Only run once on mount
 
+  // Track if we've already auto-fitted for global search (prevent repeated fitting)
+  const hasAutoFittedRef = useRef(false);
+
+  // Auto-fit map to markers for global Who-based searches (no location, no initialRegion)
+  // This ensures all markers from a global search are visible
+  useEffect(() => {
+    // Only auto-fit if:
+    // 1. This is a Who-based search (hasWho is true)
+    // 2. No initialRegion was provided (global search without location)
+    // 3. We have matches to fit to
+    // 4. Map ref is available
+    // 5. We haven't already fitted (prevent repeated fitting on filter changes)
+    if (hasWho && !initialRegion && matches.length > 0 && mapRef.current && !hasAutoFittedRef.current) {
+      // Use a small delay to ensure map is fully rendered
+      const timeoutId = setTimeout(() => {
+        if (mapRef.current && mapRef.current.fitToMatches) {
+          if (__DEV__) {
+            console.log('🗺️ [AUTO-FIT] Fitting map to markers from global search:', {
+              matchCount: matches.length,
+              hasWho,
+              hasInitialRegion: !!initialRegion
+            });
+          }
+          mapRef.current.fitToMatches();
+          hasAutoFittedRef.current = true; // Mark as fitted
+        }
+      }, 500); // Small delay to ensure map is ready
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [hasWho, initialRegion, matches.length]); // Only re-run when these change
+
   // Apply pre-selected filters from natural language search
   useEffect(() => {
     if (preSelectedFilters && filterData) {
@@ -300,12 +332,29 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
       }
 
-      // Match leagues
-      if (preSelectedFilters.leagues && preSelectedFilters.leagues.length > 0 && filterData.leagues) {
+      // Match leagues - preSelectedFilters.leagues can be objects {id, name} (from Who section) or strings (from natural language)
+      if (preSelectedFilters.leagues && preSelectedFilters.leagues.length > 0) {
         const leagueMatches = preSelectedFilters.leagues
-          .map(leagueName => filterData.leagues.find(l => 
-            l.name.toLowerCase() === leagueName.toLowerCase()
-          ))
+          .map(leagueValue => {
+            // Handle object format {id, name} from Who section
+            if (typeof leagueValue === 'object' && leagueValue.id) {
+              // Try to find in filterData first (for proper matching)
+              const match = filterData.leagues?.find(l => String(l.id) === String(leagueValue.id));
+              // If found in filterData, use it; otherwise use the preSelectedFilter data
+              return match || { id: leagueValue.id, name: leagueValue.name };
+            }
+            // Handle string format (from natural language search) - try matching by ID or name
+            if (filterData.leagues) {
+              let match = filterData.leagues.find(l => String(l.id) === String(leagueValue));
+              if (!match) {
+                match = filterData.leagues.find(l => 
+                  l.name.toLowerCase() === String(leagueValue).toLowerCase()
+                );
+              }
+              return match;
+            }
+            return null;
+          })
           .filter(Boolean);
         
         if (leagueMatches.length > 0) {
@@ -316,12 +365,29 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
       }
 
-      // Match teams
-      if (preSelectedFilters.teams && preSelectedFilters.teams.length > 0 && filterData.teams) {
+      // Match teams - preSelectedFilters.teams can be objects {id, name} (from Who section) or strings (from natural language)
+      if (preSelectedFilters.teams && preSelectedFilters.teams.length > 0) {
         const teamMatches = preSelectedFilters.teams
-          .map(teamName => filterData.teams.find(t => 
-            t.name.toLowerCase() === teamName.toLowerCase()
-          ))
+          .map(teamValue => {
+            // Handle object format {id, name} from Who section
+            if (typeof teamValue === 'object' && teamValue.id) {
+              // Try to find in filterData first (for proper matching)
+              const match = filterData.teams?.find(t => String(t.id) === String(teamValue.id));
+              // If found in filterData, use it; otherwise use the preSelectedFilter data
+              return match || { id: teamValue.id, name: teamValue.name };
+            }
+            // Handle string format (from natural language search) - try matching by ID or name
+            if (filterData.teams) {
+              let match = filterData.teams.find(t => String(t.id) === String(teamValue));
+              if (!match) {
+                match = filterData.teams.find(t => 
+                  t.name.toLowerCase() === String(teamValue).toLowerCase()
+                );
+              }
+              return match;
+            }
+            return null;
+          })
           .filter(Boolean);
         
         if (teamMatches.length > 0) {
@@ -1272,25 +1338,33 @@ const MapResultsScreen = ({ navigation, route }) => {
     const allMarkers = displayFilteredMatches || [];
     
     // Filter out matches without valid coordinates (for map display)
-    const validMarkers = allMarkers.filter(match => {
-      const venue = match.fixture?.venue;
-      const coordinates = venue?.coordinates;
-      
-      // Validate coordinates exist and are valid
-      if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
-        return false;
-      }
-      
-      const [lon, lat] = coordinates;
-      if (typeof lon !== 'number' || typeof lat !== 'number' ||
-          lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-        return false;
-      }
-      
-      // Matches are already filtered by originalSearchBounds in displayFilteredMatches
-      // So we just need to validate coordinates here
-      return true;
-    });
+    // Also filter out null/undefined matches to prevent crashes
+    const validMarkers = allMarkers
+      .filter(match => {
+        // Ensure match exists and has required structure
+        if (!match || !match.fixture || !match.fixture.venue) {
+          return false;
+        }
+        
+        const venue = match.fixture.venue;
+        const coordinates = venue?.coordinates;
+        
+        // Validate coordinates exist and are valid
+        if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+          return false;
+        }
+        
+        const [lon, lat] = coordinates;
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            isNaN(lon) || isNaN(lat) ||
+            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          return false;
+        }
+        
+        // Matches are already filtered by originalSearchBounds in displayFilteredMatches
+        // So we just need to validate coordinates here
+        return true;
+      });
     
     if (__DEV__) {
       console.log('🗺️ [MAP MARKERS] Displaying markers:', {
@@ -1304,7 +1378,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       });
     }
     
-    return validMarkers;
+    // Ensure we always return an array, never null/undefined
+    return validMarkers || [];
   }, [displayFilteredMatches, originalSearchBounds]);
 
   // Group upcoming matches by venue (coordinates preferred for physical location matching)
@@ -1363,44 +1438,90 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   // Get filter labels with metadata for chips
+  // Shows chips from selectedFilters, using filterData for names when available,
+  // or falling back to preSelectedFilters names if filterData isn't ready yet
   const getFilterLabels = useMemo(() => {
     const labels = [];
     
-    if (!filterData || !selectedFilters) return labels;
+    if (!selectedFilters) return labels;
     
-    // Country filters
-    selectedFilters.countries?.forEach(countryId => {
-      const country = filterData.countries?.find(c => c.id === countryId);
-      if (country) {
-        labels.push({ 
-          id: `country-${countryId}`, 
-          label: country.name, 
-          type: 'country', 
-          value: countryId 
-        });
-      }
-    });
+    // Country filters (always need filterData for countries)
+    if (filterData) {
+      selectedFilters.countries?.forEach(countryId => {
+        const country = filterData.countries?.find(c => c.id === countryId);
+        if (country) {
+          labels.push({ 
+            id: `country-${countryId}`, 
+            label: country.name, 
+            type: 'country', 
+            value: countryId 
+          });
+        }
+      });
+    }
     
-    // League filters
+    // League filters - use filterData if available, otherwise fall back to preSelectedFilters
     selectedFilters.leagues?.forEach(leagueId => {
-      const league = filterData.leagues?.find(l => l.id === leagueId);
-      if (league) {
+      let league = null;
+      let label = null;
+      
+      // Try to find in filterData first
+      if (filterData?.leagues) {
+        league = filterData.leagues.find(l => l.id === leagueId);
+        if (league) {
+          label = league.name;
+        }
+      }
+      
+      // If not found in filterData, try to get name from preSelectedFilters
+      if (!label && preSelectedFilters?.leagues) {
+        const preSelectedLeague = preSelectedFilters.leagues.find(l => {
+          const id = typeof l === 'object' ? l.id : l;
+          return String(id) === String(leagueId);
+        });
+        if (preSelectedLeague) {
+          label = typeof preSelectedLeague === 'object' ? preSelectedLeague.name : 'League';
+        }
+      }
+      
+      if (label) {
         labels.push({ 
           id: `league-${leagueId}`, 
-          label: league.name, 
+          label: label, 
           type: 'league', 
           value: leagueId 
         });
       }
     });
     
-    // Team filters
+    // Team filters - use filterData if available, otherwise fall back to preSelectedFilters
     selectedFilters.teams?.forEach(teamId => {
-      const team = filterData.teams?.find(t => t.id === teamId);
-      if (team) {
+      let team = null;
+      let label = null;
+      
+      // Try to find in filterData first
+      if (filterData?.teams) {
+        team = filterData.teams.find(t => t.id === teamId);
+        if (team) {
+          label = team.name;
+        }
+      }
+      
+      // If not found in filterData, try to get name from preSelectedFilters
+      if (!label && preSelectedFilters?.teams) {
+        const preSelectedTeam = preSelectedFilters.teams.find(t => {
+          const id = typeof t === 'object' ? t.id : t;
+          return String(id) === String(teamId);
+        });
+        if (preSelectedTeam) {
+          label = typeof preSelectedTeam === 'object' ? preSelectedTeam.name : 'Team';
+        }
+      }
+      
+      if (label) {
         labels.push({ 
           id: `team-${teamId}`, 
-          label: team.name, 
+          label: label, 
           type: 'team', 
           value: teamId 
         });
@@ -1408,10 +1529,119 @@ const MapResultsScreen = ({ navigation, route }) => {
     });
     
     return labels;
-  }, [filterData, selectedFilters]);
+  }, [filterData, selectedFilters, preSelectedFilters]);
 
-  // Handler to remove a filter (with cascading logic)
-  const handleRemoveFilter = useCallback((type, value) => {
+  // Perform search with current filters (used when filters are removed)
+  const performSearchWithFilters = useCallback(async (filtersToUse) => {
+    if (!dateFrom || !dateTo) {
+      if (__DEV__) {
+        console.log('❌ [FILTER SEARCH] Missing dates:', { dateFrom, dateTo });
+      }
+      return;
+    }
+
+    // Get current map region
+    let currentRegion = mapRegion || debouncedMapRegion || initialRegion;
+    if (!currentRegion) {
+      if (__DEV__) {
+        console.log('❌ [FILTER SEARCH] No region available');
+      }
+      return;
+    }
+
+    // Extract league and team IDs from filters
+    const leagueIds = (filtersToUse?.leagues || []).map(id => String(id));
+    const teamIds = (filtersToUse?.teams || []).map(id => String(id));
+    const hasWhoFilters = leagueIds.length > 0 || teamIds.length > 0;
+
+    // Calculate bounds from current region
+    const bounds = {
+      northeast: {
+        lat: currentRegion.latitude + (currentRegion.latitudeDelta / 2),
+        lng: currentRegion.longitude + (currentRegion.longitudeDelta / 2),
+      },
+      southwest: {
+        lat: currentRegion.latitude - (currentRegion.latitudeDelta / 2),
+        lng: currentRegion.longitude - (currentRegion.longitudeDelta / 2),
+      },
+    };
+
+    setIsSearching(true);
+    const requestId = currentRequestId + 1;
+    setCurrentRequestId(requestId);
+    currentRequestIdRef.current = requestId;
+
+    try {
+      let response;
+      
+      if (hasWho || hasWhoFilters) {
+        // Use searchAggregatedMatches when Who filters are present
+        const apiParams = {
+          competitions: leagueIds,
+          teams: teamIds,
+          dateFrom,
+          dateTo,
+          bounds: bounds,
+        };
+
+        if (__DEV__) {
+          console.log('🔍 [FILTER SEARCH] Using searchAggregatedMatches:', apiParams);
+        }
+
+        response = await ApiService.searchAggregatedMatches(apiParams);
+      } else {
+        // Use searchMatchesByBounds for location-based search
+        if (__DEV__) {
+          console.log('🔍 [FILTER SEARCH] Using searchMatchesByBounds:', {
+            bounds,
+            dateFrom,
+            dateTo,
+            competitions: [],
+            teams: []
+          });
+        }
+
+        response = await ApiService.searchMatchesByBounds({
+          bounds,
+          dateFrom,
+          dateTo,
+          competitions: [],
+          teams: [],
+        });
+      }
+
+      // Check if request is stale
+      const latestRequestId = currentRequestIdRef.current;
+      if (requestId < latestRequestId) {
+        if (__DEV__) {
+          console.log('⏭️ [FILTER SEARCH] REJECTED - Stale request:', { requestId, latestRequestId });
+        }
+        return;
+      }
+
+      if (response.success) {
+        const newMatches = Array.isArray(response.data) ? response.data : [];
+        setMatches(newMatches);
+        setLastSuccessfulRequestId(requestId);
+        setOriginalSearchBounds(response.bounds || bounds);
+        
+        if (__DEV__) {
+          console.log('✅ [FILTER SEARCH] Search complete:', {
+            matchCount: newMatches.length,
+            filters: { leagues: leagueIds, teams: teamIds }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error in filter search:', error);
+      Alert.alert('Error', 'Failed to search matches. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [dateFrom, dateTo, mapRegion, debouncedMapRegion, initialRegion, hasWho, currentRequestId]);
+
+  // Handler to remove a filter (with cascading logic) and trigger new search
+  const handleRemoveFilter = useCallback(async (type, value) => {
     const newFilters = { ...selectedFilters };
     
     if (type === 'country') {
@@ -1448,7 +1678,10 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     updateSelectedFilters(newFilters);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [selectedFilters, filterData, updateSelectedFilters]);
+    
+    // Trigger new search with updated filters
+    await performSearchWithFilters(newFilters);
+  }, [selectedFilters, filterData, updateSelectedFilters, performSearchWithFilters]);
 
   // Animated height for filter chips container
   const filterChipsHeight = useRef(new Animated.Value(0)).current;
@@ -1906,14 +2139,72 @@ const MapResultsScreen = ({ navigation, route }) => {
         latitudeDelta: 0.5,
         longitudeDelta: 0.5,
       };
-    } else {
-      return {
-        latitude: 51.5074, // London default
-        longitude: -0.1278,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-      };
+    } else if (hasWho && matches.length > 0) {
+      // For Who-based searches without location, try to calculate from matches
+      const coordinates = [];
+      matches.forEach((match) => {
+        const venue = match?.fixture?.venue;
+        if (venue?.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2) {
+          const [lon, lat] = venue.coordinates;
+          if (typeof lat === 'number' && typeof lon === 'number' &&
+              lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+            coordinates.push({ lat, lng: lon });
+          }
+        }
+      });
+      
+      if (coordinates.length > 0) {
+        const lats = coordinates.map(coord => coord.lat);
+        const lngs = coordinates.map(coord => coord.lng);
+        
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+        
+        const centerLat = (minLat + maxLat) / 2;
+        const centerLng = (minLng + maxLng) / 2;
+        
+        const latSpan = maxLat - minLat;
+        const lngSpan = maxLng - minLng;
+        
+        // Clamp deltas to valid ranges to prevent MapKit crashes
+        const MAX_LAT_DELTA = 50.0;
+        const MAX_LNG_DELTA = 50.0;
+        const MIN_DELTA = 0.1;
+        const PADDING_MULTIPLIER = 2.5;
+        
+        let latitudeDelta = Math.max(MIN_DELTA, latSpan * PADDING_MULTIPLIER);
+        let longitudeDelta = Math.max(MIN_DELTA, lngSpan * PADDING_MULTIPLIER);
+        
+        // Clamp to maximum values
+        latitudeDelta = Math.min(latitudeDelta, MAX_LAT_DELTA);
+        longitudeDelta = Math.min(longitudeDelta, MAX_LNG_DELTA);
+        
+        // Validate before returning
+        if (!isNaN(centerLat) && !isNaN(centerLng) && 
+            centerLat >= -90 && centerLat <= 90 && 
+            centerLng >= -180 && centerLng <= 180 &&
+            !isNaN(latitudeDelta) && !isNaN(longitudeDelta) &&
+            latitudeDelta > 0 && longitudeDelta > 0 &&
+            latitudeDelta <= MAX_LAT_DELTA && longitudeDelta <= MAX_LNG_DELTA) {
+          return {
+            latitude: centerLat,
+            longitude: centerLng,
+            latitudeDelta,
+            longitudeDelta,
+          };
+        }
+      }
     }
+    
+    // Fallback to London default only if we have no other option
+    return {
+      latitude: 51.5074, // London default
+      longitude: -0.1278,
+      latitudeDelta: 0.5,
+      longitudeDelta: 0.5,
+    };
   };
 
   return (
