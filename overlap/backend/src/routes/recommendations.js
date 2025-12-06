@@ -89,13 +89,30 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
                 forceRefresh
             );
             
-            // If we generated recommendations and trip doesn't have v2, store them
+            // If we generated recommendations and trip doesn't have v2, store them directly
+            // Note: We don't call regenerateTripRecommendations here - that's only for when things change
+            // (dates, matches, preferences, dismissals). For initial storage, we just store what we generated.
             if (!hasStoredRecommendations && result.recommendations) {
                 try {
-                    await recommendationService.regenerateTripRecommendations(tripId, user, trip, true);
-                    console.log(`✅ Stored generated recommendations for trip ${tripId}`);
+                    // Directly store the generated recommendations on the trip document
+                    trip.recommendations = result.recommendations;
+                    trip.recommendationsVersion = 'v2';
+                    trip.recommendationsGeneratedAt = new Date();
+                    trip.recommendationsError = null;
+                    
+                    // Save the user document (which contains the trip)
+                    await user.save();
+                    
+                    console.log(`✅ Stored ${result.recommendations.length} generated recommendations for trip ${tripId} (initial storage)`);
                 } catch (storeError) {
                     console.error(`❌ Failed to store recommendations for trip ${tripId}:`, storeError);
+                    // Store error in trip document for debugging
+                    try {
+                        trip.recommendationsError = storeError.message || 'Failed to store recommendations';
+                        await user.save();
+                    } catch (saveError) {
+                        console.error(`❌ Failed to save error state for trip ${tripId}:`, saveError);
+                    }
                     // Continue - return recommendations anyway
                 }
             }

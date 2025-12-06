@@ -168,6 +168,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   // Refetch recommendations when screen comes into focus (to sync with other screens)
   // Use a ref to track if this is the initial mount to avoid double-fetching
   const isInitialMount = React.useRef(true);
+  const isRefreshingRef = React.useRef(false);
   
   useFocusEffect(
     React.useCallback(() => {
@@ -177,16 +178,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
         return;
       }
       
+      // Prevent multiple simultaneous refresh attempts
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
       // Only refetch if we have an itinerary loaded and we're coming back to the screen
-      // But don't force refresh if trip has stored recommendations - use them instead
+      // But don't force refresh if trip has non-empty stored recommendations - use them instead
       if (itinerary?.id || itinerary?._id) {
-        const hasStoredRecommendations = itinerary?.recommendationsVersion === 'v2' && 
-                                         Array.isArray(itinerary?.recommendations);
+        const hasNonEmptyStoredRecommendations = itinerary?.recommendationsVersion === 'v2' && 
+                                                 Array.isArray(itinerary?.recommendations) &&
+                                                 itinerary.recommendations.length > 0;
         
-        if (hasStoredRecommendations) {
-          // Trip has stored recommendations - just refresh the trip data to get latest recommendations
+        if (hasNonEmptyStoredRecommendations) {
+          // Trip has non-empty stored recommendations - just refresh the trip data to get latest recommendations
           // The useRecommendations hook will pick them up automatically when itinerary updates
-          console.log('📥 Trip has stored recommendations - refreshing trip data instead of forcing recommendation refresh');
+          console.log(`📥 Trip has ${itinerary.recommendations.length} stored recommendations - refreshing trip data instead of forcing recommendation refresh`);
+          isRefreshingRef.current = true;
           // Refresh itinerary to get latest recommendations from backend
           refreshItinerary(itineraryId).then(updatedItinerary => {
             if (updatedItinerary) {
@@ -194,9 +202,14 @@ const TripOverviewScreen = ({ navigation, route }) => {
             }
           }).catch(err => {
             console.error('Error refreshing itinerary:', err);
+            // If refresh fails, fall back to fetching recommendations normally
+            refetchRecommendations(false);
+          }).finally(() => {
+            isRefreshingRef.current = false;
           });
         } else {
-          // No stored recommendations - fetch from API
+          // No stored recommendations or empty - fetch from API
+          console.log('📥 No stored recommendations or empty - fetching from API');
           refetchRecommendations(false); // Don't force refresh, just fetch normally
         }
       }
@@ -1134,7 +1147,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </View>
 
         {/* Recommendations Section - Collapsible (hidden for past trips) */}
-        {!isPastTrip && (
+        {/* Temporarily hidden - recommendations show on map view instead */}
+        {false && !isPastTrip && (
           <View style={styles.sectionCard}>
             <TouchableOpacity
               style={styles.sectionHeader}

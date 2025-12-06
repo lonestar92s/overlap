@@ -1425,16 +1425,25 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     transitResponse.value.data.routes && 
                     transitResponse.value.data.routes.length > 0) {
                     
+                    console.log(`🚇 Transit API response for match ${match.matchId}:`, {
+                        status: transitResponse.value.data.status,
+                        routesCount: transitResponse.value.data.routes.length
+                    });
+                    
                     // Process each route to extract transit types
-                    for (const route of transitResponse.value.data.routes) {
+                    for (let routeIndex = 0; routeIndex < transitResponse.value.data.routes.length; routeIndex++) {
+                        const route = transitResponse.value.data.routes[routeIndex];
                         const leg = route.legs[0];
                         const transitTypes = new Set();
+                        const vehicleTypesFound = [];
                         
                         // Extract transit types from route steps
                         if (leg.steps) {
                             for (const step of leg.steps) {
                                 if (step.travel_mode === 'TRANSIT' && step.transit_details?.line?.vehicle?.type) {
                                     const vehicleType = step.transit_details.line.vehicle.type.toLowerCase();
+                                    vehicleTypesFound.push(vehicleType);
+                                    
                                     // Map Google Maps vehicle types to our types
                                     if (vehicleType === 'train' || vehicleType === 'heavy_rail' || vehicleType === 'commuter_train') {
                                         transitTypes.add('train');
@@ -1453,7 +1462,15 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                         if (transitTypes.size === 0 && leg.steps && leg.steps.some(s => s.travel_mode === 'TRANSIT')) {
                             // Default to 'train' if transit route but no specific type
                             transitTypes.add('train');
+                            console.log(`🚇 Route ${routeIndex + 1}: No specific vehicle type found, defaulting to 'train'`);
                         }
+
+                        console.log(`🚇 Route ${routeIndex + 1} for match ${match.matchId}:`, {
+                            duration: leg.duration.text,
+                            distance: leg.distance.text,
+                            vehicleTypesFound: vehicleTypesFound.length > 0 ? vehicleTypesFound : ['none'],
+                            mappedTransitTypes: Array.from(transitTypes)
+                        });
 
                         // Create transit option for each unique type
                         if (transitTypes.size > 0) {
@@ -1465,7 +1482,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                             for (const transitType of transitTypes) {
                                 const existing = transitOptionsMap.get(transitType);
                                 if (!existing || durationMinutes < existing.duration) {
-                                    transitOptionsMap.set(transitType, {
+                                    const transitOption = {
                                         type: transitType,
                                         duration: durationMinutes,
                                         distance: parseFloat(distanceMiles),
@@ -1473,6 +1490,14 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                                         distanceText: leg.distance.text,
                                         available: true,
                                         transitTypes: Array.from(transitTypes) // Store all types for reference
+                                    };
+                                    transitOptionsMap.set(transitType, transitOption);
+                                    console.log(`🚇 Added/Updated transit option for match ${match.matchId}:`, {
+                                        type: transitType,
+                                        duration: `${durationMinutes} min`,
+                                        distance: `${distanceMiles} mi`,
+                                        wasExisting: !!existing,
+                                        previousDuration: existing ? `${existing.duration} min` : 'N/A'
                                     });
                                 }
                             }
@@ -1483,9 +1508,24 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     const transitOptions = Array.from(transitOptionsMap.values());
                     transitOptions.sort((a, b) => a.duration - b.duration);
                     result.transit = transitOptions.slice(0, 3);
+                    
+                    console.log(`🚇 Final transit options for match ${match.matchId}:`, {
+                        totalFound: transitOptions.length,
+                        returning: result.transit.length,
+                        options: result.transit.map(opt => ({
+                            type: opt.type,
+                            duration: `${opt.duration} min`,
+                            distance: `${opt.distance} mi`
+                        }))
+                    });
                 } else {
                     // No transit route available
                     result.transit = [];
+                    console.log(`🚇 No transit route available for match ${match.matchId}:`, {
+                        responseStatus: transitResponse.status,
+                        dataStatus: transitResponse.status === 'fulfilled' ? transitResponse.value.data.status : 'N/A',
+                        errorMessage: transitResponse.status === 'rejected' ? transitResponse.reason?.message : null
+                    });
                 }
 
                 // Only set result if we have at least driving data (for backward compatibility)

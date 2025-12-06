@@ -189,6 +189,22 @@ mobile-app/
   - Offline: Request failure handling
   - Async: Request timeouts
 
+#### 5. Hooks
+
+**Unit Tests:**
+- ✅ `useRecommendations.js`
+  - Happy path: Use stored recommendations from trip object
+  - Happy path: Fetch recommendations from API when not stored
+  - Edge case: Empty stored recommendations (v2)
+  - Edge case: Null trip object
+  - Edge case: Trip with v2 but null recommendations array
+  - Edge case: TripId changes
+  - Interaction: Dismiss recommendation
+  - Interaction: Add recommendation to trip
+  - Error state: API errors
+  - Async: Loading states
+  - Async: Force refresh vs normal fetch
+
 ## Test Execution
 
 ### Backend
