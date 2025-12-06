@@ -78,42 +78,42 @@ describe('Timezone Display Integration', () => {
     });
   });
 
-  describe('Hybrid Timezone Label Format', () => {
-    it('should display GMT (London) for London match', () => {
+  describe('Timezone Label Format - Abbreviation Only', () => {
+    it('should display GMT for London match', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.london.date,
         fixtures.london,
         { showTimezone: true, showDate: false }
       );
-      // Should include the hybrid format
-      expect(result).toMatch(/\((GMT|BST) \(London\)\)/);
+      // Should include timezone abbreviation only
+      expect(result).toMatch(/\((GMT|BST)\)/);
     });
 
-    it('should display CET (Madrid) for Madrid match', () => {
+    it('should display CET for Madrid match', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.madrid.date,
         fixtures.madrid,
         { showTimezone: true, showDate: false }
       );
-      expect(result).toMatch(/\((CET|CEST) \(Madrid\)\)/);
+      expect(result).toMatch(/\((CET|CEST)\)/);
     });
 
-    it('should display JST (Tokyo) for Tokyo match', () => {
+    it('should display JST for Tokyo match', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.tokyo.date,
         fixtures.tokyo,
         { showTimezone: true, showDate: false }
       );
-      expect(result).toMatch(/\(JST \(Tokyo\)\)/);
+      expect(result).toMatch(/\(JST\)/);
     });
 
-    it('should display EST (New York) for NY match', () => {
+    it('should display EST for NY match', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.newYork.date,
         fixtures.newYork,
         { showTimezone: true, showDate: false }
       );
-      expect(result).toMatch(/\((EST|EDT) \(New York\)\)/);
+      expect(result).toMatch(/\((EST|EDT)\)/);
     });
   });
 
@@ -255,7 +255,7 @@ describe('Timezone Display Integration', () => {
       expect(result).toBeDefined();
       expect(result).not.toBe('Time unavailable');
       expect(result).toMatch(/2025/); // Year shown
-      expect(result).toMatch(/\((GMT|BST) \(London\)\)/); // Hybrid timezone
+      expect(result).toMatch(/\((GMT|BST)\)/); // Timezone abbreviation
     });
 
     it('should produce consistent output for Modal time-only format', () => {

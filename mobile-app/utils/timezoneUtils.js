@@ -714,21 +714,18 @@ export const getCityFromTimezone = (timezone) => {
 };
 
 /**
- * Get user-friendly timezone label in hybrid format
+ * Get user-friendly timezone label (abbreviation only)
  * @param {string} timezone - Timezone string
  * @param {Date} date - Date for abbreviation (accounts for DST)
- * @param {string} venueCity - Optional venue city to use instead of timezone city
- * @returns {string} - Hybrid label like "GMT (London)"
+ * @param {string} venueCity - Optional venue city (not used, kept for API compatibility)
+ * @returns {string} - Timezone abbreviation like "GMT", "CET", "EST"
  */
 export const getTimezoneLabel = (timezone, date = new Date(), venueCity = null) => {
   if (timezone === 'UTC') {
-    return venueCity ? `UTC (${venueCity})` : 'UTC';
+    return 'UTC';
   }
   
-  const abbreviation = getTimezoneAbbreviation(timezone, date);
-  const city = venueCity || getCityFromTimezone(timezone);
-  
-  return `${abbreviation} (${city})`;
+  return getTimezoneAbbreviation(timezone, date);
 };
 
 /**

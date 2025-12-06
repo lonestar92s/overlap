@@ -1317,14 +1317,32 @@ const TripOverviewScreen = ({ navigation, route }) => {
           isPastTrip={isPastTrip}
           onHomeBasesUpdated={async () => {
             // Refresh itinerary to get updated home bases
+            // This ensures maps and travel times are recalculated
             try {
-              const response = await apiService.getTripById(itineraryId);
-              const tripData = response.trip || response.data;
-              if (response.success && tripData) {
-                setItinerary(tripData);
+              // First refresh from context (which updates all screens)
+              const updatedItinerary = await refreshItinerary(itineraryId);
+              if (updatedItinerary) {
+                setItinerary(updatedItinerary);
+              } else {
+                // Fallback to direct API call if context refresh fails
+                const response = await apiService.getTripById(itineraryId);
+                const tripData = response.trip || response.data;
+                if (response.success && tripData) {
+                  setItinerary(tripData);
+                }
               }
             } catch (error) {
-              console.error('Error refreshing itinerary:', error);
+              console.error('Error refreshing itinerary after home base update:', error);
+              // Try fallback API call
+              try {
+                const response = await apiService.getTripById(itineraryId);
+                const tripData = response.trip || response.data;
+                if (response.success && tripData) {
+                  setItinerary(tripData);
+                }
+              } catch (fallbackError) {
+                console.error('Error in fallback itinerary refresh:', fallbackError);
+              }
             }
           }}
           tripDateRange={

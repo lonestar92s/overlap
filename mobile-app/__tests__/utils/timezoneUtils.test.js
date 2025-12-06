@@ -1,4 +1,4 @@
-/**
+    /**
  * @jest-environment node
  */
 
@@ -79,24 +79,25 @@ describe('Timezone Utilities', () => {
     });
   });
 
-  describe('getTimezoneLabel - Hybrid Format', () => {
-    it('should return hybrid format with abbreviation and city', () => {
+  describe('getTimezoneLabel - Abbreviation Only', () => {
+    it('should return abbreviation for London timezone', () => {
       const label = getTimezoneLabel('Europe/London', mockDate);
-      // Should match pattern like "GMT (London)" or "BST (London)"
-      expect(label).toMatch(/^(GMT|BST) \(London\)$/);
+      // Should return just "GMT" or "BST" depending on DST
+      expect(['GMT', 'BST']).toContain(label);
     });
 
-    it('should use venue city when provided', () => {
+    it('should ignore venue city parameter (kept for API compatibility)', () => {
       const label = getTimezoneLabel('Europe/London', mockDate, 'Manchester');
-      expect(label).toMatch(/^(GMT|BST) \(Manchester\)$/);
+      // Should still return just abbreviation
+      expect(['GMT', 'BST']).toContain(label);
     });
 
-    it('should handle UTC with venue city', () => {
+    it('should return UTC for UTC timezone', () => {
       const label = getTimezoneLabel('UTC', mockDate, 'Unknown City');
-      expect(label).toBe('UTC (Unknown City)');
+      expect(label).toBe('UTC');
     });
 
-    it('should return just UTC when no venue city for UTC timezone', () => {
+    it('should return UTC when no venue city for UTC timezone', () => {
       const label = getTimezoneLabel('UTC', mockDate, null);
       expect(label).toBe('UTC');
     });
@@ -104,15 +105,15 @@ describe('Timezone Utilities', () => {
     it('should work for different timezones', () => {
       // Test Madrid
       const madridLabel = getTimezoneLabel('Europe/Madrid', mockDate);
-      expect(madridLabel).toMatch(/^(CET|CEST) \(Madrid\)$/);
+      expect(['CET', 'CEST']).toContain(madridLabel);
 
       // Test Tokyo
       const tokyoLabel = getTimezoneLabel('Asia/Tokyo', mockDate);
-      expect(tokyoLabel).toMatch(/^JST \(Tokyo\)$/);
+      expect(tokyoLabel).toBe('JST');
 
       // Test New York
       const nyLabel = getTimezoneLabel('America/New_York', mockDate);
-      expect(nyLabel).toMatch(/^(EST|EDT) \(New York\)$/);
+      expect(['EST', 'EDT']).toContain(nyLabel);
     });
   });
 
@@ -218,20 +219,20 @@ describe('Timezone Utilities', () => {
         londonFixture,
         { showTimezone: true, showDate: false, timeFormat: '12hour' }
       );
-      // Should include time and hybrid timezone label
+      // Should include time and timezone abbreviation
       expect(result).toMatch(/\d{1,2}:\d{2} (AM|PM)/);
-      expect(result).toMatch(/\((GMT|BST) \(London\)\)/);
+      expect(result).toMatch(/\((GMT|BST)\)/);
     });
 
-    it('should format date and time with hybrid timezone', () => {
+    it('should format date and time with timezone abbreviation', () => {
       const result = formatMatchTimeInVenueTimezone(
         madridFixture.date,
         madridFixture,
         { showTimezone: true, showDate: true, timeFormat: '12hour' }
       );
-      // Should include date, time, and hybrid timezone
+      // Should include date, time, and timezone abbreviation
       expect(result).toContain('at');
-      expect(result).toMatch(/\((CET|CEST) \(Madrid\)\)/);
+      expect(result).toMatch(/\((CET|CEST)\)/);
     });
 
     it('should handle missing date', () => {

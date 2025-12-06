@@ -12,6 +12,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
 import PopularMatches from '../components/PopularMatches';
+import PopularMatchModal from '../components/PopularMatchModal';
 import LocationSearchModal from '../components/LocationSearchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
@@ -63,6 +64,9 @@ const popularDestinations = [
 const SearchScreen = ({ navigation }) => {
   const [showLocationSearchModal, setShowLocationSearchModal] = useState(false);
   const [initialLocation, setInitialLocation] = useState(null);
+  const [showMatchModal, setShowMatchModal] = useState(false);
+  const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
+  const [popularMatches, setPopularMatches] = useState([]);
 
   const handleDestinationPress = (destination) => {
     // Convert destination to location object format expected by LocationSearchModal
@@ -77,7 +81,7 @@ const SearchScreen = ({ navigation }) => {
     setShowLocationSearchModal(true);
   };
 
-  const handleModalClose = () => {
+  const handleLocationModalClose = () => {
     setShowLocationSearchModal(false);
     // Clear initial location after a brief delay to allow modal to process it
     setTimeout(() => {
@@ -104,7 +108,44 @@ const SearchScreen = ({ navigation }) => {
   );
 
   const handleMatchPress = (match) => {
-    console.log('Match pressed:', match);
+    // Find the index of the selected match in the popularMatches array
+    const matchIndex = popularMatches.findIndex(m => 
+      (m.fixture?.id && match.fixture?.id && m.fixture.id === match.fixture.id) ||
+      (m.id && match.id && m.id === match.id)
+    );
+    
+    if (matchIndex !== -1 && popularMatches.length > 0) {
+      setSelectedMatchIndex(matchIndex);
+      setShowMatchModal(true);
+    } else {
+      // Fallback: if match not found in array, navigate to MapResults
+      navigation.navigate('SearchTab', {
+        screen: 'MapResults',
+        params: {
+          matches: [match],
+          initialRegion: match.fixture?.venue?.coordinates ? {
+            latitude: match.fixture.venue.coordinates[1],
+            longitude: match.fixture.venue.coordinates[0],
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          } : null,
+        }
+      });
+    }
+  };
+
+  const handleMatchesLoaded = (matches) => {
+    setPopularMatches(matches);
+  };
+
+  const handleModalClose = () => {
+    setShowMatchModal(false);
+  };
+
+  const handleModalNavigate = (newIndex) => {
+    if (newIndex >= 0 && newIndex < popularMatches.length) {
+      setSelectedMatchIndex(newIndex);
+    }
   };
 
   const handleTripPress = (trip) => {
@@ -155,15 +196,24 @@ const SearchScreen = ({ navigation }) => {
         <View style={styles.section}>
           <PopularMatches 
             onMatchPress={handleMatchPress}
+            onMatchesLoaded={handleMatchesLoaded}
           />
         </View>
       </ScrollView>
 
       <LocationSearchModal
         visible={showLocationSearchModal}
-        onClose={handleModalClose}
+        onClose={handleLocationModalClose}
         navigation={navigation}
         initialLocation={initialLocation}
+      />
+
+      <PopularMatchModal
+        visible={showMatchModal}
+        matches={popularMatches}
+        currentMatchIndex={selectedMatchIndex}
+        onClose={handleModalClose}
+        onNavigate={handleModalNavigate}
       />
     </SafeAreaView>
   );

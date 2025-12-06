@@ -118,6 +118,17 @@ describe('Web Timezone Utilities', () => {
     });
   });
 
+  describe('formatMatchDateTime timeZone field', () => {
+    it('should return abbreviation only (not hybrid format)', () => {
+      const result = formatMatchDateTime('2025-03-15T19:00:00Z', {
+        city: 'London',
+        coordinates: [-0.1278, 51.5074]
+      });
+      // timeZone should be just abbreviation, not "GMT (London)"
+      expect(['GMT', 'BST']).toContain(result.timeZone);
+    });
+  });
+
   describe('formatMatchDateTime', () => {
     const londonVenue = {
       name: 'Emirates Stadium',
@@ -150,17 +161,15 @@ describe('Web Timezone Utilities', () => {
       expect(result).toHaveProperty('groupDate');
     });
 
-    it('should return hybrid timezone format', () => {
+    it('should return timezone abbreviation only', () => {
       const result = formatMatchDateTime('2025-03-15T19:00:00Z', londonVenue);
-      // timeZone should be hybrid format
-      expect(result.timeZone).toMatch(/^(GMT|BST) \(London\)$/);
-      // timeZoneAbbr should be just the abbreviation
-      expect(['GMT', 'BST']).toContain(result.timeZoneAbbr);
+      // timeZone should be abbreviation only
+      expect(['GMT', 'BST']).toContain(result.timeZone);
     });
 
-    it('should use venue city in hybrid label', () => {
+    it('should return correct abbreviation for Madrid', () => {
       const result = formatMatchDateTime('2025-03-15T19:00:00Z', madridVenue);
-      expect(result.timeZone).toMatch(/^(CET|CEST) \(Madrid\)$/);
+      expect(['CET', 'CEST']).toContain(result.timeZone);
     });
 
     it('should format time correctly for different timezones', () => {

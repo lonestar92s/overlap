@@ -306,59 +306,84 @@ useEffect(() => {
           );
         })}
 
-        {/* Home base markers */}
-        {homeBases && homeBases.map((homeBase) => {
-          const coords = homeBase.coordinates;
-          if (!coords) {
-            return null;
-          }
-          
-          // Try to get lat/lng, handling different formats and string-to-number conversion
-          let lat = coords.lat;
-          let lng = coords.lng;
-          
-          // Handle alternative property names
-          if (lat === undefined || lat === null) {
-            lat = coords.latitude;
-          }
-          if (lng === undefined || lng === null) {
-            lng = coords.longitude || coords.lon;
-          }
-          
-          // Convert strings to numbers if needed
-          if (typeof lat === 'string') {
-            lat = parseFloat(lat);
-          }
-          if (typeof lng === 'string') {
-            lng = parseFloat(lng);
-          }
-          
-          // Validate coordinates are numbers
-          if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
-            return null;
-          }
-          
-          // Check if coordinates are within reasonable world bounds
-          if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-            return null;
-          }
+        {/* Home base markers - filter out invalid/deleted home bases */}
+        {homeBases && homeBases
+          .filter((homeBase) => {
+            // Only render home bases with valid IDs
+            const homeBaseId = homeBase._id || homeBase.id || homeBase.name;
+            if (!homeBaseId) {
+              return false;
+            }
+            
+            const coords = homeBase.coordinates;
+            if (!coords) {
+              return false;
+            }
+            
+            // Validate coordinates
+            let lat = coords.lat;
+            let lng = coords.lng;
+            
+            // Handle alternative property names
+            if (lat === undefined || lat === null) {
+              lat = coords.latitude;
+            }
+            if (lng === undefined || lng === null) {
+              lng = coords.longitude || coords.lon;
+            }
+            
+            // Convert strings to numbers if needed
+            if (typeof lat === 'string') {
+              lat = parseFloat(lat);
+            }
+            if (typeof lng === 'string') {
+              lng = parseFloat(lng);
+            }
+            
+            // Validate coordinates are numbers and within bounds
+            return typeof lat === 'number' && typeof lng === 'number' && 
+                   !isNaN(lat) && !isNaN(lng) &&
+                   lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90;
+          })
+          .map((homeBase) => {
+            const coords = homeBase.coordinates;
+            
+            // Try to get lat/lng, handling different formats and string-to-number conversion
+            let lat = coords.lat;
+            let lng = coords.lng;
+            
+            // Handle alternative property names
+            if (lat === undefined || lat === null) {
+              lat = coords.latitude;
+            }
+            if (lng === undefined || lng === null) {
+              lng = coords.longitude || coords.lon;
+            }
+            
+            // Convert strings to numbers if needed
+            if (typeof lat === 'string') {
+              lat = parseFloat(lat);
+            }
+            if (typeof lng === 'string') {
+              lng = parseFloat(lng);
+            }
 
-          // GeoJSON format: [longitude, latitude]
-          const [longitude, latitude] = [lng, lat];
+            // GeoJSON format: [longitude, latitude]
+            const [longitude, latitude] = [lng, lat];
 
-          return (
-            <Mapbox.PointAnnotation
-              key={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
-              id={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
-              coordinate={[longitude, latitude]}
-              onSelected={() => handleHomeBasePress(homeBase)}
-            >
-              <View style={styles.homeBaseMarker}>
-                <Icon name="home" size={20} color="white" />
-              </View>
-            </Mapbox.PointAnnotation>
-          );
-        })}
+            return (
+              <Mapbox.PointAnnotation
+                key={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
+                id={`homebase-${String(homeBase._id || homeBase.id || homeBase.name)}`}
+                coordinate={[longitude, latitude]}
+                onSelected={() => handleHomeBasePress(homeBase)}
+              >
+                <View style={styles.homeBaseMarker}>
+                  <Icon name="home" size={20} color="white" />
+                </View>
+              </Mapbox.PointAnnotation>
+            );
+          })}
       </Mapbox.MapView>
 
       {/* Custom location button */}

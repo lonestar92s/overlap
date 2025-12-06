@@ -85,9 +85,11 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   }, [itineraryId, getItineraryById]);
 
   // Fetch travel times when itinerary and home bases are available
+  // Also recalculate when home bases change (added, updated, or deleted)
   useEffect(() => {
     const fetchTravelTimes = async () => {
       if (!itinerary || !itinerary.homeBases || itinerary.homeBases.length === 0) {
+        // Clear travel times when no home bases are available
         setTravelTimes({});
         return;
       }
@@ -100,7 +102,30 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       try {
         setTravelTimesLoading(true);
         const times = await ApiService.getTravelTimes(itineraryId);
-        setTravelTimes(times || {});
+        // Only set travel times for matches that have valid home bases
+        // Filter out any travel times that reference deleted home bases
+        const validHomeBaseIds = new Set(
+          (itinerary.homeBases || []).map(hb => String(hb._id || hb.id))
+        );
+        
+        const filteredTimes = {};
+        if (times) {
+          Object.keys(times).forEach(matchId => {
+            const travelTime = times[matchId];
+            // Only include travel time if it doesn't reference a deleted home base
+            // If travelTime has a homeBaseId, check if it still exists
+            if (travelTime && travelTime.homeBaseId) {
+              if (validHomeBaseIds.has(String(travelTime.homeBaseId))) {
+                filteredTimes[matchId] = travelTime;
+              }
+            } else {
+              // If no homeBaseId specified, include it (will be recalculated)
+              filteredTimes[matchId] = travelTime;
+            }
+          });
+        }
+        
+        setTravelTimes(filteredTimes);
       } catch (error) {
         // Only log non-API-key errors to avoid noise in console
         if (!error.message?.includes('API key not configured')) {
@@ -113,7 +138,13 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     };
 
     fetchTravelTimes();
-  }, [itineraryId, itinerary?.matches, itinerary?.homeBases]);
+  }, [
+    itineraryId, 
+    itinerary?.matches, 
+    // Use a stringified version of home base IDs to detect changes
+    // This ensures we recalculate when home bases are added, updated, or deleted
+    itinerary?.homeBases?.map(hb => `${hb._id || hb.id}-${hb.coordinates?.lat}-${hb.coordinates?.lng}`).join(',')
+  ]);
 
   // Recommendations are automatically fetched by useRecommendations hook
 

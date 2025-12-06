@@ -197,10 +197,8 @@ export const formatMatchDateTime = (utcDate, venue) => {
     // Convert UTC date to venue's timezone
     const zonedDate = utcToZonedTime(date, timeZone);
     
-    // Get timezone abbreviation and hybrid label for display
+    // Get timezone abbreviation for display
     const tzAbbr = getTimezoneAbbreviation(timeZone, zonedDate);
-    const venueCity = venue?.city || null;
-    const hybridLabel = getHybridTimezoneLabel(timeZone, zonedDate, venueCity);
     
     // Format the date and time in the venue's timezone
     return {
@@ -208,8 +206,7 @@ export const formatMatchDateTime = (utcDate, venue) => {
         time: format(zonedDate, 'h:mm a'),                  // "7:00 PM"
         fullDate: format(zonedDate, 'EEE, MMM d, yyyy'),    // "Sat, Mar 15, 2025"
         fullDateTime: format(zonedDate, 'EEE, MMM d, yyyy h:mm a'), // "Sat, Mar 15, 2025 7:00 PM"
-        timeZone: hybridLabel,                              // "GMT (London)" - hybrid format
-        timeZoneAbbr: tzAbbr,                               // "GMT" - just abbreviation if needed
+        timeZone: tzAbbr,                                   // "GMT" - abbreviation only
         timeZoneId: timeZone,                               // "Europe/London"
         // Keep groupDate in UTC to ensure consistent grouping across timezones
         groupDate: format(date, 'yyyy-MM-dd')              // "2025-03-15"
