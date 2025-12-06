@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import { Avatar, Card, Overlay } from 'react-native-elements';
 import HeartButton from './HeartButton';
 import ErrorBoundary from './ErrorBoundary';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { formatMatchTimeInVenueTimezone } from '../utils/timezoneUtils';
 
 const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange }) => {
   const handleClose = () => {
@@ -19,7 +20,38 @@ const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange })
   if (!match) return null;
 
   const venue = match.fixture?.venue;
-  const matchDate = new Date(match.fixture.date);
+  
+  // Format date/time in venue's local timezone with hybrid label
+  const formattedTime = useMemo(() => {
+    try {
+      return formatMatchTimeInVenueTimezone(match.fixture.date, match.fixture, {
+        showTimezone: false,
+        showDate: false,
+        timeFormat: '12hour'
+      });
+    } catch (error) {
+      return 'TBD';
+    }
+  }, [match.fixture]);
+
+  const formattedDate = useMemo(() => {
+    try {
+      const formatted = formatMatchTimeInVenueTimezone(match.fixture.date, match.fixture, {
+        showTimezone: false,
+        showDate: true,
+        showYear: false,
+        timeFormat: '12hour'
+      });
+      // Extract just the date part (before " at ")
+      const parts = formatted.split(' at ');
+      // Return short format: "Mar 15"
+      const datePart = parts[0] || '';
+      const shortDate = datePart.replace(/^[A-Za-z]+,\s*/, ''); // Remove day name
+      return shortDate || 'TBD';
+    } catch (error) {
+      return 'TBD';
+    }
+  }, [match.fixture]);
 
   // Navigation logic
   const sortedMatches = [...allMatches].sort((a, b) => 
@@ -133,18 +165,12 @@ const MatchModal = ({ visible, match, onClose, allMatches = [], onMatchChange })
                 <View style={styles.timeDateButtons}>
                   <View style={styles.timeButton}>
                     <Text style={styles.timeButtonText}>
-                      {matchDate.toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {formattedTime}
                     </Text>
                   </View>
                   <View style={styles.dateButton}>
                     <Text style={styles.dateButtonText}>
-                      {matchDate.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric'
-                      })}
+                      {formattedDate}
                     </Text>
                   </View>
                 </View>

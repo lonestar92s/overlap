@@ -612,20 +612,10 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
       result = `${formattedDate} at ${timeString}`;
     }
     
-    // Add timezone indicator
+    // Add timezone indicator in hybrid format: "GMT (London)"
     if (showTimezone) {
-      let timezoneLabel;
-      if (validTimezone === 'UTC') {
-        // For UTC venues, show the venue city instead of "UTC"
-        const venueCity = fixture?.venue?.city;
-        if (venueCity) {
-          timezoneLabel = `${venueCity} Time`;
-        } else {
-          timezoneLabel = 'UTC';
-        }
-      } else {
-        timezoneLabel = getTimezoneLabel(validTimezone);
-      }
+      const venueCity = fixture?.venue?.city;
+      const timezoneLabel = getTimezoneLabel(validTimezone, venueDate, venueCity);
       result += ` (${timezoneLabel})`;
     }
     
@@ -637,33 +627,102 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
 };
 
 /**
- * Get user-friendly timezone label
- * @param {string} timezone - Timezone string
- * @returns {string} - User-friendly label
+ * Get timezone abbreviation (e.g., GMT, CET, EST)
+ * @param {string} timezone - Timezone string (e.g., "Europe/London")
+ * @param {Date} date - Date to get abbreviation for (accounts for DST)
+ * @returns {string} - Timezone abbreviation
  */
-export const getTimezoneLabel = (timezone) => {
-  const timezoneLabels = {
-    'Europe/London': 'London Time',
-    'Europe/Paris': 'Paris Time',
-    'Europe/Berlin': 'Berlin Time',
-    'Europe/Madrid': 'Madrid Time',
-    'Europe/Rome': 'Rome Time',
-    'America/New_York': 'New York Time',
-    'America/Chicago': 'Chicago Time',
-    'America/Los_Angeles': 'Los Angeles Time',
-    'America/Toronto': 'Toronto Time',
-    'Asia/Tokyo': 'Tokyo Time',
-    'Asia/Shanghai': 'Shanghai Time',
-    'Asia/Seoul': 'Seoul Time',
-    'Asia/Singapore': 'Singapore Time',
-    'Europe/Zagreb': 'Zagreb Time',
-    'Australia/Sydney': 'Sydney Time',
-    'Australia/Melbourne': 'Melbourne Time',
-    'Pacific/Auckland': 'Auckland Time',
+export const getTimezoneAbbreviation = (timezone, date = new Date()) => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en', {
+      timeZone: timezone,
+      timeZoneName: 'short'
+    });
+    const parts = formatter.formatToParts(date);
+    const timeZonePart = parts.find(part => part.type === 'timeZoneName');
+    return timeZonePart ? timeZonePart.value : 'UTC';
+  } catch (error) {
+    // Fallback abbreviations for common timezones
+    const fallbackAbbreviations = {
+      'Europe/London': 'GMT',
+      'Europe/Paris': 'CET',
+      'Europe/Berlin': 'CET',
+      'Europe/Madrid': 'CET',
+      'Europe/Rome': 'CET',
+      'Europe/Zagreb': 'CET',
+      'America/New_York': 'EST',
+      'America/Chicago': 'CST',
+      'America/Los_Angeles': 'PST',
+      'America/Toronto': 'EST',
+      'Asia/Tokyo': 'JST',
+      'Asia/Shanghai': 'CST',
+      'Asia/Seoul': 'KST',
+      'Asia/Singapore': 'SGT',
+      'Australia/Sydney': 'AEST',
+      'Australia/Melbourne': 'AEST',
+      'Pacific/Auckland': 'NZST',
+      'UTC': 'UTC'
+    };
+    return fallbackAbbreviations[timezone] || 'UTC';
+  }
+};
+
+/**
+ * Get city name from timezone
+ * @param {string} timezone - Timezone string (e.g., "Europe/London")
+ * @returns {string} - City name
+ */
+export const getCityFromTimezone = (timezone) => {
+  const cityMap = {
+    'Europe/London': 'London',
+    'Europe/Paris': 'Paris',
+    'Europe/Berlin': 'Berlin',
+    'Europe/Madrid': 'Madrid',
+    'Europe/Rome': 'Rome',
+    'Europe/Zagreb': 'Zagreb',
+    'Europe/Amsterdam': 'Amsterdam',
+    'Europe/Brussels': 'Brussels',
+    'Europe/Lisbon': 'Lisbon',
+    'Europe/Istanbul': 'Istanbul',
+    'America/New_York': 'New York',
+    'America/Chicago': 'Chicago',
+    'America/Los_Angeles': 'Los Angeles',
+    'America/Toronto': 'Toronto',
+    'America/Mexico_City': 'Mexico City',
+    'America/Sao_Paulo': 'São Paulo',
+    'America/Argentina/Buenos_Aires': 'Buenos Aires',
+    'Asia/Tokyo': 'Tokyo',
+    'Asia/Shanghai': 'Shanghai',
+    'Asia/Seoul': 'Seoul',
+    'Asia/Singapore': 'Singapore',
+    'Asia/Dubai': 'Dubai',
+    'Asia/Kolkata': 'Mumbai',
+    'Australia/Sydney': 'Sydney',
+    'Australia/Melbourne': 'Melbourne',
+    'Pacific/Auckland': 'Auckland',
+    'Africa/Johannesburg': 'Johannesburg',
     'UTC': 'UTC'
   };
   
-  return timezoneLabels[timezone] || timezone;
+  return cityMap[timezone] || timezone.split('/').pop().replace(/_/g, ' ');
+};
+
+/**
+ * Get user-friendly timezone label in hybrid format
+ * @param {string} timezone - Timezone string
+ * @param {Date} date - Date for abbreviation (accounts for DST)
+ * @param {string} venueCity - Optional venue city to use instead of timezone city
+ * @returns {string} - Hybrid label like "GMT (London)"
+ */
+export const getTimezoneLabel = (timezone, date = new Date(), venueCity = null) => {
+  if (timezone === 'UTC') {
+    return venueCity ? `UTC (${venueCity})` : 'UTC';
+  }
+  
+  const abbreviation = getTimezoneAbbreviation(timezone, date);
+  const city = venueCity || getCityFromTimezone(timezone);
+  
+  return `${abbreviation} (${city})`;
 };
 
 /**

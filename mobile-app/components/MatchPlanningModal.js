@@ -16,6 +16,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { formatMatchTimeInVenueTimezone } from '../utils/timezoneUtils';
 
 const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], onPlanningUpdated }) => {
   const { updateMatchPlanning } = useItineraries();
@@ -197,14 +198,35 @@ const MatchPlanningModal = ({ visible, onClose, match, tripId, homeBases = [], o
               {match.league} • {match.venue}
             </Text>
             <Text style={styles.matchDate}>
-              {new Date(match.date).toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+              {(() => {
+                try {
+                  // Create fixture-like object for timezone utility
+                  const fixture = {
+                    date: match.date,
+                    venue: {
+                      name: match.venue,
+                      city: match.venueCity,
+                      coordinates: match.venueCoordinates
+                    }
+                  };
+                  return formatMatchTimeInVenueTimezone(match.date, fixture, {
+                    showTimezone: true,
+                    showDate: true,
+                    showYear: true,
+                    timeFormat: '12hour'
+                  });
+                } catch (error) {
+                  // Fallback to basic formatting
+                  return new Date(match.date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                }
+              })()}
             </Text>
           </View>
 

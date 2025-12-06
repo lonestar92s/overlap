@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { Search, Clear, Chat, Close, CheckCircle, Warning } from '@mui/icons-material';
 import { processNaturalLanguageQuery, extractSearchParams, formatSearchResults, getSearchExamples } from '../services/naturalLanguageService';
+import { formatMatchDateTime } from '../utils/timezone';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="up" ref={ref} {...props} />;
@@ -294,7 +295,7 @@ const NaturalLanguageSearch = ({ onSearch, onError }) => {
                                                                     secondary={
                                                                         <Box>
                                                                             <Typography variant="body2" color="text.secondary">
-                                                                                {new Date(match.date).toLocaleDateString()} • {match.venue?.name || 'TBD'}
+                                                                                {formatMatchDateTime(match.date, match.venue).fullDate} • {match.venue?.name || 'TBD'} ({formatMatchDateTime(match.date, match.venue).timeZone})
                                                                             </Typography>
                                                                             {match.distance && (
                                                                                 <Typography variant="caption" color="text.secondary">

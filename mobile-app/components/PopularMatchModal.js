@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { formatMatchTimeInVenueTimezone } from '../utils/timezoneUtils';
 
 const PopularMatchModal = ({ 
   visible, 
@@ -52,32 +53,34 @@ const PopularMatchModal = ({
   const league = currentMatch?.league || {};
   const venue = fixture?.venue || {};
 
-  const formatMatchDate = (dateString) => {
+  // Format date in venue local timezone
+  const formatMatchDate = (dateString, fixture) => {
     if (!dateString) return 'Date TBD';
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Date TBD';
-      return date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+      const formatted = formatMatchTimeInVenueTimezone(dateString, fixture, {
+        showTimezone: false,
+        showDate: true,
+        showYear: true,
+        timeFormat: '12hour'
       });
+      // Extract just the date part (before " at ")
+      const parts = formatted.split(' at ');
+      return parts[0] || 'Date TBD';
     } catch (error) {
       return 'Date TBD';
     }
   };
 
-  const formatTime = (dateString) => {
+  // Format time in venue local timezone with hybrid label
+  const formatTime = (dateString, fixture) => {
     if (!dateString) return 'Time TBD';
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Time TBD';
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
+      const formatted = formatMatchTimeInVenueTimezone(dateString, fixture, {
+        showTimezone: true,
+        showDate: false,
+        timeFormat: '24hour'
       });
+      return formatted || 'Time TBD';
     } catch (error) {
       return 'Time TBD';
     }
@@ -184,14 +187,14 @@ const PopularMatchModal = ({
               </View>
             </View>
 
-            {/* Date & Time */}
+            {/* Date & Time - displayed in venue local timezone */}
             <View style={styles.dateTimeContainer}>
               <Text style={styles.dateTimeLabel}>Date & Time</Text>
               <Text style={styles.dateTimeText}>
-                {formatMatchDate(fixture.date)}
+                {formatMatchDate(fixture.date, fixture)}
               </Text>
               <Text style={styles.timeText}>
-                Kickoff: {formatTime(fixture.date)}
+                Kickoff: {formatTime(fixture.date, fixture)}
               </Text>
             </View>
 

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Card, Avatar, Divider, Button, ButtonGroup } from 'react-native-elements';
 import ApiService from '../services/api';
+import { formatMatchTimeInVenueTimezone, getTimezoneLabel, getVenueTimezone } from '../utils/timezoneUtils';
 
 const ResultsScreen = ({ route, navigation }) => {
   const { matches: initialMatches = [], searchParams = {} } = route.params || {};
@@ -206,22 +207,35 @@ const ResultsScreen = ({ route, navigation }) => {
 
   const hasActiveFilters = selectedLeagues.length > 0 || selectedClubs.length > 0;
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  // Format date in venue local timezone
+  const formatDate = (dateString, fixture) => {
+    try {
+      const formatted = formatMatchTimeInVenueTimezone(dateString, fixture, {
+        showTimezone: false,
+        showDate: true,
+        showYear: true,
+        timeFormat: '12hour'
+      });
+      // Extract just the date part (before " at ")
+      const parts = formatted.split(' at ');
+      return parts[0] || 'Date TBD';
+    } catch (error) {
+      return 'Date TBD';
+    }
   };
 
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  // Format time in venue local timezone with hybrid label
+  const formatTime = (dateString, fixture) => {
+    try {
+      const formatted = formatMatchTimeInVenueTimezone(dateString, fixture, {
+        showTimezone: true,
+        showDate: false,
+        timeFormat: '12hour'
+      });
+      return formatted || 'Time TBD';
+    } catch (error) {
+      return 'Time TBD';
+    }
   };
 
   const getMatchStatus = (status) => {
@@ -249,8 +263,9 @@ const ResultsScreen = ({ route, navigation }) => {
 
   const renderMatchItem = ({ item }) => {
     const statusInfo = getMatchStatus(item.fixture.status);
-    const matchDate = formatDate(item.fixture.date);
-    const matchTime = formatTime(item.fixture.date);
+    // Format date/time in venue's local timezone
+    const matchDate = formatDate(item.fixture.date, item.fixture);
+    const matchTime = formatTime(item.fixture.date, item.fixture);
     const isUpcoming = item.fixture.status.short === 'NS';
 
     return (

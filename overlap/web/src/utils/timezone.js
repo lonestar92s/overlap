@@ -101,6 +101,66 @@ export const getTimezoneAbbreviation = (timeZone, date) => {
 };
 
 /**
+ * Get city name from timezone identifier
+ * @param {string} timezone - Timezone string (e.g., "Europe/London")
+ * @returns {string} - City name
+ */
+export const getCityFromTimezone = (timezone) => {
+    const cityMap = {
+        'Europe/London': 'London',
+        'Europe/Paris': 'Paris',
+        'Europe/Berlin': 'Berlin',
+        'Europe/Madrid': 'Madrid',
+        'Europe/Rome': 'Rome',
+        'Europe/Warsaw': 'Warsaw',
+        'Europe/Istanbul': 'Istanbul',
+        'Europe/Moscow': 'Moscow',
+        'America/New_York': 'New York',
+        'America/Chicago': 'Chicago',
+        'America/Denver': 'Denver',
+        'America/Los_Angeles': 'Los Angeles',
+        'America/Bogota': 'Bogota',
+        'America/Lima': 'Lima',
+        'America/Sao_Paulo': 'São Paulo',
+        'America/Argentina/Buenos_Aires': 'Buenos Aires',
+        'Asia/Dubai': 'Dubai',
+        'Asia/Karachi': 'Karachi',
+        'Asia/Kolkata': 'Mumbai',
+        'Asia/Bangkok': 'Bangkok',
+        'Asia/Shanghai': 'Shanghai',
+        'Asia/Tokyo': 'Tokyo',
+        'Africa/Casablanca': 'Casablanca',
+        'Africa/Lagos': 'Lagos',
+        'Africa/Cairo': 'Cairo',
+        'Africa/Nairobi': 'Nairobi',
+        'Australia/Perth': 'Perth',
+        'Australia/Sydney': 'Sydney',
+        'Pacific/Auckland': 'Auckland',
+        'UTC': 'UTC'
+    };
+    
+    return cityMap[timezone] || timezone.split('/').pop().replace(/_/g, ' ');
+};
+
+/**
+ * Get hybrid timezone label: "GMT (London)"
+ * @param {string} timezone - Timezone identifier
+ * @param {Date} date - Date for abbreviation (accounts for DST)
+ * @param {string} venueCity - Optional venue city to use instead of timezone city
+ * @returns {string} - Hybrid label like "GMT (London)"
+ */
+export const getHybridTimezoneLabel = (timezone, date, venueCity = null) => {
+    if (timezone === 'UTC') {
+        return venueCity ? `UTC (${venueCity})` : 'UTC';
+    }
+    
+    const abbreviation = getTimezoneAbbreviation(timezone, date);
+    const city = venueCity || getCityFromTimezone(timezone);
+    
+    return `${abbreviation} (${city})`;
+};
+
+/**
  * PRIMARY FUNCTION: Format match date/time in stadium's local timezone
  * 
  * @param {string} utcDate - ISO date string from API (e.g., "2025-03-15T19:00:00Z")
@@ -137,8 +197,10 @@ export const formatMatchDateTime = (utcDate, venue) => {
     // Convert UTC date to venue's timezone
     const zonedDate = utcToZonedTime(date, timeZone);
     
-    // Get timezone abbreviation for display
+    // Get timezone abbreviation and hybrid label for display
     const tzAbbr = getTimezoneAbbreviation(timeZone, zonedDate);
+    const venueCity = venue?.city || null;
+    const hybridLabel = getHybridTimezoneLabel(timeZone, zonedDate, venueCity);
     
     // Format the date and time in the venue's timezone
     return {
@@ -146,7 +208,8 @@ export const formatMatchDateTime = (utcDate, venue) => {
         time: format(zonedDate, 'h:mm a'),                  // "7:00 PM"
         fullDate: format(zonedDate, 'EEE, MMM d, yyyy'),    // "Sat, Mar 15, 2025"
         fullDateTime: format(zonedDate, 'EEE, MMM d, yyyy h:mm a'), // "Sat, Mar 15, 2025 7:00 PM"
-        timeZone: tzAbbr,                                   // "GMT"
+        timeZone: hybridLabel,                              // "GMT (London)" - hybrid format
+        timeZoneAbbr: tzAbbr,                               // "GMT" - just abbreviation if needed
         timeZoneId: timeZone,                               // "Europe/London"
         // Keep groupDate in UTC to ensure consistent grouping across timezones
         groupDate: format(date, 'yyyy-MM-dd')              // "2025-03-15"
