@@ -241,7 +241,28 @@ function AppContent() {
                 <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
               )}
               <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
-              <Tab.Screen name="TripsTab" component={TripsStack} options={{ tabBarLabel: 'Trips' }} />
+              <Tab.Screen 
+                name="TripsTab" 
+                component={TripsStack} 
+                options={{ tabBarLabel: 'Trips' }}
+                listeners={({ navigation, route }) => ({
+                  tabPress: (e) => {
+                    // Check if we're on TripOverview with fromAccountTab param
+                    const state = navigation.getState();
+                    const tripsTabState = state?.routes?.find(r => r.name === 'TripsTab')?.state;
+                    const currentScreen = tripsTabState?.routes?.[tripsTabState.index]?.name;
+                    const currentParams = tripsTabState?.routes?.[tripsTabState.index]?.params;
+                    
+                    // If we're on TripOverview from AccountTab, navigate to TripsList instead
+                    if (currentScreen === 'TripOverview' && currentParams?.fromAccountTab === true) {
+                      e.preventDefault();
+                      navigation.navigate('TripsTab', {
+                        screen: 'TripsList'
+                      });
+                    }
+                  }
+                })}
+              />
               <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
               <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Profile' }} />
             </Tab.Navigator>

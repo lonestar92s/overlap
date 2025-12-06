@@ -13,6 +13,7 @@ import {
 import { Input, Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import ApiService from '../services/api';
+import { colors, spacing, typography } from '../styles/designTokens';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -79,6 +80,19 @@ const ForgotPasswordScreen = ({ navigation }) => {
         style={styles.keyboardAvoid}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
+          {/* Header with back button */}
+          <View style={styles.topHeader}>
+            <TouchableOpacity
+              style={styles.headerBackButton}
+              onPress={() => navigation.goBack()}
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="arrow-back" size={24} color={colors.primary} />
+            </TouchableOpacity>
+            <View style={styles.placeholder} />
+          </View>
+
           <View style={styles.header}>
             <MaterialIcons name="lock-reset" size={80} color="#1976d2" />
             <Text style={styles.title}>Reset Password</Text>
@@ -169,6 +183,20 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  headerBackButton: {
+    padding: spacing.sm,
+  },
+  placeholder: {
+    width: 40,
   },
   header: {
     alignItems: 'center',

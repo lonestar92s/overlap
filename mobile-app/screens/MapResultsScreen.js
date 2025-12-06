@@ -132,7 +132,8 @@ const MapResultsScreen = ({ navigation, route }) => {
   // AbortController for request cancellation
   const abortControllerRef = useRef(null);
 
-  
+  // Track if pre-selected filters have been applied (prevent reappearance)
+  const hasAppliedPreSelectedFiltersRef = useRef(false);
 
   
   // Refs
@@ -305,9 +306,10 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, [hasWho, initialRegion, matches.length]); // Only re-run when these change
 
-  // Apply pre-selected filters from natural language search
+  // Apply pre-selected filters from natural language search (only once on mount)
   useEffect(() => {
-    if (preSelectedFilters && filterData) {
+    // Only apply pre-selected filters once, and only if they haven't been applied yet
+    if (preSelectedFilters && filterData && !hasAppliedPreSelectedFiltersRef.current) {
       if (__DEV__) {
         console.log('🎯 Applying pre-selected filters:', preSelectedFilters);
       }
@@ -405,6 +407,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       if (hasFilters) {
         updateSelectedFilters(selectedFilters);
+        hasAppliedPreSelectedFiltersRef.current = true; // Mark as applied
         if (__DEV__) {
           console.log('✅ Applied pre-selected filters:', selectedFilters);
         }
@@ -1382,11 +1385,13 @@ const MapResultsScreen = ({ navigation, route }) => {
     return validMarkers || [];
   }, [displayFilteredMatches, originalSearchBounds]);
 
-  // Group upcoming matches by venue (coordinates preferred for physical location matching)
+  // Group matches by venue (coordinates preferred for physical location matching)
+  // Only includes matches that are visible on the map (mapMarkersMatches)
+  // This ensures navigation is restricted to matches that have markers on the map
   const venueGroups = useMemo(() => {
-    if (!finalFilteredMatches || finalFilteredMatches.length === 0) return [];
+    if (!mapMarkersMatches || mapMarkersMatches.length === 0) return [];
     const groupsMap = new Map();
-    finalFilteredMatches.forEach((m) => {
+    mapMarkersMatches.forEach((m) => {
       const venue = m?.fixture?.venue || {};
       let key = null;
       // Prioritize coordinates for physical location matching (handles shared stadiums with different venue IDs)
@@ -1412,7 +1417,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     // Sort groups by earliest match date
     groups.sort((a, b) => new Date(a.matches[0].fixture.date) - new Date(b.matches[0].fixture.date));
     return groups;
-  }, [finalFilteredMatches]);
+  }, [mapMarkersMatches]);
 
   // Clamp or reset selected index if filtered results change
   useEffect(() => {
@@ -1640,8 +1645,8 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, [dateFrom, dateTo, mapRegion, debouncedMapRegion, initialRegion, hasWho, currentRequestId]);
 
-  // Handler to remove a filter (with cascading logic) and trigger new search
-  const handleRemoveFilter = useCallback(async (type, value) => {
+  // Handler to remove a filter (with cascading logic) - client-side only, no automatic search
+  const handleRemoveFilter = useCallback((type, value) => {
     const newFilters = { ...selectedFilters };
     
     if (type === 'country') {
@@ -1679,9 +1684,9 @@ const MapResultsScreen = ({ navigation, route }) => {
     updateSelectedFilters(newFilters);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Trigger new search with updated filters
-    await performSearchWithFilters(newFilters);
-  }, [selectedFilters, filterData, updateSelectedFilters, performSearchWithFilters]);
+    // No automatic search - filters only affect client-side filtering
+    // User must explicitly tap "Search this area" to fetch new data
+  }, [selectedFilters, filterData, updateSelectedFilters]);
 
   // Animated height for filter chips container
   const filterChipsHeight = useRef(new Animated.Value(0)).current;
@@ -2083,7 +2088,8 @@ const MapResultsScreen = ({ navigation, route }) => {
         } : null,
         isSearching,
         currentRequestId,
-        lastSuccessfulRequestId
+        lastSuccessfulRequestId,
+        hasFilters: !!(selectedFilters.leagues.length > 0 || selectedFilters.teams.length > 0)
       });
     }
     
@@ -2095,37 +2101,47 @@ const MapResultsScreen = ({ navigation, route }) => {
       return;
     }
     
-    // Always perform search - don't check if region has changed
-    const requestId = currentRequestId + 1;
-    if (__DEV__) {
-      console.log('🚀 [SEARCH THIS AREA] Starting search:', {
-        requestId,
-        previousRequestId: currentRequestId,
-        region: {
-          center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
-          delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
-        }
-      });
-    }
+    // Check if we have Who-based filters (leagues/teams) - if so, use searchAggregatedMatches
+    const leagueIds = (selectedFilters?.leagues || []).map(id => String(id));
+    const teamIds = (selectedFilters?.teams || []).map(id => String(id));
+    const hasWhoFilters = leagueIds.length > 0 || teamIds.length > 0;
     
-    // Start end-to-end performance timer with phase tracking (from button press to rendered)
-    const timer = performanceTracker.startTimerWithPhases(
-      performanceTracker.MetricType.SEARCH_THIS_AREA,
-      {
-        bounds: {
-          center: { lat: currentRegion.latitude, lng: currentRegion.longitude },
-          delta: { lat: currentRegion.latitudeDelta, lng: currentRegion.longitudeDelta }
-        },
-        dateRange: { from: dateFrom, to: dateTo },
-        requestId
+    if (hasWho || hasWhoFilters) {
+      // Use performSearchWithFilters which handles Who-based searches
+      await performSearchWithFilters(selectedFilters);
+    } else {
+      // Use traditional bounds-based search
+      const requestId = currentRequestId + 1;
+      if (__DEV__) {
+        console.log('🚀 [SEARCH THIS AREA] Starting bounds search:', {
+          requestId,
+          previousRequestId: currentRequestId,
+          region: {
+            center: { lat: currentRegion.latitude.toFixed(4), lng: currentRegion.longitude.toFixed(4) },
+            delta: { lat: currentRegion.latitudeDelta.toFixed(4), lng: currentRegion.longitudeDelta.toFixed(4) }
+          }
+        });
       }
-    );
-    searchTimerRef.current = timer;
-    
-    setCurrentRequestId(requestId);
-    currentRequestIdRef.current = requestId; // Update ref for synchronous access
-    setIsSearching(true);
-    await performBoundsSearch(currentRegion, requestId, timer);
+      
+      // Start end-to-end performance timer with phase tracking (from button press to rendered)
+      const timer = performanceTracker.startTimerWithPhases(
+        performanceTracker.MetricType.SEARCH_THIS_AREA,
+        {
+          bounds: {
+            center: { lat: currentRegion.latitude, lng: currentRegion.longitude },
+            delta: { lat: currentRegion.latitudeDelta, lng: currentRegion.longitudeDelta }
+          },
+          dateRange: { from: dateFrom, to: dateTo },
+          requestId
+        }
+      );
+      searchTimerRef.current = timer;
+      
+      setCurrentRequestId(requestId);
+      currentRequestIdRef.current = requestId; // Update ref for synchronous access
+      setIsSearching(true);
+      await performBoundsSearch(currentRegion, requestId, timer);
+    }
   };
 
   // Calculate initial region based on searched location

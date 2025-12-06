@@ -13,7 +13,7 @@ import HomeBaseSelector from './HomeBaseSelector';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 import apiService from '../services/api';
 
-const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateRange = null }) => {
+const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateRange = null, isPastTrip = false }) => {
   const [expanded, setExpanded] = useState(false);
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [editingHomeBase, setEditingHomeBase] = useState(null);
@@ -121,33 +121,35 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
           )}
         </View>
         
-        <View style={styles.homeBaseActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleEditHomeBase(item)}
-            disabled={isDeleting}
-            accessibilityRole="button"
-            accessibilityLabel={`Edit home base ${item.name}`}
-            accessibilityHint="Double tap to edit this home base"
-          >
-            <MaterialIcons name="edit" size={18} color={colors.text.secondary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleDeleteHomeBase(item._id)}
-            disabled={isDeleting}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete home base ${item.name}`}
-            accessibilityHint="Double tap to delete this home base"
-          >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color={colors.error} />
-            ) : (
-              <MaterialIcons name="delete" size={18} color={colors.error} />
-            )}
-          </TouchableOpacity>
-        </View>
+        {!isPastTrip && (
+          <View style={styles.homeBaseActions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleEditHomeBase(item)}
+              disabled={isDeleting}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit home base ${item.name}`}
+              accessibilityHint="Double tap to edit this home base"
+            >
+              <MaterialIcons name="edit" size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleDeleteHomeBase(item._id)}
+              disabled={isDeleting}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete home base ${item.name}`}
+              accessibilityHint="Double tap to delete this home base"
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color={colors.error} />
+              ) : (
+                <MaterialIcons name="delete" size={18} color={colors.error} />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -198,30 +200,34 @@ const HomeBaseSection = ({ tripId, homeBases = [], onHomeBasesUpdated, tripDateR
             />
           )}
           
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddHomeBase}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Add home base"
-            accessibilityHint="Double tap to add a new home base"
-          >
-            <MaterialIcons name="add" size={20} color={colors.primary} />
-            <Text style={styles.addButtonText}>Add Home Base</Text>
-          </TouchableOpacity>
+          {!isPastTrip && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleAddHomeBase}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Add home base"
+              accessibilityHint="Double tap to add a new home base"
+            >
+              <MaterialIcons name="add" size={20} color={colors.primary} />
+              <Text style={styles.addButtonText}>Add Home Base</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
-      <HomeBaseSelector
-        visible={selectorVisible}
-        onClose={() => {
-          setSelectorVisible(false);
-          setEditingHomeBase(null);
-        }}
-        onSave={handleSaveHomeBase}
-        homeBase={editingHomeBase}
-        tripDateRange={tripDateRange}
-      />
+      {!isPastTrip && (
+        <HomeBaseSelector
+          visible={selectorVisible}
+          onClose={() => {
+            setSelectorVisible(false);
+            setEditingHomeBase(null);
+          }}
+          onSave={handleSaveHomeBase}
+          homeBase={editingHomeBase}
+          tripDateRange={tripDateRange}
+        />
+      )}
     </View>
   );
 };

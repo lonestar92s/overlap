@@ -268,9 +268,20 @@ const AccountScreen = ({ navigation }) => {
   };
 
   const handleTripPress = (trip) => {
-    navigation.navigate('TripsTab', {
-      screen: 'TripOverview',
-      params: { itineraryId: trip.id || trip._id }
+    // For past trips, navigate to TripsTab first (which shows TripsList by default)
+    // then navigate to TripOverview, ensuring TripsList is in the stack
+    // This ensures proper back navigation and tab press behavior
+    navigation.navigate('TripsTab');
+    // Use requestAnimationFrame to ensure the tab switch completes
+    // before navigating to TripOverview, which will push it on top of TripsList
+    requestAnimationFrame(() => {
+      navigation.navigate('TripsTab', {
+        screen: 'TripOverview',
+        params: { 
+          itineraryId: trip.id || trip._id,
+          fromAccountTab: true 
+        }
+      });
     });
   };
 

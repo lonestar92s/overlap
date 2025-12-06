@@ -80,6 +80,12 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   
   // Ref to track if a unified search has been completed
   const hasCompletedWhoSearchRef = useRef(false);
+  
+  // Ref for ScrollView to enable programmatic scrolling
+  const scrollViewRef = useRef(null);
+  
+  // State to track Who section position for scrolling
+  const [whoSectionY, setWhoSectionY] = useState(0);
 
   // Load recent searches
   useEffect(() => {
@@ -948,6 +954,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                    style={styles.keyboardAvoidingView}
                  >
                    <ScrollView
+                     ref={scrollViewRef}
                      style={styles.scrollView}
                      contentContainerStyle={styles.scrollContent}
                      showsVerticalScrollIndicator={false}
@@ -1137,7 +1144,13 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           </View>
 
           {/* Who Card - Collapsible */}
-          <View style={styles.card}>
+          <View 
+            style={styles.card}
+            onLayout={(event) => {
+              const { y } = event.nativeEvent.layout;
+              setWhoSectionY(y);
+            }}
+          >
             <TouchableOpacity
               style={styles.cardHeader}
               onPress={() => setWhoExpanded(!whoExpanded)}
@@ -1176,6 +1189,20 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                       if (processedText.trim().length < 2) {
                         hasCompletedWhoSearchRef.current = false;
                       }
+                    }}
+                    onFocus={() => {
+                      // Scroll to input after a short delay to ensure keyboard animation completes
+                      setTimeout(() => {
+                        if (whoSectionY > 0) {
+                          scrollViewRef.current?.scrollTo({
+                            y: whoSectionY - 50, // Offset to show input and some space above
+                            animated: true,
+                          });
+                        } else {
+                          // Fallback: scroll to end if position not yet measured
+                          scrollViewRef.current?.scrollToEnd({ animated: true });
+                        }
+                      }, 100);
                     }}
                     autoCapitalize="none"
                     autoCorrect={false}

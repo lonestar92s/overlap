@@ -391,15 +391,33 @@ const MatchMapView = forwardRef(({
     // Build array of valid markers only (never include null/undefined)
     const markerArray = [];
     Array.from(venueGroupsMap.values()).forEach((venueGroup) => {
+      // CRITICAL: Validate venueGroup.key FIRST - if invalid, skip entirely
+      // This prevents creating markers with invalid keys
+      if (!venueGroup.key || typeof venueGroup.key !== 'string' || venueGroup.key.length === 0) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid venueGroup.key, skipping marker:', {
+            key: venueGroup.key,
+            venueGroup
+          });
+        }
+        return; // Skip if key is invalid - don't create marker
+      }
+      
       // Use the first match from the venue group for marker display and selection check
       const firstMatch = venueGroup.matches[0];
       if (!firstMatch || !firstMatch.fixture || !firstMatch.fixture.venue) {
-        return; // Skip invalid matches
+        if (__DEV__) {
+          console.warn('⚠️ Invalid firstMatch in venueGroup, skipping marker');
+        }
+        return; // Skip invalid matches - don't create marker
       }
       
       const venue = firstMatch.fixture.venue;
-      if (!venue.coordinates || !Array.isArray(venue.coordinates) || venue.coordinates.length !== 2) {
-        return; // Skip matches without valid coordinates
+      if (!venue || !venue.coordinates || !Array.isArray(venue.coordinates) || venue.coordinates.length !== 2) {
+        if (__DEV__) {
+          console.warn('⚠️ Invalid venue coordinates, skipping marker');
+        }
+        return; // Skip matches without valid coordinates - don't create marker
       }
       
       const [lon, lat] = venue.coordinates;
@@ -408,34 +426,35 @@ const MatchMapView = forwardRef(({
       if (typeof lon !== 'number' || typeof lat !== 'number' ||
           isNaN(lon) || isNaN(lat) ||
           lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-        return; // Skip invalid coordinates
+        if (__DEV__) {
+          console.warn('⚠️ Invalid coordinate values, skipping marker:', { lon, lat });
+        }
+        return; // Skip invalid coordinates - don't create marker
       }
       
-      const isSelected = venueGroup.matches.some(m => m.fixture.id === selectedMatchId);
+      const isSelected = venueGroup.matches.some(m => m.fixture?.id === selectedMatchId);
       const coordinate = {
         latitude: lat,  // GeoJSON: [lon, lat]
         longitude: lon, // So lat is index 1, lon is index 0
       };
       
-      // Use venue key for marker identifier - ensure it's always a valid string
-      if (!venueGroup.key || typeof venueGroup.key !== 'string') {
-        if (__DEV__) {
-          console.warn('⚠️ Invalid venueGroup.key, skipping marker:', venueGroup);
-        }
-        return; // Skip if key is invalid
-      }
-      
+      // Create markerKey - we know venueGroup.key is valid at this point
       const markerKey = `venue-${venueGroup.key}`;
       
-      // Validate markerKey is not undefined/null
-      if (!markerKey) {
+      // Final validation - markerKey should always be valid if venueGroup.key is valid
+      if (!markerKey || typeof markerKey !== 'string' || markerKey.length === 0) {
         if (__DEV__) {
-          console.warn('⚠️ Invalid markerKey, skipping marker');
+          console.warn('⚠️ Invalid markerKey after construction, skipping marker');
         }
-        return;
+        return; // Skip if markerKey is somehow invalid - don't create marker
       }
       
-      // Only push valid markers to array
+      // All validations passed - create marker
+      // At this point, we know:
+      // - venueGroup.key is a valid string
+      // - markerKey is valid
+      // - coordinate is valid
+      // - firstMatch is valid
       const markerComponent = (
         <Marker
           key={markerKey}
@@ -447,28 +466,12 @@ const MatchMapView = forwardRef(({
         />
       );
       
-      // Final safety check - ensure component is not null/undefined
-      if (!markerComponent) {
-        if (__DEV__) {
-          console.warn('⚠️ Marker component is null/undefined, skipping');
-        }
-        return;
-      }
-      
+      // Marker component is always valid at this point (React.createElement never returns null for valid inputs)
       markerArray.push(markerComponent);
     });
     
-    // Final safety filter - remove any null/undefined that might have slipped through
-    const filteredMarkers = markerArray.filter(marker => marker != null);
-    
-    if (__DEV__ && filteredMarkers.length !== markerArray.length) {
-      console.warn('⚠️ Filtered out null/undefined markers:', {
-        original: markerArray.length,
-        filtered: filteredMarkers.length
-      });
-    }
-    
-    return filteredMarkers; // Always return an array, never null
+    // Return array directly - if we did our job, it contains only valid markers
+    return markerArray;
   }, [matches, selectedMatchId, handleMarkerPress, getVenueGroupKey]);
 
   // Render recommended match markers with memoization (yellow pins)
@@ -541,7 +544,12 @@ const MatchMapView = forwardRef(({
         return;
       }
       
-      // Only push valid markers to array
+      // All validations passed - create marker
+      // At this point, we know:
+      // - matchId is valid
+      // - markerKey is valid
+      // - coordinate is valid
+      // - match is valid
       const markerComponent = (
         <Marker
           key={markerKey}
@@ -553,28 +561,12 @@ const MatchMapView = forwardRef(({
         />
       );
       
-      // Final safety check - ensure component is not null/undefined
-      if (!markerComponent) {
-        if (__DEV__) {
-          console.warn('⚠️ Recommended marker component is null/undefined, skipping');
-        }
-        return;
-      }
-      
+      // Marker component is always valid at this point (React.createElement never returns null for valid inputs)
       recommendedMarkerArray.push(markerComponent);
     });
     
-    // Final safety filter - remove any null/undefined that might have slipped through
-    const filteredRecommended = recommendedMarkerArray.filter(marker => marker != null);
-    
-    if (__DEV__ && filteredRecommended.length !== recommendedMarkerArray.length) {
-      console.warn('⚠️ Filtered out null/undefined recommended markers:', {
-        original: recommendedMarkerArray.length,
-        filtered: filteredRecommended.length
-      });
-    }
-    
-    return filteredRecommended; // Always return an array, never null
+    // Return array directly - if we did our job, it contains only valid markers
+    return recommendedMarkerArray;
   }, [recommendedMatches, handleRecommendedMatchPress]);
 
   // Render home base markers with memoization
@@ -670,7 +662,12 @@ const MatchMapView = forwardRef(({
         return;
       }
       
-      // Only push valid markers to array
+      // All validations passed - create marker
+      // At this point, we know:
+      // - homeBaseId is valid
+      // - markerKey is valid
+      // - coordinate is valid
+      // - homeBase is valid
       const markerComponent = (
         <Marker
           key={markerKey}
@@ -682,102 +679,16 @@ const MatchMapView = forwardRef(({
         />
       );
       
-      // Final safety check - ensure component is not null/undefined
-      if (!markerComponent) {
-        if (__DEV__) {
-          console.warn('⚠️ Home base marker component is null/undefined, skipping');
-        }
-        return;
-      }
-      
+      // Marker component is always valid at this point (React.createElement never returns null for valid inputs)
       homeBaseMarkerArray.push(markerComponent);
     });
     
-    // Final safety filter - remove any null/undefined that might have slipped through
-    const filteredHomeBases = homeBaseMarkerArray.filter(marker => marker != null);
-    
-    if (__DEV__ && filteredHomeBases.length !== homeBaseMarkerArray.length) {
-      console.warn('⚠️ Filtered out null/undefined home base markers:', {
-        original: homeBaseMarkerArray.length,
-        filtered: filteredHomeBases.length
-      });
-    }
-    
-    return filteredHomeBases; // Always return an array, never null
+    // Return array directly - if we did our job, it contains only valid markers
+    return homeBaseMarkerArray;
   }, [homeBases, handleHomeBasePress]);
 
-  // Final safety filter: Create safe arrays right before rendering to prevent null children
-  // This is critical to prevent crashes when React Native Maps receives null markers during re-renders
-  // We need to be extremely strict - filter out ANY falsy values and ensure only valid React elements
-  const safeMarkers = useMemo(() => {
-    try {
-      if (!markers || !Array.isArray(markers)) return [];
-      const filtered = markers.filter(marker => {
-        // Strict check: must be truthy AND have a valid React element structure
-        if (!marker) return false;
-        if (marker === null || marker === undefined) return false;
-        // Check if it's a valid React element (has type property)
-        if (typeof marker === 'object' && marker.type) return true;
-        return false;
-      });
-      // Final safety check - ensure no null/undefined slipped through
-      return filtered.filter(m => m != null && m !== undefined);
-    } catch (error) {
-      if (__DEV__) {
-        console.error('⚠️ [MapView] Error creating safeMarkers:', error);
-      }
-      return [];
-    }
-  }, [markers]);
-
-  const safeRecommendedMarkers = useMemo(() => {
-    try {
-      if (!recommendedMarkers || !Array.isArray(recommendedMarkers)) return [];
-      const filtered = recommendedMarkers.filter(marker => {
-        if (!marker) return false;
-        if (marker === null || marker === undefined) return false;
-        if (typeof marker === 'object' && marker.type) return true;
-        return false;
-      });
-      return filtered.filter(m => m != null && m !== undefined);
-    } catch (error) {
-      if (__DEV__) {
-        console.error('⚠️ [MapView] Error creating safeRecommendedMarkers:', error);
-      }
-      return [];
-    }
-  }, [recommendedMarkers]);
-
-  const safeHomeBaseMarkers = useMemo(() => {
-    try {
-      if (!homeBaseMarkers || !Array.isArray(homeBaseMarkers)) return [];
-      const filtered = homeBaseMarkers.filter(marker => {
-        if (!marker) return false;
-        if (marker === null || marker === undefined) return false;
-        if (typeof marker === 'object' && marker.type) return true;
-        return false;
-      });
-      return filtered.filter(m => m != null && m !== undefined);
-    } catch (error) {
-      if (__DEV__) {
-        console.error('⚠️ [MapView] Error creating safeHomeBaseMarkers:', error);
-      }
-      return [];
-    }
-  }, [homeBaseMarkers]);
-
-  // Log if we filtered out any null markers (for debugging)
-  if (__DEV__) {
-    if (safeMarkers.length !== markers.length || 
-        safeRecommendedMarkers.length !== recommendedMarkers.length ||
-        safeHomeBaseMarkers.length !== homeBaseMarkers.length) {
-      console.warn('⚠️ [MapView] Filtered out null/undefined markers before render:', {
-        markers: { original: markers.length, safe: safeMarkers.length },
-        recommended: { original: recommendedMarkers.length, safe: safeRecommendedMarkers.length },
-        homeBases: { original: homeBaseMarkers.length, safe: safeHomeBaseMarkers.length }
-      });
-    }
-  }
+  // Marker arrays are guaranteed to contain only valid Marker components
+  // No need for additional filtering - if validation is done correctly, arrays are clean
 
   return (
     <View style={[styles.container, style]}>
@@ -797,9 +708,9 @@ const MatchMapView = forwardRef(({
         mapType="standard"
         moveOnMarkerPress={false} // Prevent map movement when pressing markers
       >
-        {Array.isArray(safeMarkers) && safeMarkers.length > 0 ? safeMarkers : null}
-        {Array.isArray(safeRecommendedMarkers) && safeRecommendedMarkers.length > 0 ? safeRecommendedMarkers : null}
-        {Array.isArray(safeHomeBaseMarkers) && safeHomeBaseMarkers.length > 0 ? safeHomeBaseMarkers : null}
+        {markers}
+        {recommendedMarkers}
+        {homeBaseMarkers}
       </MapView>
       
       {/* Custom Location Button */}

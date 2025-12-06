@@ -49,14 +49,16 @@ import { useRecommendations } from '../hooks/useRecommendations';
 const TripOverviewScreen = ({ navigation, route }) => {
   const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary, updateItinerary } = useItineraries();
   const itineraryId = route?.params?.itineraryId;
+  const fromAccountTab = route?.params?.fromAccountTab === true;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [planningModalVisible, setPlanningModalVisible] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   
-  // Use recommendations hook
+  // Use recommendations hook (disabled for past trips)
   const tripId = itinerary?.id || itinerary?._id;
+  const isPastTripForHook = itinerary?.isCompleted === true;
   const { 
     recommendations, 
     loading: recommendationsLoading, 
@@ -64,7 +66,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
     refetch: refetchRecommendations,
     dismiss: dismissRecommendation,
     addToTrip: addRecommendationToTrip
-  } = useRecommendations(tripId, { autoFetch: !!tripId });
+  } = useRecommendations(tripId, { autoFetch: !!tripId && !isPastTripForHook });
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -89,6 +91,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const descriptionInputRef = useRef(null);
   const notesSectionRef = useRef(null);
   const [notesSectionY, setNotesSectionY] = useState(0);
+
+  // Detect if this is a past trip (completed trip)
+  const isPastTrip = itinerary?.isCompleted === true;
 
   useEffect(() => {
     if (itineraryId) {
@@ -525,6 +530,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
   };
 
   const handleMatchPress = (match) => {
+    // Don't allow match selection for past trips
+    if (isPastTrip) return;
     setSelectedMatch(match);
     setPlanningModalVisible(true);
   };
@@ -678,9 +685,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
       <View style={styles.matchCard}>
         <MatchCard
           match={transformedMatch}
-          onPress={() => handleMatchPress(item)}
+          onPress={isPastTrip ? undefined : () => handleMatchPress(item)}
           variant="default"
-          showHeart={true}
+          showHeart={!isPastTrip}
           showAttendancePrompt={true}
           showResults={shouldShowResults}
           style={styles.matchCardStyle}
@@ -892,7 +899,14 @@ const TripOverviewScreen = ({ navigation, route }) => {
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.backButtonIcon}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            // For past trips navigated from AccountTab, go back to AccountTab
+            if (fromAccountTab && isPastTrip) {
+              navigation.navigate('AccountTab');
+            } else {
+              navigation.goBack();
+            }
+          }}
         >
           <MaterialIcons name="arrow-back" size={16} color={colors.text.primary} />
         </TouchableOpacity>
@@ -925,55 +939,62 @@ const TripOverviewScreen = ({ navigation, route }) => {
           <View style={styles.tripInfoHeader}>
             <Text style={styles.tripInfoTitle}>{itinerary.name}</Text>
             {formatDateRange() && (
-              <TouchableOpacity
-                style={styles.dateRangeContainer}
-                onPress={() => {
-                  // Initialize edit dates from current trip dates or calculated dates
-                  if (itinerary?.startDate && itinerary?.endDate) {
-                    const start = new Date(itinerary.startDate).toISOString().split('T')[0];
-                    const end = new Date(itinerary.endDate).toISOString().split('T')[0];
-                    setEditStartDate(start);
-                    setEditEndDate(end);
-                    const dateRange = createDateRange(start, end);
-                    const dates = {};
-                    dateRange.forEach((dateStr, index) => {
-                      dates[dateStr] = {
-                        selected: true,
-                        startingDay: index === 0,
-                        endingDay: index === dateRange.length - 1,
-                      };
-                    });
-                    setEditSelectedDates(dates);
-                  } else if (itinerary?.matches && itinerary.matches.length > 0) {
-                    const dates = itinerary.matches
-                      .map(m => new Date(m.date))
-                      .filter(d => !isNaN(d.getTime()))
-                      .sort((a, b) => a - b);
-                    if (dates.length > 0) {
-                      const start = dates[0].toISOString().split('T')[0];
-                      const end = dates[dates.length - 1].toISOString().split('T')[0];
+              isPastTrip ? (
+                <View style={styles.dateRangeContainer}>
+                  <MaterialIcons name="calendar-today" size={21} color="rgba(0, 0, 0, 0.5)" />
+                  <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.dateRangeContainer}
+                  onPress={() => {
+                    // Initialize edit dates from current trip dates or calculated dates
+                    if (itinerary?.startDate && itinerary?.endDate) {
+                      const start = new Date(itinerary.startDate).toISOString().split('T')[0];
+                      const end = new Date(itinerary.endDate).toISOString().split('T')[0];
                       setEditStartDate(start);
                       setEditEndDate(end);
                       const dateRange = createDateRange(start, end);
-                      const datesObj = {};
+                      const dates = {};
                       dateRange.forEach((dateStr, index) => {
-                        datesObj[dateStr] = {
+                        dates[dateStr] = {
                           selected: true,
                           startingDay: index === 0,
                           endingDay: index === dateRange.length - 1,
                         };
                       });
-                      setEditSelectedDates(datesObj);
+                      setEditSelectedDates(dates);
+                    } else if (itinerary?.matches && itinerary.matches.length > 0) {
+                      const dates = itinerary.matches
+                        .map(m => new Date(m.date))
+                        .filter(d => !isNaN(d.getTime()))
+                        .sort((a, b) => a - b);
+                      if (dates.length > 0) {
+                        const start = dates[0].toISOString().split('T')[0];
+                        const end = dates[dates.length - 1].toISOString().split('T')[0];
+                        setEditStartDate(start);
+                        setEditEndDate(end);
+                        const dateRange = createDateRange(start, end);
+                        const datesObj = {};
+                        dateRange.forEach((dateStr, index) => {
+                          datesObj[dateStr] = {
+                            selected: true,
+                            startingDay: index === 0,
+                            endingDay: index === dateRange.length - 1,
+                          };
+                        });
+                        setEditSelectedDates(datesObj);
+                      }
                     }
-                  }
-                  setEditDatesModalVisible(true);
-                }}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="calendar-today" size={21} color="rgba(0, 0, 0, 0.5)" />
-                <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
-                <MaterialIcons name="edit" size={16} color="rgba(0, 0, 0, 0.3)" style={styles.editIcon} />
-              </TouchableOpacity>
+                    setEditDatesModalVisible(true);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="calendar-today" size={21} color="rgba(0, 0, 0, 0.5)" />
+                  <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
+                  <MaterialIcons name="edit" size={16} color="rgba(0, 0, 0, 0.3)" style={styles.editIcon} />
+                </TouchableOpacity>
+              )
             )}
           </View>
           
@@ -990,8 +1011,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
           
-          {/* Description - Editable inline */}
-          {isEditingDescription ? (
+          {/* Description - Editable inline (read-only for past trips) */}
+          {isPastTrip ? (
+            <View>
+              {descriptionText ? (
+                <Text style={styles.tripDescription}>{descriptionText}</Text>
+              ) : (
+                <Text style={styles.descriptionPlaceholder}>No description</Text>
+              )}
+            </View>
+          ) : isEditingDescription ? (
             <View>
               <TextInput
                 ref={descriptionInputRef}
@@ -1084,51 +1113,53 @@ const TripOverviewScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Recommendations Section - Collapsible */}
-        <View style={styles.sectionCard}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => setRecommendationsExpanded(!recommendationsExpanded)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sectionTitle}>Recommended Matches</Text>
-            <MaterialIcons
-              name={recommendationsExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-              size={24}
-              color={colors.text.primary}
-            />
-          </TouchableOpacity>
-          
-          {recommendationsExpanded && (
-            <View style={styles.recommendationsContent}>
-              {recommendationsLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={colors.secondary} />
-                  <Text style={styles.loadingText}>Loading recommendations...</Text>
-                </View>
-              ) : recommendationsError ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{recommendationsError}</Text>
-                  <TouchableOpacity
-                    style={styles.retryButton}
-                    onPress={() => refetchRecommendations(true)}
-                  >
-                    <Text style={styles.retryButtonText}>Retry</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : recommendations.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No recommendations available</Text>
-                </View>
-              ) : (
-                <RecommendationsCarousel
-                  recommendations={recommendations}
-                  renderRecommendationItem={renderRecommendationItem}
-                />
-              )}
-            </View>
-          )}
-        </View>
+        {/* Recommendations Section - Collapsible (hidden for past trips) */}
+        {!isPastTrip && (
+          <View style={styles.sectionCard}>
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={() => setRecommendationsExpanded(!recommendationsExpanded)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sectionTitle}>Recommended Matches</Text>
+              <MaterialIcons
+                name={recommendationsExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                size={24}
+                color={colors.text.primary}
+              />
+            </TouchableOpacity>
+            
+            {recommendationsExpanded && (
+              <View style={styles.recommendationsContent}>
+                {recommendationsLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={colors.secondary} />
+                    <Text style={styles.loadingText}>Loading recommendations...</Text>
+                  </View>
+                ) : recommendationsError ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{recommendationsError}</Text>
+                    <TouchableOpacity
+                      style={styles.retryButton}
+                      onPress={() => refetchRecommendations(true)}
+                    >
+                      <Text style={styles.retryButtonText}>Retry</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : recommendations.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No recommendations available</Text>
+                  </View>
+                ) : (
+                  <RecommendationsCarousel
+                    recommendations={recommendations}
+                    renderRecommendationItem={renderRecommendationItem}
+                  />
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Notes Section - Collapsible */}
         <View 
@@ -1171,7 +1202,15 @@ const TripOverviewScreen = ({ navigation, route }) => {
           
           {notesExpanded && (
             <View style={styles.notesContent}>
-              {isEditingNotes ? (
+              {isPastTrip ? (
+                <View>
+                  {notesText ? (
+                    <Text style={styles.notesText}>{notesText}</Text>
+                  ) : (
+                    <Text style={styles.notesPlaceholder}>No notes</Text>
+                  )}
+                </View>
+              ) : isEditingNotes ? (
                 <View>
                   <TextInput
                     ref={notesInputRef}
@@ -1241,6 +1280,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         <HomeBaseSection
           tripId={itineraryId}
           homeBases={itinerary?.homeBases || []}
+          isPastTrip={isPastTrip}
           onHomeBasesUpdated={async () => {
             // Refresh itinerary to get updated home bases
             try {
@@ -1263,8 +1303,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
           }
         />
 
-        {/* Flights Section - Below Home Bases */}
-        <View style={styles.sectionCard}>
+        {/* Flights Section - Below Home Bases (hidden for past trips) */}
+        {!isPastTrip && (
+          <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Flights</Text>
             <View style={styles.sectionHeaderRight}>
@@ -1391,6 +1432,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
             </View>
           )}
         </View>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -1493,15 +1535,17 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
 
-      {/* Match Planning Modal */}
-      <MatchPlanningModal
-        visible={planningModalVisible}
-        onClose={handleClosePlanningModal}
-        match={selectedMatch}
-        tripId={itineraryId}
-        homeBases={itinerary?.homeBases || []}
-        onPlanningUpdated={handlePlanningUpdated}
-      />
+      {/* Match Planning Modal (hidden for past trips) */}
+      {!isPastTrip && (
+        <MatchPlanningModal
+          visible={planningModalVisible}
+          onClose={handleClosePlanningModal}
+          match={selectedMatch}
+          tripId={itineraryId}
+          homeBases={itinerary?.homeBases || []}
+          onPlanningUpdated={handlePlanningUpdated}
+        />
+      )}
 
       {/* Edit Dates Modal */}
       <Modal
