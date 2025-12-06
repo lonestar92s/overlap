@@ -178,10 +178,29 @@ const TripOverviewScreen = ({ navigation, route }) => {
       }
       
       // Only refetch if we have an itinerary loaded and we're coming back to the screen
+      // But don't force refresh if trip has stored recommendations - use them instead
       if (itinerary?.id || itinerary?._id) {
-        refetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
+        const hasStoredRecommendations = itinerary?.recommendationsVersion === 'v2' && 
+                                         Array.isArray(itinerary?.recommendations);
+        
+        if (hasStoredRecommendations) {
+          // Trip has stored recommendations - just refresh the trip data to get latest recommendations
+          // The useRecommendations hook will pick them up automatically when itinerary updates
+          console.log('📥 Trip has stored recommendations - refreshing trip data instead of forcing recommendation refresh');
+          // Refresh itinerary to get latest recommendations from backend
+          refreshItinerary(itineraryId).then(updatedItinerary => {
+            if (updatedItinerary) {
+              setItinerary(updatedItinerary);
+            }
+          }).catch(err => {
+            console.error('Error refreshing itinerary:', err);
+          });
+        } else {
+          // No stored recommendations - fetch from API
+          refetchRecommendations(false); // Don't force refresh, just fetch normally
+        }
       }
-    }, [itinerary])
+    }, [itinerary, itineraryId, refreshItinerary, refetchRecommendations])
   );
 
   // Refresh itinerary after flight is added

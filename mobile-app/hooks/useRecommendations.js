@@ -25,13 +25,13 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
   // Handle both old signature (tripId, options) and new signature (tripId, trip, options)
   let trip = null;
   let finalOptions = {};
-  if (tripOrOptions && typeof tripOrOptions === 'object' && !tripOrOptions.autoFetch && !tripOrOptions.hasOwnProperty('autoFetch')) {
+  if (tripOrOptions && typeof tripOrOptions === 'object' && tripOrOptions !== null && !tripOrOptions.autoFetch && !tripOrOptions.hasOwnProperty('autoFetch')) {
     // Second param is trip object
     trip = tripOrOptions;
-    finalOptions = options;
+    finalOptions = options || {};
   } else {
     // Second param is options (backward compatibility)
-    finalOptions = tripOrOptions;
+    finalOptions = tripOrOptions && typeof tripOrOptions === 'object' && tripOrOptions !== null ? tripOrOptions : {};
   }
   
   const { autoFetch = true } = finalOptions;
@@ -184,6 +184,13 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
         if (data.success) {
           // Deduplicate recommendations
           const uniqueRecommendations = deduplicateRecommendations(data.recommendations || []);
+          
+          // Log if recommendations came from storage
+          if (data.fromStorage) {
+            console.log(`📥 API returned ${uniqueRecommendations.length} stored recommendations from trip document`);
+          } else {
+            console.log(`📥 API returned ${uniqueRecommendations.length} newly generated recommendations`);
+          }
           
           // Track viewed recommendations (only if not from storage)
           await trackViewedRecommendations(uniqueRecommendations, tripId, data.fromStorage || false);
@@ -346,9 +353,11 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
       // If trip has stored recommendations, use them immediately (no loading state)
       const hasStoredRecommendations = trip && 
                                         trip.recommendationsVersion === 'v2' && 
-                                        Array.isArray(trip.recommendations);
+                                        Array.isArray(trip.recommendations) &&
+                                        trip.recommendations.length > 0;
       
       if (hasStoredRecommendations) {
+        console.log(`📥 Using ${trip.recommendations.length} stored recommendations from trip document`);
         const uniqueRecommendations = deduplicateRecommendations(trip.recommendations || []);
         if (isMountedRef.current) {
           setRecommendations(uniqueRecommendations);
@@ -359,8 +368,16 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
         trackViewedRecommendations(uniqueRecommendations, tripId, false).catch(err => {
           console.error('Error tracking viewed recommendations:', err);
         });
+      } else if (trip && trip.recommendationsVersion === 'v2' && Array.isArray(trip.recommendations) && trip.recommendations.length === 0) {
+        // Trip has v2 but empty recommendations - this is valid (e.g., all days have matches)
+        console.log('📥 Trip has empty stored recommendations (v2) - this is expected');
+        if (isMountedRef.current) {
+          setRecommendations([]);
+          setError(null);
+          setLoading(false);
+        }
       } else {
-        // Fallback to API fetch
+        // Fallback to API fetch (trip not loaded yet or no stored recommendations)
         fetchRecommendations(false);
       }
     }

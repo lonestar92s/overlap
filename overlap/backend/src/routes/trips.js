@@ -1340,25 +1340,69 @@ router.get('/:id/travel-times', auth, async (req, res) => {
             }
 
             // Calculate travel time using Google Maps Directions API
+            // Calculate both driving and transit in parallel
             try {
                 const origin = `${selectedHomeBase.coordinates.lat},${selectedHomeBase.coordinates.lng}`;
                 const destination = `${venueCoords.lat},${venueCoords.lng}`;
 
-                const response = await axios.get(
-                    'https://maps.googleapis.com/maps/api/directions/json',
-                    {
-                        params: {
-                            origin,
-                            destination,
-                            mode: 'driving',
-                            key: googleApiKey
-                        },
-                        ...googleApiConfig
-                    }
-                );
+                // Prepare departure time for transit (use match date/time, fallback to 9 AM if too far in future)
+                let departureTime = null;
+                const matchDateTime = new Date(match.date);
+                const now = new Date();
+                const sixMonthsFromNow = new Date(now.getTime() + (6 * 30 * 24 * 60 * 60 * 1000));
+                
+                if (matchDateTime <= sixMonthsFromNow && matchDateTime >= now) {
+                    // Use match date/time if within 6 months
+                    departureTime = Math.floor(matchDateTime.getTime() / 1000);
+                } else if (matchDateTime > sixMonthsFromNow) {
+                    // If too far in future, use 9 AM on match date
+                    const defaultTime = new Date(matchDateTime);
+                    defaultTime.setHours(9, 0, 0, 0);
+                    departureTime = Math.floor(defaultTime.getTime() / 1000);
+                }
 
-                if (response.data.status === 'OK' && response.data.routes && response.data.routes.length > 0) {
-                    const route = response.data.routes[0];
+                // Make parallel API calls for driving and transit
+                const [drivingResponse, transitResponse] = await Promise.allSettled([
+                    // Driving request
+                    axios.get(
+                        'https://maps.googleapis.com/maps/api/directions/json',
+                        {
+                            params: {
+                                origin,
+                                destination,
+                                mode: 'driving',
+                                key: googleApiKey
+                            },
+                            ...googleApiConfig
+                        }
+                    ),
+                    // Transit request
+                    axios.get(
+                        'https://maps.googleapis.com/maps/api/directions/json',
+                        {
+                            params: {
+                                origin,
+                                destination,
+                                mode: 'transit',
+                                transit_mode: 'train|bus|subway|tram',
+                                ...(departureTime && { departure_time: departureTime }),
+                                key: googleApiKey
+                            },
+                            ...googleApiConfig
+                        }
+                    )
+                ]);
+
+                const result = {
+                    homeBaseId: String(selectedHomeBase._id)
+                };
+
+                // Process driving response
+                if (drivingResponse.status === 'fulfilled' && 
+                    drivingResponse.value.data.status === 'OK' && 
+                    drivingResponse.value.data.routes && 
+                    drivingResponse.value.data.routes.length > 0) {
+                    const route = drivingResponse.value.data.routes[0];
                     const leg = route.legs[0];
                     
                     // Convert duration from seconds to minutes
@@ -1366,17 +1410,101 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     // Convert distance from meters to miles
                     const distanceMiles = (leg.distance.value / 1609.34).toFixed(1);
 
-                    travelTimes[match.matchId] = {
+                    result.driving = {
                         duration: durationMinutes, // minutes
                         distance: parseFloat(distanceMiles), // miles
-                        homeBaseId: String(selectedHomeBase._id),
                         durationText: leg.duration.text,
                         distanceText: leg.distance.text
                     };
+                }
+
+                // Process transit response
+                const transitOptionsMap = new Map(); // Map to deduplicate by type and keep fastest
+                if (transitResponse.status === 'fulfilled' && 
+                    transitResponse.value.data.status === 'OK' && 
+                    transitResponse.value.data.routes && 
+                    transitResponse.value.data.routes.length > 0) {
+                    
+                    // Process each route to extract transit types
+                    for (const route of transitResponse.value.data.routes) {
+                        const leg = route.legs[0];
+                        const transitTypes = new Set();
+                        
+                        // Extract transit types from route steps
+                        if (leg.steps) {
+                            for (const step of leg.steps) {
+                                if (step.travel_mode === 'TRANSIT' && step.transit_details?.line?.vehicle?.type) {
+                                    const vehicleType = step.transit_details.line.vehicle.type.toLowerCase();
+                                    // Map Google Maps vehicle types to our types
+                                    if (vehicleType === 'train' || vehicleType === 'heavy_rail' || vehicleType === 'commuter_train') {
+                                        transitTypes.add('train');
+                                    } else if (vehicleType === 'subway' || vehicleType === 'metro' || vehicleType === 'light_rail') {
+                                        transitTypes.add('subway');
+                                    } else if (vehicleType === 'bus') {
+                                        transitTypes.add('bus');
+                                    } else if (vehicleType === 'tram') {
+                                        transitTypes.add('tram');
+                                    }
+                                }
+                            }
+                        }
+
+                        // If no specific transit types found, check if it's a transit route
+                        if (transitTypes.size === 0 && leg.steps && leg.steps.some(s => s.travel_mode === 'TRANSIT')) {
+                            // Default to 'train' if transit route but no specific type
+                            transitTypes.add('train');
+                        }
+
+                        // Create transit option for each unique type
+                        if (transitTypes.size > 0) {
+                            const durationMinutes = Math.round(leg.duration.value / 60);
+                            const distanceMiles = (leg.distance.value / 1609.34).toFixed(1);
+                            
+                            // For routes with multiple transit types, create entry for each type
+                            // but only keep the fastest option for each type
+                            for (const transitType of transitTypes) {
+                                const existing = transitOptionsMap.get(transitType);
+                                if (!existing || durationMinutes < existing.duration) {
+                                    transitOptionsMap.set(transitType, {
+                                        type: transitType,
+                                        duration: durationMinutes,
+                                        distance: parseFloat(distanceMiles),
+                                        durationText: leg.duration.text,
+                                        distanceText: leg.distance.text,
+                                        available: true,
+                                        transitTypes: Array.from(transitTypes) // Store all types for reference
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // Convert map to array, sort by duration (fastest first), and limit to top 3
+                    const transitOptions = Array.from(transitOptionsMap.values());
+                    transitOptions.sort((a, b) => a.duration - b.duration);
+                    result.transit = transitOptions.slice(0, 3);
                 } else {
-                    // API returned error or no route found
-                    console.warn(`Directions API error for match ${match.matchId}:`, response.data.status);
-                    travelTimes[match.matchId] = null;
+                    // No transit route available
+                    result.transit = [];
+                }
+
+                // Only set result if we have at least driving data (for backward compatibility)
+                if (result.driving) {
+                    travelTimes[match.matchId] = result;
+                } else {
+                    // Fallback to legacy format if only transit is available
+                    if (result.transit && result.transit.length > 0) {
+                        const fastestTransit = result.transit[0];
+                        travelTimes[match.matchId] = {
+                            duration: fastestTransit.duration,
+                            distance: fastestTransit.distance,
+                            homeBaseId: result.homeBaseId,
+                            durationText: fastestTransit.durationText,
+                            distanceText: fastestTransit.distanceText
+                        };
+                    } else {
+                        travelTimes[match.matchId] = null;
+                    }
                 }
             } catch (error) {
                 console.error(`Error calculating travel time for match ${match.matchId}:`, error.message);
