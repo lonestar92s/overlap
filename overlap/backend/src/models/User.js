@@ -432,6 +432,47 @@ const userSchema = new mongoose.Schema({
                 default: Date.now
             }
         }],
+        recommendations: [{
+            matchId: {
+                type: String,
+                required: true
+            },
+            recommendedForDate: {
+                type: String, // ISO date string (YYYY-MM-DD)
+                required: true
+            },
+            match: {
+                type: mongoose.Schema.Types.Mixed,
+                required: true
+            },
+            reason: {
+                type: String,
+                default: ''
+            },
+            proximity: {
+                type: String,
+                default: ''
+            },
+            score: {
+                type: Number,
+                default: 0
+            },
+            alternativeDates: [{
+                type: String // ISO date strings
+            }]
+        }],
+        recommendationsVersion: {
+            type: String,
+            default: null // 'v2' when recommendations are stored, null for legacy
+        },
+        recommendationsGeneratedAt: {
+            type: Date,
+            default: null
+        },
+        recommendationsError: {
+            type: String,
+            default: null // Store error message if regeneration fails
+        },
         createdAt: {
             type: Date,
             default: Date.now

@@ -58,32 +58,59 @@ router.get('/trips/:tripId/recommendations', authenticateToken, async (req, res)
         }
 
         console.log(`✅ Trip found: ${trip.name || tripId}, has ${trip.matches?.length || 0} matches`);
-        // Generate recommendations (service will validate trip exists)
-        const result = await recommendationService.getRecommendationsForTrip(
-            tripId,
-            user,
-            trip,
-            forceRefresh
-        );
         
-        console.log(`📤 Returning ${result.recommendations?.length || 0} recommendations for trip ${tripId}`);
-
-        // Set cache headers for client-side caching (shorter for force refresh)
-        const cacheMaxAge = forceRefresh ? 0 : 3600; // No cache for force refresh, 1 hour otherwise
-        res.set({
-            'Cache-Control': `private, max-age=${cacheMaxAge}`, // Cache for 1 hour on client (or 0 for force refresh)
-            'ETag': `"${tripId}-${user._id}-${Date.now()}"`, // Simple ETag for cache validation
-            'Last-Modified': new Date().toUTCString()
-        });
-
-        res.json({
-            success: true,
-            recommendations: result.recommendations || [], // Handle both formats for backward compatibility
-            tripId,
-            generatedAt: new Date().toISOString(),
-            cached: result.cached || false,
-            diagnostics: result.diagnostics || null
-        });
+        // Check if trip has stored recommendations (v2)
+        const hasStoredRecommendations = trip.recommendationsVersion === 'v2' && 
+                                         trip.recommendations && 
+                                         Array.isArray(trip.recommendations);
+        
+        if (hasStoredRecommendations && !forceRefresh) {
+            // Use stored recommendations
+            console.log(`📤 Returning ${trip.recommendations.length} stored recommendations for trip ${tripId}`);
+            res.json({
+                success: true,
+                recommendations: trip.recommendations || [],
+                tripId,
+                generatedAt: trip.recommendationsGeneratedAt?.toISOString() || new Date().toISOString(),
+                cached: false, // Not from cache, but from database
+                fromStorage: true,
+                diagnostics: trip.recommendationsError ? {
+                    reason: 'regeneration_error',
+                    message: trip.recommendationsError
+                } : null
+            });
+        } else {
+            // Fallback: Generate on-demand (for migration period or force refresh)
+            console.log(`🔄 Generating recommendations on-demand for trip ${tripId}${hasStoredRecommendations ? ' (force refresh)' : ' (no stored recommendations)'}`);
+            const result = await recommendationService.getRecommendationsForTrip(
+                tripId,
+                user,
+                trip,
+                forceRefresh
+            );
+            
+            // If we generated recommendations and trip doesn't have v2, store them
+            if (!hasStoredRecommendations && result.recommendations) {
+                try {
+                    await recommendationService.regenerateTripRecommendations(tripId, user, trip, true);
+                    console.log(`✅ Stored generated recommendations for trip ${tripId}`);
+                } catch (storeError) {
+                    console.error(`❌ Failed to store recommendations for trip ${tripId}:`, storeError);
+                    // Continue - return recommendations anyway
+                }
+            }
+            
+            console.log(`📤 Returning ${result.recommendations?.length || 0} recommendations for trip ${tripId}`);
+            res.json({
+                success: true,
+                recommendations: result.recommendations || [],
+                tripId,
+                generatedAt: new Date().toISOString(),
+                cached: result.cached || false,
+                fromStorage: false,
+                diagnostics: result.diagnostics || null
+            });
+        }
 
     } catch (error) {
         console.error('Error getting recommendations:', error);
@@ -152,7 +179,21 @@ router.post('/:matchId/track', authenticateToken, async (req, res) => {
         user.recommendationHistory.push(recommendationEntry);
         await user.save();
 
-        // Invalidate cache when user interacts with recommendations
+        // Regenerate recommendations when user interacts (dismissed/saved affects recommendations)
+        if (tripId && (action === 'dismissed' || action === 'saved')) {
+            try {
+                const trip = user.trips.id(tripId);
+                if (trip) {
+                    await recommendationService.regenerateTripRecommendations(tripId, user, trip, true);
+                    console.log(`✅ Regenerated recommendations for trip ${tripId} after ${action} action`);
+                }
+            } catch (regenError) {
+                console.error(`❌ Failed to regenerate recommendations for trip ${tripId}:`, regenError);
+                // Don't fail the request if regeneration fails - interaction was still tracked
+            }
+        }
+
+        // Legacy cache invalidation (for backward compatibility during migration)
         if (tripId) {
             recommendationService.invalidateTripCache(tripId);
         }

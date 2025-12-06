@@ -5,6 +5,7 @@ const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
+const recommendationService = require('../services/recommendationService');
 
 const router = express.Router();
 
@@ -104,10 +105,37 @@ router.put('/', auth, async (req, res) => {
 
         await req.user.save();
 
-        // Invalidate recommended matches cache if recommendation-affecting preferences changed
+        // Regenerate recommendations for all trips if recommendation-affecting preferences changed
         if (shouldInvalidateCache) {
+            // Invalidate legacy cache
             const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
             console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id}`);
+            
+            // Regenerate recommendations for all trips (async, non-blocking)
+            if (req.user.trips && req.user.trips.length > 0) {
+                // Run in background - don't await to avoid blocking the response
+                (async () => {
+                    try {
+                        console.log(`🔄 Regenerating recommendations for ${req.user.trips.length} trips due to preference changes`);
+                        for (const trip of req.user.trips) {
+                            try {
+                                await recommendationService.regenerateTripRecommendations(
+                                    trip._id.toString(),
+                                    req.user,
+                                    trip,
+                                    true
+                                );
+                            } catch (tripError) {
+                                console.error(`❌ Failed to regenerate recommendations for trip ${trip._id}:`, tripError);
+                                // Continue with other trips
+                            }
+                        }
+                        console.log(`✅ Completed regenerating recommendations for all trips`);
+                    } catch (error) {
+                        console.error(`❌ Error during background recommendation regeneration:`, error);
+                    }
+                })();
+            }
         }
 
         res.json({ preferences: req.user.preferences });

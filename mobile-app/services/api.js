@@ -1957,10 +1957,12 @@ class ApiService {
   
   // Get cached recommendations synchronously (for immediate display)
   getCachedRecommendations(tripId) {
+    // Legacy cache method - kept for backward compatibility during migration
+    // Recommendations are now stored in trip.recommendations in database
     const cacheKey = `recommendations:${tripId}`;
     const cached = recommendationCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-      console.log('⚡ API Service - Returning cached recommendations (sync)');
+      console.log('⚡ API Service - Returning cached recommendations (legacy fallback)');
       return {
         ...cached.data,
         cached: true
@@ -1973,11 +1975,13 @@ class ApiService {
     try {
       console.log('🎯 API Service - Getting recommendations for trip:', tripId, forceRefresh ? '(force refresh)' : '');
       
-      // Check client-side cache first (only if not forcing refresh)
+      // Note: Client-side cache check removed - recommendations are now in trip.recommendations
+      // Cache kept for backward compatibility during migration
+      // Only check cache if forcing refresh (legacy fallback)
       if (!forceRefresh) {
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
-          console.log('⚡ API Service - Returning client-side cached recommendations');
+          console.log('⚡ API Service - Returning client-side cached recommendations (legacy fallback)');
           return cached;
         }
       } else {
@@ -2019,7 +2023,8 @@ class ApiService {
         throw new Error(data.message || 'Failed to fetch recommendations');
       }
       
-      // Cache the response (only if not forcing refresh, or if we got a successful response)
+      // Note: Client-side caching removed - recommendations are now in trip.recommendations
+      // Cache kept for backward compatibility during migration (legacy trips without stored recommendations)
       if (!forceRefresh || (data.success && data.recommendations)) {
         const cacheKey = `recommendations:${tripId}`;
         recommendationCache.set(cacheKey, {

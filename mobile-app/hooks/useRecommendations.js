@@ -1,6 +1,7 @@
 /**
  * Custom hook for managing trip recommendations
- * Handles fetching, caching, deduplication, tracking, and dismissal
+ * Now reads from trip.recommendations (stored on trip document)
+ * Falls back to API call if trip doesn't have stored recommendations (migration support)
  * 
  * IMPORTANT: This hook does NOT handle useFocusEffect - screens should call refetch()
  * from their own useFocusEffect hooks to sync recommendations across screens
@@ -15,12 +16,25 @@ const activeRequests = new Map();
 /**
  * Hook for managing trip recommendations
  * @param {string} tripId - Trip ID to fetch recommendations for
+ * @param {Object} trip - Trip object (optional, if provided will read recommendations from trip.recommendations)
  * @param {Object} options - Optional configuration
  * @param {boolean} options.autoFetch - Whether to fetch on mount (default: true)
  * @returns {Object} Recommendations state and utilities
  */
-export const useRecommendations = (tripId, options = {}) => {
-  const { autoFetch = true } = options;
+export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => {
+  // Handle both old signature (tripId, options) and new signature (tripId, trip, options)
+  let trip = null;
+  let finalOptions = {};
+  if (tripOrOptions && typeof tripOrOptions === 'object' && !tripOrOptions.autoFetch && !tripOrOptions.hasOwnProperty('autoFetch')) {
+    // Second param is trip object
+    trip = tripOrOptions;
+    finalOptions = options;
+  } else {
+    // Second param is options (backward compatibility)
+    finalOptions = tripOrOptions;
+  }
+  
+  const { autoFetch = true } = finalOptions;
   
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -93,6 +107,7 @@ export const useRecommendations = (tripId, options = {}) => {
   
   /**
    * Fetch recommendations for the trip
+   * Now reads from trip.recommendations if available, otherwise falls back to API
    */
   const fetchRecommendations = useCallback(async (forceRefresh = false) => {
     if (!tripId) {
@@ -102,6 +117,32 @@ export const useRecommendations = (tripId, options = {}) => {
       }
       return;
     }
+    
+    // If we have trip with stored recommendations and not forcing refresh, use them
+    const hasStoredRecommendations = trip && 
+                                      trip.recommendationsVersion === 'v2' && 
+                                      Array.isArray(trip.recommendations) &&
+                                      !forceRefresh;
+    
+    if (hasStoredRecommendations) {
+      console.log('📥 Using stored recommendations from trip document');
+      const uniqueRecommendations = deduplicateRecommendations(trip.recommendations || []);
+      
+      // Track viewed recommendations (async, don't block)
+      trackViewedRecommendations(uniqueRecommendations, tripId, false).catch(err => {
+        console.error('Error tracking viewed recommendations:', err);
+      });
+      
+      if (isMountedRef.current) {
+        setRecommendations(uniqueRecommendations);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+    
+    // Fallback: Fetch from API (for migration period or force refresh)
+    console.log('📥 Fetching recommendations from API (fallback or force refresh)');
     
     // Check if there's already an active request for this tripId
     const existingRequest = activeRequests.get(tripId);
@@ -144,8 +185,8 @@ export const useRecommendations = (tripId, options = {}) => {
           // Deduplicate recommendations
           const uniqueRecommendations = deduplicateRecommendations(data.recommendations || []);
           
-          // Track viewed recommendations (only if not cached)
-          await trackViewedRecommendations(uniqueRecommendations, tripId, data.cached);
+          // Track viewed recommendations (only if not from storage)
+          await trackViewedRecommendations(uniqueRecommendations, tripId, data.fromStorage || false);
           
           // Update state
           if (isMountedRef.current) {
@@ -153,7 +194,7 @@ export const useRecommendations = (tripId, options = {}) => {
             setError(null);
           }
           
-          return { recommendations: uniqueRecommendations, cached: data.cached };
+          return { recommendations: uniqueRecommendations, cached: data.cached || data.fromStorage };
         } else {
           throw new Error(data.message || 'Failed to fetch recommendations');
         }
@@ -189,7 +230,7 @@ export const useRecommendations = (tripId, options = {}) => {
         console.error('Error fetching recommendations:', err);
       }
     }
-  }, [tripId, deduplicateRecommendations, trackViewedRecommendations]);
+  }, [tripId, trip, deduplicateRecommendations, trackViewedRecommendations]);
   
   /**
    * Dismiss a recommendation
@@ -299,12 +340,31 @@ export const useRecommendations = (tripId, options = {}) => {
     }
   }, [tripId]);
   
-  // Auto-fetch on mount if enabled
+  // Auto-load recommendations on mount if enabled
   useEffect(() => {
     if (autoFetch && tripId) {
-      fetchRecommendations(false);
+      // If trip has stored recommendations, use them immediately (no loading state)
+      const hasStoredRecommendations = trip && 
+                                        trip.recommendationsVersion === 'v2' && 
+                                        Array.isArray(trip.recommendations);
+      
+      if (hasStoredRecommendations) {
+        const uniqueRecommendations = deduplicateRecommendations(trip.recommendations || []);
+        if (isMountedRef.current) {
+          setRecommendations(uniqueRecommendations);
+          setError(null);
+          setLoading(false);
+        }
+        // Track viewed (async, don't block)
+        trackViewedRecommendations(uniqueRecommendations, tripId, false).catch(err => {
+          console.error('Error tracking viewed recommendations:', err);
+        });
+      } else {
+        // Fallback to API fetch
+        fetchRecommendations(false);
+      }
     }
-  }, [tripId, autoFetch]); // Only depend on tripId and autoFetch, not fetchRecommendations
+  }, [tripId, autoFetch, trip]); // Include trip in dependencies
   
   // Memoized refetch function (stable reference)
   const refetch = useCallback((forceRefresh = false) => {

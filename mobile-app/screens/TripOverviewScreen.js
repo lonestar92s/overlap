@@ -57,6 +57,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const [selectedMatch, setSelectedMatch] = useState(null);
   
   // Use recommendations hook (disabled for past trips)
+  // Pass trip object so hook can read recommendations from trip.recommendations
   const tripId = itinerary?.id || itinerary?._id;
   const isPastTripForHook = itinerary?.isCompleted === true;
   const { 
@@ -66,7 +67,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
     refetch: refetchRecommendations,
     dismiss: dismissRecommendation,
     addToTrip: addRecommendationToTrip
-  } = useRecommendations(tripId, { autoFetch: !!tripId && !isPastTripForHook });
+  } = useRecommendations(tripId, itinerary, { autoFetch: !!tripId && !isPastTripForHook });
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);

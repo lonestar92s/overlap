@@ -39,7 +39,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     refetch: refetchRecommendations,
     dismiss: dismissRecommendation,
     addToTrip: addRecommendationToTrip
-  } = useRecommendations(itineraryId, { autoFetch: !!itineraryId });
+  } = useRecommendations(itineraryId, itinerary, { autoFetch: !!itineraryId });
   
   // Conditional import for map component
   const MatchMapView = React.useMemo(() => {

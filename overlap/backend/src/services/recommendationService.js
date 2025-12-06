@@ -54,35 +54,8 @@ class RecommendationService {
             const tripIdStr = String(tripId);
             console.log(`🔍 Using tripId: ${tripIdStr} for filtering dismissed recommendations`);
             
-            // Check cache first (unless force refresh)
-            let cachedResult = null;
-            const cacheKey = this.generateCacheKey(tripId, user, trip);
-            if (!forceRefresh) {
-                cachedResult = this.getFromCache(cacheKey);
-                if (cachedResult) {
-                    console.log(`⚡ Returning cached recommendations for trip: ${tripId} (cache key: ${cacheKey})`);
-                    // Handle both old format (array) and new format (object with recommendations and diagnostics)
-                    if (Array.isArray(cachedResult)) {
-                        // Legacy format - just an array
-                        return {
-                            recommendations: cachedResult,
-                            cached: true,
-                            diagnostics: null
-                        };
-                    } else {
-                        // New format - object with recommendations and diagnostics
-                        return {
-                            recommendations: cachedResult.recommendations || [],
-                            cached: true,
-                            diagnostics: cachedResult.diagnostics || null
-                        };
-                    }
-                } else {
-                    console.log(`💾 Cache miss for trip: ${tripId} (cache key: ${cacheKey})`);
-                }
-            } else {
-                console.log(`🔄 Force refresh requested - bypassing cache for trip: ${tripId}`);
-            }
+            // Note: Cache checking removed - recommendations are now stored in database
+            // Cache methods kept for backward compatibility during migration
             
             // Get trip date range
             const tripDates = this.getTripDateRange(trip);
@@ -230,17 +203,7 @@ class RecommendationService {
                 dismissedMatches: Array.from(dismissedMatchIds)
             };
 
-            // Only cache non-empty results (or cache empty results with shorter expiry)
-            if (recommendations.length > 0) {
-                // Cache successful results with full expiry
-                this.setCache(cacheKey, { recommendations, diagnostics });
-                console.log(`✅ Generated ${recommendations.length} unique recommendations - cached`);
-            } else {
-                // Cache empty results with shorter expiry (1 hour instead of 24 hours)
-                this.setCache(cacheKey, { recommendations: [], diagnostics }, 60 * 60 * 1000);
-                console.log(`⚠️ Generated 0 recommendations - cached with short expiry (1 hour)`);
-            }
-            
+            // Note: Caching removed - recommendations are now stored in database via regenerateTripRecommendations()
             console.log(`✅ Generated ${recommendations.length} unique recommendations`);
             return {
                 recommendations,
@@ -1046,6 +1009,89 @@ class RecommendationService {
             if (key.includes(`:${userId}-`)) {
                 this.cache.delete(key);
             }
+        }
+    }
+
+    /**
+     * Regenerate recommendations for a trip and store them directly on the trip document
+     * @param {string} tripId - The trip ID
+     * @param {Object} user - User object (Mongoose document)
+     * @param {Object} trip - Trip object (Mongoose subdocument)
+     * @param {boolean} forceRefresh - If true, force regeneration even if recommendations exist
+     * @returns {Object} Object with success flag, recommendations count, and error if any
+     */
+    async regenerateTripRecommendations(tripId, user, trip, forceRefresh = false) {
+        try {
+            console.log(`🔄 Regenerating recommendations for trip: ${tripId}${forceRefresh ? ' (force refresh)' : ''}`);
+            
+            // Check if trip exists
+            if (!trip) {
+                console.log(`❌ Trip not found: ${tripId}`);
+                return {
+                    success: false,
+                    error: 'Trip not found',
+                    recommendationsCount: 0
+                };
+            }
+
+            // Generate recommendations using existing logic
+            const result = await this.getRecommendationsForTrip(tripId, user, trip, forceRefresh);
+            
+            if (result.diagnostics?.reason === 'trip_not_found' || 
+                result.diagnostics?.reason === 'invalid_trip_dates' ||
+                result.diagnostics?.reason === 'all_days_have_matches' ||
+                result.diagnostics?.reason === 'no_venues_with_coordinates') {
+                // These are valid states - store empty recommendations
+                trip.recommendations = [];
+                trip.recommendationsVersion = 'v2';
+                trip.recommendationsGeneratedAt = new Date();
+                trip.recommendationsError = null;
+                
+                await user.save();
+                
+                console.log(`✅ Stored empty recommendations for trip ${tripId} (${result.diagnostics.reason})`);
+                return {
+                    success: true,
+                    recommendationsCount: 0,
+                    diagnostics: result.diagnostics
+                };
+            }
+
+            // Store recommendations on trip document
+            trip.recommendations = result.recommendations || [];
+            trip.recommendationsVersion = 'v2';
+            trip.recommendationsGeneratedAt = new Date();
+            trip.recommendationsError = null;
+
+            // Save the user document (which contains the trip)
+            await user.save();
+
+            console.log(`✅ Regenerated and stored ${result.recommendations.length} recommendations for trip ${tripId}`);
+            
+            return {
+                success: true,
+                recommendationsCount: result.recommendations.length,
+                recommendations: result.recommendations,
+                diagnostics: result.diagnostics
+            };
+
+        } catch (error) {
+            console.error(`❌ Error regenerating recommendations for trip ${tripId}:`, error);
+            
+            // Store error in trip document
+            try {
+                trip.recommendationsError = error.message || 'Unknown error during regeneration';
+                trip.recommendationsGeneratedAt = new Date();
+                await user.save();
+            } catch (saveError) {
+                console.error(`❌ Failed to save error state for trip ${tripId}:`, saveError);
+            }
+            
+            return {
+                success: false,
+                error: error.message || 'Unknown error',
+                recommendationsCount: 0
+            };
         }
     }
 }
