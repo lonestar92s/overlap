@@ -20,7 +20,7 @@ import { transformRecommendationsForMap, transformMatchesForMap } from '../utils
 
 const ItineraryMapScreen = ({ navigation, route }) => {
   const { itineraryId } = route.params;
-  const { getItineraryById, addMatchToItinerary } = useItineraries();
+  const { getItineraryById, addMatchToItinerary, itineraries } = useItineraries();
   const [itinerary, setItinerary] = useState(null);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [selectedRecommendation, setSelectedRecommendation] = useState(null);
@@ -30,6 +30,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   const [venueCoordinates, setVenueCoordinates] = useState({});
   const [travelTimes, setTravelTimes] = useState({});
   const [travelTimesLoading, setTravelTimesLoading] = useState(false);
+  const [addingMatch, setAddingMatch] = useState(false);
+  const addingMatchRef = useRef(false);
   
   // Use recommendations hook
   const { 
@@ -83,6 +85,44 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
     loadItinerary();
   }, [itineraryId, getItineraryById]);
+
+  // Sync local itinerary state when context updates (e.g., when match is added)
+  useEffect(() => {
+    const updatedItinerary = getItineraryById(itineraryId);
+    if (!updatedItinerary) {
+      return;
+    }
+    
+    // If we don't have a local itinerary yet, set it
+    if (!itinerary) {
+      setItinerary(updatedItinerary);
+      return;
+    }
+    
+    // Compare matches to detect if itinerary actually changed
+    const currentMatchesCount = itinerary.matches?.length || 0;
+    const updatedMatchesCount = updatedItinerary.matches?.length || 0;
+    const currentMatchIds = new Set(
+      (itinerary.matches || []).map(m => String(m.matchId || m.fixture?.id || m.id)).filter(Boolean)
+    );
+    const updatedMatchIds = new Set(
+      (updatedItinerary.matches || []).map(m => String(m.matchId || m.fixture?.id || m.id)).filter(Boolean)
+    );
+    
+    // Check if matches changed (count or IDs)
+    const matchesChanged = 
+      updatedMatchesCount !== currentMatchesCount ||
+      currentMatchIds.size !== updatedMatchIds.size ||
+      [...updatedMatchIds].some(id => !currentMatchIds.has(id));
+    
+    if (matchesChanged) {
+      console.log('🗺️ ItineraryMapScreen - Syncing itinerary from context update:', {
+        currentMatches: currentMatchesCount,
+        updatedMatches: updatedMatchesCount
+      });
+      setItinerary(updatedItinerary);
+    }
+  }, [itineraries, itineraryId, getItineraryById, itinerary]);
 
   // Fetch travel times when itinerary and home bases are available
   // Also recalculate when home bases change (added, updated, or deleted)
@@ -292,10 +332,35 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   }, [itinerary?.matches]);
 
   // Transform recommendations to the format expected by the map
-  // Memoize to ensure map updates when recommendations change
+  // Filter out recommendations that are already in the itinerary (as matches)
+  // Memoize to ensure map updates when recommendations or itinerary changes
   const transformedRecommendations = useMemo(() => {
-    return transformRecommendationsForMap(recommendations);
-  }, [recommendations]);
+    if (!recommendations || recommendations.length === 0) {
+      return [];
+    }
+    
+    // Get match IDs that are already in the itinerary
+    const existingMatchIds = new Set();
+    if (itinerary?.matches && itinerary.matches.length > 0) {
+      itinerary.matches.forEach(match => {
+        const matchId = match.matchId || match.fixture?.id || match.id;
+        if (matchId) {
+          existingMatchIds.add(String(matchId));
+        }
+      });
+    }
+    
+    // Filter out recommendations that are already in the itinerary
+    const filteredRecommendations = recommendations.filter(rec => {
+      const recMatchId = rec.matchId || rec.match?.id || rec.match?.fixture?.id;
+      if (!recMatchId) {
+        return true; // Keep if we can't determine match ID
+      }
+      return !existingMatchIds.has(String(recMatchId));
+    });
+    
+    return transformRecommendationsForMap(filteredRecommendations);
+  }, [recommendations, itinerary?.matches]);
 
   // Handle marker press
   const handleMarkerPress = (match) => {
@@ -354,20 +419,33 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
   // Handle adding recommendation to trip
   const handleAddRecommendationToTrip = async (recommendation) => {
+    // Prevent multiple concurrent calls
+    if (addingMatchRef.current) {
+      console.log('⚠️ Add match operation already in progress, ignoring duplicate call');
+      return;
+    }
+
     try {
+      addingMatchRef.current = true;
+      setAddingMatch(true);
+      
       await addRecommendationToTrip(recommendation, addMatchToItinerary);
       
       // Close the card overlay
       setSelectedRecommendation(null);
 
-      // Refresh itinerary to show new match
-      const updatedItinerary = getItineraryById(itineraryId);
-      if (updatedItinerary) {
-        setItinerary(updatedItinerary);
-      }
+      // The itinerary context is automatically updated by addMatchToItinerary
+      // The useEffect above will sync the local state when context updates
+      // The recommendations list is already updated by the hook (removed from list)
+      // The transformedRecommendations memo will automatically filter it out
+      // Trigger map auto-fit to show the new match
+      setAutoFitKey(prev => prev + 1);
     } catch (err) {
       console.error('Error adding recommendation to trip:', err);
       Alert.alert('Error', 'Failed to add match to trip');
+    } finally {
+      addingMatchRef.current = false;
+      setAddingMatch(false);
     }
   };
 
@@ -474,14 +552,24 @@ const ItineraryMapScreen = ({ navigation, route }) => {
           {/* Recommendation Actions */}
           <View style={styles.recommendationActions}>
             <TouchableOpacity
-              style={styles.addToTripButton}
+              style={[
+                styles.addToTripButton,
+                addingMatch && styles.addToTripButtonDisabled
+              ]}
               onPress={() => handleAddRecommendationToTrip(selectedRecommendation)}
+              disabled={addingMatch}
             >
-              <Text style={styles.addToTripButtonText}>Add to Trip</Text>
+              <Text style={styles.addToTripButtonText}>
+                {addingMatch ? 'Adding...' : 'Add to Trip'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.dismissRecommendationButton}
+              style={[
+                styles.dismissRecommendationButton,
+                addingMatch && styles.dismissRecommendationButtonDisabled
+              ]}
               onPress={() => handleDismissRecommendation(selectedRecommendation)}
+              disabled={addingMatch}
             >
               <Text style={styles.dismissRecommendationButtonText}>Not Interested</Text>
             </TouchableOpacity>
@@ -632,6 +720,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  addToTripButtonDisabled: {
+    backgroundColor: '#9e9e9e',
+    opacity: 0.6,
+  },
   addToTripButtonText: {
     color: '#fff',
     fontSize: 16,
@@ -644,6 +736,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  dismissRecommendationButtonDisabled: {
+    backgroundColor: '#e0e0e0',
+    opacity: 0.6,
   },
   dismissRecommendationButtonText: {
     color: '#666',

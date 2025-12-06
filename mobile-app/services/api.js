@@ -9,8 +9,11 @@ const getApiBaseUrl = () => {
       console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');
       return 'http://localhost:3001/api';
     } else {
-      // Production: Fail fast - no fallback
-      throw new Error('EXPO_PUBLIC_API_URL environment variable is required in production. Set it in EAS secrets.');
+      // Production: Use fallback to prevent crashes, but log warning
+      // This allows the app to work even if the EAS secret isn't set
+      console.warn('⚠️ EXPO_PUBLIC_API_URL not set in production - using fallback URL');
+      console.warn('⚠️ Please set EXPO_PUBLIC_API_URL in EAS secrets for proper configuration');
+      return 'https://friendly-gratitude-production-3f31.up.railway.app/api';
     }
   }
   
@@ -635,9 +638,30 @@ class ApiService {
         })
       });
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // If response isn't JSON, get text instead
+        const text = await response.text();
+        console.error('❌ API Error - Non-JSON response:', {
+          status: response.status,
+          statusText: response.statusText,
+          text: text
+        });
+        throw new Error(`Failed to add match to trip (${response.status}): ${text}`);
+      }
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to add match to trip');
+        const errorMessage = data.message || data.error || `Failed to add match to trip (${response.status})`;
+        console.error('❌ API Error adding match to trip:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error,
+          message: data.message,
+          data: data
+        });
+        throw new Error(errorMessage);
       }
       
       return data;

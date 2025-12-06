@@ -1744,7 +1744,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   useEffect(() => {
     const headerHeight = 120; // Approximate header height (60 paddingTop + 16 paddingBottom + content)
     const filterChipsHeightValue = getFilterLabels.length > 0 ? filterChipsMeasuredHeight || 50 : 0;
-    const buttonSpacing = spacing.md; // 16px spacing
+    const buttonSpacing = spacing.lg; // 24px spacing for better visual separation
     const targetTop = headerHeight + filterChipsHeightValue + buttonSpacing;
     
     Animated.timing(searchButtonTopAnimated, {
@@ -2271,38 +2271,38 @@ const MapResultsScreen = ({ navigation, route }) => {
       </View>
 
       {/* Filter Chips Section - Animated */}
-      <Animated.View 
-        style={[
-          styles.filterChipsContainer,
-          {
-            height: filterChipsHeight,
-            overflow: 'hidden',
-            opacity: getFilterLabels.length > 0 ? 1 : 0, // Fade in/out for better UX
-          }
-        ]}
-        pointerEvents={getFilterLabels.length > 0 ? 'auto' : 'none'} // Disable touches when hidden
-      >
-        <View
-          ref={filterChipsContentRef}
-          onLayout={onFilterChipsContentLayout}
-          style={{ minHeight: 60 }} // Ensure minimum height for measurement
+      {getFilterLabels.length > 0 && (
+        <Animated.View 
+          style={[
+            styles.filterChipsContainer,
+            {
+              height: filterChipsHeight,
+              overflow: 'hidden',
+            }
+          ]}
         >
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipsContent}
+          <View
+            ref={filterChipsContentRef}
+            onLayout={onFilterChipsContentLayout}
+            style={{ minHeight: 60 }} // Ensure minimum height for measurement
           >
-            {getFilterLabels.map(filter => (
-              <FilterChip
-                key={filter.id}
-                label={filter.label}
-                onRemove={() => handleRemoveFilter(filter.type, filter.value)}
-                type={filter.type}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      </Animated.View>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipsContent}
+            >
+              {getFilterLabels.map(filter => (
+                <FilterChip
+                  key={filter.id}
+                  label={filter.label}
+                  onRemove={() => handleRemoveFilter(filter.type, filter.value)}
+                  type={filter.type}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        </Animated.View>
+      )}
 
       {/* Map Layer */}
       <MatchMapView
