@@ -545,7 +545,13 @@ export const formatMatchTimeInVenueTimezone = (dateString, fixture, options = {}
     // Validate timezone before using it
     const validTimezone = isValidTimezone(timezone) ? timezone : 'UTC';
     
-    const venueDate = parseMatchDateToVenueTime(dateString, validTimezone);
+    // Parse date as-is (UTC) - let toLocaleTimeString/toLocaleDateString handle timezone conversion
+    // This properly accounts for DST and avoids double-conversion bugs
+    if (!dateString) return { date: 'TBD', time: 'TBD' };
+    const venueDate = new Date(dateString);
+    if (isNaN(venueDate.getTime())) {
+      return 'Time unavailable';
+    }
     
     // Format time with fallback
     let timeString;

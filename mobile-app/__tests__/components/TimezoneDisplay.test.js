@@ -118,25 +118,26 @@ describe('Timezone Display Integration', () => {
   });
 
   describe('Time Conversion Accuracy', () => {
-    it('should show 7pm for London match (19:00 UTC)', () => {
+    it('should show correct time for London match (19:00 UTC = 19:00 GMT in winter)', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.london.date,
         fixtures.london,
         { showTimezone: false, showDate: false, timeFormat: '12hour' }
       );
-      // 19:00 UTC = 19:00 GMT (same timezone during standard time)
-      // or 20:00 BST during summer time
-      expect(result).toMatch(/07:00 PM|08:00 PM/);
+      // March 15 is before DST change in UK (last Sunday of March)
+      // 19:00 UTC = 19:00 GMT (UTC+0 in winter)
+      expect(result).toMatch(/07:00 PM/);
     });
 
-    it('should show 8pm for Madrid match (19:00 UTC + 1 hour CET)', () => {
+    it('should show correct time for Madrid match (19:00 UTC = 20:00 CET in winter)', () => {
       const result = formatMatchTimeInVenueTimezone(
         fixtures.madrid.date,
         fixtures.madrid,
         { showTimezone: false, showDate: false, timeFormat: '12hour' }
       );
-      // 19:00 UTC = 20:00 CET or 21:00 CEST
-      expect(result).toMatch(/08:00 PM|09:00 PM/);
+      // March 15 is before DST change in Europe (last Sunday of March)
+      // 19:00 UTC = 20:00 CET (UTC+1 in winter)
+      expect(result).toMatch(/08:00 PM/);
     });
 
     it('should show 7pm for Tokyo match (10:00 UTC + 9 hours JST)', () => {
@@ -145,7 +146,7 @@ describe('Timezone Display Integration', () => {
         fixtures.tokyo,
         { showTimezone: false, showDate: false, timeFormat: '12hour' }
       );
-      // 10:00 UTC = 19:00 JST
+      // 10:00 UTC = 19:00 JST (Japan doesn't use DST)
       expect(result).toMatch(/07:00 PM/);
     });
   });
