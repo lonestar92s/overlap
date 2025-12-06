@@ -125,6 +125,75 @@ class GeocodingService {
     }
 
     /**
+     * Reverse geocode coordinates to get country name
+     * @param {number} lat - Latitude
+     * @param {number} lng - Longitude
+     * @returns {Promise<string|null>} - Country name or null if failed
+     */
+    async reverseGeocodeCountry(lat, lng) {
+        if (!this.apiKey) {
+            console.error('❌ LocationIQ API key not configured - set LOCATIONIQ_API_KEY environment variable');
+            return null;
+        }
+
+        // Create cache key for reverse geocoding
+        const cacheKey = `reverse_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+        
+        // Check cache first
+        if (this.cache.has(cacheKey)) {
+            this.cacheStats.hits++;
+            const cached = this.cache.get(cacheKey);
+            return cached ? cached.country : null;
+        }
+
+        this.cacheStats.misses++;
+        this.cacheStats.totalRequests++;
+
+        try {
+            const response = await axios.get(`${this.baseURL}/reverse.php`, {
+                params: {
+                    key: this.apiKey,
+                    lat: lat,
+                    lon: lng,
+                    format: 'json',
+                    addressdetails: 1
+                },
+                timeout: 10000
+            });
+
+            if (response.data && response.data.address) {
+                const address = response.data.address;
+                // Try multiple possible country fields
+                const country = address.country || 
+                               address.country_name || 
+                               address.country_code?.toUpperCase() ||
+                               null;
+                
+                if (country) {
+                    // Cache the result
+                    this.cache.set(cacheKey, { country, lat, lng });
+                    console.log(`✅ Reverse geocoded [${lat}, ${lng}] to country: ${country}`);
+                    return country;
+                } else {
+                    console.log(`⚠️ No country found in reverse geocoding for [${lat}, ${lng}]`);
+                    this.cache.set(cacheKey, null);
+                    return null;
+                }
+            } else {
+                console.log(`⚠️ No reverse geocoding results for [${lat}, ${lng}]`);
+                this.cache.set(cacheKey, null);
+                return null;
+            }
+
+        } catch (error) {
+            console.error(`❌ Reverse geocoding failed for [${lat}, ${lng}]:`, error.message);
+            // Cache null result to avoid repeated failed attempts
+            this.cache.set(cacheKey, null);
+            return null;
+        }
+    }
+
+    /**
      * Clear cache
      */
     clearCache() {

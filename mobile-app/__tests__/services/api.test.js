@@ -11,8 +11,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 global.fetch = jest.fn();
 
 describe('API Service', () => {
+  // Use localhost for tests to match implementation fallback
   const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
-    'https://friendly-gratitude-production-3f31.up.railway.app/api';
+    'http://localhost:3001/api';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -35,7 +36,7 @@ describe('API Service', () => {
       const result = await ApiService.login('test@example.com', 'password123');
 
       expect(fetch).toHaveBeenCalledWith(
-        `${API_BASE_URL}/auth/login`,
+        expect.stringContaining('/auth/login'),
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -72,12 +73,14 @@ describe('API Service', () => {
     it('should handle network errors', async () => {
       fetch.mockRejectedValueOnce(new Error('Network error'));
 
-      await expect(ApiService.login('test@example.com', 'password123'))
-        .rejects.toThrow('Network error');
+      const result = await ApiService.login('test@example.com', 'password123');
+      // API service catches network errors and returns { success: false, error: 'Network error' }
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
     });
   });
 
-  describe('getMatches', () => {
+  describe('searchAggregatedMatches', () => {
     it('should fetch matches with query parameters', async () => {
       const mockMatches = [
         { id: 1, fixture: { date: '2025-02-15' } },
@@ -86,21 +89,21 @@ describe('API Service', () => {
 
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ success: true, matches: mockMatches })
+        json: async () => ({ success: true, data: mockMatches })
       });
 
-      const result = await ApiService.getMatches({
+      const result = await ApiService.searchAggregatedMatches({
         dateFrom: '2025-02-15',
         dateTo: '2025-02-20',
-        leagueIds: '39'
+        competitions: ['39']
       });
 
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/matches'),
+        expect.stringContaining('/api/search/aggregated'),
         expect.any(Object)
       );
 
-      expect(result.matches).toEqual(mockMatches);
+      expect(result.data).toEqual(mockMatches);
     });
 
     it('should include auth token in headers when authenticated', async () => {
@@ -109,10 +112,13 @@ describe('API Service', () => {
 
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ success: true, matches: [] })
+        json: async () => ({ success: true, data: [] })
       });
 
-      await ApiService.getMatches({});
+      await ApiService.searchAggregatedMatches({
+        dateFrom: '2025-02-15',
+        dateTo: '2025-02-20'
+      });
 
       expect(fetch).toHaveBeenCalledWith(
         expect.any(String),

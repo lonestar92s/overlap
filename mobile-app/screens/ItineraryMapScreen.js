@@ -112,16 +112,25 @@ const ItineraryMapScreen = ({ navigation, route }) => {
         if (times) {
           Object.keys(times).forEach(matchId => {
             const travelTime = times[matchId];
-            // Only include travel time if it doesn't reference a deleted home base
-            // If travelTime has a homeBaseId, check if it still exists
+            // Only include travel time if:
+            // 1. It has a homeBaseId (explicitly assigned)
+            // 2. The home base still exists in the trip
+            // 3. The match has planning.homeBaseId set (double-check)
             if (travelTime && travelTime.homeBaseId) {
-              if (validHomeBaseIds.has(String(travelTime.homeBaseId))) {
-                filteredTimes[matchId] = travelTime;
+              const homeBaseId = String(travelTime.homeBaseId);
+              if (validHomeBaseIds.has(homeBaseId)) {
+                // Verify the match has this home base assigned
+                const match = itinerary.matches?.find(m => 
+                  String(m.matchId) === matchId || 
+                  String(m.fixture?.id) === matchId
+                );
+                if (match?.planning?.homeBaseId && 
+                    String(match.planning.homeBaseId) === homeBaseId) {
+                  filteredTimes[matchId] = travelTime;
+                }
               }
-            } else {
-              // If no homeBaseId specified, include it (will be recalculated)
-              filteredTimes[matchId] = travelTime;
             }
+            // If no homeBaseId, don't include it (matches without assigned home bases)
           });
         }
         

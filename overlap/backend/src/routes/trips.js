@@ -1287,30 +1287,41 @@ router.get('/:id/travel-times', auth, async (req, res) => {
 
         // Process each match
         for (const match of matchesToProcess) {
-            const matchDate = new Date(match.date);
-            
-            // Find applicable home base(s) for this match date
-            const applicableHomeBases = homeBasesToUse.filter(homeBase => {
-                if (!homeBase.dateRange || !homeBase.dateRange.from || !homeBase.dateRange.to) {
-                    return false;
-                }
-                const fromDate = new Date(homeBase.dateRange.from);
-                const toDate = new Date(homeBase.dateRange.to);
-                return matchDate >= fromDate && matchDate <= toDate;
-            });
-
-            if (applicableHomeBases.length === 0) {
-                // No home base matches this match date
+            // Only calculate travel times for matches with explicitly assigned home bases
+            // Check if match has planning data with an assigned homeBaseId
+            if (!match.planning || !match.planning.homeBaseId) {
+                // No home base assigned to this match - skip travel time calculation
                 travelTimes[match.matchId] = null;
                 continue;
             }
 
-            // Prefer home base with coordinates, otherwise use first one
-            let selectedHomeBase = applicableHomeBases.find(hb => 
-                hb.coordinates && 
-                typeof hb.coordinates.lat === 'number' && 
-                typeof hb.coordinates.lng === 'number'
-            ) || applicableHomeBases[0];
+            // Find the explicitly assigned home base
+            const assignedHomeBaseId = String(match.planning.homeBaseId);
+            const selectedHomeBase = homeBasesToUse.find(hb => {
+                const hbId = String(hb._id || hb.id || '');
+                return hbId === assignedHomeBaseId || 
+                       hbId.toLowerCase() === assignedHomeBaseId.toLowerCase() ||
+                       hb._id?.toString() === assignedHomeBaseId ||
+                       hb.id?.toString() === assignedHomeBaseId;
+            });
+
+            if (!selectedHomeBase) {
+                // Assigned home base not found - skip this match
+                travelTimes[match.matchId] = null;
+                continue;
+            }
+
+            // Validate that home base date range includes match date (safety check)
+            const matchDate = new Date(match.date);
+            if (selectedHomeBase.dateRange && selectedHomeBase.dateRange.from && selectedHomeBase.dateRange.to) {
+                const fromDate = new Date(selectedHomeBase.dateRange.from);
+                const toDate = new Date(selectedHomeBase.dateRange.to);
+                if (matchDate < fromDate || matchDate > toDate) {
+                    // Match date is outside home base date range - skip
+                    travelTimes[match.matchId] = null;
+                    continue;
+                }
+            }
 
             // Check if home base has coordinates
             if (!selectedHomeBase.coordinates || 

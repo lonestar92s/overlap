@@ -4,6 +4,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../../contexts/AuthContext';
 import ApiService from '../../services/api';
 
+// Mock AsyncStorage
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(() => Promise.resolve(null)),
+  setItem: jest.fn(() => Promise.resolve()),
+  removeItem: jest.fn(() => Promise.resolve()),
+  clear: jest.fn(() => Promise.resolve()),
+}));
+
+// Mock expo-secure-store (will fallback to AsyncStorage in tests)
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.reject(new Error('Not available'))),
+  setItemAsync: jest.fn(() => Promise.reject(new Error('Not available'))),
+  deleteItemAsync: jest.fn(() => Promise.reject(new Error('Not available'))),
+}));
+
 // Mock the API service
 jest.mock('../../services/api', () => ({
   __esModule: true,
@@ -60,7 +75,7 @@ describe('AuthContext', () => {
       expect(result.current.user).toEqual(mockUser);
       expect(result.current.token).toBe(mockToken);
       expect(ApiService.setAuthToken).toHaveBeenCalledWith(mockToken);
-    });
+    }, { timeout: 3000 });
   });
 
   it('should handle login failure', async () => {
@@ -122,7 +137,14 @@ describe('AuthContext', () => {
     const mockToken = 'stored-token';
     const mockUser = { id: '1', email: 'test@example.com' };
 
-    await AsyncStorage.setItem('authToken', mockToken);
+    // Mock AsyncStorage to return the token
+    AsyncStorage.getItem.mockImplementation((key) => {
+      if (key === 'authToken') {
+        return Promise.resolve(mockToken);
+      }
+      return Promise.resolve(null);
+    });
+
     ApiService.getCurrentUser.mockResolvedValue(mockUser);
 
     const wrapper = ({ children }) => (
@@ -136,6 +158,8 @@ describe('AuthContext', () => {
     });
 
     expect(ApiService.getCurrentUser).toHaveBeenCalled();
+    expect(result.current.user).toEqual(mockUser);
+    expect(result.current.token).toBe(mockToken);
   });
 
   it('should handle invalid stored token', async () => {

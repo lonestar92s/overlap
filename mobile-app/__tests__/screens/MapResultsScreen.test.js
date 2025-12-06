@@ -35,7 +35,7 @@ jest.mock('@gorhom/bottom-sheet', () => {
     }),
   };
 });
-jest.mock('react-native-haptics', () => ({
+jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
 }));
 jest.mock('../../utils/performanceTracker', () => ({

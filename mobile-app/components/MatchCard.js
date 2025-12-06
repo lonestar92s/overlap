@@ -361,7 +361,10 @@ const MatchCard = ({
       </View>
 
       {/* Travel Time Display - only show in overlay variant (used in map view) */}
-      {variant === 'overlay' && (travelTime || travelTimeLoading) && (
+      {/* Only show travel time if match has an explicitly assigned home base */}
+      {variant === 'overlay' && 
+       match?.planning?.homeBaseId && 
+       (travelTime || travelTimeLoading) && (
         <View style={styles.travelTimeContainer}>
           <TravelTimeDisplay 
             travelTime={travelTime} 
