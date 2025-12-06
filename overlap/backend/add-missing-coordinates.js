@@ -25,7 +25,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
       {
         venueId: 546,
         name: 'Elland Road',
-        coordinates: [-1.5721, 53.7777] // [longitude, latitude]
+        coordinates: [-1.572222, 53.777778] // [longitude, latitude] - precise coordinates
       },
       {
         venueId: 8560,
@@ -89,7 +89,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
       {
         venueId: 546,
         name: 'Elland Road',
-        coordinates: [-1.5721, 53.7777] // [longitude, latitude]
+        coordinates: [-1.572222, 53.777778] // [longitude, latitude] - precise coordinates
       },
       {
         venueId: 8560,

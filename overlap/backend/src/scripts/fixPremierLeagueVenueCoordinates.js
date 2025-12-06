@@ -65,6 +65,13 @@ const PREMIER_LEAGUE_CORRECTIONS = {
     city: 'Falmer',
     country: 'England',
     correctCoordinates: [-0.0810, 50.8619] // [lng, lat]
+  },
+  // Elland Road - Leeds, UK
+  546: {
+    name: 'Elland Road',
+    city: 'Leeds',
+    country: 'England',
+    correctCoordinates: [-1.572222, 53.777778] // [lng, lat] - precise coordinates
   }
 };
 
