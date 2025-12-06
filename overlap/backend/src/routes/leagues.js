@@ -1,7 +1,6 @@
 const express = require('express');
 const leagueService = require('../services/leagueService');
 const subscriptionService = require('../services/subscriptionService');
-const geocodingService = require('../services/geocodingService');
 const User = require('../models/User');
 const League = require('../models/League');
 const { authenticateToken } = require('../middleware/auth');
@@ -17,60 +16,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
               Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c; // Distance in kilometers
-}
-
-// Helper function to detect country from bounds (same as in matches.js)
-function detectCountryFromBounds(bounds) {
-    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-    
-    // Find the closest country within threshold
-    let searchCountry = null;
-    let minDistance = Infinity;
-    
-    const DISTANCE_THRESHOLD = 800;
-    const NEARBY_THRESHOLD = 400;
-    const nearbyCountries = [];
-    
-    for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
-        const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
-        if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
-            minDistance = distance;
-            searchCountry = countryName;
-        }
-        // Track all countries within nearby threshold for border region handling
-        if (distance < NEARBY_THRESHOLD) {
-            nearbyCountries.push({ country: countryName, distance });
-        }
-    }
-    
-    // Sort nearby countries by distance
-    nearbyCountries.sort((a, b) => a.distance - b.distance);
-    
-    // If no country found, use regional fallback
-    if (!searchCountry) {
-        if (centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40) {
-            searchCountry = 'Europe-Region';
-        } else if (centerLat > -55 && centerLat < 75 && centerLng > -170 && centerLng < -30) {
-            searchCountry = 'Americas-Region';
-        } else if (centerLat > -50 && centerLat < 75 && centerLng > 60 && centerLng < 180) {
-            searchCountry = 'AsiaPacific-Region';
-        } else if (centerLat > -40 && centerLat < 40 && centerLng > -25 && centerLng < 60) {
-            searchCountry = 'Africa-Region';
-        } else {
-            const roundedLat = Math.round(centerLat);
-            const roundedLng = Math.round(centerLng);
-            searchCountry = `Remote-${roundedLat}-${roundedLng}`;
-        }
-    }
-    
-    return {
-        country: searchCountry,
-        centerLat,
-        centerLng,
-        distance: minDistance === Infinity ? null : minDistance,
-        nearbyCountries: nearbyCountries.map(c => c.country)
-    };
 }
 
 // Country coordinate mapping (approximate country centers for geographic filtering)
@@ -94,54 +39,6 @@ const COUNTRY_COORDS = {
     'Switzerland': { lat: 46.8182, lng: 8.2275 },
     'Finland': { lat: 64.0, lng: 26.0 }
 };
-
-/**
- * GET /api/leagues/all
- * Get all active leagues in database (for visibility/debugging - not filtered by subscription
- */
-router.get('/all', async (req, res) => {
-    try {
-        const allLeagues = await League.find({ isActive: true })
-            .sort({ country: 1, tier: 1, name: 1 })
-            .lean();
-        
-        // Group by country for easier reading
-        const leaguesByCountry = {};
-        for (const league of allLeagues) {
-            const country = league.country || 'Unknown';
-            if (!leaguesByCountry[country]) {
-                leaguesByCountry[country] = [];
-            }
-            leaguesByCountry[country].push({
-                id: league.apiId,
-                name: league.name,
-                tier: league.tier || 1,
-                country: league.country,
-                countryCode: league.countryCode
-            });
-        }
-        
-        res.json({
-            success: true,
-            totalLeagues: allLeagues.length,
-            leaguesByCountry,
-            allLeagues: allLeagues.map(l => ({
-                id: l.apiId,
-                name: l.name,
-                tier: l.tier || 1,
-                country: l.country,
-                countryCode: l.countryCode
-            }))
-        });
-    } catch (error) {
-        console.error('Error fetching all leagues:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch all leagues',
-            error: error.message
-        });
-    }
-});
 
 /**
  * GET /api/leagues
@@ -248,14 +145,10 @@ router.get('/relevant', async (req, res) => {
         // Get all active leagues from MongoDB
         const allLeagues = await League.find({ isActive: true }).lean();
 
-        // Detect country from bounds (uses COUNTRY_COORDS for detection, but we'll match by name)
-        const countryDetection = detectCountryFromBounds(bounds);
-        const detectedCountry = countryDetection.country;
-        const nearbyCountries = countryDetection.nearbyCountries || [];
-
-        // Cache for reverse geocoded country (to avoid repeated API calls)
-        let reverseGeocodedCountry = null;
-        let reverseGeocodeAttempted = false;
+        // Define regional groupings
+        const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
+        const isInNorthAmerica = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
+        const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
 
         const relevantLeagues = [];
 
@@ -269,56 +162,45 @@ router.get('/relevant', async (req, res) => {
                 league.name.includes('Nations League') || league.name.includes('Friendlies')) {
                 shouldInclude = true;
             } else {
-                // PRIMARY METHOD: Country name matching (fastest and most accurate)
-                // Match league country to detected country or nearby countries
-                if (league.country === detectedCountry || nearbyCountries.includes(league.country)) {
-                    shouldInclude = true;
-                } else {
-                    // FALLBACK METHOD: Reverse geocoding for countries not in hardcoded list
-                    // Only attempt once per function call and cache the result
-                    if (!reverseGeocodeAttempted && detectedCountry && !COUNTRY_COORDS[detectedCountry]) {
-                        reverseGeocodeAttempted = true;
-                        try {
-                            reverseGeocodedCountry = await geocodingService.reverseGeocodeCountry(centerLat, centerLng);
-                            if (reverseGeocodedCountry && league.country === reverseGeocodedCountry) {
-                                shouldInclude = true;
-                            }
-                        } catch (error) {
-                            console.log(`⚠️ Reverse geocoding failed: ${error.message}`);
-                        }
-                    } else if (reverseGeocodedCountry && league.country === reverseGeocodedCountry) {
-                        // Use cached reverse geocoded country
-                        shouldInclude = true;
+                // Get country coordinates if available
+                const countryCoords = COUNTRY_COORDS[league.country];
+                
+                if (countryCoords) {
+                    // Calculate distance from search center to country center
+                    const distance = calculateDistance(
+                        centerLat, centerLng,
+                        countryCoords.lat, countryCoords.lng
+                    );
+
+                    // Smart distance thresholds based on region
+                    let maxDistance;
+                    if (isInEurope) {
+                        maxDistance = 2500; // Europe is densely packed
+                    } else if (isInNorthAmerica || isInSouthAmerica) {
+                        maxDistance = 3000; // Large countries, be more inclusive
                     } else {
-                        // LAST RESORT: Distance calculation for edge cases
-                        // Only use this if country name doesn't match and reverse geocoding failed
-                        const countryCoords = COUNTRY_COORDS[league.country];
-                        
-                        if (countryCoords) {
-                            // Calculate distance from search center to country center
-                            const distance = calculateDistance(
-                                centerLat, centerLng,
-                                countryCoords.lat, countryCoords.lng
-                            );
+                        maxDistance = 2000; // Default
+                    }
 
-                            // Smart distance thresholds based on region
-                            const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
-                            const isInNorthAmerica = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
-                            const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
+                    if (distance <= maxDistance) {
+                        shouldInclude = true;
+                    }
+                } else {
+                    // For countries without coordinates, use country matching based on bounds
+                    const countryMatches = {
+                        'England': isInEurope && centerLat > 49 && centerLat < 59 && centerLng > -8 && centerLng < 2,
+                        'Spain': isInEurope && centerLat > 35 && centerLat < 44 && centerLng > -10 && centerLng < 5,
+                        'Germany': isInEurope && centerLat > 47 && centerLat < 55 && centerLng > 5 && centerLng < 15,
+                        'Italy': isInEurope && centerLat > 35 && centerLat < 47 && centerLng > 6 && centerLng < 19,
+                        'France': isInEurope && centerLat > 42 && centerLat < 51 && centerLng > -5 && centerLng < 8,
+                        'Portugal': isInEurope && centerLat > 36 && centerLat < 42 && centerLng > -10 && centerLng < -6,
+                        'Netherlands': isInEurope && centerLat > 50 && centerLat < 54 && centerLng > 3 && centerLng < 8,
+                        'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
+                        'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
+                    };
 
-                            let maxDistance;
-                            if (isInEurope) {
-                                maxDistance = 2500; // Europe is densely packed
-                            } else if (isInNorthAmerica || isInSouthAmerica) {
-                                maxDistance = 3000; // Large countries, be more inclusive
-                            } else {
-                                maxDistance = 2000; // Default
-                            }
-
-                            if (distance <= maxDistance) {
-                                shouldInclude = true;
-                            }
-                        }
+                    if (countryMatches[league.country]) {
+                        shouldInclude = true;
                     }
                 }
             }

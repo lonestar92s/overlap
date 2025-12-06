@@ -3,8 +3,6 @@ const https = require('https');
 const subscriptionService = require('./subscriptionService');
 const venueService = require('./venueService');
 const teamService = require('./teamService');
-const geocodingService = require('./geocodingService');
-const League = require('../models/League');
 const weights = require('../config/recommendationWeights');
 const { shouldFilterMatch } = require('../utils/matchStatus');
 
@@ -237,9 +235,8 @@ class RecommendationService {
             const allMatches = [];
 
             // Search for matches on each date
-            // Pass saved venues to enable geographic league selection
             for (const searchDate of searchDates) {
-                const matches = await this.searchMatchesForDate(searchDate, restrictedLeagues, savedMatchVenues);
+                const matches = await this.searchMatchesForDate(searchDate, restrictedLeagues);
                 allMatches.push(...matches);
             }
 
@@ -358,11 +355,10 @@ class RecommendationService {
     /**
      * Search for matches on a specific date
      */
-    async searchMatchesForDate(date, restrictedLeagues, savedMatchVenues = null) {
+    async searchMatchesForDate(date, restrictedLeagues) {
         try {
             // Get all accessible leagues (not restricted)
-            // Pass saved venues to calculate bounds for geographic league selection
-            const allLeagues = await this.getAllAccessibleLeagues(restrictedLeagues, savedMatchVenues);
+            const allLeagues = await this.getAllAccessibleLeagues(restrictedLeagues);
             
             if (allLeagues.length === 0) {
                 return [];
@@ -914,56 +910,9 @@ class RecommendationService {
         return searchDates;
     }
 
-    async getAllAccessibleLeagues(restrictedLeagues, savedMatchVenues = null) {
-        // If we have saved match venues, use geographic league selection (same as regular search)
-        if (savedMatchVenues && savedMatchVenues.length > 0) {
-            // Calculate bounds from saved venues
-            const lats = savedMatchVenues
-                .map(v => v.coordinates && v.coordinates[1])
-                .filter(lat => lat != null);
-            const lngs = savedMatchVenues
-                .map(v => v.coordinates && v.coordinates[0])
-                .filter(lng => lng != null);
-
-            if (lats.length > 0 && lngs.length > 0) {
-                // Create bounds with buffer around venues
-                const minLat = Math.min(...lats);
-                const maxLat = Math.max(...lats);
-                const minLng = Math.min(...lngs);
-                const maxLng = Math.max(...lngs);
-                
-                // Add 30% buffer to bounds (same as regular search)
-                const latSpan = maxLat - minLat;
-                const lngSpan = maxLng - minLng;
-                const bufferPercent = 0.3;
-                
-                const bounds = {
-                    northeast: {
-                        lat: maxLat + (latSpan * bufferPercent),
-                        lng: maxLng + (lngSpan * bufferPercent)
-                    },
-                    southwest: {
-                        lat: minLat - (latSpan * bufferPercent),
-                        lng: minLng - (lngSpan * bufferPercent)
-                    }
-                };
-
-                // Use same geographic league selection as regular search
-                const relevantLeagueIds = await this.getRelevantLeagueIdsForBounds(bounds);
-                
-                // Filter out restricted leagues
-                const accessibleLeagueIds = relevantLeagueIds
-                    .map(id => id.toString())
-                    .filter(leagueId => !restrictedLeagues.includes(leagueId));
-                
-                console.log(`🎯 Recommendations: Using ${accessibleLeagueIds.length} geographically-relevant leagues (from ${relevantLeagueIds.length} total, ${restrictedLeagues.length} restricted)`);
-                return accessibleLeagueIds;
-            }
-        }
-
-        // Fallback: If no venues, use hardcoded list (for backward compatibility)
-        // This should rarely happen as recommendations require saved matches with venues
-        console.log('⚠️ Recommendations: No venues provided, using fallback hardcoded league list');
+    async getAllAccessibleLeagues(restrictedLeagues) {
+        // This would typically come from a database or configuration
+        // For now, return common league IDs, excluding restricted ones
         const allLeagues = [
             '39', // Premier League
             '40', // Championship
@@ -981,258 +930,6 @@ class RecommendationService {
         ];
 
         return allLeagues.filter(leagueId => !restrictedLeagues.includes(leagueId));
-    }
-
-    /**
-     * Get relevant league IDs for given bounds using country matching (same logic as regular search)
-     * This is a simplified version of getRelevantLeagueIds from matches.js
-     */
-    async getRelevantLeagueIdsForBounds(bounds) {
-        // Calculate center point of search bounds
-        const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-        const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-
-        // Get all active leagues from MongoDB
-        const allLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
-
-        // Country coordinate mapping (same as matches.js for country detection)
-        const COUNTRY_COORDS = {
-            'England': { lat: 52.3555, lng: -1.1743 },
-            'Scotland': { lat: 56.4907, lng: -4.2026 },
-            'Wales': { lat: 52.1307, lng: -3.7837 },
-            'Northern-Ireland': { lat: 54.7877, lng: -6.4923 },
-            'Ireland': { lat: 53.1424, lng: -7.6921 },
-            'France': { lat: 46.6034, lng: 1.8883 },
-            'Spain': { lat: 40.4637, lng: -3.7492 },
-            'Portugal': { lat: 39.3999, lng: -8.2245 },
-            'Italy': { lat: 41.8719, lng: 12.5674 },
-            'Germany': { lat: 51.1657, lng: 10.4515 },
-            'Netherlands': { lat: 52.1326, lng: 5.2913 },
-            'Belgium': { lat: 50.5039, lng: 4.4699 },
-            'Switzerland': { lat: 46.8182, lng: 8.2275 },
-            'Austria': { lat: 47.5162, lng: 14.5501 },
-            'Denmark': { lat: 56.2639, lng: 9.5018 },
-            'Sweden': { lat: 60.1282, lng: 18.6435 },
-            'Norway': { lat: 60.4720, lng: 8.4689 },
-            'Finland': { lat: 61.9241, lng: 25.7482 },
-            'Iceland': { lat: 64.9631, lng: -19.0208 },
-            'Poland': { lat: 51.9194, lng: 19.1451 },
-            'Czech-Republic': { lat: 49.8175, lng: 15.4730 },
-            'Czechia': { lat: 49.8175, lng: 15.4730 },
-            'Hungary': { lat: 47.1625, lng: 19.5033 },
-            'Romania': { lat: 45.9432, lng: 24.9668 },
-            'Bulgaria': { lat: 42.7339, lng: 25.4858 },
-            'Ukraine': { lat: 48.3794, lng: 31.1656 },
-            'Russia': { lat: 61.5240, lng: 105.3188 },
-            'Serbia': { lat: 44.0165, lng: 21.0059 },
-            'Croatia': { lat: 45.1000, lng: 15.2000 },
-            'Slovenia': { lat: 46.1512, lng: 14.9955 },
-            'Slovakia': { lat: 48.6690, lng: 19.6990 },
-            'Bosnia-Herzegovina': { lat: 43.9159, lng: 17.6791 },
-            'Montenegro': { lat: 42.7087, lng: 19.3744 },
-            'North-Macedonia': { lat: 41.5124, lng: 21.7453 },
-            'Albania': { lat: 41.1533, lng: 20.1683 },
-            'Kosovo': { lat: 42.6026, lng: 20.9030 },
-            'Greece': { lat: 39.0742, lng: 21.8243 },
-            'Cyprus': { lat: 35.1264, lng: 33.4299 },
-            'Malta': { lat: 35.9375, lng: 14.3754 },
-            'Turkey': { lat: 38.9637, lng: 35.2433 },
-            'Saudi Arabia': { lat: 23.8859, lng: 45.0792 },
-            'Saudi-Arabia': { lat: 23.8859, lng: 45.0792 },
-            'UAE': { lat: 23.4241, lng: 53.8478 },
-            'United-Arab-Emirates': { lat: 23.4241, lng: 53.8478 },
-            'Qatar': { lat: 25.3548, lng: 51.1839 },
-            'Israel': { lat: 31.0461, lng: 34.8516 },
-            'Iran': { lat: 32.4279, lng: 53.6880 },
-            'USA': { lat: 39.8283, lng: -98.5795 },
-            'Canada': { lat: 56.1304, lng: -106.3468 },
-            'Mexico': { lat: 23.6345, lng: -102.5528 },
-            'Brazil': { lat: -14.2350, lng: -51.9253 },
-            'Argentina': { lat: -38.4161, lng: -63.6167 },
-            'Colombia': { lat: 4.5709, lng: -74.2973 },
-            'Chile': { lat: -35.6751, lng: -71.5430 },
-            'Peru': { lat: -9.1900, lng: -75.0152 },
-            'Ecuador': { lat: -1.8312, lng: -78.1834 },
-            'Uruguay': { lat: -32.5228, lng: -55.7658 },
-            'Paraguay': { lat: -23.4425, lng: -58.4438 },
-            'Venezuela': { lat: 6.4238, lng: -66.5897 },
-            'Bolivia': { lat: -16.2902, lng: -63.5887 },
-            'Japan': { lat: 36.2048, lng: 138.2529 },
-            'South-Korea': { lat: 35.9078, lng: 127.7669 },
-            'China': { lat: 35.8617, lng: 104.1954 },
-            'India': { lat: 20.5937, lng: 78.9629 },
-            'Australia': { lat: -25.2744, lng: 133.7751 },
-            'Indonesia': { lat: -0.7893, lng: 113.9213 },
-            'Thailand': { lat: 15.8700, lng: 100.9925 },
-            'Vietnam': { lat: 14.0583, lng: 108.2772 },
-            'Malaysia': { lat: 4.2105, lng: 101.9758 },
-            'Singapore': { lat: 1.3521, lng: 103.8198 },
-            'Egypt': { lat: 26.8206, lng: 30.8025 },
-            'South-Africa': { lat: -30.5595, lng: 22.9375 },
-            'Morocco': { lat: 31.7917, lng: -7.0926 },
-            'Algeria': { lat: 28.0339, lng: 1.6596 },
-            'Tunisia': { lat: 33.8869, lng: 9.5375 },
-            'Nigeria': { lat: 9.0820, lng: 8.6753 },
-            'Ghana': { lat: 7.9465, lng: -1.0232 },
-            'Senegal': { lat: 14.4974, lng: -14.4524 },
-            'Cameroon': { lat: 7.3697, lng: 12.3547 },
-            'Ivory-Coast': { lat: 7.5400, lng: -5.5471 },
-            'Kenya': { lat: -0.0236, lng: 37.9062 }
-        };
-
-        // Detect country from bounds
-        const countryDetection = this.detectCountryFromBounds(bounds, COUNTRY_COORDS);
-        const detectedCountry = countryDetection.country;
-        const nearbyCountries = countryDetection.nearbyCountries || [];
-
-        // Cache for reverse geocoded country
-        let reverseGeocodedCountry = null;
-        let reverseGeocodeAttempted = false;
-
-        const relevantLeagueIds = [];
-
-        for (const league of allLeagues) {
-            let shouldInclude = false;
-
-            // Always include international competitions
-            if (league.country === 'International' || league.country === 'Europe' || 
-                league.name.includes('Champions League') || league.name.includes('Europa') ||
-                league.name.includes('World Cup') || league.name.includes('European Championship') ||
-                league.name.includes('Nations League') || league.name.includes('Friendlies')) {
-                shouldInclude = true;
-            } else {
-                // PRIMARY METHOD: Country name matching
-                if (league.country === detectedCountry || nearbyCountries.includes(league.country)) {
-                    shouldInclude = true;
-                } else {
-                    // FALLBACK METHOD: Reverse geocoding
-                    if (!reverseGeocodeAttempted && detectedCountry && !COUNTRY_COORDS[detectedCountry]) {
-                        reverseGeocodeAttempted = true;
-                        try {
-                            reverseGeocodedCountry = await geocodingService.reverseGeocodeCountry(centerLat, centerLng);
-                            if (reverseGeocodedCountry && league.country === reverseGeocodedCountry) {
-                                shouldInclude = true;
-                            }
-                        } catch (error) {
-                            console.log(`⚠️ Reverse geocoding failed: ${error.message}`);
-                        }
-                    } else if (reverseGeocodedCountry && league.country === reverseGeocodedCountry) {
-                        shouldInclude = true;
-                    } else {
-                        // LAST RESORT: Distance calculation
-                        const countryCoords = COUNTRY_COORDS[league.country];
-                        if (countryCoords) {
-                            const distance = this.calculateDistanceKm(
-                                centerLat, centerLng,
-                                countryCoords.lat, countryCoords.lng
-                            );
-
-                            const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
-                            const isInNorthAmerica = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
-                            const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
-
-                            let maxDistance;
-                            if (isInEurope) {
-                                maxDistance = 800;
-                            } else if (isInNorthAmerica || isInSouthAmerica) {
-                                maxDistance = 3000;
-                            } else {
-                                maxDistance = 2000;
-                            }
-
-                            if (distance <= maxDistance) {
-                                shouldInclude = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (shouldInclude) {
-                const leagueId = parseInt(league.apiId);
-                if (!isNaN(leagueId)) {
-                    relevantLeagueIds.push(leagueId);
-                }
-            }
-        }
-
-        // Fallback: if no relevant leagues found
-        if (relevantLeagueIds.length === 0) {
-            const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3'];
-            const fallbackLeagues = await League.find({ 
-                apiId: { $in: fallbackApiIds },
-                isActive: true 
-            }).select('apiId').lean();
-            
-            return fallbackLeagues.map(l => parseInt(l.apiId)).filter(id => !isNaN(id));
-        }
-
-        return relevantLeagueIds;
-    }
-
-    /**
-     * Detect country from bounds (same logic as matches.js)
-     */
-    detectCountryFromBounds(bounds, COUNTRY_COORDS) {
-        const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-        const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-        
-        let searchCountry = null;
-        let minDistance = Infinity;
-        const DISTANCE_THRESHOLD = 800;
-        const NEARBY_THRESHOLD = 400;
-        const nearbyCountries = [];
-        
-        for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
-            const distance = this.calculateDistanceKm(centerLat, centerLng, coords.lat, coords.lng);
-            if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
-                minDistance = distance;
-                searchCountry = countryName;
-            }
-            if (distance < NEARBY_THRESHOLD) {
-                nearbyCountries.push({ country: countryName, distance });
-            }
-        }
-        
-        nearbyCountries.sort((a, b) => a.distance - b.distance);
-        
-        if (!searchCountry) {
-            if (centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40) {
-                searchCountry = 'Europe-Region';
-            } else if (centerLat > -55 && centerLat < 75 && centerLng > -170 && centerLng < -30) {
-                searchCountry = 'Americas-Region';
-            } else if (centerLat > -50 && centerLat < 75 && centerLng > 60 && centerLng < 180) {
-                searchCountry = 'AsiaPacific-Region';
-            } else if (centerLat > -40 && centerLat < 40 && centerLng > -25 && centerLng < 60) {
-                searchCountry = 'Africa-Region';
-            } else {
-                const roundedLat = Math.round(centerLat);
-                const roundedLng = Math.round(centerLng);
-                searchCountry = `Remote-${roundedLat}-${roundedLng}`;
-            }
-        }
-        
-        return {
-            country: searchCountry,
-            centerLat,
-            centerLng,
-            distance: minDistance === Infinity ? null : minDistance,
-            nearbyCountries: nearbyCountries.map(c => c.country)
-        };
-    }
-
-    /**
-     * Calculate distance in kilometers
-     */
-    calculateDistanceKm(lat1, lon1, lat2, lon2) {
-        const R = 6371; // Earth's radius in kilometers
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
     }
 
     calculateDistance(lat1, lon1, lat2, lon2) {
