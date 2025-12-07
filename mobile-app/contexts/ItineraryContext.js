@@ -309,6 +309,17 @@ export const ItineraryProvider = ({ children }) => {
         ));
         return updatedTrip;
       } else if (response.error) {
+        // Check if this is a 404 (trip not found/deleted)
+        const isNotFound = response.error.includes('Trip not found') || 
+                          response.error.includes('not found') ||
+                          (response.status === 404);
+        
+        if (isNotFound) {
+          // Trip was deleted - return deleted indicator
+          // Don't log this as it's expected after deletion
+          return { deleted: true };
+        }
+        
         // Only log non-rate-limit errors to avoid noise
         if (!response.error.includes('429') && !response.error.includes('rate limit')) {
           if (__DEV__) {

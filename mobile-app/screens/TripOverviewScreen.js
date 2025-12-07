@@ -58,8 +58,35 @@ const TripOverviewScreen = ({ navigation, route }) => {
   
   // Use recommendations hook (disabled for past trips)
   // Pass trip object so hook can read recommendations from trip.recommendations
+  // Stabilize the trip object to prevent unnecessary re-renders when only non-essential data changes
   const tripId = itinerary?.id || itinerary?._id;
   const isPastTripForHook = itinerary?.isCompleted === true;
+  
+  // Memoize trip object to only update when recommendations or essential data changes
+  // This prevents useRecommendations from re-running when other itinerary fields change
+  const stableTrip = useMemo(() => {
+    if (!itinerary) return null;
+    
+    // Only include essential fields that useRecommendations needs
+    return {
+      id: itinerary.id || itinerary._id,
+      _id: itinerary._id || itinerary.id,
+      recommendationsVersion: itinerary.recommendationsVersion,
+      recommendations: itinerary.recommendations,
+      isCompleted: itinerary.isCompleted,
+      // Include a hash of recommendations to detect actual changes
+      _recommendationsHash: itinerary.recommendations 
+        ? JSON.stringify(itinerary.recommendations.map(r => r.matchId || r.match?.id || r.match?.fixture?.id)).slice(0, 100)
+        : null
+    };
+  }, [
+    itinerary?.id || itinerary?._id,
+    itinerary?.recommendationsVersion,
+    itinerary?.isCompleted,
+    // Only update when recommendations array reference or content changes
+    itinerary?.recommendations ? JSON.stringify(itinerary.recommendations.map(r => r.matchId || r.match?.id || r.match?.fixture?.id)) : null
+  ]);
+  
   const { 
     recommendations, 
     loading: recommendationsLoading, 
@@ -67,11 +94,13 @@ const TripOverviewScreen = ({ navigation, route }) => {
     refetch: refetchRecommendations,
     dismiss: dismissRecommendation,
     addToTrip: addRecommendationToTrip
-  } = useRecommendations(tripId, itinerary, { autoFetch: !!tripId && !isPastTripForHook });
+  } = useRecommendations(tripId, stableTrip, { autoFetch: !!tripId && !isPastTripForHook });
   const [scoresLoading, setScoresLoading] = useState(false);
   const [matchesExpanded, setMatchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(true);
+  // Track if scores have been fetched for this trip to prevent duplicate calls
+  const scoresFetchedRef = React.useRef(new Set());
   const [descriptionText, setDescriptionText] = useState('');
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isSavingDescription, setIsSavingDescription] = useState(false);
@@ -98,6 +127,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (itineraryId) {
+      // Clear scores fetched ref when itineraryId changes
+      scoresFetchedRef.current.clear();
+      
       // Load cached recommendations immediately (synchronously) for instant display
       // Note: The useRecommendations hook will handle loading recommendations automatically
       // We just log here for debugging - the hook manages its own state
@@ -120,6 +152,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
       // Always fetch fresh data from API on mount to ensure we have latest flights
       const loadItinerary = async () => {
         try {
+          // Check if itinerary exists in context first
+          const itineraryInContext = getItineraryById(itineraryId);
+          if (!itineraryInContext) {
+            // Itinerary was deleted - navigate back
+            console.log('📥 Itinerary not found in context on mount, navigating back');
+            setLoading(false);
+            navigation.goBack();
+            return;
+          }
+
           const response = await apiService.getTripById(itineraryId);
           // Handle both response.trip and response.data formats
           const tripData = response.trip || response.data;
@@ -134,7 +176,20 @@ const TripOverviewScreen = ({ navigation, route }) => {
               fetchScores(tripData.id || tripData._id);
             }
           } else {
-            // Fallback to context if API fails
+            // Check if this is a 404 (trip deleted)
+            const isNotFound = response.status === 404 || 
+                              response.error?.includes('Trip not found') ||
+                              response.error?.includes('not found');
+            
+            if (isNotFound) {
+              // Trip was deleted - navigate back
+              console.log('📥 Itinerary was deleted, navigating back');
+              setLoading(false);
+              navigation.goBack();
+              return;
+            }
+            
+            // Fallback to context if API fails (non-404 errors)
             const foundItinerary = getItineraryById(itineraryId);
             if (foundItinerary) {
               setItinerary(foundItinerary);
@@ -163,19 +218,28 @@ const TripOverviewScreen = ({ navigation, route }) => {
       // No itineraryId provided, stop loading
       setLoading(false);
     }
-  }, [itineraryId, getItineraryById]);
+  }, [itineraryId, getItineraryById, navigation]);
 
   // Refetch recommendations when screen comes into focus (to sync with other screens)
   // Use a ref to track if this is the initial mount to avoid double-fetching
   const isInitialMount = React.useRef(true);
   const isRefreshingRef = React.useRef(false);
+  const lastRefreshTimeRef = React.useRef(null);
+  const lastItineraryIdRef = React.useRef(null);
   
   useFocusEffect(
     React.useCallback(() => {
       // Skip the first focus (initial mount) - recommendations are already fetched in useEffect
       if (isInitialMount.current) {
         isInitialMount.current = false;
+        lastItineraryIdRef.current = itineraryId;
         return;
+      }
+      
+      // If itineraryId changed, reset refresh tracking
+      if (lastItineraryIdRef.current !== itineraryId) {
+        lastItineraryIdRef.current = itineraryId;
+        lastRefreshTimeRef.current = null;
       }
       
       // Prevent multiple simultaneous refresh attempts
@@ -183,37 +247,66 @@ const TripOverviewScreen = ({ navigation, route }) => {
         return;
       }
       
-      // Only refetch if we have an itinerary loaded and we're coming back to the screen
-      // But don't force refresh if trip has non-empty stored recommendations - use them instead
-      if (itinerary?.id || itinerary?._id) {
-        const hasNonEmptyStoredRecommendations = itinerary?.recommendationsVersion === 'v2' && 
-                                                 Array.isArray(itinerary?.recommendations) &&
-                                                 itinerary.recommendations.length > 0;
-        
-        if (hasNonEmptyStoredRecommendations) {
-          // Trip has non-empty stored recommendations - just refresh the trip data to get latest recommendations
-          // The useRecommendations hook will pick them up automatically when itinerary updates
-          console.log(`📥 Trip has ${itinerary.recommendations.length} stored recommendations - refreshing trip data instead of forcing recommendation refresh`);
-          isRefreshingRef.current = true;
-          // Refresh itinerary to get latest recommendations from backend
-          refreshItinerary(itineraryId).then(updatedItinerary => {
-            if (updatedItinerary) {
-              setItinerary(updatedItinerary);
-            }
-          }).catch(err => {
-            console.error('Error refreshing itinerary:', err);
-            // If refresh fails, fall back to fetching recommendations normally
-            refetchRecommendations(false);
-          }).finally(() => {
-            isRefreshingRef.current = false;
-          });
-        } else {
-          // No stored recommendations or empty - fetch from API
-          console.log('📥 No stored recommendations or empty - fetching from API');
-          refetchRecommendations(false); // Don't force refresh, just fetch normally
-        }
+      // Prevent excessive refreshes - only refresh if it's been more than 30 seconds since last refresh
+      const now = Date.now();
+      const thirtySeconds = 30 * 1000;
+      if (lastRefreshTimeRef.current && (now - lastRefreshTimeRef.current) < thirtySeconds) {
+        return;
       }
-    }, [itinerary, itineraryId, refreshItinerary, refetchRecommendations])
+      
+      // Only refetch if we have an itineraryId
+      if (!itineraryId) {
+        return;
+      }
+      
+      // Check if itinerary still exists in context before attempting refresh
+      // This prevents 404 errors when an itinerary is deleted while viewing it
+      const itineraryInContext = getItineraryById(itineraryId);
+      if (!itineraryInContext) {
+        // Itinerary was deleted - navigate back
+        console.log('📥 Itinerary not found in context, navigating back');
+        navigation.goBack();
+        return;
+      }
+      
+      // Get current itinerary from state (but don't depend on it in the callback)
+      // We'll check if it has stored recommendations, but if it doesn't exist yet, that's okay
+      const currentItinerary = itinerary;
+      const hasNonEmptyStoredRecommendations = currentItinerary?.recommendationsVersion === 'v2' && 
+                                               Array.isArray(currentItinerary?.recommendations) &&
+                                               currentItinerary.recommendations.length > 0;
+      
+      if (hasNonEmptyStoredRecommendations) {
+        // Trip has non-empty stored recommendations - just refresh the trip data to get latest recommendations
+        // The useRecommendations hook will pick them up automatically when itinerary updates
+        console.log(`📥 Trip has ${currentItinerary.recommendations.length} stored recommendations - refreshing trip data instead of forcing recommendation refresh`);
+        isRefreshingRef.current = true;
+        lastRefreshTimeRef.current = now;
+        // Refresh itinerary to get latest recommendations from backend
+        refreshItinerary(itineraryId).then(updatedItinerary => {
+          // Check if itinerary was deleted
+          if (updatedItinerary?.deleted) {
+            console.log('📥 Itinerary was deleted, navigating back');
+            navigation.goBack();
+            return;
+          }
+          if (updatedItinerary) {
+            setItinerary(updatedItinerary);
+          }
+        }).catch(err => {
+          console.error('Error refreshing itinerary:', err);
+          // If refresh fails, fall back to fetching recommendations normally
+          refetchRecommendations(false);
+        }).finally(() => {
+          isRefreshingRef.current = false;
+        });
+      } else {
+        // No stored recommendations or empty - fetch from API
+        console.log('📥 No stored recommendations or empty - fetching from API');
+        lastRefreshTimeRef.current = now;
+        refetchRecommendations(false); // Don't force refresh, just fetch normally
+      }
+    }, [itineraryId, refreshItinerary, refetchRecommendations, getItineraryById, navigation]) // Removed 'itinerary' from dependencies to prevent infinite loop
   );
 
   // Refresh itinerary after flight is added
@@ -510,6 +603,14 @@ const TripOverviewScreen = ({ navigation, route }) => {
   };
 
   const fetchScores = async (tripId) => {
+    if (!tripId) return;
+    
+    // Prevent duplicate calls for the same trip
+    if (scoresFetchedRef.current.has(tripId)) {
+      return;
+    }
+    
+    scoresFetchedRef.current.add(tripId);
     setScoresLoading(true);
     try {
       const data = await apiService.fetchScores(tripId);
@@ -539,6 +640,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
     } catch (err) {
       console.error('Error fetching match scores:', err);
       // Don't show error to user - scores are optional
+      // Remove from set on error so it can be retried
+      scoresFetchedRef.current.delete(tripId);
     } finally {
       setScoresLoading(false);
     }

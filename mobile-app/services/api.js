@@ -72,6 +72,15 @@ const login = async (email, password) => {
       body: JSON.stringify({ email, password })
     });
 
+    // Handle rate limit errors before parsing JSON
+    if (response.status === 429) {
+      return { 
+        success: false, 
+        error: 'Too many requests from this IP. Please wait a few minutes and try again.',
+        rateLimited: true
+      };
+    }
+
     const data = await response.json();
     
     if (response.ok) {
@@ -83,6 +92,14 @@ const login = async (email, password) => {
   } catch (error) {
     if (__DEV__) {
       console.error('Login error:', error);
+    }
+    // Check if it's a rate limit error in the catch block too
+    if (error.message?.includes('429') || error.message?.includes('rate limit') || error.message?.includes('Too many requests')) {
+      return { 
+        success: false, 
+        error: 'Too many requests from this IP. Please wait a few minutes and try again.',
+        rateLimited: true
+      };
     }
     return { success: false, error: 'Network error' };
   }
@@ -98,6 +115,15 @@ const register = async (email, password) => {
       body: JSON.stringify({ email, password })
     });
 
+    // Handle rate limit errors before parsing JSON
+    if (response.status === 429) {
+      return { 
+        success: false, 
+        error: 'Too many requests from this IP. Please wait a few minutes and try again.',
+        rateLimited: true
+      };
+    }
+
     const data = await response.json();
     
     if (response.ok) {
@@ -109,6 +135,14 @@ const register = async (email, password) => {
   } catch (error) {
     if (__DEV__) {
       console.error('Registration error:', error);
+    }
+    // Check if it's a rate limit error in the catch block too
+    if (error.message?.includes('429') || error.message?.includes('rate limit') || error.message?.includes('Too many requests')) {
+      return { 
+        success: false, 
+        error: 'Too many requests from this IP. Please wait a few minutes and try again.',
+        rateLimited: true
+      };
     }
     return { success: false, error: 'Network error' };
   }
@@ -635,7 +669,7 @@ class ApiService {
             data: data
           });
         }
-        return { success: false, error: errorMessage };
+        return { success: false, error: errorMessage, status: response.status };
       }
       
       return { success: true, data: data.trip || data };
