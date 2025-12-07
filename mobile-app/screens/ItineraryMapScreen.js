@@ -74,10 +74,18 @@ const ItineraryMapScreen = ({ navigation, route }) => {
             setItinerary(response.data);
             // Trigger auto-fit when itinerary loads from API
             setAutoFitKey(prev => prev + 1);
+          } else if (response.error) {
+            // Only log non-rate-limit errors to avoid noise
+            if (!response.error.includes('429') && !response.error.includes('rate limit')) {
+              console.warn('⚠️ Failed to load itinerary from API:', response.error);
+            }
           }
         }
       } catch (error) {
-        console.error('Error loading itinerary:', error);
+        // Only log if it's not a network error that might be transient
+        if (error.message && !error.message.includes('Network request failed')) {
+          console.error('Error loading itinerary:', error);
+        }
       } finally {
         setLoading(false);
       }
@@ -126,22 +134,75 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
   // Fetch travel times when itinerary and home bases are available
   // Also recalculate when home bases change (added, updated, or deleted)
+  // Uses caching to avoid unnecessary API calls
+  const lastTravelTimesHash = useRef(null);
+  
   useEffect(() => {
     const fetchTravelTimes = async () => {
       if (!itinerary || !itinerary.homeBases || itinerary.homeBases.length === 0) {
         // Clear travel times when no home bases are available
         setTravelTimes({});
+        lastTravelTimesHash.current = null;
         return;
       }
 
       if (!itinerary.matches || itinerary.matches.length === 0) {
         setTravelTimes({});
+        lastTravelTimesHash.current = null;
         return;
       }
 
+      // Create a hash of matches and home bases to detect if we need to refetch
+      const matchIds = (itinerary.matches || [])
+        .map(m => String(m.matchId || m.fixture?.id || m.id))
+        .sort()
+        .join(',');
+      const homeBaseIds = (itinerary.homeBases || [])
+        .map(hb => `${hb._id || hb.id}-${hb.coordinates?.lat}-${hb.coordinates?.lng}`)
+        .sort()
+        .join(',');
+      const currentHash = `${matchIds}|${homeBaseIds}`;
+      
+      // Only fetch if hash changed (matches or home bases changed)
+      if (lastTravelTimesHash.current === currentHash) {
+        // Check cache first - API service will return cached if available
+        const cached = ApiService.getCachedTravelTimes(itineraryId);
+        if (cached && Object.keys(cached).length > 0) {
+          // Use cached data, but still filter for valid home bases
+          const validHomeBaseIds = new Set(
+            (itinerary.homeBases || []).map(hb => String(hb._id || hb.id))
+          );
+          
+          const filteredTimes = {};
+          Object.keys(cached).forEach(matchId => {
+            const travelTime = cached[matchId];
+            if (travelTime && travelTime.homeBaseId) {
+              const homeBaseId = String(travelTime.homeBaseId);
+              if (validHomeBaseIds.has(homeBaseId)) {
+                const match = itinerary.matches?.find(m => 
+                  String(m.matchId) === matchId || 
+                  String(m.fixture?.id) === matchId
+                );
+                if (match?.planning?.homeBaseId && 
+                    String(match.planning.homeBaseId) === homeBaseId) {
+                  filteredTimes[matchId] = travelTime;
+                }
+              }
+            }
+          });
+          setTravelTimes(filteredTimes);
+          return; // Use cached data, no API call needed
+        }
+        return; // Hash unchanged and no cache - keep existing travel times
+      }
+      
+      // Hash changed or no cache - fetch from API
+      lastTravelTimesHash.current = currentHash;
+
       try {
         setTravelTimesLoading(true);
-        const times = await ApiService.getTravelTimes(itineraryId);
+        // Don't force refresh - use cache if available
+        const times = await ApiService.getTravelTimes(itineraryId, null, false);
         // Only set travel times for matches that have valid home bases
         // Filter out any travel times that reference deleted home bases
         const validHomeBaseIds = new Set(
@@ -176,11 +237,41 @@ const ItineraryMapScreen = ({ navigation, route }) => {
         
         setTravelTimes(filteredTimes);
       } catch (error) {
-        // Only log non-API-key errors to avoid noise in console
-        if (!error.message?.includes('API key not configured')) {
+        // Only log non-API-key and non-rate-limit errors to avoid noise in console
+        if (!error.message?.includes('API key not configured') && 
+            !error.message?.includes('429') && 
+            !error.message?.includes('rate limit') &&
+            !error.message?.includes('Too many requests')) {
           console.error('Error fetching travel times:', error);
         }
-        setTravelTimes({});
+        // Try to use cached data on error
+        const cached = ApiService.getCachedTravelTimes(itineraryId);
+        if (cached && Object.keys(cached).length > 0) {
+          const validHomeBaseIds = new Set(
+            (itinerary.homeBases || []).map(hb => String(hb._id || hb.id))
+          );
+          
+          const filteredTimes = {};
+          Object.keys(cached).forEach(matchId => {
+            const travelTime = cached[matchId];
+            if (travelTime && travelTime.homeBaseId) {
+              const homeBaseId = String(travelTime.homeBaseId);
+              if (validHomeBaseIds.has(homeBaseId)) {
+                const match = itinerary.matches?.find(m => 
+                  String(m.matchId) === matchId || 
+                  String(m.fixture?.id) === matchId
+                );
+                if (match?.planning?.homeBaseId && 
+                    String(match.planning.homeBaseId) === homeBaseId) {
+                  filteredTimes[matchId] = travelTime;
+                }
+              }
+            }
+          });
+          setTravelTimes(filteredTimes);
+        } else {
+          setTravelTimes({});
+        }
       } finally {
         setTravelTimesLoading(false);
       }
@@ -200,20 +291,34 @@ const ItineraryMapScreen = ({ navigation, route }) => {
   // Refetch recommendations when screen comes into focus (to sync with other screens)
   // Use a ref to track if this is the initial mount to avoid double-fetching
   const isInitialMount = React.useRef(true);
+  const lastRefreshTime = React.useRef(null);
   
   useFocusEffect(
     React.useCallback(() => {
       // Skip the first focus (initial mount) - recommendations are already fetched in useEffect
       if (isInitialMount.current) {
         isInitialMount.current = false;
+        lastRefreshTime.current = Date.now();
         return;
       }
       
       // Only refetch if we have an itinerary loaded and we're coming back to the screen
       if (itineraryId && itinerary) {
-        refetchRecommendations(true); // Force refresh to get latest (including dismissed items removed)
+        // Only refresh if data is stale (older than 5 minutes)
+        const now = Date.now();
+        const fiveMinutes = 5 * 60 * 1000;
+        const isStale = !lastRefreshTime.current || (now - lastRefreshTime.current) > fiveMinutes;
+        
+        if (isStale) {
+          // Use cached data if available, don't force refresh
+          refetchRecommendations(false);
+          lastRefreshTime.current = now;
+        } else {
+          // Data is fresh, use cached recommendations
+          // The hook will use cached data automatically
+        }
       }
-    }, [itineraryId, itinerary])
+    }, [itineraryId, itinerary, refetchRecommendations])
   );
 
   // Calculate map region to fit all matches, recommended matches, and home bases

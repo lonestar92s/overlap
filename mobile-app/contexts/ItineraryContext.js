@@ -105,6 +105,9 @@ export const ItineraryProvider = ({ children }) => {
           }
           return updated;
         });
+        
+        // Invalidate travel times cache since matches changed
+        ApiService.invalidateTravelTimesCache(itineraryId);
       } else {
         throw new Error('Failed to add match to trip via API');
       }
@@ -305,11 +308,21 @@ export const ItineraryProvider = ({ children }) => {
           idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
         ));
         return updatedTrip;
+      } else if (response.error) {
+        // Only log non-rate-limit errors to avoid noise
+        if (!response.error.includes('429') && !response.error.includes('rate limit')) {
+          if (__DEV__) {
+            console.warn('⚠️ Failed to refresh itinerary:', response.error);
+          }
+        }
       }
       return null;
     } catch (error) {
-      if (__DEV__) {
-        console.error('Error refreshing itinerary:', error);
+      // Only log if it's not a network error that might be transient
+      if (error.message && !error.message.includes('Network request failed')) {
+        if (__DEV__) {
+          console.error('Error refreshing itinerary:', error);
+        }
       }
       return null;
     }

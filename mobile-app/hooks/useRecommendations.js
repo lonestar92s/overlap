@@ -13,6 +13,10 @@ import ApiService from '../services/api';
 // Shared request cache to prevent duplicate API calls when multiple screens fetch simultaneously
 const activeRequests = new Map();
 
+// Debounce tracking to prevent rapid successive fetches
+const lastFetchTime = new Map();
+const DEBOUNCE_DELAY = 2000; // 2 seconds between fetches
+
 /**
  * Hook for managing trip recommendations
  * @param {string} tripId - Trip ID to fetch recommendations for
@@ -44,10 +48,21 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
   const isMountedRef = useRef(true);
   // AbortController for cancelling in-flight requests
   const abortControllerRef = useRef(null);
+  // Track which recommendations have been tracked in this session to prevent duplicates
+  const trackedInSessionRef = useRef(new Set());
+  // Track current tripId to clear session tracking when trip changes
+  const currentTripIdRef = useRef(tripId);
   
-  // Cleanup on unmount
+  // Cleanup on unmount and clear session tracking when tripId changes
   useEffect(() => {
     isMountedRef.current = true;
+    
+    // Clear session tracking if tripId changed
+    if (currentTripIdRef.current !== tripId) {
+      trackedInSessionRef.current.clear();
+      currentTripIdRef.current = tripId;
+    }
+    
     return () => {
       isMountedRef.current = false;
       // Cancel any in-flight requests
@@ -78,18 +93,32 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
   }, []);
   
   /**
-   * Track that user viewed recommendations (only if not cached)
+   * Track that user viewed recommendations (only if not cached and not already tracked in this session)
    */
   const trackViewedRecommendations = useCallback(async (recommendations, tripId, wasCached) => {
     if (wasCached) return; // Don't track if from cache
+    if (!recommendations || recommendations.length === 0) return;
     
     try {
       const trackedMatchIds = new Set();
+      let rateLimited = false;
+      
       for (const rec of recommendations) {
         const matchId = String(rec.matchId || rec.match?.fixture?.id || rec.match?.id);
-        if (!trackedMatchIds.has(matchId)) {
-          trackedMatchIds.add(matchId);
-          await ApiService.trackRecommendation(
+        if (!matchId || trackedMatchIds.has(matchId)) {
+          continue; // Skip invalid or already tracked match IDs in this batch
+        }
+        
+        // Skip if already tracked in this session
+        if (trackedInSessionRef.current.has(matchId)) {
+          continue;
+        }
+        
+        trackedMatchIds.add(matchId);
+        trackedInSessionRef.current.add(matchId); // Mark as tracked in session
+        
+        try {
+          const result = await ApiService.trackRecommendation(
             matchId,
             'viewed',
             tripId,
@@ -97,10 +126,41 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
             rec.score,
             rec.reason
           );
+          
+          // If we hit rate limit, stop tracking to avoid more errors
+          if (result && result.rateLimited) {
+            rateLimited = true;
+            break;
+          }
+          
+          // Add a small delay between calls to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (err) {
+          // Log individual failures but continue with others
+          // Suppress rate limit errors
+          if (!err.message?.includes('429') && !err.message?.includes('rate limit')) {
+            console.warn(`⚠️ Failed to track recommendation ${matchId}:`, err.message);
+          }
+          
+          // If we hit rate limit, stop tracking
+          if (err.message?.includes('429') || err.message?.includes('rate limit')) {
+            rateLimited = true;
+            break;
+          }
+        }
+      }
+      
+      if (rateLimited) {
+        // Silently handle rate limiting - don't log as error
+        if (__DEV__) {
+          console.log('📊 Rate limited while tracking recommendations - stopping to avoid errors');
         }
       }
     } catch (err) {
-      console.error('Error tracking viewed recommendations:', err);
+      // Only log non-rate-limit errors
+      if (!err.message?.includes('429') && !err.message?.includes('rate limit')) {
+        console.error('Error tracking viewed recommendations:', err);
+      }
       // Don't throw - tracking failure shouldn't break the UI
     }
   }, []);
@@ -128,10 +188,9 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
       console.log('📥 Using stored recommendations from trip document');
       const uniqueRecommendations = deduplicateRecommendations(trip.recommendations || []);
       
-      // Track viewed recommendations (async, don't block)
-      trackViewedRecommendations(uniqueRecommendations, tripId, false).catch(err => {
-        console.error('Error tracking viewed recommendations:', err);
-      });
+      // Don't track stored recommendations - they're already persisted and tracking causes excessive API calls
+      // trackViewedRecommendations(uniqueRecommendations, tripId, true) would skip tracking anyway,
+      // but we don't even need to call it for stored recommendations
       
       if (isMountedRef.current) {
         setRecommendations(uniqueRecommendations);
@@ -142,7 +201,6 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
     }
     
     // Fallback: Fetch from API (for migration period or force refresh)
-    console.log('📥 Fetching recommendations from API (fallback or force refresh)');
     
     // Check if there's already an active request for this tripId
     const existingRequest = activeRequests.get(tripId);
@@ -157,9 +215,44 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
         return;
       } catch (err) {
         // If existing request failed, continue with new request
+        // But check if it was rate limited - if so, use cache
+        if (err.rateLimited || err.message?.includes('429') || err.message?.includes('rate limit')) {
+          const cached = ApiService.getCachedRecommendations(tripId);
+          if (cached && cached.recommendations) {
+            console.log('⚠️ Rate limited - using cached recommendations');
+            if (isMountedRef.current) {
+              setRecommendations(cached.recommendations || []);
+              setError(null);
+            }
+            return;
+          }
+        }
         console.warn('Existing request failed, starting new request:', err);
       }
     }
+    
+    // Debounce: Skip fetch if we just fetched recently (unless forcing refresh)
+    if (!forceRefresh) {
+      const lastFetch = lastFetchTime.get(tripId);
+      const now = Date.now();
+      if (lastFetch && (now - lastFetch) < DEBOUNCE_DELAY) {
+        // Use cached data if available
+        const cached = ApiService.getCachedRecommendations(tripId);
+        if (cached && cached.recommendations) {
+          console.log('📥 Using cached recommendations (debounced)');
+          if (isMountedRef.current) {
+            setRecommendations(cached.recommendations || []);
+            setError(null);
+          }
+          return;
+        }
+        // No cache, but skip fetch to avoid rate limiting
+        return;
+      }
+      lastFetchTime.set(tripId, now);
+    }
+    
+    console.log('📥 Fetching recommendations from API (fallback or force refresh)');
     
     // Only show loading if we don't have cached data
     const hasCache = ApiService.getCachedRecommendations(tripId);
@@ -178,6 +271,27 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
         
         // Check if request was aborted
         if (abortController.signal.aborted || !isMountedRef.current) {
+          return { recommendations: [], cached: false };
+        }
+        
+        // Check if rate limited
+        if (data.rateLimited || response.status === 429) {
+          // Try to use cached recommendations
+          const cached = ApiService.getCachedRecommendations(tripId);
+          if (cached && cached.recommendations) {
+            console.log('⚠️ Rate limited - using cached recommendations');
+            const uniqueRecommendations = deduplicateRecommendations(cached.recommendations || []);
+            if (isMountedRef.current) {
+              setRecommendations(uniqueRecommendations);
+              setError(null);
+            }
+            return { recommendations: uniqueRecommendations, cached: true };
+          }
+          // No cache available, but don't throw error
+          if (isMountedRef.current) {
+            setRecommendations([]);
+            setError(null); // Don't show error for rate limits
+          }
           return { recommendations: [], cached: false };
         }
         
@@ -203,7 +317,7 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
           
           return { recommendations: uniqueRecommendations, cached: data.cached || data.fromStorage };
         } else {
-          throw new Error(data.message || 'Failed to fetch recommendations');
+          throw new Error(data.message || data.error || 'Failed to fetch recommendations');
         }
       } catch (err) {
         // Don't update state if request was aborted
@@ -211,7 +325,28 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
           return { recommendations: [], cached: false };
         }
         
-        // Handle error
+        // Check if it's a rate limit error
+        if (err.rateLimited || err.message?.includes('429') || err.message?.includes('rate limit') || err.message?.includes('Too many requests')) {
+          // Try to use cached recommendations
+          const cached = ApiService.getCachedRecommendations(tripId);
+          if (cached && cached.recommendations) {
+            console.log('⚠️ Rate limited (error) - using cached recommendations');
+            const uniqueRecommendations = deduplicateRecommendations(cached.recommendations || []);
+            if (isMountedRef.current) {
+              setRecommendations(uniqueRecommendations);
+              setError(null);
+            }
+            return { recommendations: uniqueRecommendations, cached: true };
+          }
+          // No cache available, but don't show error for rate limits
+          if (isMountedRef.current) {
+            setRecommendations([]);
+            setError(null);
+          }
+          return { recommendations: [], cached: false };
+        }
+        
+        // Handle other errors
         if (isMountedRef.current) {
           setError(err.message || 'Failed to fetch recommendations');
           setRecommendations([]);
@@ -233,8 +368,11 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
       await requestPromise;
     } catch (err) {
       // Error already handled in promise
+      // Only log if it's not a rate limit error
       if (!abortController.signal.aborted && isMountedRef.current) {
-        console.error('Error fetching recommendations:', err);
+        if (!err.rateLimited && !err.message?.includes('429') && !err.message?.includes('rate limit')) {
+          console.error('Error fetching recommendations:', err);
+        }
       }
     }
   }, [tripId, trip, deduplicateRecommendations, trackViewedRecommendations]);
@@ -372,10 +510,9 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
           setError(null);
           setLoading(false);
         }
-        // Track viewed (async, don't block)
-        trackViewedRecommendations(uniqueRecommendations, tripId, false).catch(err => {
-          console.error('Error tracking viewed recommendations:', err);
-        });
+        // Don't track stored recommendations - they're already persisted and tracking causes excessive API calls
+        // trackViewedRecommendations(uniqueRecommendations, tripId, true) would skip tracking anyway,
+        // but we don't even need to call it for stored recommendations
       } else if (trip && trip.recommendationsVersion === 'v2' && Array.isArray(trip.recommendations) && trip.recommendations.length === 0) {
         // Trip has v2 but empty recommendations - this is valid (e.g., all days have matches)
         // Cancel any in-flight API requests since we know there are no recommendations

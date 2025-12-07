@@ -127,17 +127,32 @@ export const AuthProvider = ({ children }) => {
           const userData = await ApiService.getCurrentUser();
           setUser(userData);
         } catch (error) {
-          console.log('Token validation failed, clearing auth state');
-          console.log('Token validation error details:', error.message);
+          // Check if it's a rate limit error - don't clear auth state for rate limits
+          if (error.isRateLimit || error.status === 429 || error.message.includes('rate limit') || error.message.includes('Too many requests')) {
+            console.log('Rate limit during token validation, keeping token for retry');
+            // Don't clear auth state for rate limits - keep token and retry later
+            setUser(null);
+            return; // Exit early, don't clear auth state
+          }
           
-          // Check if it's a network error vs authentication error
+          // Check if it's an actual authentication failure (401)
+          if (error.isAuthFailure || error.status === 401 || error.message.includes('Authentication failed')) {
+            console.log('Token validation failed - authentication error, clearing auth state');
+            console.log('Token validation error details:', error.message);
+            // Token is invalid or expired, clear it
+            await logout();
+            return;
+          }
+          
+          // Check if it's a network error vs other errors
           if (error.message.includes('Network error') || error.message.includes('timeout')) {
             console.log('Network error during token validation, keeping token for retry');
             // Don't clear auth state for network errors, just set user to null temporarily
             setUser(null);
           } else {
-            // Token is invalid or expired, clear it
-            await logout();
+            // For other errors, log but don't clear auth state (might be temporary)
+            console.log('Token validation error (non-auth), keeping token:', error.message);
+            setUser(null);
           }
         }
       }

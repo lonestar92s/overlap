@@ -29,6 +29,10 @@ let authToken = null;
 const recommendationCache = new Map();
 const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
 
+// Client-side cache for travel times
+const travelTimesCache = new Map();
+const TRAVEL_TIMES_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds (travel times don't change often)
+
 // Get authentication token from storage or memory
 const getAuthToken = async () => {
   if (authToken) {
@@ -200,14 +204,39 @@ const getCurrentUser = async () => {
       }
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      // If response isn't JSON, get text instead
+      const text = await response.text();
+      // Check for rate limit in non-JSON response
+      if (response.status === 429) {
+        const rateLimitError = new Error('Rate limit exceeded - please try again later');
+        rateLimitError.isRateLimit = true;
+        rateLimitError.status = 429;
+        throw rateLimitError;
+      }
+      throw new Error(`Failed to get user data (${response.status}): ${text}`);
+    }
     
     if (response.ok) {
       return data.user;
     } else {
+      // Handle rate limit errors specifically
+      if (response.status === 429) {
+        const rateLimitError = new Error('Rate limit exceeded - please try again later');
+        rateLimitError.isRateLimit = true;
+        rateLimitError.status = 429;
+        throw rateLimitError;
+      }
+      
       // Provide more specific error messages based on status code
       if (response.status === 401) {
-        throw new Error('Authentication failed - please log in again');
+        const authError = new Error('Authentication failed - please log in again');
+        authError.isAuthFailure = true;
+        authError.status = 401;
+        throw authError;
       } else if (response.status === 403) {
         throw new Error('Access denied - insufficient permissions');
       } else if (response.status >= 500) {
@@ -217,7 +246,10 @@ const getCurrentUser = async () => {
       }
     }
   } catch (error) {
-    console.error('Get current user error:', error);
+    // Only log if it's not a rate limit error (to reduce noise)
+    if (!error.isRateLimit) {
+      console.error('Get current user error:', error);
+    }
     
     // Distinguish between network errors and authentication errors
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
@@ -286,6 +318,29 @@ const AVAILABLE_LEAGUES = [
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
+  }
+
+  /**
+   * Helper to check if an error is a rate limit error
+   */
+  isRateLimitError(error, response) {
+    if (response && response.status === 429) return true;
+    if (error?.status === 429) return true;
+    if (error?.isRateLimit) return true;
+    if (error?.message?.includes('429')) return true;
+    if (error?.message?.includes('rate limit')) return true;
+    if (error?.message?.includes('Too many requests')) return true;
+    return false;
+  }
+
+  /**
+   * Helper to create a rate limit error
+   */
+  createRateLimitError(message = 'Rate limit exceeded - please try again later') {
+    const error = new Error(message);
+    error.isRateLimit = true;
+    error.status = 429;
+    return error;
   }
 
   // Helper method to create fetch requests with timeout
@@ -554,15 +609,42 @@ class ApiService {
         }
       });
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // If response isn't JSON, get text instead
+        const text = await response.text();
+        console.error('❌ API Error - Non-JSON response when fetching trip:', {
+          status: response.status,
+          statusText: response.statusText,
+          text: text
+        });
+        return { success: false, error: `Failed to fetch trip (${response.status}): ${text}` };
+      }
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch trip');
+        const errorMessage = data.message || data.error || `Failed to fetch trip (${response.status})`;
+        // Only log non-429 errors to avoid noise from rate limiting
+        if (response.status !== 429) {
+          console.error('❌ API Error fetching trip:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: data.error,
+            message: data.message,
+            data: data
+          });
+        }
+        return { success: false, error: errorMessage };
       }
       
       return { success: true, data: data.trip || data };
     } catch (error) {
-      console.error('Error fetching trip:', error);
-      return { success: false, error: error.message };
+      // Only log if it's not a network error that might be transient
+      if (error.message && !error.message.includes('Network request failed')) {
+        console.error('Error fetching trip:', error);
+      }
+      return { success: false, error: error.message || 'Failed to fetch trip' };
     }
   }
 
@@ -582,14 +664,29 @@ class ApiService {
         body: JSON.stringify(body)
       });
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        if (this.isRateLimitError(null, response)) {
+          throw this.createRateLimitError();
+        }
+        throw new Error(`Failed to create trip (${response.status})`);
+      }
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create trip');
+        if (this.isRateLimitError(null, response)) {
+          throw this.createRateLimitError();
+        }
+        throw new Error(data.message || data.error || 'Failed to create trip');
       }
       
       return data;
     } catch (error) {
-      console.error('Error creating trip:', error);
+      // Suppress logging for rate limit errors
+      if (!this.isRateLimitError(error)) {
+        console.error('Error creating trip:', error);
+      }
       throw error;
     }
   }
@@ -606,14 +703,29 @@ class ApiService {
         body: JSON.stringify(updates)
       });
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        if (this.isRateLimitError(null, response)) {
+          throw this.createRateLimitError();
+        }
+        throw new Error(`Failed to update trip (${response.status})`);
+      }
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to update trip');
+        if (this.isRateLimitError(null, response)) {
+          throw this.createRateLimitError();
+        }
+        throw new Error(data.message || data.error || 'Failed to update trip');
       }
       
       return data;
     } catch (error) {
-      console.error('Error updating trip:', error);
+      // Suppress logging for rate limit errors
+      if (!this.isRateLimitError(error)) {
+        console.error('Error updating trip:', error);
+      }
       throw error;
     }
   }
@@ -849,6 +961,9 @@ class ApiService {
         throw new Error(errorMessage);
       }
 
+      // Invalidate travel times cache since home bases changed
+      this.invalidateTravelTimesCache(tripId);
+      
       return data; // { success: true, homeBase: {...}, message: '...' }
     } catch (error) {
       console.error('Error adding home base to trip:', error);
@@ -894,6 +1009,9 @@ class ApiService {
         throw new Error(errorMessage);
       }
 
+      // Invalidate travel times cache since home bases changed
+      this.invalidateTravelTimesCache(tripId);
+      
       return data; // { success: true, homeBase: {...}, message: '...' }
     } catch (error) {
       console.error('Error updating home base:', error);
@@ -938,6 +1056,9 @@ class ApiService {
         throw new Error(errorMessage);
       }
 
+      // Invalidate travel times cache since home bases changed
+      this.invalidateTravelTimesCache(tripId);
+      
       return data; // { success: true, message: '...' }
     } catch (error) {
       console.error('Error deleting home base from trip:', error);
@@ -950,10 +1071,32 @@ class ApiService {
     }
   }
 
-  async getTravelTimes(tripId, matchIds = null) {
+  // Get cached travel times synchronously
+  getCachedTravelTimes(tripId, matchIds = null) {
+    const cacheKey = matchIds 
+      ? `travel-times:${tripId}:${Array.isArray(matchIds) ? matchIds.sort().join(',') : matchIds}`
+      : `travel-times:${tripId}`;
+    
+    const cached = travelTimesCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < TRAVEL_TIMES_CACHE_EXPIRY) {
+      console.log('⚡ API Service - Returning cached travel times');
+      return cached.data;
+    }
+    return null;
+  }
+
+  async getTravelTimes(tripId, matchIds = null, forceRefresh = false) {
     try {
       if (!tripId) {
         throw new Error('Trip ID is required');
+      }
+
+      // Check cache first (unless forcing refresh)
+      if (!forceRefresh) {
+        const cached = this.getCachedTravelTimes(tripId, matchIds);
+        if (cached) {
+          return cached;
+        }
       }
 
       const token = await getAuthToken();
@@ -985,27 +1128,94 @@ class ApiService {
         30000 // Longer timeout for travel time calculations
       );
 
-      const data = await response.json();
+      // Handle rate limit errors before parsing JSON
+      if (response.status === 429) {
+        // Return cached travel times if available when rate limited
+        const cached = this.getCachedTravelTimes(tripId, matchIds);
+        if (cached) {
+          console.log('⚠️ Rate limited - returning cached travel times');
+          return cached;
+        }
+        // If no cache, return empty object (don't throw error)
+        console.warn('⚠️ Rate limited and no cached travel times available');
+        return {};
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // If response isn't JSON, try to get cached data
+        const cached = this.getCachedTravelTimes(tripId, matchIds);
+        if (cached) {
+          console.log('⚠️ Non-JSON response - returning cached travel times');
+          return cached;
+        }
+        throw new Error(`Failed to parse travel times response (${response.status})`);
+      }
 
       if (!response.ok) {
+        // Check if it's a rate limit error
+        if (response.status === 429) {
+          // Return cached travel times if available
+          const cached = this.getCachedTravelTimes(tripId, matchIds);
+          if (cached) {
+            console.log('⚠️ Rate limited - returning cached travel times');
+            return cached;
+          }
+          // Return empty object instead of throwing error
+          console.warn('⚠️ Rate limited and no cached travel times available');
+          return {};
+        }
+        
         const errorMessage = data?.message || data?.error || 'Failed to fetch travel times';
-        console.error('Get travel times API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: data
-        });
+        // Only log non-rate-limit errors
+        if (response.status !== 429) {
+          console.error('Get travel times API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
 
-      // Return travel times in format: { matchId: { duration, distance, homeBaseId } }
-      return data.travelTimes || {};
-    } catch (error) {
-      console.error('Error fetching travel times:', error);
-      console.error('Error details:', {
-        tripId,
-        matchIds,
-        message: error.message
+      // Cache the travel times
+      const travelTimes = data.travelTimes || {};
+      const cacheKey = matchIds 
+        ? `travel-times:${tripId}:${Array.isArray(matchIds) ? matchIds.sort().join(',') : matchIds}`
+        : `travel-times:${tripId}`;
+      
+      travelTimesCache.set(cacheKey, {
+        data: travelTimes,
+        timestamp: Date.now()
       });
+
+      // Return travel times in format: { matchId: { duration, distance, homeBaseId } }
+      return travelTimes;
+    } catch (error) {
+      // Check if it's a rate limit error
+      if (this.isRateLimitError(error) || error.message?.includes('429') || error.message?.includes('rate limit') || error.message?.includes('Too many requests')) {
+        // Return cached travel times if available
+        const cached = this.getCachedTravelTimes(tripId, matchIds);
+        if (cached) {
+          console.log('⚠️ Rate limited (error) - returning cached travel times');
+          return cached;
+        }
+        // Return empty object instead of throwing error
+        console.warn('⚠️ Rate limited and no cached travel times available');
+        return {};
+      }
+      
+      // Only log non-rate-limit errors
+      if (!error.message?.includes('429') && !error.message?.includes('rate limit')) {
+        console.error('Error fetching travel times:', error);
+        console.error('Error details:', {
+          tripId,
+          matchIds,
+          message: error.message
+        });
+      }
       throw error;
     }
   }
@@ -2025,16 +2235,48 @@ class ApiService {
         }
       });
       
-      const data = await response.json();
-      console.log('🎯 API Service - Recommendations response:', { 
-        status: response.status, 
-        cached: data.cached,
-        recommendationCount: data.recommendations?.length || 0,
-        diagnostics: data.diagnostics ? {
-          reason: data.diagnostics.reason,
-          message: data.diagnostics.message
-        } : null
-      });
+      // Handle rate limit errors before parsing JSON
+      if (response.status === 429) {
+        // Return cached recommendations if available when rate limited
+        const cached = this.getCachedRecommendations(tripId);
+        if (cached) {
+          console.log('⚠️ Rate limited - returning cached recommendations');
+          return cached;
+        }
+        // If no cache, return empty recommendations with rate limit flag
+        return {
+          success: false,
+          rateLimited: true,
+          recommendations: [],
+          error: 'Rate limit exceeded - please try again later'
+        };
+      }
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // If response isn't JSON, try to get cached data
+        const cached = this.getCachedRecommendations(tripId);
+        if (cached) {
+          console.log('⚠️ Non-JSON response - returning cached recommendations');
+          return cached;
+        }
+        throw new Error(`Failed to parse recommendations response (${response.status})`);
+      }
+      
+      // Suppress logging for rate limit errors to reduce console noise
+      if (response.status !== 429) {
+        console.log('🎯 API Service - Recommendations response:', { 
+          status: response.status, 
+          cached: data.cached,
+          recommendationCount: data.recommendations?.length || 0,
+          diagnostics: data.diagnostics ? {
+            reason: data.diagnostics.reason,
+            message: data.diagnostics.message
+          } : null
+        });
+      }
       
       // Log dismissed matches if available
       if (data.diagnostics?.dismissedMatches && data.diagnostics.dismissedMatches.length > 0) {
@@ -2044,7 +2286,23 @@ class ApiService {
       }
       
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch recommendations');
+        // Check if it's a rate limit error
+        if (response.status === 429) {
+          // Return cached recommendations if available
+          const cached = this.getCachedRecommendations(tripId);
+          if (cached) {
+            console.log('⚠️ Rate limited - returning cached recommendations');
+            return cached;
+          }
+          // Return error with rate limit flag
+          return {
+            success: false,
+            rateLimited: true,
+            recommendations: [],
+            error: data.message || data.error || 'Rate limit exceeded - please try again later'
+          };
+        }
+        throw new Error(data.message || data.error || 'Failed to fetch recommendations');
       }
       
       // Note: Client-side caching removed - recommendations are now in trip.recommendations
@@ -2059,7 +2317,27 @@ class ApiService {
       
       return data;
     } catch (error) {
-      console.error('Error fetching recommendations:', error);
+      // Check if it's a rate limit error
+      if (error.message?.includes('429') || error.message?.includes('rate limit') || error.message?.includes('Too many requests')) {
+        // Return cached recommendations if available
+        const cached = this.getCachedRecommendations(tripId);
+        if (cached) {
+          console.log('⚠️ Rate limited (error) - returning cached recommendations');
+          return cached;
+        }
+        // Return error with rate limit flag
+        return {
+          success: false,
+          rateLimited: true,
+          recommendations: [],
+          error: 'Rate limit exceeded - please try again later'
+        };
+      }
+      
+      // Only log non-rate-limit errors
+      if (!error.message?.includes('429') && !error.message?.includes('rate limit')) {
+        console.error('Error fetching recommendations:', error);
+      }
       throw error;
     }
   }
@@ -2083,16 +2361,38 @@ class ApiService {
         })
       });
       
-      const data = await response.json();
-      console.log('📊 API Service - Track recommendation response:', { status: response.status, data });
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // If response isn't JSON, get text instead
+        const text = await response.text();
+        // Suppress rate limit errors
+        if (response.status === 429) {
+          return { success: false, rateLimited: true };
+        }
+        throw new Error(`Failed to track recommendation (${response.status}): ${text}`);
+      }
+      
+      // Suppress logging for rate limit errors to avoid noise
+      if (response.status !== 429) {
+        console.log('📊 API Service - Track recommendation response:', { status: response.status, data });
+      }
       
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to track recommendation');
+        // Don't throw for rate limit errors - just return failure
+        if (response.status === 429) {
+          return { success: false, rateLimited: true };
+        }
+        throw new Error(data.message || data.error || `Failed to track recommendation (${response.status})`);
       }
       
       return data;
     } catch (error) {
-      console.error('Error tracking recommendation:', error);
+      // Only log if it's not a network error that might be transient
+      if (error.message && !error.message.includes('Network request failed')) {
+        console.error('Error tracking recommendation:', error);
+      }
       throw error;
     }
   }
@@ -2137,8 +2437,27 @@ class ApiService {
     }
   }
 
+  invalidateTravelTimesCache(tripId) {
+    if (tripId) {
+      // Remove all travel times cache entries for this trip
+      const keysToDelete = [];
+      for (const key of travelTimesCache.keys()) {
+        if (key.startsWith(`travel-times:${tripId}`)) {
+          keysToDelete.push(key);
+        }
+      }
+      keysToDelete.forEach(key => travelTimesCache.delete(key));
+      console.log('🗑️ API Service - Invalidated travel times cache for trip:', tripId);
+    } else {
+      // Clear all travel times cache
+      travelTimesCache.clear();
+      console.log('🗑️ API Service - Cleared all travel times cache');
+    }
+  }
+
   clearAllCache() {
     recommendationCache.clear();
+    travelTimesCache.clear();
     console.log('🗑️ API Service - Cleared all cache');
   }
 
