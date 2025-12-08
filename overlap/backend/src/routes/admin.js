@@ -4,6 +4,7 @@ const Team = require('../models/Team');
 const Venue = require('../models/Venue');
 const Match = require('../models/Match');
 const User = require('../models/User');
+const League = require('../models/League');
 const teamService = require('../services/teamService');
 const venueService = require('../services/venueService');
 const subscriptionService = require('../services/subscriptionService');
@@ -1079,6 +1080,73 @@ router.get('/leagues/suggest-short-name', authenticateToken, ensureAdmin, (req, 
         res.status(500).json({
             success: false,
             message: 'Internal server error'
+        });
+    }
+});
+
+// Get all onboarded leagues with pagination and search
+router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const search = req.query.search || '';
+        const country = req.query.country || '';
+        
+        // Build query
+        const query = { isActive: { $ne: false } };
+        
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { shortName: { $regex: search, $options: 'i' } },
+                { apiId: { $regex: search, $options: 'i' } }
+            ];
+        }
+        
+        if (country) {
+            query.country = { $regex: country, $options: 'i' };
+        }
+        
+        // Get total count
+        const total = await League.countDocuments(query);
+        
+        // Get leagues sorted alphabetically by name
+        const leagues = await League.find(query)
+            .sort({ name: 1 }) // Alphabetical order
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
+        
+        // Format response
+        const formattedLeagues = leagues.map(league => ({
+            id: league.apiId,
+            name: league.name,
+            shortName: league.shortName,
+            country: league.country,
+            countryCode: league.countryCode,
+            tier: league.tier || 1,
+            emblem: league.emblem,
+            isActive: league.isActive !== false,
+            createdAt: league.createdAt,
+            updatedAt: league.updatedAt
+        }));
+        
+        res.json({
+            success: true,
+            data: formattedLeagues,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching leagues:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch leagues',
+            error: error.message
         });
     }
 });

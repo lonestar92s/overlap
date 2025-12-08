@@ -106,6 +106,37 @@ Before shipping, run through `prompts/prod_checklist.txt`:
 - **Iterate**: Use agent feedback to improve, then re-review
 - **Combine agents**: After UI/UX review, get QA tests. After architecture review, get DevOps audit.
 
+## 🎯 AI Development Best Practices
+
+### Explain Before Code
+Before asking for code, have the AI explain its approach. Correcting an explanation is much easier than correcting 200 lines of wrong code.
+
+**Example**:
+```
+You: "Add password hashing to registration"
+AI: "I'll use bcrypt to hash passwords before saving to database"
+You: "Actually use bcryptjs, and hash in the service layer"
+AI: [Updates approach]
+You: "Good, now implement it"
+```
+
+### Small Task Breakdown
+Break large features into small, isolated tasks. Instead of "Build auth", break into:
+- Define the user model
+- Create the registration route
+- Add password hashing
+- Add login logic
+
+Small tasks reduce hallucinations and simplify debugging.
+
+### File Re-Paste Workflow
+Every few edits, paste the full updated file back. This keeps the AI aware of the real current version and prevents drift.
+
+### Modular Architecture
+If the AI requires your entire codebase to make small changes, your structure is too tightly coupled. Design modules so each part can be understood and modified independently.
+
+See `workflow.md` for detailed workflows incorporating these practices.
+
 ## 🎯 Common Scenarios
 
 ### Scenario 1: New Feature

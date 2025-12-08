@@ -942,11 +942,15 @@ const TripOverviewScreen = ({ navigation, route }) => {
           snapToInterval={cardWidth + spacing.md}
           decelerationRate="fast"
         >
-          {recommendations.map((recommendation, index) => (
-            <View key={recommendation.matchId || index} style={[styles.carouselItem, { width: cardWidth }]}>
-              {renderRecommendationItem({ item: recommendation })}
-            </View>
-          ))}
+          {recommendations.map((recommendation, index) => {
+            // Combine matchId with index to ensure uniqueness even if matchIds are duplicated
+            const uniqueKey = recommendation.matchId ? `rec-${recommendation.matchId}-${index}` : `rec-${index}`;
+            return (
+              <View key={uniqueKey} style={[styles.carouselItem, { width: cardWidth }]}>
+                {renderRecommendationItem({ item: recommendation })}
+              </View>
+            );
+          })}
         </ScrollView>
 
         {/* Pagination indicators */}
@@ -1226,16 +1230,20 @@ const TripOverviewScreen = ({ navigation, route }) => {
                 <View>
                   {flatListData.map((item, index) => {
                     if (item.type === 'header') {
+                      // Use date string for unique header key
+                      const dateKey = item.date ? item.date.toISOString() : `header-${index}`;
                       return (
-                        <View key={`header-${index}`} style={styles.dateHeader}>
+                        <View key={`header-${dateKey}`} style={styles.dateHeader}>
                           <Text style={styles.dateHeaderText}>
                             {formatDateHeader(item.date)}
                           </Text>
                         </View>
                       );
                     } else {
+                      // Combine matchId with index to ensure uniqueness even if matchIds are duplicated
+                      const uniqueKey = item.matchId ? `match-${item.matchId}-${index}` : `match-${index}`;
                       return (
-                        <View key={item.matchId || `match-${index}`}>
+                        <View key={uniqueKey}>
                           {renderMatchItem({ item })}
                         </View>
                       );

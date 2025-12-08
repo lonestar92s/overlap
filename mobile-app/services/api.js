@@ -1542,7 +1542,9 @@ class ApiService {
         
         const url = `${this.baseURL}/matches/search?${params.toString()}`;
         const networkStartTime = performance.now();
-        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000, signal);
+        // Location-only searches can take longer due to multiple league API calls with retries
+        // Increased timeout to 60 seconds to accommodate backend processing
+        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 60000, signal);
         const networkEndTime = performance.now();
         const networkDuration = networkEndTime - networkStartTime;
         

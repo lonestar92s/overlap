@@ -16,6 +16,7 @@ class LeagueService {
             '39': { name: 'Premier League', country: 'England' },
             '40': { name: 'Championship', country: 'England' },
             '41': { name: 'League One', country: 'England' },
+            '45': { name: 'FA Cup', country: 'England' },
             '140': { name: 'La Liga', country: 'Spain' },
             '78': { name: 'Bundesliga', country: 'Germany' },
             '79': { name: 'Bundesliga 2', country: 'Germany' },
