@@ -29,7 +29,8 @@ import {
     Tooltip,
     CircularProgress,
     Tabs,
-    Tab
+    Tab,
+    Collapse
 } from '@mui/material';
 import {
     Dashboard as DashboardIcon,
@@ -43,7 +44,9 @@ import {
     CheckCircle as CheckCircleIcon,
     Error as ErrorIcon,
     Schedule as ScheduleIcon,
-    SportsSoccer as SportsSoccerIcon
+    SportsSoccer as SportsSoccerIcon,
+    ExpandMore as ExpandMoreIcon,
+    ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { useAuth } from './Auth';
 import { getBackendUrl } from '../utils/api';
@@ -421,6 +424,9 @@ const AdminDashboard = () => {
     const [leaguePage, setLeaguePage] = useState(1);
     const [leaguePagination, setLeaguePagination] = useState(null);
     const [leagueLoading, setLeagueLoading] = useState(false);
+    const [expandedLeagues, setExpandedLeagues] = useState(new Set());
+    const [leagueTeams, setLeagueTeams] = useState({});
+    const [loadingTeams, setLoadingTeams] = useState({});
 
     // Venues state
     const [venueSearch, setVenueSearch] = useState('');
@@ -429,6 +435,11 @@ const AdminDashboard = () => {
     const [venuePage, setVenuePage] = useState(1);
     const [venuePagination, setVenuePagination] = useState(null);
     const [venueLoading, setVenueLoading] = useState(false);
+
+    // League season year edit state
+    const [leagueEditDialog, setLeagueEditDialog] = useState(false);
+    const [selectedLeague, setSelectedLeague] = useState(null);
+    const [leagueSeasonYear, setLeagueSeasonYear] = useState('');
 
     const getAuthHeaders = () => ({
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -713,6 +724,45 @@ const AdminDashboard = () => {
         }
     };
 
+    // Fetch teams for a league
+    const fetchLeagueTeams = async (leagueId) => {
+        // If teams already loaded, don't fetch again
+        if (leagueTeams[leagueId]) {
+            return;
+        }
+
+        try {
+            setLoadingTeams(prev => ({ ...prev, [leagueId]: true }));
+            const response = await fetch(`${getBackendUrl()}/api/admin/leagues/${leagueId}/teams`, {
+                headers: getAuthHeaders()
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                setLeagueTeams(prev => ({ ...prev, [leagueId]: data.data }));
+            } else {
+                setError('Failed to fetch teams for league');
+            }
+        } catch (error) {
+            setError('Error fetching teams: ' + error.message);
+        } finally {
+            setLoadingTeams(prev => ({ ...prev, [leagueId]: false }));
+        }
+    };
+
+    // Toggle league expansion
+    const toggleLeagueExpansion = (leagueId) => {
+        const newExpanded = new Set(expandedLeagues);
+        if (newExpanded.has(leagueId)) {
+            newExpanded.delete(leagueId);
+        } else {
+            newExpanded.add(leagueId);
+            // Fetch teams when expanding
+            fetchLeagueTeams(leagueId);
+        }
+        setExpandedLeagues(newExpanded);
+    };
+
     // Venue edit handlers
     const handleEditVenue = (venue) => {
         setSelectedVenue(venue);
@@ -793,6 +843,43 @@ const AdminDashboard = () => {
             }
         } catch (error) {
             setError('Error updating venue: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // League season year edit handlers
+    const handleEditLeagueSeasonYear = (league) => {
+        setSelectedLeague(league);
+        setLeagueSeasonYear(league.seasonYear?.toString() || '');
+        setLeagueEditDialog(true);
+    };
+
+    const handleSaveLeagueSeasonYear = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch(`${getBackendUrl()}/api/admin/leagues/${selectedLeague.id}/season-year`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    seasonYear: parseInt(leagueSeasonYear)
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                setSuccess(`✅ Successfully updated season year for ${selectedLeague.name} to ${leagueSeasonYear}`);
+                setLeagueEditDialog(false);
+                setSelectedLeague(null);
+                setLeagueSeasonYear('');
+                
+                // Refresh leagues list
+                await fetchOnboardedLeagues(leaguePage);
+            } else {
+                setError('Failed to update season year: ' + (data.message || 'Unknown error'));
+            }
+        } catch (error) {
+            setError('Error updating season year: ' + error.message);
         } finally {
             setLoading(false);
         }
@@ -1584,53 +1671,151 @@ const AdminDashboard = () => {
                                 <Table>
                                     <TableHead>
                                         <TableRow>
+                                            <TableCell></TableCell>
                                             <TableCell><strong>ID</strong></TableCell>
                                             <TableCell><strong>League Name</strong></TableCell>
                                             <TableCell><strong>Short Name</strong></TableCell>
                                             <TableCell><strong>Country</strong></TableCell>
                                             <TableCell><strong>Country Code</strong></TableCell>
                                             <TableCell><strong>Tier</strong></TableCell>
+                                            <TableCell><strong>Season Year</strong></TableCell>
                                             <TableCell><strong>Status</strong></TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {onboardedLeagues.map((league) => (
-                                            <TableRow key={league.id}>
-                                                <TableCell>{league.id}</TableCell>
-                                                <TableCell>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        {league.emblem && (
-                                                            <img 
-                                                                src={league.emblem} 
-                                                                alt={league.name}
-                                                                style={{ width: 24, height: 24, objectFit: 'contain' }}
-                                                                onError={(e) => { e.target.style.display = 'none'; }}
+                                        {onboardedLeagues.map((league) => {
+                                            const isExpanded = expandedLeagues.has(league.id);
+                                            const teams = leagueTeams[league.id] || [];
+                                            const isLoading = loadingTeams[league.id];
+                                            
+                                            return (
+                                                <React.Fragment key={league.id}>
+                                                    <TableRow 
+                                                        sx={{ 
+                                                            cursor: 'pointer',
+                                                            '&:hover': { backgroundColor: 'action.hover' }
+                                                        }}
+                                                        onClick={() => toggleLeagueExpansion(league.id)}
+                                                    >
+                                                        <TableCell>
+                                                            <IconButton 
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    toggleLeagueExpansion(league.id);
+                                                                }}
+                                                            >
+                                                                {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                                            </IconButton>
+                                                        </TableCell>
+                                                        <TableCell>{league.id}</TableCell>
+                                                        <TableCell>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                {league.emblem && (
+                                                                    <img 
+                                                                        src={league.emblem} 
+                                                                        alt={league.name}
+                                                                        style={{ width: 24, height: 24, objectFit: 'contain' }}
+                                                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                                                    />
+                                                                )}
+                                                                <strong>{league.name}</strong>
+                                                            </Box>
+                                                        </TableCell>
+                                                        <TableCell>{league.shortName}</TableCell>
+                                                        <TableCell>{league.country}</TableCell>
+                                                        <TableCell>
+                                                            <Chip label={league.countryCode} size="small" />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                label={`Tier ${league.tier}`} 
+                                                                size="small" 
+                                                                color={league.tier === 1 ? 'primary' : league.tier === 2 ? 'secondary' : 'default'}
                                                             />
-                                                        )}
-                                                        <strong>{league.name}</strong>
-                                                    </Box>
-                                                </TableCell>
-                                                <TableCell>{league.shortName}</TableCell>
-                                                <TableCell>{league.country}</TableCell>
-                                                <TableCell>
-                                                    <Chip label={league.countryCode} size="small" />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Chip 
-                                                        label={`Tier ${league.tier}`} 
-                                                        size="small" 
-                                                        color={league.tier === 1 ? 'primary' : league.tier === 2 ? 'secondary' : 'default'}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Chip 
-                                                        label={league.isActive ? 'Active' : 'Inactive'} 
-                                                        size="small" 
-                                                        color={league.isActive ? 'success' : 'default'}
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                {league.seasonYear || 'N/A'}
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleEditLeagueSeasonYear(league);
+                                                                    }}
+                                                                    sx={{ ml: 0.5 }}
+                                                                >
+                                                                    <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Box>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                label={league.isActive ? 'Active' : 'Inactive'} 
+                                                                size="small" 
+                                                                color={league.isActive ? 'success' : 'default'}
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    <TableRow>
+                                                        <TableCell 
+                                                            style={{ paddingBottom: 0, paddingTop: 0 }} 
+                                                            colSpan={9}
+                                                        >
+                                                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                                <Box sx={{ margin: 2 }}>
+                                                                    <Typography variant="h6" gutterBottom>
+                                                                        Teams ({teams.length})
+                                                                    </Typography>
+                                                                    {isLoading ? (
+                                                                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                                                            <CircularProgress size={24} />
+                                                                        </Box>
+                                                                    ) : teams.length === 0 ? (
+                                                                        <Alert severity="info">No teams found for this league.</Alert>
+                                                                    ) : (
+                                                                        <TableContainer>
+                                                                            <Table size="small">
+                                                                                <TableHead>
+                                                                                    <TableRow>
+                                                                                        <TableCell><strong>Team Name</strong></TableCell>
+                                                                                        <TableCell><strong>City</strong></TableCell>
+                                                                                        <TableCell><strong>Country</strong></TableCell>
+                                                                                        <TableCell><strong>Venue</strong></TableCell>
+                                                                                    </TableRow>
+                                                                                </TableHead>
+                                                                                <TableBody>
+                                                                                    {teams.map((team) => (
+                                                                                        <TableRow key={team.id}>
+                                                                                            <TableCell>
+                                                                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                                                    {team.logo && (
+                                                                                                        <img 
+                                                                                                            src={team.logo} 
+                                                                                                            alt={team.name}
+                                                                                                            style={{ width: 20, height: 20, objectFit: 'contain' }}
+                                                                                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                                                                                        />
+                                                                                                    )}
+                                                                                                    {team.name}
+                                                                                                </Box>
+                                                                                            </TableCell>
+                                                                                            <TableCell>{team.city || 'N/A'}</TableCell>
+                                                                                            <TableCell>{team.country || 'N/A'}</TableCell>
+                                                                                            <TableCell>{team.venue?.name || 'N/A'}</TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        </TableContainer>
+                                                                    )}
+                                                                </Box>
+                                                            </Collapse>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </React.Fragment>
+                                            );
+                                        })}
                                     </TableBody>
                                 </Table>
                             </TableContainer>
@@ -1818,6 +2003,49 @@ const AdminDashboard = () => {
                         onClick={handleSaveVenue}
                         variant="contained"
                         disabled={!venueEditData.name || loading}
+                    >
+                        {loading ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* League Season Year Edit Dialog */}
+            <Dialog 
+                open={leagueEditDialog} 
+                onClose={() => setLeagueEditDialog(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    Edit Season Year: {selectedLeague?.name}
+                </DialogTitle>
+                <DialogContent>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                        <TextField
+                            label="Season Year"
+                            value={leagueSeasonYear}
+                            onChange={(e) => setLeagueSeasonYear(e.target.value)}
+                            type="number"
+                            required
+                            fullWidth
+                            inputProps={{ min: 2000, max: 2100 }}
+                            helperText="The year the season starts (e.g., 2024 for 2024-2025 season)"
+                        />
+                        {leagueSeasonYear && (
+                            <Alert severity="info">
+                                Season will be set to: {leagueSeasonYear}-08-01 to {parseInt(leagueSeasonYear) + 1}-05-31
+                            </Alert>
+                        )}
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setLeagueEditDialog(false)}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleSaveLeagueSeasonYear}
+                        variant="contained"
+                        disabled={!leagueSeasonYear || loading || !/^\d{4}$/.test(leagueSeasonYear)}
                     >
                         {loading ? 'Saving...' : 'Save Changes'}
                     </Button>

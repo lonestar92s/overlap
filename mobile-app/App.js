@@ -263,7 +263,9 @@ function AppContent() {
                   }
                 })}
               />
-              <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
+              {FEATURE_FLAGS.enableMessagesTab && (
+                <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
+              )}
               <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Profile' }} />
             </Tab.Navigator>
           </ItineraryProvider>

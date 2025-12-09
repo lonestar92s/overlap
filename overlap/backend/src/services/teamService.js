@@ -190,14 +190,13 @@ class TeamService {
      */
     async getTeamsByLeague(leagueApiId) {
         try {
-            const league = await League.findOne({ apiId: leagueApiId });
-            if (!league) {
-                return [];
-            }
-
-            const teams = await Team.find({ leagueId: league._id })
-                .populate('venueId')
-                .sort({ name: 1 });
+            // Teams store leagues in an array: leagues: [{ leagueId: String, ... }]
+            // Query teams where the leagues array contains an entry with matching leagueId
+            const teams = await Team.find({ 
+                'leagues.leagueId': leagueApiId.toString(),
+                'leagues.isActive': { $ne: false }
+            })
+            .sort({ name: 1 });
             
             return teams;
         } catch (error) {

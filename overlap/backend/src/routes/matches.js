@@ -826,7 +826,7 @@ router.get('/search', async (req, res) => {
             const boundsLatSpan = originalBounds.northeast.lat - originalBounds.southwest.lat;
             const boundsLngSpan = originalBounds.northeast.lng - originalBounds.southwest.lng;
             
-            // Validate bounds span (prevent unreasonably large bounds)
+            // Validate bounds span (must be positive)
             if (boundsLatSpan <= 0 || boundsLngSpan <= 0) {
                 return res.status(400).json({ 
                     success: false, 
@@ -834,23 +834,34 @@ router.get('/search', async (req, res) => {
                 });
             }
             
-            if (boundsLatSpan > 90 || boundsLngSpan > 180) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: 'Bounds too large - please zoom in and search a smaller area' 
-                });
-            }
+            // Clamp original bounds to valid coordinate ranges before applying buffer
+            // Latitude: -90 to 90, Longitude: -180 to 180
+            const clampedOriginalBounds = {
+                northeast: {
+                    lat: Math.max(-90, Math.min(90, originalBounds.northeast.lat)),
+                    lng: Math.max(-180, Math.min(180, originalBounds.northeast.lng))
+                },
+                southwest: {
+                    lat: Math.max(-90, Math.min(90, originalBounds.southwest.lat)),
+                    lng: Math.max(-180, Math.min(180, originalBounds.southwest.lng))
+                }
+            };
+            
+            // Recalculate spans after clamping
+            const clampedLatSpan = clampedOriginalBounds.northeast.lat - clampedOriginalBounds.southwest.lat;
+            const clampedLngSpan = clampedOriginalBounds.northeast.lng - clampedOriginalBounds.southwest.lng;
             
             const bufferPercent = 0.3; // 30% buffer
             
+            // Calculate buffered bounds and clamp again to ensure valid ranges
             const bounds = {
                 northeast: {
-                    lat: originalBounds.northeast.lat + (boundsLatSpan * bufferPercent),
-                    lng: originalBounds.northeast.lng + (boundsLngSpan * bufferPercent)
+                    lat: Math.max(-90, Math.min(90, clampedOriginalBounds.northeast.lat + (clampedLatSpan * bufferPercent))),
+                    lng: Math.max(-180, Math.min(180, clampedOriginalBounds.northeast.lng + (clampedLngSpan * bufferPercent)))
                 },
                 southwest: {
-                    lat: originalBounds.southwest.lat - (boundsLatSpan * bufferPercent),
-                    lng: originalBounds.southwest.lng - (boundsLngSpan * bufferPercent)
+                    lat: Math.max(-90, Math.min(90, clampedOriginalBounds.southwest.lat - (clampedLatSpan * bufferPercent))),
+                    lng: Math.max(-180, Math.min(180, clampedOriginalBounds.southwest.lng - (clampedLngSpan * bufferPercent)))
                 }
             };
             

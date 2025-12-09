@@ -178,6 +178,16 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
       return;
     }
     
+    // Don't fetch recommendations for past/completed trips
+    if (trip && trip.isCompleted === true) {
+      if (isMountedRef.current) {
+        setRecommendations([]);
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+    
     // If we have trip with stored recommendations and not forcing refresh, use them
     const hasStoredRecommendations = trip && 
                                       trip.recommendationsVersion === 'v2' && 
@@ -275,7 +285,7 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
         }
         
         // Check if rate limited
-        if (data.rateLimited || response.status === 429) {
+        if (data.rateLimited) {
           // Try to use cached recommendations
           const cached = ApiService.getCachedRecommendations(tripId);
           if (cached && cached.recommendations) {
@@ -488,6 +498,16 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
   // Auto-load recommendations on mount if enabled
   useEffect(() => {
     if (autoFetch && tripId) {
+      // Don't fetch recommendations for past/completed trips
+      if (trip && trip.isCompleted === true) {
+        if (isMountedRef.current) {
+          setRecommendations([]);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+      
       // If trip has stored recommendations, use them immediately (no loading state)
       const hasStoredRecommendations = trip && 
                                         trip.recommendationsVersion === 'v2' && 

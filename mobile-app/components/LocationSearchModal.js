@@ -1334,7 +1334,11 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.enterButton, (!canSearch()) && styles.enterButtonDisabled]}
+              style={[
+                styles.enterButton, 
+                canSearch() && styles.enterButtonActive,
+                (!canSearch()) && styles.enterButtonDisabled
+              ]}
               onPress={handleSearch}
               disabled={loading || !canSearch()}
               accessibilityLabel="Search for matches"
@@ -1343,7 +1347,10 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
               {loading ? (
                 <ActivityIndicator size="small" color="rgba(0, 0, 0, 0.5)" />
               ) : (
-                <Text style={styles.enterButtonText}>Search</Text>
+                <Text style={[
+                  styles.enterButtonText,
+                  canSearch() && styles.enterButtonTextActive
+                ]}>Search</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1356,7 +1363,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#D9E8F2', // Light blue background from Figma
+    backgroundColor: '#FFFFFF', // Light blue background from Figma
   },
   header: {
     flexDirection: 'row',
@@ -1551,6 +1558,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg + spacing.xs + 7, // 55px from Figma
+    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     gap: spacing.sm + spacing.xs,
   },
@@ -1588,10 +1596,18 @@ const styles = StyleSheet.create({
   enterButtonDisabled: {
     opacity: 0.5,
   },
+  enterButtonActive: {
+    backgroundColor: colors.primaryGreen, // Use primary green from design tokens
+    borderColor: colors.text.primary,
+    opacity: 1,
+  },
   enterButtonText: {
     ...typography.caption,
     fontWeight: '700',
     color: 'rgba(0, 0, 0, 0.5)',
+  },
+  enterButtonTextActive: {
+    color: colors.text.primary, // Darker text when active
   },
   chipsContainer: {
     marginTop: spacing.sm,

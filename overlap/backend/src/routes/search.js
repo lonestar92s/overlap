@@ -1195,8 +1195,22 @@ const inferLeagueFromTeams = (teams) => {
     return Array.from(detectedLeagues);
 };
 
+// Country to default city mapping (for leagues not in hardcoded mapping)
+const countryToCityMapping = {
+    'United Kingdom': { city: 'London', coordinates: [-0.118092, 51.509865] },
+    'United States': { city: 'Kansas City', coordinates: [-94.578567, 39.099727] },
+    'USA': { city: 'Kansas City', coordinates: [-94.578567, 39.099727] },
+    'Spain': { city: 'Madrid', coordinates: [-3.703790, 40.416775] },
+    'Germany': { city: 'Berlin', coordinates: [13.404954, 52.520008] },
+    'France': { city: 'Paris', coordinates: [2.352222, 48.856614] },
+    'Italy': { city: 'Rome', coordinates: [12.496366, 41.902782] },
+    'Portugal': { city: 'Lisbon', coordinates: [-9.139337, 38.722252] },
+    'Netherlands': { city: 'Amsterdam', coordinates: [4.904139, 52.367573] },
+    'Mexico': { city: 'Mexico City', coordinates: [-99.133178, 19.432608] }
+};
+
 // Smart location inference based on teams and leagues
-const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
+const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
     // Team-based country mapping
     const teamCountryMapping = {
         // English teams
@@ -1249,7 +1263,7 @@ const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
         'feyenoord': { city: 'Rotterdam', country: 'Netherlands', coordinates: [4.477733, 51.924420] }
     };
 
-    // League-based country mapping
+    // League-based country mapping (fallback for known leagues)
     const leagueCountryMapping = {
         'premier league': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
         'championship': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
@@ -1258,7 +1272,10 @@ const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
         'ligue 1': { city: 'Paris', country: 'France', coordinates: [2.352222, 48.856614] },
         'serie a': { city: 'Rome', country: 'Italy', coordinates: [12.496366, 41.902782] },
         'primeira liga': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
-        'eredivisie': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] }
+        'eredivisie': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] },
+        'major league soccer': { city: 'Kansas City', country: 'United States', coordinates: [-94.578567, 39.099727] },
+        'mls': { city: 'Kansas City', country: 'United States', coordinates: [-94.578567, 39.099727] },
+        'liga mx': { city: 'Mexico City', country: 'Mexico', coordinates: [-99.133178, 19.432608] }
     };
 
     // First, try to infer from teams
@@ -1274,9 +1291,36 @@ const inferLocationFromTeamsAndLeagues = (teams, leagues) => {
     // If no team match, try to infer from leagues
     if (leagues && leagues.length > 0) {
         for (const league of leagues) {
-            const leagueName = league.name.toLowerCase();
-            if (leagueCountryMapping[leagueName]) {
+            const leagueName = league.name?.toLowerCase();
+            
+            // First check hardcoded mapping
+            if (leagueName && leagueCountryMapping[leagueName]) {
                 return leagueCountryMapping[leagueName];
+            }
+            
+            // If not in hardcoded mapping, try to get from database
+            // Check if league has an apiId or id field
+            const leagueId = league.apiId || league.id;
+            if (leagueId) {
+                try {
+                    const dbLeague = await League.findOne({ apiId: leagueId.toString() });
+                    if (dbLeague && dbLeague.country) {
+                        const country = dbLeague.country;
+                        // Use country-to-city mapping to get default location
+                        const defaultLocation = countryToCityMapping[country] || 
+                                               countryToCityMapping[country === 'United States' ? 'USA' : country];
+                        if (defaultLocation) {
+                            return {
+                                city: defaultLocation.city,
+                                country: country,
+                                coordinates: defaultLocation.coordinates
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error querying league ${leagueId} from database:`, error);
+                    // Continue to next league
+                }
             }
         }
     }
@@ -1927,7 +1971,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
 
         // SMART LOCATION DEFAULTS - If no location specified, infer from teams/leagues
         if (!result.location) {
-            result.location = inferLocationFromTeamsAndLeagues(result.teams, result.leagues);
+            result.location = await inferLocationFromTeamsAndLeagues(result.teams, result.leagues);
         }
 
         // Calculate confidence score based on extracted entities

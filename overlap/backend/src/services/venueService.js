@@ -95,25 +95,64 @@ class VenueService {
                     if (!normalizedCity) return venueNameMatch;
                     return venueNameMatch && normalizeString(v.city) === normalizedCity;
                 });
-                
-
+            }
+            
+            // Strategy 5: If we found a venue but it has invalid coordinates, try to find another with valid coordinates
+            if (venue) {
+                const venueCoords = venue.location?.coordinates || venue.coordinates;
+                if (venueCoords && !this.isWithinCountryBounds(venueCoords, venue.country)) {
+                    // Found venue but coordinates are wrong - try to find another with same name
+                    console.warn(`⚠️ Found venue ${venue.name} but coordinates [${venueCoords[0]}, ${venueCoords[1]}] are outside ${venue.country} bounds`);
+                    
+                    // Try to find another venue with same name and valid coordinates
+                    const allVenues = await Venue.find({});
+                    const validVenue = allVenues.find(v => {
+                        const venueNameMatch = normalizeString(v.name) === normalizedVenueName;
+                        if (!venueNameMatch) return false;
+                        
+                        const coords = v.location?.coordinates || v.coordinates;
+                        if (!coords) return false;
+                        
+                        // Prefer venue with valid coordinates for its country
+                        return this.isWithinCountryBounds(coords, v.country);
+                    });
+                    
+                    if (validVenue) {
+                        console.log(`✅ Found alternative venue ${validVenue.name} with valid coordinates`);
+                        venue = validVenue;
+                    }
+                }
             }
             
             if (!venue) {
                 return null;
             }
             
-
+            // Get coordinates from either location.coordinates (preferred) or coordinates field
+            let coordinates = venue.location?.coordinates || venue.coordinates;
             
-            if (venue && venue.location?.coordinates) {
-                return {
-                    stadium: venue.name,
-                    name: venue.name,
-                    city: venue.city,
-                    country: venue.country,
-                    coordinates: venue.location.coordinates,
-                    capacity: venue.capacity
-                };
+            // Validate coordinates are in reasonable format [lon, lat]
+            if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
+                const [lon, lat] = coordinates;
+                // Basic validation: coordinates should be within valid ranges
+                if (typeof lon === 'number' && typeof lat === 'number' &&
+                    lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+                    // Additional validation: coordinates should be within country bounds
+                    if (this.isWithinCountryBounds(coordinates, venue.country)) {
+                        return {
+                            stadium: venue.name,
+                            name: venue.name,
+                            city: venue.city,
+                            country: venue.country,
+                            coordinates: coordinates,
+                            capacity: venue.capacity
+                        };
+                    } else {
+                        console.warn(`⚠️ Coordinates for venue ${venue.name} are outside ${venue.country} bounds: [${lon}, ${lat}]`);
+                    }
+                } else {
+                    console.warn(`⚠️ Invalid coordinates for venue ${venue.name}: [${lon}, ${lat}]`);
+                }
             }
             
             return null;
@@ -372,6 +411,48 @@ class VenueService {
     }
 
     /**
+     * Validate coordinates are within country bounds
+     * @param {Array} coordinates - [longitude, latitude] array
+     * @param {string} country - Country name
+     * @returns {boolean} - True if coordinates are valid for the country
+     */
+    isWithinCountryBounds(coordinates, country) {
+        if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+            return false;
+        }
+        
+        const [lon, lat] = coordinates;
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+            return false;
+        }
+        
+        // Country bounds for validation
+        const COUNTRY_BOUNDS = {
+            'England': { minLat: 50.0, maxLat: 55.8, minLng: -6.0, maxLng: 2.0 },
+            'Germany': { minLat: 47.0, maxLat: 55.0, minLng: 5.0, maxLng: 15.0 },
+            'France': { minLat: 41.0, maxLat: 51.0, minLng: -5.0, maxLng: 10.0 },
+            'Spain': { minLat: 36.0, maxLat: 44.0, minLng: -10.0, maxLng: 4.0 },
+            'Italy': { minLat: 36.0, maxLat: 47.0, minLng: 6.0, maxLng: 19.0 },
+            'Netherlands': { minLat: 50.7, maxLat: 53.7, minLng: 3.0, maxLng: 7.3 },
+            'Portugal': { minLat: 36.9, maxLat: 42.2, minLng: -9.5, maxLng: -6.2 },
+            'Belgium': { minLat: 49.5, maxLat: 51.5, minLng: 2.5, maxLng: 6.4 },
+            'Scotland': { minLat: 54.6, maxLat: 60.9, minLng: -8.6, maxLng: -0.7 },
+            'Mexico': { minLat: 14.5, maxLat: 32.7, minLng: -118.4, maxLng: -86.7 },
+            'USA': { minLat: 24.5, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 }
+        };
+        
+        const bounds = COUNTRY_BOUNDS[country];
+        if (!bounds) {
+            // Country not in our bounds list - allow it (could be a new country)
+            return true;
+        }
+        
+        return lat >= bounds.minLat && lat <= bounds.maxLat &&
+               lon >= bounds.minLng && lon <= bounds.maxLng;
+    }
+
+    /**
      * Save or update venue with coordinates
      * @param {Object} venueData - Venue data including coordinates
      * @returns {Object|null} - Saved venue object or null if failed
@@ -382,6 +463,13 @@ class VenueService {
             
             if (!name || !city || !country) {
                 console.warn(`⚠️ Missing required venue data: name=${name}, city=${city}, country=${country}`);
+                return null;
+            }
+            
+            // Validate coordinates are within country bounds before saving
+            if (coordinates && !this.isWithinCountryBounds(coordinates, country)) {
+                const [lon, lat] = coordinates;
+                console.error(`❌ Rejecting coordinates for ${name}, ${city}, ${country}: [${lon}, ${lat}] are outside country bounds`);
                 return null;
             }
 
@@ -401,8 +489,12 @@ class VenueService {
 
             let venue;
             if (existingVenue) {
-                // Update existing venue with new coordinates if they don't exist
-                if (!existingVenue.coordinates && coordinates) {
+                // Update existing venue with new coordinates if they don't exist OR if existing coordinates are wrong
+                const existingCoords = existingVenue.coordinates || existingVenue.location?.coordinates;
+                const hasValidExistingCoords = existingCoords && this.isWithinCountryBounds(existingCoords, country);
+                
+                if (coordinates && (!existingCoords || !hasValidExistingCoords)) {
+                    // Only update if no coordinates exist, or existing coordinates are invalid
                     existingVenue.coordinates = coordinates;
                     existingVenue.location = {
                         type: 'Point',
@@ -417,6 +509,9 @@ class VenueService {
                     
                     await existingVenue.save();
                     console.log(`✅ Updated existing venue with coordinates: ${name} → [${coordinates[0]}, ${coordinates[1]}]`);
+                } else if (coordinates && hasValidExistingCoords) {
+                    // Existing coordinates are valid, keep them
+                    console.log(`ℹ️ Keeping existing valid coordinates for ${name}: [${existingCoords[0]}, ${existingCoords[1]}]`);
                 }
                 venue = existingVenue;
             } else {

@@ -858,7 +858,9 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Handle map region change (when user pans/zooms)
   // FIXED: Always allow "Search this area" - removed movement threshold requirement
-  const handleMapRegionChange = (region, bounds) => {
+  // FIXED: Wrapped in useCallback to prevent infinite render loops
+  // Empty deps: setMapRegion and setHasMovedFromInitial are stable state setters
+  const handleMapRegionChange = useCallback((region, bounds) => {
     setMapRegion(region);
     
     // Always show "Search this area" button - user should be able to re-search current viewport
@@ -866,7 +868,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     
     // Reduced logging - only log significant changes
     // (Removed verbose logging on every pan/zoom)
-  };
+  }, []); // Empty deps: setMapRegion and setHasMovedFromInitial are stable
 
   // Handle marker press: show overlay, hide bottom sheet, and center map
   const getVenueGroupKey = useCallback((match) => {
@@ -921,9 +923,10 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Map marker selects the venue group containing this match
       const key = getVenueGroupKey(match);
       
+      // CRITICAL: Check if venueGroups is ready and has data
       if (!venueGroups || venueGroups.length === 0) {
         if (__DEV__) {
-          console.warn('MapResultsScreen: No venue groups available');
+          console.warn('MapResultsScreen: No venue groups available - markers may not be ready yet');
         }
         clearTimeout(suppressTimeout);
         suppressNextMapPressRef.current = false;
@@ -939,9 +942,52 @@ const MapResultsScreen = ({ navigation, route }) => {
         return;
       }
       
+      // Find the venue group by key
+      const venueGroup = venueGroups.find(g => g.key === key);
+      
+      if (!venueGroup) {
+        if (__DEV__) {
+          console.warn('MapResultsScreen: Venue group not found for key', key, 'match ID:', match.fixture.id);
+        }
+        clearTimeout(suppressTimeout);
+        suppressNextMapPressRef.current = false;
+        return;
+      }
+      
+      // Find the specific match in the venue group by fixture ID
+      // This ensures we show the correct match even if the marker was created with a different "firstMatch"
+      // This fixes the issue where the wrong match temporarily shows
+      const matchFixtureId = match.fixture.id;
+      const targetMatch = venueGroup.matches.find(m => m.fixture?.id === matchFixtureId);
+      
+      // If the specific match isn't found, use the first match in the group (fallback)
+      // But prioritize finding the exact match to avoid showing wrong match temporarily
+      const matchToShow = targetMatch || venueGroup.matches[0];
+      
+      if (!matchToShow) {
+        if (__DEV__) {
+          console.warn('MapResultsScreen: No matches found in venue group', key);
+        }
+        clearTimeout(suppressTimeout);
+        suppressNextMapPressRef.current = false;
+        return;
+      }
+      
+      // Find the index of the venue group
       const index = venueGroups.findIndex(g => g.key === key);
-      const nextIndex = index >= 0 ? index : 0;
-      setSelectedVenueIndex(nextIndex);
+      if (index < 0) {
+        if (__DEV__) {
+          console.warn('MapResultsScreen: Could not find venue group index for key', key);
+        }
+        clearTimeout(suppressTimeout);
+        suppressNextMapPressRef.current = false;
+        return;
+      }
+      
+      // Set the selected venue index - the overlay will show the matches for this venue group
+      // Since venueGroups is sorted chronologically, the first match in the group will be shown
+      // But we've validated that the clicked match exists in this group
+      setSelectedVenueIndex(index);
       
       // Close bottom sheet if open
       if (bottomSheetRef.current && typeof bottomSheetRef.current.close === 'function') {

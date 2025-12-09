@@ -150,18 +150,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
       }
 
       // Always fetch fresh data from API on mount to ensure we have latest flights
+      // Note: Past trips may not be in context (only active trips are loaded),
+      // so we always try the API first
       const loadItinerary = async () => {
         try {
-          // Check if itinerary exists in context first
-          const itineraryInContext = getItineraryById(itineraryId);
-          if (!itineraryInContext) {
-            // Itinerary was deleted - navigate back
-            console.log('📥 Itinerary not found in context on mount, navigating back');
-            setLoading(false);
-            navigation.goBack();
-            return;
-          }
-
+          // Try to fetch from API first (this works for both active and past trips)
           const response = await apiService.getTripById(itineraryId);
           // Handle both response.trip and response.data formats
           const tripData = response.trip || response.data;
@@ -197,6 +190,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
               setNotesText(foundItinerary.notes || '');
               // Recommendations are automatically fetched by useRecommendations hook
               // The hook will fetch when tripId becomes available
+            } else {
+              // Not in context and API failed - navigate back
+              console.log('📥 Itinerary not found in context or API, navigating back');
+              setLoading(false);
+              navigation.goBack();
             }
           }
         } catch (error) {
@@ -208,6 +206,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setDescriptionText(foundItinerary.description || '');
             setNotesText(foundItinerary.notes || '');
             // Recommendations are automatically fetched by useRecommendations hook
+          } else {
+            // Not in context and error occurred - navigate back
+            console.log('📥 Itinerary not found in context after error, navigating back');
+            setLoading(false);
+            navigation.goBack();
           }
         } finally {
           setLoading(false);
@@ -259,19 +262,53 @@ const TripOverviewScreen = ({ navigation, route }) => {
         return;
       }
       
-      // Check if itinerary still exists in context before attempting refresh
-      // This prevents 404 errors when an itinerary is deleted while viewing it
-      const itineraryInContext = getItineraryById(itineraryId);
-      if (!itineraryInContext) {
-        // Itinerary was deleted - navigate back
-        console.log('📥 Itinerary not found in context, navigating back');
-        navigation.goBack();
-        return;
-      }
-      
       // Get current itinerary from state (but don't depend on it in the callback)
       // We'll check if it has stored recommendations, but if it doesn't exist yet, that's okay
       const currentItinerary = itinerary;
+      
+      // Check if itinerary exists in local state or context
+      // Note: Past trips may not be in context (only active trips are loaded),
+      // so we check local state first, then context
+      const itineraryInContext = getItineraryById(itineraryId);
+      const hasItinerary = currentItinerary || itineraryInContext;
+      
+      // If we don't have the itinerary in state or context, try to refresh it from API
+      // This handles the case where it's a past trip not in context
+      if (!hasItinerary) {
+        console.log('📥 Itinerary not found in state or context, refreshing from API');
+        isRefreshingRef.current = true;
+        lastRefreshTimeRef.current = now;
+        refreshItinerary(itineraryId).then(updatedItinerary => {
+          // Check if itinerary was deleted
+          if (updatedItinerary?.deleted) {
+            console.log('📥 Itinerary was deleted, navigating back');
+            navigation.goBack();
+            return;
+          }
+          if (updatedItinerary) {
+            setItinerary(updatedItinerary);
+            // After refreshing, continue with recommendation logic
+            const hasNonEmptyStoredRecommendations = updatedItinerary?.recommendationsVersion === 'v2' && 
+                                                     Array.isArray(updatedItinerary?.recommendations) &&
+                                                     updatedItinerary.recommendations.length > 0;
+            if (!hasNonEmptyStoredRecommendations) {
+              refetchRecommendations(false);
+            }
+          } else {
+            // Couldn't refresh - might be deleted, navigate back
+            console.log('📥 Could not refresh itinerary, navigating back');
+            navigation.goBack();
+          }
+        }).catch(err => {
+          console.error('Error refreshing itinerary:', err);
+          // If refresh fails, try fetching recommendations as fallback
+          refetchRecommendations(false);
+        }).finally(() => {
+          isRefreshingRef.current = false;
+        });
+        return;
+      }
+      
       const hasNonEmptyStoredRecommendations = currentItinerary?.recommendationsVersion === 'v2' && 
                                                Array.isArray(currentItinerary?.recommendations) &&
                                                currentItinerary.recommendations.length > 0;

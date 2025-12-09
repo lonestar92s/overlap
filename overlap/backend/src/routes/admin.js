@@ -1118,18 +1118,25 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
             .lean();
         
         // Format response
-        const formattedLeagues = leagues.map(league => ({
-            id: league.apiId,
-            name: league.name,
-            shortName: league.shortName,
-            country: league.country,
-            countryCode: league.countryCode,
-            tier: league.tier || 1,
-            emblem: league.emblem,
-            isActive: league.isActive !== false,
-            createdAt: league.createdAt,
-            updatedAt: league.updatedAt
-        }));
+        const formattedLeagues = leagues.map(league => {
+            // Extract season year from season.start (e.g., "2024-08-01" -> 2024)
+            const seasonYear = league.season?.start ? new Date(league.season.start).getFullYear() : null;
+            
+            return {
+                id: league.apiId,
+                name: league.name,
+                shortName: league.shortName,
+                country: league.country,
+                countryCode: league.countryCode,
+                tier: league.tier || 1,
+                emblem: league.emblem,
+                isActive: league.isActive !== false,
+                seasonYear: seasonYear,
+                season: league.season,
+                createdAt: league.createdAt,
+                updatedAt: league.updatedAt
+            };
+        });
         
         res.json({
             success: true,
@@ -1146,6 +1153,102 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch leagues',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/admin/leagues/:leagueId/teams
+// Get teams for a specific league
+router.get('/leagues/:leagueId/teams', authenticateToken, ensureAdmin, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+        
+        const teams = await teamService.getTeamsByLeague(leagueId);
+        
+        // Format teams for frontend
+        // Teams have embedded venue data in team.venue, not a venueId reference
+        const formattedTeams = teams.map(team => ({
+            id: team._id,
+            name: team.name,
+            apiId: team.apiId,
+            logo: team.logo,
+            city: team.city,
+            country: team.country,
+            venue: team.venue?.name ? {
+                name: team.venue.name,
+                city: team.city || null,
+                country: team.country || null
+            } : null
+        }));
+        
+        res.json({
+            success: true,
+            data: formattedTeams
+        });
+    } catch (error) {
+        console.error('Error fetching teams for league:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch teams',
+            error: error.message
+        });
+    }
+});
+
+// PUT /api/admin/leagues/:leagueId/season-year
+// Update league season year
+router.put('/leagues/:leagueId/season-year', authenticateToken, ensureAdmin, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+        const { seasonYear } = req.body;
+        
+        if (!seasonYear || !Number.isInteger(parseInt(seasonYear)) || parseInt(seasonYear) < 2000 || parseInt(seasonYear) > 2100) {
+            return res.status(400).json({
+                success: false,
+                message: 'Valid season year is required (2000-2100)'
+            });
+        }
+        
+        const year = parseInt(seasonYear);
+        
+        // Find league by apiId
+        const league = await League.findOne({ apiId: leagueId.toString() });
+        if (!league) {
+            return res.status(404).json({
+                success: false,
+                message: 'League not found'
+            });
+        }
+        
+        // Update season dates based on the new year
+        // Typical season: August of year to May of next year
+        const seasonStart = `${year}-08-01`;
+        const seasonEnd = `${year + 1}-05-31`;
+        
+        league.season = {
+            start: seasonStart,
+            end: seasonEnd,
+            current: league.season?.current !== false
+        };
+        
+        await league.save();
+        
+        res.json({
+            success: true,
+            message: `Successfully updated season year to ${year}`,
+            league: {
+                id: league.apiId,
+                name: league.name,
+                seasonYear: year,
+                season: league.season
+            }
+        });
+    } catch (error) {
+        console.error('Error updating league season year:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update league season year',
             error: error.message
         });
     }

@@ -1516,16 +1516,25 @@ class ApiService {
     try {
       // If no competitions or teams specified, use the location-only search endpoint
       if (competitions.length === 0 && teams.length === 0 && bounds && dateFrom && dateTo) {
-        // Validate bounds before making request
+        // Validate and clamp bounds before making request
         if (bounds.northeast && bounds.southwest) {
           const latSpan = bounds.northeast.lat - bounds.southwest.lat;
           const lngSpan = bounds.northeast.lng - bounds.southwest.lng;
-          if (latSpan <= 0 || lngSpan <= 0 || latSpan > 90 || lngSpan > 180) {
+          
+          // Validate bounds span (must be positive)
+          if (latSpan <= 0 || lngSpan <= 0) {
             if (__DEV__) {
               console.error('❌ [API] Invalid bounds:', { bounds, latSpan, lngSpan });
             }
-            throw new Error('Invalid map bounds - please try zooming in or searching a smaller area');
+            throw new Error('Invalid map bounds - northeast must be greater than southwest');
           }
+          
+          // Clamp coordinates to valid ranges to prevent invalid lat/lng values
+          // Latitude: -90 to 90, Longitude: -180 to 180
+          bounds.northeast.lat = Math.max(-90, Math.min(90, bounds.northeast.lat));
+          bounds.northeast.lng = Math.max(-180, Math.min(180, bounds.northeast.lng));
+          bounds.southwest.lat = Math.max(-90, Math.min(90, bounds.southwest.lat));
+          bounds.southwest.lng = Math.max(-180, Math.min(180, bounds.southwest.lng));
         }
         if (__DEV__) {
           console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');

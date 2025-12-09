@@ -235,5 +235,102 @@ describe('Multi-Query Parsing - Unit Tests', () => {
       expect(params.leagues).toBeDefined();
     });
   });
+
+  describe('Location Inference from Leagues', () => {
+    let inferLocationFromTeamsAndLeagues;
+    let League;
+
+    beforeEach(() => {
+      League = require('../../../src/models/League');
+      // Get the function from the route module
+      const searchRoute = require('../../../src/routes/search');
+      // The function might be exported or we need to access it differently
+      // For now, we'll test it through parseNaturalLanguage
+    });
+
+    it('should infer location from MLS league using database country', async () => {
+      // Mock League.findOne to return MLS with USA country
+      League.findOne = jest.fn().mockResolvedValue({
+        apiId: '253',
+        name: 'Major League Soccer',
+        country: 'United States',
+        countryCode: 'US'
+      });
+
+      const query = "MLS matches next month";
+      
+      // Mock OpenAI to return parsed result with MLS league
+      const mockOpenAI = require('openai');
+      const mockResponse = {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              isMultiQuery: false,
+              leagues: [{ apiId: "253", name: "Major League Soccer" }],
+              dateRange: {
+                start: "2025-03-01",
+                end: "2025-03-31"
+              },
+              location: null, // No location specified - should be inferred
+              errorMessage: null
+            })
+          }
+        }]
+      };
+      
+      mockOpenAI.OpenAI.mockImplementation(() => ({
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue(mockResponse)
+          }
+        }
+      }));
+
+      const result = await parseNaturalLanguage(query);
+      
+      // Location should be inferred from MLS league country (United States)
+      expect(result.location).toBeDefined();
+      expect(result.location.country).toBe('United States');
+      expect(result.location.city).toBe('Kansas City');
+      expect(result.location.coordinates).toEqual([-94.578567, 39.099727]);
+    });
+
+    it('should infer location from hardcoded league mapping when available', async () => {
+      const query = "Premier League matches next month";
+      
+      const mockOpenAI = require('openai');
+      const mockResponse = {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              isMultiQuery: false,
+              leagues: [{ apiId: "39", name: "Premier League" }],
+              dateRange: {
+                start: "2025-03-01",
+                end: "2025-03-31"
+              },
+              location: null,
+              errorMessage: null
+            })
+          }
+        }]
+      };
+      
+      mockOpenAI.OpenAI.mockImplementation(() => ({
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue(mockResponse)
+          }
+        }
+      }));
+
+      const result = await parseNaturalLanguage(query);
+      
+      // Should use hardcoded mapping for Premier League
+      expect(result.location).toBeDefined();
+      expect(result.location.country).toBe('United Kingdom');
+      expect(result.location.city).toBe('London');
+    });
+  });
 });
 
