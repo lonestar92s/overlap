@@ -441,6 +441,16 @@ const AdminDashboard = () => {
     const [selectedLeague, setSelectedLeague] = useState(null);
     const [leagueSeasonYear, setLeagueSeasonYear] = useState('');
 
+    // Feedback state
+    const [feedback, setFeedback] = useState([]);
+    const [feedbackSearch, setFeedbackSearch] = useState('');
+    const [feedbackTypeFilter, setFeedbackTypeFilter] = useState('');
+    const [feedbackPage, setFeedbackPage] = useState(1);
+    const [feedbackPagination, setFeedbackPagination] = useState(null);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
+    const [feedbackSortBy, setFeedbackSortBy] = useState('created_at');
+    const [feedbackOrder, setFeedbackOrder] = useState('desc');
+
     const getAuthHeaders = () => ({
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json'
@@ -690,6 +700,42 @@ const AdminDashboard = () => {
     };
 
     // Fetch onboarded leagues
+    const fetchFeedback = async (page = feedbackPage) => {
+        try {
+            setFeedbackLoading(true);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                limit: '50',
+                sortBy: feedbackSortBy,
+                order: feedbackOrder
+            });
+            
+            if (feedbackSearch) {
+                params.append('search', feedbackSearch);
+            }
+            
+            if (feedbackTypeFilter) {
+                params.append('type', feedbackTypeFilter);
+            }
+            
+            const response = await fetch(`${getBackendUrl()}/api/admin/feedback?${params}`, {
+                headers: getAuthHeaders()
+            });
+            const data = await response.json();
+            if (data.success) {
+                setFeedback(data.data.feedback || []);
+                setFeedbackPagination(data.data.pagination);
+            } else {
+                setError('Failed to fetch feedback');
+            }
+        } catch (error) {
+            console.error('Error fetching feedback:', error);
+            setError('Error fetching feedback: ' + error.message);
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
+
     const fetchOnboardedLeagues = async (page = leaguePage) => {
         try {
             setLeagueLoading(true);
@@ -1001,6 +1047,10 @@ const AdminDashboard = () => {
                     if (newValue === 5) {
                         fetchOnboardedLeagues();
                     }
+                    // Fetch feedback when switching to the Feedback tab
+                    if (newValue === 6) {
+                        fetchFeedback();
+                    }
                 }}>
                     <Tab label="Unmapped Teams" icon={<WarningIcon />} />
                     <Tab label="Venue Issues" icon={<StadiumIcon />} />
@@ -1008,6 +1058,7 @@ const AdminDashboard = () => {
                     <Tab label="Subscriptions" icon={<GroupIcon />} />
                     <Tab label="League Onboarding" icon={<SportsSoccerIcon />} />
                     <Tab label="Onboarded Leagues" icon={<SportsSoccerIcon />} />
+                    <Tab label="Feedback" icon={<ErrorIcon />} />
                 </Tabs>
 
                 {/* Unmapped Teams Tab */}
@@ -1853,6 +1904,201 @@ const AdminDashboard = () => {
                         </>
                     )}
                 </TabPanel>
+
+                {/* Feedback Tab */}
+                <TabPanel value={currentTab} index={6}>
+                    <Typography variant="h6" gutterBottom>
+                        User Feedback
+                        {feedbackPagination && ` (${feedbackPagination.total} total)`}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                        View and manage user feedback, bug reports, feature requests, and ratings. Feedback is sorted chronologically (newest first).
+                    </Typography>
+
+                    {/* Search and Filter Controls */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                        <TextField
+                            label="Search Feedback"
+                            value={feedbackSearch}
+                            onChange={(e) => {
+                                setFeedbackSearch(e.target.value);
+                                setFeedbackPage(1);
+                            }}
+                            placeholder="Search by message, user email, or name..."
+                            size="small"
+                            sx={{ minWidth: 250 }}
+                            onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                    fetchFeedback();
+                                }
+                            }}
+                        />
+                        <FormControl size="small" sx={{ minWidth: 180 }}>
+                            <InputLabel>Filter by Type</InputLabel>
+                            <Select
+                                value={feedbackTypeFilter}
+                                label="Filter by Type"
+                                onChange={(e) => {
+                                    setFeedbackTypeFilter(e.target.value);
+                                    setFeedbackPage(1);
+                                }}
+                            >
+                                <MenuItem value="">All Types</MenuItem>
+                                <MenuItem value="bug">Bug Reports</MenuItem>
+                                <MenuItem value="feature">Feature Requests</MenuItem>
+                                <MenuItem value="general">General Feedback</MenuItem>
+                                <MenuItem value="rating">Ratings</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControl size="small" sx={{ minWidth: 180 }}>
+                            <InputLabel>Sort By</InputLabel>
+                            <Select
+                                value={feedbackSortBy}
+                                label="Sort By"
+                                onChange={(e) => {
+                                    setFeedbackSortBy(e.target.value);
+                                    fetchFeedback();
+                                }}
+                            >
+                                <MenuItem value="created_at">Date</MenuItem>
+                                <MenuItem value="type">Type</MenuItem>
+                                <MenuItem value="userEmail">User Email</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel>Order</InputLabel>
+                            <Select
+                                value={feedbackOrder}
+                                label="Order"
+                                onChange={(e) => {
+                                    setFeedbackOrder(e.target.value);
+                                    fetchFeedback();
+                                }}
+                            >
+                                <MenuItem value="desc">Newest First</MenuItem>
+                                <MenuItem value="asc">Oldest First</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Button
+                            variant="contained"
+                            onClick={() => fetchFeedback()}
+                            disabled={feedbackLoading}
+                            startIcon={feedbackLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                        >
+                            {feedbackLoading ? 'Loading...' : 'Search'}
+                        </Button>
+                        {(feedbackSearch || feedbackTypeFilter) && (
+                            <Button
+                                variant="outlined"
+                                onClick={() => {
+                                    setFeedbackSearch('');
+                                    setFeedbackTypeFilter('');
+                                    setFeedbackPage(1);
+                                    fetchFeedback(1);
+                                }}
+                                startIcon={<ClearIcon />}
+                            >
+                                Clear Filters
+                            </Button>
+                        )}
+                    </Box>
+
+                    {/* Feedback Table */}
+                    {feedbackLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : feedback.length === 0 ? (
+                        <Alert severity="info">
+                            No feedback found. {feedbackSearch || feedbackTypeFilter ? 'Try adjusting your search filters.' : 'No feedback has been submitted yet.'}
+                        </Alert>
+                    ) : (
+                        <>
+                            <TableContainer>
+                                <Table>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell><strong>Date</strong></TableCell>
+                                            <TableCell><strong>Type</strong></TableCell>
+                                            <TableCell><strong>User</strong></TableCell>
+                                            <TableCell><strong>Message</strong></TableCell>
+                                            <TableCell><strong>Status</strong></TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {feedback.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>
+                                                    {new Date(item.createdAt).toLocaleString()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={item.type || 'general'} 
+                                                        size="small" 
+                                                        color={
+                                                            item.type === 'bug' ? 'error' :
+                                                            item.type === 'feature' ? 'primary' :
+                                                            item.type === 'rating' ? 'success' : 'default'
+                                                        }
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Box>
+                                                        <Typography variant="body2">
+                                                            {item.userName || 'Unknown'}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="textSecondary">
+                                                            {item.userEmail || 'No email'}
+                                                        </Typography>
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2" sx={{ maxWidth: 400 }}>
+                                                        {item.message || 'No message'}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={item.status || 'new'} 
+                                                        size="small" 
+                                                        color={item.status === 'resolved' ? 'success' : 'default'}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+
+                            {/* Pagination */}
+                            {feedbackPagination && feedbackPagination.pages > 1 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 1 }}>
+                                    <Button
+                                        disabled={feedbackPage === 1}
+                                        onClick={() => {
+                                            setFeedbackPage(feedbackPage - 1);
+                                            fetchFeedback(feedbackPage - 1);
+                                        }}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <Typography sx={{ alignSelf: 'center', px: 2 }}>
+                                        Page {feedbackPagination.page} of {feedbackPagination.pages}
+                                    </Typography>
+                                    <Button
+                                        disabled={feedbackPage >= feedbackPagination.pages}
+                                        onClick={() => {
+                                            setFeedbackPage(feedbackPage + 1);
+                                            fetchFeedback(feedbackPage + 1);
+                                        }}
+                                    >
+                                        Next
+                                    </Button>
+                                </Box>
+                            )}
+                        </>
+                    )}
+                </TabPanel>
             </Paper>
 
             {/* Map Team Dialog */}
@@ -2051,6 +2297,198 @@ const AdminDashboard = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+                <Typography variant="h6" gutterBottom>
+                    User Feedback
+                    {feedbackPagination && ` (${feedbackPagination.total} total)`}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                    View and manage user feedback, bug reports, feature requests, and ratings. Feedback is sorted chronologically (newest first).
+                </Typography>
+
+                {/* Search and Filter Controls */}
+                <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                    <TextField
+                        label="Search Feedback"
+                        value={feedbackSearch}
+                        onChange={(e) => {
+                            setFeedbackSearch(e.target.value);
+                            setFeedbackPage(1);
+                        }}
+                        placeholder="Search by message, user email, or name..."
+                        size="small"
+                        sx={{ minWidth: 250 }}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                                fetchFeedback();
+                            }
+                        }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 180 }}>
+                        <InputLabel>Filter by Type</InputLabel>
+                        <Select
+                            value={feedbackTypeFilter}
+                            label="Filter by Type"
+                            onChange={(e) => {
+                                setFeedbackTypeFilter(e.target.value);
+                                setFeedbackPage(1);
+                            }}
+                        >
+                            <MenuItem value="">All Types</MenuItem>
+                            <MenuItem value="bug">Bug Reports</MenuItem>
+                            <MenuItem value="feature">Feature Requests</MenuItem>
+                            <MenuItem value="general">General Feedback</MenuItem>
+                            <MenuItem value="rating">Ratings</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ minWidth: 180 }}>
+                        <InputLabel>Sort By</InputLabel>
+                        <Select
+                            value={feedbackSortBy}
+                            label="Sort By"
+                            onChange={(e) => {
+                                setFeedbackSortBy(e.target.value);
+                                fetchFeedback();
+                            }}
+                        >
+                            <MenuItem value="created_at">Date</MenuItem>
+                            <MenuItem value="type">Type</MenuItem>
+                            <MenuItem value="userEmail">User Email</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <InputLabel>Order</InputLabel>
+                        <Select
+                            value={feedbackOrder}
+                            label="Order"
+                            onChange={(e) => {
+                                setFeedbackOrder(e.target.value);
+                                fetchFeedback();
+                            }}
+                        >
+                            <MenuItem value="desc">Newest First</MenuItem>
+                            <MenuItem value="asc">Oldest First</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <Button
+                        variant="contained"
+                        onClick={() => fetchFeedback()}
+                        disabled={feedbackLoading}
+                        startIcon={feedbackLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                    >
+                        {feedbackLoading ? 'Loading...' : 'Search'}
+                    </Button>
+                    {(feedbackSearch || feedbackTypeFilter) && (
+                        <Button
+                            variant="outlined"
+                            onClick={() => {
+                                setFeedbackSearch('');
+                                setFeedbackTypeFilter('');
+                                setFeedbackPage(1);
+                                fetchFeedback(1);
+                            }}
+                            startIcon={<ClearIcon />}
+                        >
+                            Clear Filters
+                        </Button>
+                    )}
+                </Box>
+
+                {/* Feedback Table */}
+                {feedbackLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                        <CircularProgress />
+                    </Box>
+                ) : feedback.length === 0 ? (
+                    <Alert severity="info">
+                        No feedback found. {feedbackSearch || feedbackTypeFilter ? 'Try adjusting your search filters.' : 'No feedback has been submitted yet.'}
+                    </Alert>
+                ) : (
+                    <>
+                        <TableContainer>
+                            <Table>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell><strong>Date</strong></TableCell>
+                                        <TableCell><strong>Type</strong></TableCell>
+                                        <TableCell><strong>User</strong></TableCell>
+                                        <TableCell><strong>Message</strong></TableCell>
+                                        <TableCell><strong>Status</strong></TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {feedback.map((item) => (
+                                        <TableRow key={item.id}>
+                                            <TableCell>
+                                                {new Date(item.createdAt).toLocaleString()}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip 
+                                                    label={item.type || 'general'} 
+                                                    size="small" 
+                                                    color={
+                                                        item.type === 'bug' ? 'error' :
+                                                        item.type === 'feature' ? 'primary' :
+                                                        item.type === 'rating' ? 'success' : 'default'
+                                                    }
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Box>
+                                                    <Typography variant="body2">
+                                                        {item.userName || 'Unknown'}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="textSecondary">
+                                                        {item.userEmail || 'No email'}
+                                                    </Typography>
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" sx={{ maxWidth: 400 }}>
+                                                    {item.message || 'No message'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip 
+                                                    label={item.status || 'new'} 
+                                                    size="small" 
+                                                    color={item.status === 'resolved' ? 'success' : 'default'}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+
+                        {/* Pagination */}
+                        {feedbackPagination && feedbackPagination.pages > 1 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 1 }}>
+                                <Button
+                                    disabled={feedbackPage === 1}
+                                    onClick={() => {
+                                        setFeedbackPage(feedbackPage - 1);
+                                        fetchFeedback(feedbackPage - 1);
+                                    }}
+                                >
+                                    Previous
+                                </Button>
+                                <Typography sx={{ alignSelf: 'center', px: 2 }}>
+                                    Page {feedbackPagination.page} of {feedbackPagination.pages}
+                                </Typography>
+                                <Button
+                                    disabled={feedbackPage >= feedbackPagination.pages}
+                                    onClick={() => {
+                                        setFeedbackPage(feedbackPage + 1);
+                                        fetchFeedback(feedbackPage + 1);
+                                    }}
+                                >
+                                    Next
+                                </Button>
+                            </Box>
+                        )}
+                    </>
+                )}
+            </TabPanel>
         </Box>
     );
 };

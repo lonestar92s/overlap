@@ -497,8 +497,13 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   headerActions: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+  },
+  feedbackButton: {
+    padding: spacing.xs,
   },
   moreButton: {
     padding: spacing.xs,

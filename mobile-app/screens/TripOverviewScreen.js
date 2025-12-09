@@ -164,8 +164,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setDescriptionText(tripData.description || '');
             setNotesText(tripData.notes || '');
             // Recommendations are automatically fetched by useRecommendations hook
-            // Fetch scores for completed matches
-            if (tripData.matches && tripData.matches.length > 0) {
+            // Fetch scores only if there are completed matches (past dates)
+            if (tripData.matches && hasCompletedMatches(tripData.matches)) {
               fetchScores(tripData.id || tripData._id);
             }
           } else {
@@ -637,6 +637,16 @@ const TripOverviewScreen = ({ navigation, route }) => {
     const startStr = start.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
     const endStr = end.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
     return `${startStr}-${endStr}`;
+  };
+
+  // Helper function to check if trip has any completed matches
+  const hasCompletedMatches = (matches) => {
+    if (!matches || matches.length === 0) return false;
+    const now = new Date();
+    return matches.some(match => {
+      const matchDate = new Date(match.date);
+      return matchDate < now;
+    });
   };
 
   const fetchScores = async (tripId) => {
@@ -1834,7 +1844,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
-
     </SafeAreaView>
   );
 };
