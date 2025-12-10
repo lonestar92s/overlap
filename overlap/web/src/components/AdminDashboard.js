@@ -30,7 +30,8 @@ import {
     CircularProgress,
     Tabs,
     Tab,
-    Collapse
+    Collapse,
+    Checkbox
 } from '@mui/material';
 import {
     Dashboard as DashboardIcon,
@@ -447,6 +448,102 @@ const AdminDashboard = () => {
     const [feedbackTypeFilter, setFeedbackTypeFilter] = useState('');
     const [feedbackPage, setFeedbackPage] = useState(1);
     const [feedbackPagination, setFeedbackPagination] = useState(null);
+
+    // Tier Access Management state
+    const [tierAccess, setTierAccess] = useState(null);
+    const [allLeagues, setAllLeagues] = useState([]);
+    const [tierAccessLoading, setTierAccessLoading] = useState(false);
+    const [selectedTierForEdit, setSelectedTierForEdit] = useState(null);
+    const [tierAccessEditDialog, setTierAccessEditDialog] = useState(false);
+    const [editedAllowedLeagues, setEditedAllowedLeagues] = useState([]);
+    const [leagueSearchTerm, setLeagueSearchTerm] = useState('');
+
+    // Continent mapping utility
+    const getContinentFromCountry = (country, countryCode) => {
+        const continentMap = {
+            // Europe
+            'GB': 'Europe', 'England': 'Europe', 'Scotland': 'Europe', 'Wales': 'Europe', 'Northern Ireland': 'Europe',
+            'FR': 'Europe', 'France': 'Europe',
+            'ES': 'Europe', 'Spain': 'Europe',
+            'DE': 'Europe', 'Germany': 'Europe',
+            'IT': 'Europe', 'Italy': 'Europe',
+            'PT': 'Europe', 'Portugal': 'Europe',
+            'NL': 'Europe', 'Netherlands': 'Europe',
+            'BE': 'Europe', 'Belgium': 'Europe',
+            'CH': 'Europe', 'Switzerland': 'Europe',
+            'AT': 'Europe', 'Austria': 'Europe',
+            'TR': 'Europe', 'Turkey': 'Europe',
+            'HR': 'Europe', 'Croatia': 'Europe',
+            'GR': 'Europe', 'Greece': 'Europe',
+            'PL': 'Europe', 'Poland': 'Europe',
+            'CZ': 'Europe', 'Czech Republic': 'Europe',
+            'DK': 'Europe', 'Denmark': 'Europe',
+            'SE': 'Europe', 'Sweden': 'Europe',
+            'NO': 'Europe', 'Norway': 'Europe',
+            'FI': 'Europe', 'Finland': 'Europe',
+            'IE': 'Europe', 'Ireland': 'Europe',
+            'INT': 'Europe', 'Europe': 'Europe', 'International': 'Europe',
+            
+            // North America
+            'US': 'North America', 'USA': 'North America', 'United States': 'North America',
+            'MX': 'North America', 'Mexico': 'North America',
+            'CA': 'North America', 'Canada': 'North America',
+            
+            // South America
+            'BR': 'South America', 'Brazil': 'South America',
+            'AR': 'South America', 'Argentina': 'South America',
+            'CL': 'South America', 'Chile': 'South America',
+            'CO': 'South America', 'Colombia': 'South America',
+            'UY': 'South America', 'Uruguay': 'South America',
+            
+            // Asia
+            'JP': 'Asia', 'Japan': 'Asia',
+            'CN': 'Asia', 'China': 'Asia',
+            'KR': 'Asia', 'South Korea': 'Asia',
+            'SA': 'Asia', 'Saudi Arabia': 'Asia',
+            'AE': 'Asia', 'United Arab Emirates': 'Asia',
+            'IN': 'Asia', 'India': 'Asia',
+            'AU': 'Asia', 'Australia': 'Asia', // Often grouped with Asia for sports
+            'NZ': 'Asia', 'New Zealand': 'Asia',
+            
+            // Africa
+            'ZA': 'Africa', 'South Africa': 'Africa',
+            'EG': 'Africa', 'Egypt': 'Africa',
+            'NG': 'Africa', 'Nigeria': 'Africa',
+        };
+        
+        return continentMap[countryCode] || continentMap[country] || 'Other';
+    };
+
+    // Group leagues by continent
+    const groupLeaguesByContinent = (leagues) => {
+        const grouped = {};
+        leagues.forEach(league => {
+            const continent = getContinentFromCountry(league.country, league.countryCode);
+            if (!grouped[continent]) {
+                grouped[continent] = [];
+            }
+            grouped[continent].push(league);
+        });
+        
+        // Sort continents in a preferred order
+        const continentOrder = ['Europe', 'North America', 'South America', 'Asia', 'Africa', 'Other'];
+        const sorted = {};
+        continentOrder.forEach(continent => {
+            if (grouped[continent]) {
+                sorted[continent] = grouped[continent].sort((a, b) => a.name.localeCompare(b.name));
+            }
+        });
+        
+        // Add any remaining continents
+        Object.keys(grouped).forEach(continent => {
+            if (!sorted[continent]) {
+                sorted[continent] = grouped[continent].sort((a, b) => a.name.localeCompare(b.name));
+            }
+        });
+        
+        return sorted;
+    };
     const [feedbackLoading, setFeedbackLoading] = useState(false);
     const [feedbackSortBy, setFeedbackSortBy] = useState('created_at');
     const [feedbackOrder, setFeedbackOrder] = useState('desc');
@@ -627,10 +724,12 @@ const AdminDashboard = () => {
             
             const data = await response.json();
             if (data.success) {
-                setOnboardedLeagues(data.data);
-                setLeaguePagination(data.pagination);
+                setOnboardedLeagues(data.data || []);
+                setLeaguePagination(data.pagination || null);
             } else {
                 setError(data.message || 'Failed to fetch leagues');
+                setOnboardedLeagues([]);
+                setLeaguePagination(null);
             }
         } catch (error) {
             console.error('Error fetching leagues:', error);
@@ -661,6 +760,119 @@ const AdminDashboard = () => {
         }
     };
 
+    // Fetch tier access configuration
+    const fetchTierAccess = useCallback(async () => {
+        try {
+            setTierAccessLoading(true);
+            const response = await fetch(`${getBackendUrl()}/api/admin/tier-access`, {
+                headers: getAuthHeaders()
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                setTierAccess(data.data.tierAccess);
+                setAllLeagues(data.data.leagues);
+            } else {
+                setError(data.message || 'Failed to fetch tier access configuration');
+            }
+        } catch (error) {
+            console.error('Error fetching tier access:', error);
+            setError('Failed to fetch tier access configuration');
+        } finally {
+            setTierAccessLoading(false);
+        }
+    }, []);
+
+    // Update tier access configuration
+    const updateTierAccess = async (tier, allowedLeagues, description) => {
+        try {
+            setTierAccessLoading(true);
+            const response = await fetch(`${getBackendUrl()}/api/admin/tier-access/${tier}`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    allowedLeagues,
+                    description
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                setSuccess(`Successfully updated ${tier} tier access`);
+                setTierAccessEditDialog(false);
+                setSelectedTierForEdit(null);
+                setEditedAllowedLeagues([]);
+                setLeagueSearchTerm(''); // Clear search when saving
+                await fetchTierAccess();
+            } else {
+                setError(data.message || 'Failed to update tier access');
+            }
+        } catch (error) {
+            console.error('Error updating tier access:', error);
+            setError('Error updating tier access: ' + error.message);
+        } finally {
+            setTierAccessLoading(false);
+        }
+    };
+
+    // Handle opening tier edit dialog
+    const handleEditTierAccess = (tier) => {
+        if (!tierAccess) return;
+        setSelectedTierForEdit(tier);
+        // Use allowedLeagues if available, otherwise calculate from restrictedLeagues
+        const tierConfig = tierAccess[tier];
+        let allowedLeagues = tierConfig.allowedLeagues;
+        if (!allowedLeagues || allowedLeagues.length === 0) {
+            // Calculate allowed from restricted (legacy support)
+            const allLeagueIds = allLeagues.map(l => l.id);
+            const restricted = tierConfig.restrictedLeagues || [];
+            allowedLeagues = allLeagueIds.filter(id => !restricted.includes(id));
+        }
+        setEditedAllowedLeagues([...allowedLeagues]);
+        setLeagueSearchTerm(''); // Reset search when opening dialog
+        setTierAccessEditDialog(true);
+    };
+
+    // Handle saving tier access changes
+    const handleSaveTierAccess = async () => {
+        if (!selectedTierForEdit || !tierAccess) return;
+        const description = tierAccess[selectedTierForEdit].description;
+        await updateTierAccess(selectedTierForEdit, editedAllowedLeagues, description);
+    };
+
+    // Handle select all leagues
+    const handleSelectAll = () => {
+        const allLeagueIds = allLeagues.map(l => l.id);
+        setEditedAllowedLeagues([...allLeagueIds]);
+    };
+
+    // Handle deselect all leagues
+    const handleDeselectAll = () => {
+        setEditedAllowedLeagues([]);
+    };
+
+    // Handle select all in continent
+    const handleSelectContinent = (continent, continentLeagues) => {
+        const continentLeagueIds = continentLeagues.map(l => l.id);
+        const newAllowed = [...new Set([...editedAllowedLeagues, ...continentLeagueIds])];
+        setEditedAllowedLeagues(newAllowed);
+    };
+
+    // Handle deselect all in continent
+    const handleDeselectContinent = (continent, continentLeagues) => {
+        const continentLeagueIds = continentLeagues.map(l => l.id);
+        const newAllowed = editedAllowedLeagues.filter(id => !continentLeagueIds.includes(id));
+        setEditedAllowedLeagues(newAllowed);
+    };
+
     // Add useEffect to load data on mount
     useEffect(() => {
         const loadData = async () => {
@@ -678,7 +890,7 @@ const AdminDashboard = () => {
 
     // Fetch leagues when search, filter, or page changes
     useEffect(() => {
-        if (currentTab === 5) {
+        if (currentTab === 6) {
             fetchOnboardedLeagues();
         }
     }, [currentTab, leaguePage, fetchOnboardedLeagues]); // Refetch when tab changes or page changes
@@ -689,6 +901,13 @@ const AdminDashboard = () => {
             fetchVenues();
         }
     }, [currentTab, venuePage, fetchVenues]); // Refetch when tab changes or page changes
+
+    // Fetch tier access when tab changes
+    useEffect(() => {
+        if (currentTab === 4) {
+            fetchTierAccess();
+        }
+    }, [currentTab, fetchTierAccess]);
 
     // Check admin access AFTER all hooks
     if (!user || user.role !== 'admin') {
@@ -1061,18 +1280,23 @@ const AdminDashboard = () => {
                         fetchVenues();
                     }
                     // Fetch leagues when switching to the Onboarded Leagues tab
-                    if (newValue === 5) {
+                    if (newValue === 6) {
                         fetchOnboardedLeagues();
                     }
                     // Fetch feedback when switching to the Feedback tab
-                    if (newValue === 6) {
+                    if (newValue === 7) {
                         fetchFeedback();
+                    }
+                    // Fetch tier access when switching to the Tier Access tab
+                    if (newValue === 4) {
+                        fetchTierAccess();
                     }
                 }}>
                     <Tab label="Unmapped Teams" icon={<WarningIcon />} />
                     <Tab label="Venue Issues" icon={<StadiumIcon />} />
                     <Tab label="Data Freshness" icon={<ScheduleIcon />} />
                     <Tab label="Subscriptions" icon={<GroupIcon />} />
+                    <Tab label="Tier Access" icon={<GroupIcon />} />
                     <Tab label="League Onboarding" icon={<SportsSoccerIcon />} />
                     <Tab label="Onboarded Leagues" icon={<SportsSoccerIcon />} />
                     <Tab label="Feedback" icon={<ErrorIcon />} />
@@ -1643,8 +1867,270 @@ const AdminDashboard = () => {
                     )}
                 </TabPanel>
 
-                {/* League Onboarding Tab */}
+                {/* Tier Access Management Tab */}
                 <TabPanel value={currentTab} index={4}>
+                    <Typography variant="h6" gutterBottom>
+                        Tier Access Management
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                        Configure which leagues each subscription tier can access. Select the leagues that users with each tier should have access to.
+                    </Typography>
+
+                    {tierAccessLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : tierAccess ? (
+                        <Grid container spacing={3}>
+                            {['freemium', 'pro', 'planner'].map((tier) => (
+                                <Grid item xs={12} md={4} key={tier}>
+                                    <Card>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                                <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
+                                                    {tier}
+                                                </Typography>
+                                                <Button
+                                                    size="small"
+                                                    startIcon={<EditIcon />}
+                                                    onClick={() => handleEditTierAccess(tier)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                            </Box>
+                                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                {tierAccess[tier]?.description || 'No description'}
+                                            </Typography>
+                                            <Typography variant="body2" fontWeight="bold" sx={{ mb: 1 }}>
+                                                Allowed Leagues ({(() => {
+                                                    const tierConfig = tierAccess[tier];
+                                                    if (tierConfig.allowedLeagues && tierConfig.allowedLeagues.length > 0) {
+                                                        return tierConfig.allowedLeagues.length;
+                                                    }
+                                                    // Calculate from restricted (legacy)
+                                                    const allLeagueIds = allLeagues.map(l => l.id);
+                                                    const restricted = tierConfig.restrictedLeagues || [];
+                                                    return allLeagueIds.filter(id => !restricted.includes(id)).length;
+                                                })()}):
+                                            </Typography>
+                                            {(() => {
+                                                const tierConfig = tierAccess[tier];
+                                                let allowedLeagues = tierConfig.allowedLeagues;
+                                                if (!allowedLeagues || allowedLeagues.length === 0) {
+                                                    // Calculate from restricted (legacy)
+                                                    const allLeagueIds = allLeagues.map(l => l.id);
+                                                    const restricted = tierConfig.restrictedLeagues || [];
+                                                    allowedLeagues = allLeagueIds.filter(id => !restricted.includes(id));
+                                                }
+                                                
+                                                if (allowedLeagues.length > 0) {
+                                                    return (
+                                                        <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                                                            {allowedLeagues.slice(0, 10).map((leagueId) => {
+                                                                const league = allLeagues.find(l => l.id === leagueId);
+                                                                return (
+                                                                    <Chip
+                                                                        key={leagueId}
+                                                                        label={league ? league.name : leagueId}
+                                                                        size="small"
+                                                                        color="success"
+                                                                        sx={{ m: 0.5 }}
+                                                                    />
+                                                                );
+                                                            })}
+                                                            {allowedLeagues.length > 10 && (
+                                                                <Typography variant="caption" color="textSecondary">
+                                                                    +{allowedLeagues.length - 10} more
+                                                                </Typography>
+                                                            )}
+                                                        </Box>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <Typography variant="body2" color="textSecondary">
+                                                            No leagues accessible
+                                                        </Typography>
+                                                    );
+                                                }
+                                            })()}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    ) : (
+                        <Alert severity="info">
+                            No tier access configuration found. Please refresh the page.
+                        </Alert>
+                    )}
+
+                    {/* Edit Tier Access Dialog */}
+                    <Dialog
+                        open={tierAccessEditDialog}
+                        onClose={() => {
+                            setTierAccessEditDialog(false);
+                            setSelectedTierForEdit(null);
+                            setEditedAllowedLeagues([]);
+                        }}
+                        maxWidth="md"
+                        fullWidth
+                    >
+                        <DialogTitle>
+                            Edit {selectedTierForEdit && selectedTierForEdit.charAt(0).toUpperCase() + selectedTierForEdit.slice(1)} Tier Access
+                        </DialogTitle>
+                        <DialogContent>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Select which leagues users with this tier should have access to. Checked leagues will be accessible.
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={handleSelectAll}
+                                >
+                                    Select All
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={handleDeselectAll}
+                                >
+                                    Deselect All
+                                </Button>
+                                <Typography variant="body2" sx={{ alignSelf: 'center', ml: 'auto', color: 'text.secondary' }}>
+                                    {editedAllowedLeagues.length} of {allLeagues.length} selected
+                                </Typography>
+                            </Box>
+
+                            <TextField
+                                label="Search Leagues"
+                                fullWidth
+                                size="small"
+                                sx={{ mb: 2 }}
+                                value={leagueSearchTerm}
+                                onChange={(e) => setLeagueSearchTerm(e.target.value)}
+                                placeholder="Search by league name or country..."
+                            />
+
+                            <Box sx={{ maxHeight: 500, overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>
+                                {allLeagues.length > 0 ? (() => {
+                                    // Filter leagues based on search term
+                                    let filteredLeagues = allLeagues.filter(league => {
+                                        if (!leagueSearchTerm.trim()) return true;
+                                        const searchLower = leagueSearchTerm.toLowerCase();
+                                        return (
+                                            league.name.toLowerCase().includes(searchLower) ||
+                                            league.country.toLowerCase().includes(searchLower) ||
+                                            league.countryCode.toLowerCase().includes(searchLower)
+                                        );
+                                    });
+
+                                    if (filteredLeagues.length === 0) {
+                                        return (
+                                            <Typography variant="body2" color="textSecondary" sx={{ p: 2 }}>
+                                                No leagues found matching "{leagueSearchTerm}"
+                                            </Typography>
+                                        );
+                                    }
+
+                                    // Group by continent
+                                    const groupedLeagues = groupLeaguesByContinent(filteredLeagues);
+
+                                    return Object.entries(groupedLeagues).map(([continent, continentLeagues]) => {
+                                        const allContinentSelected = continentLeagues.every(l => editedAllowedLeagues.includes(l.id));
+                                        const someContinentSelected = continentLeagues.some(l => editedAllowedLeagues.includes(l.id));
+
+                                        return (
+                                            <Box key={continent} sx={{ mb: 2 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, pb: 1, borderBottom: '1px solid #e0e0e0' }}>
+                                                    <Checkbox
+                                                        checked={allContinentSelected}
+                                                        indeterminate={someContinentSelected && !allContinentSelected}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                handleSelectContinent(continent, continentLeagues);
+                                                            } else {
+                                                                handleDeselectContinent(continent, continentLeagues);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Typography variant="subtitle2" fontWeight="bold" sx={{ flex: 1 }}>
+                                                        {continent} ({continentLeagues.length})
+                                                    </Typography>
+                                                </Box>
+                                                {continentLeagues.map((league) => {
+                                                    const isAllowed = editedAllowedLeagues.includes(league.id);
+                                                    return (
+                                                        <Box
+                                                            key={league.id}
+                                                            sx={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                pl: 4,
+                                                                pr: 1,
+                                                                py: 0.5,
+                                                                '&:hover': { backgroundColor: '#f5f5f5' }
+                                                            }}
+                                                        >
+                                                            <Checkbox
+                                                                checked={isAllowed}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setEditedAllowedLeagues([...editedAllowedLeagues, league.id]);
+                                                                    } else {
+                                                                        setEditedAllowedLeagues(editedAllowedLeagues.filter(id => id !== league.id));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <Box sx={{ flex: 1 }}>
+                                                                <Typography variant="body2" fontWeight="bold">
+                                                                    {league.name}
+                                                                </Typography>
+                                                                <Typography variant="caption" color="textSecondary">
+                                                                    {league.country} ({league.countryCode})
+                                                                </Typography>
+                                                            </Box>
+                                                            {isAllowed && (
+                                                                <Chip label="Allowed" size="small" color="success" />
+                                                            )}
+                                                        </Box>
+                                                    );
+                                                })}
+                                            </Box>
+                                        );
+                                    });
+                                })() : (
+                                    <Typography variant="body2" color="textSecondary" sx={{ p: 2 }}>
+                                        No leagues available
+                                    </Typography>
+                                )}
+                            </Box>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button
+                                onClick={() => {
+                                    setTierAccessEditDialog(false);
+                                    setSelectedTierForEdit(null);
+                                    setEditedAllowedLeagues([]);
+                                    setLeagueSearchTerm(''); // Clear search when closing
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleSaveTierAccess}
+                                variant="contained"
+                                disabled={tierAccessLoading}
+                            >
+                                {tierAccessLoading ? <CircularProgress size={20} /> : 'Save Changes'}
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+                </TabPanel>
+
+                {/* League Onboarding Tab */}
+                <TabPanel value={currentTab} index={5}>
                     <LeagueOnboardingWizard 
                         getAuthHeaders={getAuthHeaders}
                         onSuccess={() => {
@@ -1657,7 +2143,7 @@ const AdminDashboard = () => {
                 </TabPanel>
 
                 {/* Onboarded Leagues Tab */}
-                <TabPanel value={currentTab} index={5}>
+                <TabPanel value={currentTab} index={6}>
                     <Typography variant="h6" gutterBottom>
                         Onboarded Leagues
                         {leaguePagination && ` (${leaguePagination.total} total)`}
@@ -1923,7 +2409,7 @@ const AdminDashboard = () => {
                 </TabPanel>
 
                 {/* Feedback Tab */}
-                <TabPanel value={currentTab} index={6}>
+                <TabPanel value={currentTab} index={7}>
                     <Typography variant="h6" gutterBottom>
                         User Feedback
                         {feedbackPagination && ` (${feedbackPagination.total} total)`}

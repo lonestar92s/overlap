@@ -61,14 +61,14 @@ router.get('/', authenticateToken, async (req, res) => {
         );
         
         // Format for frontend consumption
-        const formattedLeagues = filteredLeagues.map(league => ({
+        const formattedLeagues = await Promise.all(filteredLeagues.map(async (league) => ({
             id: league.apiId,
             name: league.name,
             tier: league.tier || 1,
             country: league.country,
             countryCode: league.countryCode,
-            subscriptionRequired: !subscriptionService.hasLeagueAccess(user, league.apiId)
-        }));
+            subscriptionRequired: !(await subscriptionService.hasLeagueAccess(user, league.apiId))
+        })));
 
         res.json({
             success: true,

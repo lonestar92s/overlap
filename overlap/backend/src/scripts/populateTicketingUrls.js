@@ -28,7 +28,21 @@ async function populateTicketingUrls() {
         }
         
         await mongoose.connect(mongoUrl);
-        console.log('📦 Connected to MongoDB\n');
+        const dbName = mongoose.connection.db?.databaseName || 'unknown';
+        console.log('📦 Connected to MongoDB');
+        console.log(`   Database: ${dbName}`);
+        console.log(`   Collection: teams\n`);
+
+        // Debug: Show sample teams in database
+        const totalTeams = await Team.countDocuments({});
+        console.log(`📊 Total teams in database: ${totalTeams}`);
+        const sampleTeams = await Team.find({}).limit(5).select('name apiId ticketingUrl').lean();
+        console.log('📋 Sample teams in database:');
+        sampleTeams.forEach(team => {
+            const hasUrl = team.ticketingUrl ? '✅' : '❌';
+            console.log(`   ${hasUrl} "${team.name}" (apiId: ${team.apiId})`);
+        });
+        console.log('');
 
         console.log(`📋 Found ${Object.keys(TEAM_TICKETING_URLS).length} teams in ticketing URL mapping\n`);
 
@@ -40,13 +54,29 @@ async function populateTicketingUrls() {
         // Iterate through mapping and update teams
         for (const [teamName, ticketingUrl] of Object.entries(TEAM_TICKETING_URLS)) {
             try {
-                // Find team by name (case-insensitive)
-                const team = await Team.findOne({
+                // Try multiple matching strategies
+                // 1. Exact match (case-insensitive)
+                let team = await Team.findOne({
                     name: { $regex: new RegExp(`^${teamName}$`, 'i') }
                 });
 
+                // 2. If not found, try partial match (contains)
+                if (!team) {
+                    team = await Team.findOne({
+                        name: { $regex: new RegExp(teamName.replace(/ FC$/, ''), 'i') }
+                    });
+                }
+
+                // 3. If still not found, try matching in aliases
+                if (!team) {
+                    team = await Team.findOne({
+                        aliases: { $regex: new RegExp(teamName.replace(/ FC$/, ''), 'i') }
+                    });
+                }
+
                 if (!team) {
                     notFound.push(teamName);
+                    console.log(`⚠️  Not found: ${teamName}`);
                     continue;
                 }
 
@@ -57,10 +87,14 @@ async function populateTicketingUrls() {
                 }
 
                 // Update team with ticketing URL
+                const oldUrl = team.ticketingUrl;
                 team.ticketingUrl = ticketingUrl;
                 await team.save();
                 updated++;
-                console.log(`✅ Updated ${team.name}: ${ticketingUrl}`);
+                console.log(`✅ Updated ${team.name} (matched from "${teamName}"): ${ticketingUrl}`);
+                if (oldUrl) {
+                    console.log(`   Previous URL: ${oldUrl}`);
+                }
 
             } catch (error) {
                 errors.push({ teamName, error: error.message });

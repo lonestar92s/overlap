@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { CheckBox } from 'react-native-elements';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
 
 /**
  * FilterAccordion Component
@@ -19,8 +19,12 @@ const FilterAccordion = ({
   onToggle,
   onExpand,
   children,
+  hasNestedItems = false,
   accessibilityLabel,
 }) => {
+  // Only show expand icon if there are nested items to expand
+  const shouldShowExpand = onExpand && hasNestedItems;
+
   return (
     <View style={styles.filterItem}>
       <View style={styles.filterRow}>
@@ -38,11 +42,16 @@ const FilterAccordion = ({
           <View style={styles.countChip}>
             <Text style={styles.countText}>{count}</Text>
           </View>
-          {onExpand && (
-            <TouchableOpacity onPress={onExpand} style={styles.expandIconBtn}>
+          {shouldShowExpand && (
+            <TouchableOpacity 
+              onPress={onExpand} 
+              style={styles.expandIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? `Collapse ${name} options` : `Expand ${name} options`}
+            >
               <Ionicons 
                 name={expanded ? 'chevron-up' : 'chevron-down'} 
-                size={18} 
+                size={iconSizes.sm} 
                 color={colors.text.secondary} 
               />
             </TouchableOpacity>
@@ -71,11 +80,14 @@ const styles = StyleSheet.create({
   filterItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: spacing.sm,
+    gap: spacing.xs,
   },
   expandIconBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    padding: spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginLeft: spacing.xs,
   },
   checkboxContainer: {
@@ -94,9 +106,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardGrey,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    minWidth: 40,
+    borderRadius: borderRadius.pill,
+    minWidth: 32,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   countText: {
     ...typography.caption,

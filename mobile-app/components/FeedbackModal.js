@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
-import { Overlay, Input, Button } from 'react-native-elements';
+import { View, Text, StyleSheet, Alert, Platform, KeyboardAvoidingView, ScrollView, Modal, TouchableOpacity, TouchableWithoutFeedback } from 'react-native';
+import { Input, Button } from 'react-native-elements';
 import ApiService from '../services/api';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import { modalKeyboardAvoidingProps } from '../utils/keyboardUtils';
 
 const FeedbackModal = ({ visible, onClose, type = 'general', initialMessage = null }) => {
   const [feedbackText, setFeedbackText] = useState(initialMessage || '');
@@ -36,77 +37,103 @@ const FeedbackModal = ({ visible, onClose, type = 'general', initialMessage = nu
   };
 
   return (
-    <Overlay
-      isVisible={visible}
-      onBackdropPress={handleClose}
-      overlayStyle={styles.overlay}
-      backdropStyle={styles.backdrop}
+    <Modal
+      visible={visible}
+      transparent={true}
       animationType="slide"
+      onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
-      >
-        <View style={styles.contentContainer}>
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.header}>
-              <Text style={styles.title}>Send Feedback</Text>
-            </View>
+      <TouchableWithoutFeedback onPress={handleClose}>
+        <View style={styles.backdrop}>
+          <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+            <KeyboardAvoidingView
+              {...modalKeyboardAvoidingProps}
+              style={styles.keyboardView}
+            >
+              <View style={styles.overlay}>
+                <ScrollView
+                  style={styles.scrollView}
+                  contentContainerStyle={styles.scrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled={true}
+                >
+                  <View style={styles.contentContainer}>
+                    <View style={styles.header}>
+                      <Text style={styles.title}>Send Feedback</Text>
+                      <TouchableOpacity
+                        onPress={handleClose}
+                        style={styles.closeButton}
+                        accessibilityLabel="Close feedback modal"
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.closeButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
 
-            {initialMessage && (
-              <Text style={styles.initialMessage}>{initialMessage}</Text>
-            )}
+                    {initialMessage && (
+                      <Text style={styles.initialMessage}>{initialMessage}</Text>
+                    )}
 
-            <Input
-              label="Your Feedback"
-              placeholder="Type your feedback here..."
-              value={feedbackText}
-              onChangeText={setFeedbackText}
-              multiline
-              numberOfLines={6}
-              inputStyle={styles.input}
-              inputContainerStyle={styles.inputContainer}
-              containerStyle={styles.inputWrapper}
-              labelStyle={styles.label}
-              disabled={submitting}
-              accessibilityLabel="Feedback text input"
-            />
-          </ScrollView>
+                    <Input
+                      label="Your Feedback"
+                      placeholder="Type your feedback here..."
+                      value={feedbackText}
+                      onChangeText={setFeedbackText}
+                      multiline
+                      numberOfLines={6}
+                      inputStyle={styles.input}
+                      inputContainerStyle={styles.inputContainer}
+                      containerStyle={styles.inputWrapper}
+                      labelStyle={styles.label}
+                      disabled={submitting}
+                      accessibilityLabel="Feedback text input"
+                    />
 
-          <View style={styles.buttonContainer}>
-            <Button
-              title="Cancel"
-              onPress={handleClose}
-              disabled={submitting}
-              buttonStyle={[styles.button, styles.cancelButton]}
-              titleStyle={styles.cancelButtonText}
-              containerStyle={styles.buttonWrapper}
-              accessibilityLabel="Cancel feedback"
-            />
-            <Button
-              title={submitting ? 'Sending...' : 'Send'}
-              onPress={handleSubmit}
-              disabled={submitting || !feedbackText.trim()}
-              loading={submitting}
-              buttonStyle={[styles.button, styles.submitButton]}
-              titleStyle={styles.submitButtonText}
-              containerStyle={styles.buttonWrapper}
-              accessibilityLabel="Send feedback"
-            />
-          </View>
+                    <View style={styles.buttonContainer}>
+                      <Button
+                        title="Cancel"
+                        onPress={handleClose}
+                        disabled={submitting}
+                        buttonStyle={[styles.button, styles.cancelButton]}
+                        titleStyle={styles.cancelButtonText}
+                        containerStyle={styles.buttonWrapper}
+                        accessibilityLabel="Cancel feedback"
+                      />
+                      <Button
+                        title={submitting ? 'Sending...' : 'Send'}
+                        onPress={handleSubmit}
+                        disabled={submitting || !feedbackText.trim()}
+                        loading={submitting}
+                        buttonStyle={[styles.button, styles.submitButton]}
+                        titleStyle={styles.submitButtonText}
+                        containerStyle={styles.buttonWrapper}
+                        accessibilityLabel="Send feedback"
+                      />
+                    </View>
+                  </View>
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
         </View>
-      </KeyboardAvoidingView>
-    </Overlay>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  keyboardView: {
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   overlay: {
     borderRadius: borderRadius.md,
     padding: spacing.lg,
@@ -114,31 +141,49 @@ const styles = StyleSheet.create({
     maxWidth: 500,
     maxHeight: '80%',
     backgroundColor: colors.card,
-  },
-  backdrop: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  keyboardView: {
-    width: '100%',
-    flex: 1,
-  },
-  contentContainer: {
-    flex: 1,
-    width: '100%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingBottom: spacing.md,
+  },
+  contentContainer: {
+    width: '100%',
+    flexDirection: 'column',
   },
   header: {
     marginBottom: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     ...typography.h3,
     color: colors.text.primary,
     fontWeight: '600',
+    flex: 1,
+  },
+  closeButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.sm,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: colors.text.secondary,
+    fontWeight: '300',
   },
   initialMessage: {
     ...typography.body,
@@ -178,6 +223,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
+    marginTop: spacing.md,
   },
   buttonWrapper: {
     flex: 1,

@@ -717,7 +717,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                 };
             }
         }
-        const hasAccess = subscriptionService.hasLeagueAccess(user, competitionId);
+        const hasAccess = await subscriptionService.hasLeagueAccess(user, competitionId);
         if (!hasAccess) {
             return res.status(403).json({
                 error: 'Subscription Required',

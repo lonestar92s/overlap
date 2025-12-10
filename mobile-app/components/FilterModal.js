@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
 import FilterSection from './FilterSection';
 import FilterAccordion from './FilterAccordion';
-import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, iconSizes, shadows } from '../styles/designTokens';
 
 const FilterModal = ({ 
   visible, 
@@ -246,7 +246,11 @@ const FilterModal = ({
       <View style={styles.nestedSection}>
         <View style={styles.nestedHeader}>
           <Text style={styles.nestedTitle}>Leagues</Text>
-          <TouchableOpacity onPress={() => handleSelectAllLeagues(country.id)}>
+          <TouchableOpacity 
+            onPress={() => handleSelectAllLeagues(country.id)}
+            accessibilityRole="button"
+            accessibilityLabel="Select all leagues"
+          >
             <Text style={styles.selectAllText}>Select All</Text>
           </TouchableOpacity>
         </View>
@@ -266,13 +270,18 @@ const FilterModal = ({
               expanded={isLeagueExpanded}
               onToggle={() => handleLeagueChange(league.id)}
               onExpand={() => setExpandedLeagueId(prev => prev === league.id ? null : league.id)}
+              hasNestedItems={leagueTeams.length > 0}
               accessibilityLabel={`Filter by ${league.name} league`}
             >
               {isLeagueExpanded && leagueTeams.length > 0 && (
                 <View style={styles.nestedSection}>
                   <View style={styles.nestedHeader}>
                     <Text style={styles.nestedTitle}>Teams</Text>
-                    <TouchableOpacity onPress={() => handleSelectAllTeams(league.id)}>
+                    <TouchableOpacity 
+                      onPress={() => handleSelectAllTeams(league.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Select all teams"
+                    >
                       <Text style={styles.selectAllText}>Select All</Text>
                     </TouchableOpacity>
                   </View>
@@ -341,8 +350,13 @@ const FilterModal = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Filter Matches</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#666" />
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close filter modal"
+            >
+              <Ionicons name="close" size={iconSizes.md} color={colors.text.secondary} />
             </TouchableOpacity>
           </View>
 
@@ -413,7 +427,7 @@ const FilterModal = ({
           </View>
 
           {/* Footer Actions */}
-          <View style={[styles.footer, { paddingBottom: 16 + (insets?.bottom || 0) }]}>
+          <View style={[styles.footer, { paddingBottom: spacing.md + (insets?.bottom || 0) }]}>
             <TouchableOpacity
               style={styles.resetButton}
               onPress={handleReset}
@@ -450,14 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     width: '90%',
     maxHeight: '80%',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    ...shadows.large,
   },
   header: {
     flexDirection: 'row',
@@ -472,7 +479,11 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
   closeButton: {
-    padding: spacing.xs,
+    padding: spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activeFiltersContainer: {
     flexDirection: 'row',
@@ -564,9 +575,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardGrey,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    minWidth: 40,
+    borderRadius: borderRadius.pill,
+    minWidth: 32,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   countText: {
     ...typography.caption,
@@ -582,6 +594,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   nestedTitle: {
     ...typography.body,

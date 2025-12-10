@@ -87,7 +87,7 @@ router.post('/register', [
         });
 
         // Set subscription tier using the service
-        subscriptionService.updateUserTier(user, selectedTier);
+        await subscriptionService.updateUserTier(user, selectedTier);
 
         await user.save();
 
@@ -303,7 +303,7 @@ router.get('/workos/callback', async (req, res) => {
             });
 
             // Set default subscription tier
-            subscriptionService.updateUserTier(newUser, 'freemium');
+            await subscriptionService.updateUserTier(newUser, 'freemium');
             await newUser.save();
             user = newUser;
         }

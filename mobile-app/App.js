@@ -27,6 +27,7 @@ import WorkOSLoginScreen from './screens/WorkOSLoginScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
 import AccountScreen from './screens/AccountScreen';
+import FeedbackScreen from './screens/FeedbackScreen';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -186,6 +187,39 @@ function MemoriesStack() {
   );
 }
 
+function AccountStack() {
+  return (
+    <Stack.Navigator
+      initialRouteName="Account"
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.primary,
+        },
+        headerTintColor: colors.onPrimary,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
+      <Stack.Screen
+        name="Account"
+        component={AccountScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="Feedback"
+        component={FeedbackScreen}
+        options={{
+          title: 'Send Feedback',
+          headerTitleAlign: 'center',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 // Main app component with authentication
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -266,7 +300,7 @@ function AppContent() {
               {FEATURE_FLAGS.enableMessagesTab && (
                 <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
               )}
-              <Tab.Screen name="AccountTab" component={AccountScreen} options={{ tabBarLabel: 'Profile' }} />
+              <Tab.Screen name="AccountTab" component={AccountStack} options={{ tabBarLabel: 'Profile' }} />
             </Tab.Navigator>
           </ItineraryProvider>
         </FilterProvider>

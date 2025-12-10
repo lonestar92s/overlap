@@ -640,7 +640,7 @@ router.get('/users', adminAuth, async (req, res) => {
                 stats: {
                     total,
                     tierStats,
-                    tierAccess: subscriptionService.getAllTiers()
+                    tierAccess: await subscriptionService.getAllTiers()
                 },
                 pagination: {
                     page: parseInt(page),
@@ -683,7 +683,7 @@ router.put('/users/:userId/subscription', adminAuth, async (req, res) => {
         }
         
         // Update subscription using service
-        subscriptionService.updateUserTier(user, tier);
+        await subscriptionService.updateUserTier(user, tier);
         await user.save();
         
         res.json({
@@ -734,7 +734,7 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
         });
         
         // Get tier access info
-        const tierAccess = subscriptionService.getAllTiers();
+        const tierAccess = await subscriptionService.getAllTiers();
         
         res.json({
             success: true,
@@ -750,6 +750,102 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch subscription stats'
+        });
+    }
+});
+
+// Tier Access Management Endpoints
+
+// GET /api/admin/tier-access
+// Get tier access configuration
+router.get('/tier-access', adminAuth, async (req, res) => {
+    try {
+        const tierAccess = await subscriptionService.getTierAccessConfig();
+        
+        // Also get all leagues for the UI
+        const leagueService = require('../services/leagueService');
+        const allLeagues = await leagueService.getAllLeagues();
+        
+        // Ensure tierAccess includes allowedLeagues for each tier
+        const tierAccessWithAllowed = {};
+        for (const tier of ['freemium', 'pro', 'planner']) {
+            const tierConfig = tierAccess[tier] || {};
+            tierAccessWithAllowed[tier] = {
+                allowedLeagues: tierConfig.allowedLeagues || [],
+                restrictedLeagues: tierConfig.restrictedLeagues || [],
+                description: tierConfig.description || ''
+            };
+        }
+        
+        res.json({
+            success: true,
+            data: {
+                tierAccess: tierAccessWithAllowed,
+                leagues: allLeagues.map(league => ({
+                    id: league.apiId,
+                    name: league.name,
+                    country: league.country,
+                    countryCode: league.countryCode
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching tier access:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch tier access configuration'
+        });
+    }
+});
+
+// PUT /api/admin/tier-access/:tier
+// Update tier access configuration
+router.put('/tier-access/:tier', adminAuth, async (req, res) => {
+    try {
+        const { tier } = req.params;
+        const { allowedLeagues, restrictedLeagues, description } = req.body;
+        
+        if (!['freemium', 'pro', 'planner'].includes(tier)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid tier. Must be freemium, pro, or planner'
+            });
+        }
+        
+        // Validate allowedLeagues is an array if provided
+        if (allowedLeagues !== undefined && !Array.isArray(allowedLeagues)) {
+            return res.status(400).json({
+                success: false,
+                message: 'allowedLeagues must be an array'
+            });
+        }
+        
+        // Validate restrictedLeagues is an array if provided (legacy support)
+        if (restrictedLeagues !== undefined && !Array.isArray(restrictedLeagues)) {
+            return res.status(400).json({
+                success: false,
+                message: 'restrictedLeagues must be an array'
+            });
+        }
+        
+        const updatedTierAccess = await subscriptionService.updateTierAccess(
+            tier,
+            allowedLeagues,
+            description,
+            restrictedLeagues
+        );
+        
+        res.json({
+            success: true,
+            message: `Successfully updated ${tier} tier access`,
+            data: updatedTierAccess
+        });
+    } catch (error) {
+        console.error('Error updating tier access:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update tier access configuration',
+            error: error.message
         });
     }
 });

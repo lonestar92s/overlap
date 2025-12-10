@@ -6,11 +6,9 @@ import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 import { normalizeIds } from '../utils/idNormalizer';
-import FeedbackModal from '../components/FeedbackModal';
 
 const AccountScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
-  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [prefs, setPrefs] = useState({ 
     favoriteLeagues: [], 
@@ -244,6 +242,11 @@ const AccountScreen = ({ navigation }) => {
   const username = user?.email?.split('@')[0] || 'user';
   const displayName = user?.name || user?.email?.split('@')[0] || 'User Name';
   
+  // Get subscription tier for badge display
+  const subscriptionTier = user?.subscription?.tier;
+  const showSubscriptionBadge = subscriptionTier && (subscriptionTier === 'pro' || subscriptionTier === 'planner');
+  const subscriptionBadgeText = subscriptionTier?.toUpperCase() || '';
+  
   const tabs = [
     { id: 'trips', label: 'Past Trips' },
     { id: 'favorites', label: 'Favorites' },
@@ -348,9 +351,14 @@ const AccountScreen = ({ navigation }) => {
 
         {/* Top Right Actions */}
         <View style={styles.headerActions}>
+          {showSubscriptionBadge && (
+            <View style={styles.subscriptionBadge}>
+              <Text style={styles.subscriptionBadgeText}>{subscriptionBadgeText}</Text>
+            </View>
+          )}
           <TouchableOpacity 
             style={styles.feedbackButton}
-            onPress={() => setFeedbackModalVisible(true)}
+            onPress={() => navigation.navigate('Feedback', { type: 'general' })}
             accessibilityLabel="Send feedback"
             accessibilityRole="button"
             accessibilityHint="Opens feedback form to send suggestions or report issues"
@@ -445,12 +453,6 @@ const AccountScreen = ({ navigation }) => {
         />
       </View>
     </ScrollView>
-    
-    <FeedbackModal
-      visible={feedbackModalVisible}
-      onClose={() => setFeedbackModalVisible(false)}
-      type="general"
-    />
     </SafeAreaView>
   );
 };
@@ -532,6 +534,19 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  subscriptionBadge: {
+    backgroundColor: colors.secondary,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginRight: spacing.xs,
+  },
+  subscriptionBadgeText: {
+    ...typography.caption,
+    color: colors.onSecondary,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   
   // Tab Navigation - Wanderlog Pattern

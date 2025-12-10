@@ -85,6 +85,13 @@ const MatchCard = ({
   // Get match status and result
   const matchStatus = useMemo(() => getMatchStatus(match), [match]);
   const matchResult = useMemo(() => getMatchResult(match), [match]);
+  // Debug: Log ticketing URL availability
+useEffect(() => {
+  if (__DEV__ && teams.home?.name) {
+    console.log(`[MatchCard] ${teams.home.name} - ticketingUrl:`, teams.home.ticketingUrl);
+    console.log(`[MatchCard] isPast:`, isPast, 'matchStatus.type:', matchStatus.type);
+  }
+}, [teams.home?.ticketingUrl, isPast, matchStatus.type]);
   const formattedDate = useMemo(() => 
     formatMatchDate(fixture.date, matchStatus.isPast),
     [fixture.date, matchStatus.isPast]
@@ -373,7 +380,7 @@ const MatchCard = ({
           activeOpacity={0.7}
         >
           <Icon name="confirmation-number" size={18} color={colors.primary} />
-          <Text style={styles.ticketsButtonText}>Tickets</Text>
+          <Text style={styles.ticketsButtonText}>Buy Tickets</Text>
         </TouchableOpacity>
       )}
 

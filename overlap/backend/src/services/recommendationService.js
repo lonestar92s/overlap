@@ -128,7 +128,7 @@ class RecommendationService {
 
             // Get user's subscription tier for league filtering
             const subscriptionTier = user.subscription?.tier || 'freemium';
-            const restrictedLeagues = subscriptionService.getRestrictedLeagues(subscriptionTier);
+            const restrictedLeagues = await subscriptionService.getRestrictedLeagues(subscriptionTier);
             
             // Get user's recommendation radius preference
             const userRadius = user.preferences?.recommendationRadius || this.defaultRadius;

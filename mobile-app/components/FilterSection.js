@@ -46,6 +46,9 @@ const FilterSection = ({
         const isSelected = selectedIds.includes(item.id);
         const isExpanded = expandedId === item.id;
         const nestedItems = getNestedItems ? getNestedItems(item) : null;
+        // Only show expand icon if there are 2+ nested items (more useful UX)
+        // Single nested item doesn't need expansion
+        const hasNestedItems = nestedItems && nestedItems.length > 1;
         
         return (
           <FilterAccordion
@@ -57,9 +60,10 @@ const FilterSection = ({
             expanded={isExpanded}
             onToggle={() => onItemToggle(item.id)}
             onExpand={onItemExpand ? () => onItemExpand(item.id) : null}
+            hasNestedItems={hasNestedItems}
             accessibilityLabel={`Filter by ${item.name} ${title.toLowerCase()}`}
           >
-            {isExpanded && nestedItems && renderNestedContent && (
+            {isExpanded && nestedItems && nestedItems.length > 0 && renderNestedContent && (
               <View style={styles.nestedSection}>
                 {renderNestedContent(item, nestedItems)}
               </View>
@@ -79,7 +83,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
   },
   sectionTitle: {
     ...typography.h3,
