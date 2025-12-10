@@ -6,9 +6,11 @@ import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 import { normalizeIds } from '../utils/idNormalizer';
+import FeedbackModal from '../components/FeedbackModal';
 
 const AccountScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [prefs, setPrefs] = useState({ 
     favoriteLeagues: [], 
@@ -347,6 +349,15 @@ const AccountScreen = ({ navigation }) => {
         {/* Top Right Actions */}
         <View style={styles.headerActions}>
           <TouchableOpacity 
+            style={styles.feedbackButton}
+            onPress={() => setFeedbackModalVisible(true)}
+            accessibilityLabel="Send feedback"
+            accessibilityRole="button"
+            accessibilityHint="Opens feedback form to send suggestions or report issues"
+          >
+            <MaterialIcons name="feedback" size={iconSizes.md} color={colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
             style={styles.moreButton}
             onPress={handleMoreOptions}
             accessibilityLabel="More options"
@@ -434,6 +445,12 @@ const AccountScreen = ({ navigation }) => {
         />
       </View>
     </ScrollView>
+    
+    <FeedbackModal
+      visible={feedbackModalVisible}
+      onClose={() => setFeedbackModalVisible(false)}
+      type="general"
+    />
     </SafeAreaView>
   );
 };
@@ -504,9 +521,17 @@ const styles = StyleSheet.create({
   },
   feedbackButton: {
     padding: spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   moreButton: {
     padding: spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   
   // Tab Navigation - Wanderlog Pattern

@@ -608,3 +608,4 @@ const handleSearchResponse = (response) => {
 4. **Match IDs**: Use fixture.id from API as unique identifier.
 5. **Empty Arrays**: Use empty arrays `[]` instead of `null` for missing secondary matches.
 
+

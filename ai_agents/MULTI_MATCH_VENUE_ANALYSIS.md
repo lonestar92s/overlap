@@ -329,3 +329,4 @@ The core issue is that the system requires venue IDs for grouping, but different
 
 This is an incremental refactor that can be implemented in small PRs, starting with the most critical fixes (removing strict venue.id requirement) and gradually adding more sophisticated grouping logic.
 
+

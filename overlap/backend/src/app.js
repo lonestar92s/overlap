@@ -6,23 +6,6 @@ const dotenv = require('dotenv');
 const path = require('path');
 const mongoose = require('mongoose');
 
-// Initialize Sentry error reporting (if DSN is configured)
-let Sentry = null;
-if (process.env.SENTRY_DSN) {
-    Sentry = require('@sentry/node');
-    Sentry.init({
-        dsn: process.env.SENTRY_DSN,
-        environment: process.env.NODE_ENV || 'development',
-        tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in prod, 100% in dev
-        beforeSend(event, hint) {
-            // Don't send errors in development
-            if (process.env.NODE_ENV !== 'production') {
-                return null;
-            }
-            return event;
-        }
-    });
-}
 const transportationRoutes = require('./routes/transportation');
 const matchesRoutes = require('./routes/matches');
 const searchRoutes = require('./routes/search');
@@ -36,6 +19,7 @@ const tripsRoutes = require('./routes/trips');
 const leaguesRoutes = require('./routes/leagues');
 const venuesRoutes = require('./routes/venues');
 const recommendationsRoutes = require('./routes/recommendations');
+const feedbackRoutes = require('./routes/feedback');
 const adminRouter = require('./routes/admin');
 
 
@@ -47,12 +31,6 @@ dotenv.config({ path: envPath });
 
 
 const app = express();
-
-// Sentry request handler (must be before other middleware)
-if (Sentry) {
-    app.use(Sentry.Handlers.requestHandler());
-    app.use(Sentry.Handlers.tracingHandler());
-}
 
 // Security headers middleware (must be before other middleware)
 app.use(helmet({
@@ -216,6 +194,7 @@ app.use('/api/matches/attended', attendedMatchesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/memories', memoriesRoutes);
 app.use('/api/recommendations', recommendationsRoutes);
+app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
@@ -235,18 +214,8 @@ if (process.env.NODE_ENV !== 'production') {
 const teamService = require('./services/teamService');
 teamService.setUnmappedLogger(adminRouter.logUnmappedTeam);
 
-// Sentry error handler (must be after all routes, before error handlers)
-if (Sentry) {
-    app.use(Sentry.Handlers.errorHandler());
-}
-
 // Global error handler
 app.use((err, req, res, next) => {
-    // Log error to Sentry if configured
-    if (Sentry) {
-        Sentry.captureException(err);
-    }
-    
     // Log error to console (will be replaced with logger later)
     console.error('Unhandled error:', err);
     

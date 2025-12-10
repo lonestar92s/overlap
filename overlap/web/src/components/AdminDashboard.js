@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
@@ -484,7 +484,7 @@ const AdminDashboard = () => {
         }
     };
 
-    const fetchVenues = async (page = venuePage) => {
+    const fetchVenues = useCallback(async (page = venuePage) => {
         try {
             setVenueLoading(true);
             const params = new URLSearchParams({
@@ -507,6 +507,11 @@ const AdminDashboard = () => {
             const response = await fetch(`${getBackendUrl()}/api/admin/venues?${params}`, {
                 headers: getAuthHeaders()
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
             if (data.success) {
                 setVenues(data.data.venues);
@@ -520,7 +525,7 @@ const AdminDashboard = () => {
         } finally {
             setVenueLoading(false);
         }
-    };
+    }, [venuePage, venueSearch, venueCountryFilter, venueHasIssuesFilter]);
 
     const fetchDataFreshness = async () => {
         try {
@@ -556,11 +561,16 @@ const AdminDashboard = () => {
     };
 
     // Fetch users for subscription management
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         try {
             const response = await fetch(`${getBackendUrl()}/api/admin/users?page=${userPage}&search=${userSearch}&tier=${selectedTier}`, {
                 headers: getAuthHeaders()
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
             if (data.success) {
                 setUsers(data.data.users);
@@ -572,7 +582,7 @@ const AdminDashboard = () => {
             console.error('Error fetching users:', error);
             setError('Failed to fetch users and subscription data');
         }
-    };
+    }, [userPage, userSearch, selectedTier]);
 
     // Fetch subscription statistics
     const fetchSubscriptionStats = async () => {
@@ -588,6 +598,47 @@ const AdminDashboard = () => {
             console.error('Error fetching subscription stats:', error);
         }
     };
+
+    // Fetch onboarded leagues
+    const fetchOnboardedLeagues = useCallback(async (page = leaguePage) => {
+        try {
+            setLeagueLoading(true);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                limit: '20'
+            });
+            
+            if (leagueSearch) {
+                params.append('search', leagueSearch);
+            }
+            
+            if (leagueCountryFilter) {
+                params.append('country', leagueCountryFilter);
+            }
+            
+            const response = await fetch(`${getBackendUrl()}/api/admin/leagues?${params}`, {
+                headers: getAuthHeaders()
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                setOnboardedLeagues(data.data);
+                setLeaguePagination(data.pagination);
+            } else {
+                setError(data.message || 'Failed to fetch leagues');
+            }
+        } catch (error) {
+            console.error('Error fetching leagues:', error);
+            setError('Error fetching leagues: ' + error.message);
+        } finally {
+            setLeagueLoading(false);
+        }
+    }, [leaguePage, leagueSearch, leagueCountryFilter]);
 
     // Update user subscription tier
     const updateUserSubscription = async (userId, newTier) => {
@@ -623,21 +674,21 @@ const AdminDashboard = () => {
             }
         };
         loadData();
-    }, [userPage, userSearch, selectedTier]); // Re-fetch when these values change
+    }, [fetchUsers]); // Re-fetch when fetchUsers changes (which depends on userPage, userSearch, selectedTier)
 
     // Fetch leagues when search, filter, or page changes
     useEffect(() => {
         if (currentTab === 5) {
             fetchOnboardedLeagues();
         }
-    }, [leaguePage]); // Only refetch on page change, not on search/filter (user clicks Search button)
+    }, [currentTab, leaguePage, fetchOnboardedLeagues]); // Refetch when tab changes or page changes
 
     // Fetch venues when tab changes or page changes
     useEffect(() => {
         if (currentTab === 1) {
             fetchVenues();
         }
-    }, [venuePage]); // Only refetch on page change, not on search/filter (user clicks Search button)
+    }, [currentTab, venuePage, fetchVenues]); // Refetch when tab changes or page changes
 
     // Check admin access AFTER all hooks
     if (!user || user.role !== 'admin') {
@@ -699,7 +750,7 @@ const AdminDashboard = () => {
         }
     };
 
-    // Fetch onboarded leagues
+    // Fetch feedback
     const fetchFeedback = async (page = feedbackPage) => {
         try {
             setFeedbackLoading(true);
@@ -733,40 +784,6 @@ const AdminDashboard = () => {
             setError('Error fetching feedback: ' + error.message);
         } finally {
             setFeedbackLoading(false);
-        }
-    };
-
-    const fetchOnboardedLeagues = async (page = leaguePage) => {
-        try {
-            setLeagueLoading(true);
-            const params = new URLSearchParams({
-                page: page.toString(),
-                limit: '20'
-            });
-            
-            if (leagueSearch) {
-                params.append('search', leagueSearch);
-            }
-            
-            if (leagueCountryFilter) {
-                params.append('country', leagueCountryFilter);
-            }
-            
-            const response = await fetch(`${getBackendUrl()}/api/admin/leagues?${params}`, {
-                headers: getAuthHeaders()
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                setOnboardedLeagues(data.data);
-                setLeaguePagination(data.pagination);
-            } else {
-                setError('Failed to fetch leagues');
-            }
-        } catch (error) {
-            setError('Error fetching leagues: ' + error.message);
-        } finally {
-            setLeagueLoading(false);
         }
     };
 
@@ -2297,198 +2314,6 @@ const AdminDashboard = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-                <Typography variant="h6" gutterBottom>
-                    User Feedback
-                    {feedbackPagination && ` (${feedbackPagination.total} total)`}
-                </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    View and manage user feedback, bug reports, feature requests, and ratings. Feedback is sorted chronologically (newest first).
-                </Typography>
-
-                {/* Search and Filter Controls */}
-                <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-                    <TextField
-                        label="Search Feedback"
-                        value={feedbackSearch}
-                        onChange={(e) => {
-                            setFeedbackSearch(e.target.value);
-                            setFeedbackPage(1);
-                        }}
-                        placeholder="Search by message, user email, or name..."
-                        size="small"
-                        sx={{ minWidth: 250 }}
-                        onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                                fetchFeedback();
-                            }
-                        }}
-                    />
-                    <FormControl size="small" sx={{ minWidth: 180 }}>
-                        <InputLabel>Filter by Type</InputLabel>
-                        <Select
-                            value={feedbackTypeFilter}
-                            label="Filter by Type"
-                            onChange={(e) => {
-                                setFeedbackTypeFilter(e.target.value);
-                                setFeedbackPage(1);
-                            }}
-                        >
-                            <MenuItem value="">All Types</MenuItem>
-                            <MenuItem value="bug">Bug Reports</MenuItem>
-                            <MenuItem value="feature">Feature Requests</MenuItem>
-                            <MenuItem value="general">General Feedback</MenuItem>
-                            <MenuItem value="rating">Ratings</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl size="small" sx={{ minWidth: 180 }}>
-                        <InputLabel>Sort By</InputLabel>
-                        <Select
-                            value={feedbackSortBy}
-                            label="Sort By"
-                            onChange={(e) => {
-                                setFeedbackSortBy(e.target.value);
-                                fetchFeedback();
-                            }}
-                        >
-                            <MenuItem value="created_at">Date</MenuItem>
-                            <MenuItem value="type">Type</MenuItem>
-                            <MenuItem value="userEmail">User Email</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl size="small" sx={{ minWidth: 120 }}>
-                        <InputLabel>Order</InputLabel>
-                        <Select
-                            value={feedbackOrder}
-                            label="Order"
-                            onChange={(e) => {
-                                setFeedbackOrder(e.target.value);
-                                fetchFeedback();
-                            }}
-                        >
-                            <MenuItem value="desc">Newest First</MenuItem>
-                            <MenuItem value="asc">Oldest First</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <Button
-                        variant="contained"
-                        onClick={() => fetchFeedback()}
-                        disabled={feedbackLoading}
-                        startIcon={feedbackLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
-                    >
-                        {feedbackLoading ? 'Loading...' : 'Search'}
-                    </Button>
-                    {(feedbackSearch || feedbackTypeFilter) && (
-                        <Button
-                            variant="outlined"
-                            onClick={() => {
-                                setFeedbackSearch('');
-                                setFeedbackTypeFilter('');
-                                setFeedbackPage(1);
-                                fetchFeedback(1);
-                            }}
-                            startIcon={<ClearIcon />}
-                        >
-                            Clear Filters
-                        </Button>
-                    )}
-                </Box>
-
-                {/* Feedback Table */}
-                {feedbackLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : feedback.length === 0 ? (
-                    <Alert severity="info">
-                        No feedback found. {feedbackSearch || feedbackTypeFilter ? 'Try adjusting your search filters.' : 'No feedback has been submitted yet.'}
-                    </Alert>
-                ) : (
-                    <>
-                        <TableContainer>
-                            <Table>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell><strong>Date</strong></TableCell>
-                                        <TableCell><strong>Type</strong></TableCell>
-                                        <TableCell><strong>User</strong></TableCell>
-                                        <TableCell><strong>Message</strong></TableCell>
-                                        <TableCell><strong>Status</strong></TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {feedback.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell>
-                                                {new Date(item.createdAt).toLocaleString()}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    label={item.type || 'general'} 
-                                                    size="small" 
-                                                    color={
-                                                        item.type === 'bug' ? 'error' :
-                                                        item.type === 'feature' ? 'primary' :
-                                                        item.type === 'rating' ? 'success' : 'default'
-                                                    }
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Box>
-                                                    <Typography variant="body2">
-                                                        {item.userName || 'Unknown'}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="textSecondary">
-                                                        {item.userEmail || 'No email'}
-                                                    </Typography>
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" sx={{ maxWidth: 400 }}>
-                                                    {item.message || 'No message'}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    label={item.status || 'new'} 
-                                                    size="small" 
-                                                    color={item.status === 'resolved' ? 'success' : 'default'}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-
-                        {/* Pagination */}
-                        {feedbackPagination && feedbackPagination.pages > 1 && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 1 }}>
-                                <Button
-                                    disabled={feedbackPage === 1}
-                                    onClick={() => {
-                                        setFeedbackPage(feedbackPage - 1);
-                                        fetchFeedback(feedbackPage - 1);
-                                    }}
-                                >
-                                    Previous
-                                </Button>
-                                <Typography sx={{ alignSelf: 'center', px: 2 }}>
-                                    Page {feedbackPagination.page} of {feedbackPagination.pages}
-                                </Typography>
-                                <Button
-                                    disabled={feedbackPage >= feedbackPagination.pages}
-                                    onClick={() => {
-                                        setFeedbackPage(feedbackPage + 1);
-                                        fetchFeedback(feedbackPage + 1);
-                                    }}
-                                >
-                                    Next
-                                </Button>
-                            </Box>
-                        )}
-                    </>
-                )}
-            </TabPanel>
         </Box>
     );
 };

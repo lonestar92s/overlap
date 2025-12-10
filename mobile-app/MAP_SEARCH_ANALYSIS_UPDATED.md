@@ -426,3 +426,4 @@ const [debouncedMapRegion, setDebouncedMapRegion] = useState(() => {
 
 **Overall Status**: ⚠️ **PARTIALLY FIXED** - Core functionality works but has timing/race condition issues that can cause pins to not display on initial load.
 
+

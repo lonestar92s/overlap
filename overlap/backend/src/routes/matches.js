@@ -725,10 +725,35 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         const searchSessionId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         console.log(`🔍 [${searchSessionId}] Starting search for competition ${competitionId} with bounds: ${bounds ? 'YES' : 'NO'}`);
         
+        // Determine season based on competition type and date range
+        let season = '2025'; // Default for regular leagues
+        if (dateFrom) {
+            const startYear = new Date(dateFrom).getFullYear();
+            const startMonth = new Date(dateFrom).getMonth() + 1;
+            
+            // World Cup (ID 1) uses the year of the tournament as the season
+            if (competitionId === '1' || competitionId === 1) {
+                season = startYear.toString();
+                console.log(`🌍 [${searchSessionId}] WORLD CUP SEARCH DETECTED! Competition ID: ${competitionId}`);
+                console.log(`🌍 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
+                console.log(`🌍 [${searchSessionId}] Using season: ${season} (from year ${startYear})`);
+            } else {
+                // For regular leagues (Premier League, etc.), determine season based on month
+                // If date is in second half of year (July+), it's the start of that season
+                // If date is Jan-June, it's still the previous season
+                if (startMonth >= 7) {
+                    season = startYear.toString();
+                } else {
+                    season = (startYear - 1).toString();
+                }
+            }
+        }
+        
         // Special logging for Champions League
         if (competitionId === '2' || competitionId === 2) {
             console.log(`🏆 [${searchSessionId}] CHAMPIONS LEAGUE SEARCH DETECTED! Competition ID: ${competitionId}`);
             console.log(`🏆 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
+            console.log(`🏆 [${searchSessionId}] Season: ${season}`);
             console.log(`🏆 [${searchSessionId}] Bounds: ${bounds ? JSON.stringify(bounds) : 'NO BOUNDS'}`);
         }
         
@@ -739,10 +764,27 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         }
 
         const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            params: { league: competitionId, season: '2025', from: dateFrom, to: dateTo },
+            params: { league: competitionId, season: season, from: dateFrom, to: dateTo },
             headers: { 'x-apisports-key': API_SPORTS_KEY },
             httpsAgent
         });
+
+        // Special logging for World Cup API response
+        if (competitionId === '1' || competitionId === 1) {
+            console.log(`🌍 [${searchSessionId}] World Cup API Response:`, {
+                season: season,
+                totalResults: apiResponse.data.results || 0,
+                hasResponse: !!apiResponse.data.response,
+                responseLength: apiResponse.data.response?.length || 0,
+                firstMatch: apiResponse.data.response?.[0] ? {
+                    id: apiResponse.data.response[0].id,
+                    teams: `${apiResponse.data.response[0].teams?.home?.name} vs ${apiResponse.data.response[0].teams?.away?.name}`,
+                    date: apiResponse.data.response[0].fixture?.date,
+                    venue: apiResponse.data.response[0].fixture?.venue?.name,
+                    city: apiResponse.data.response[0].fixture?.venue?.city
+                } : 'No matches'
+            });
+        }
 
         // Special logging for Champions League API response
         if (competitionId === '2' || competitionId === 2) {
@@ -761,6 +803,21 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         }
 
         const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds, searchSessionId);
+        
+        // Special logging for World Cup after transformation
+        if (competitionId === '1' || competitionId === 1) {
+            console.log(`🌍 [${searchSessionId}] World Cup After Transformation:`, {
+                totalMatches: transformedData.response?.length || 0,
+                hasMatches: !!transformedData.response && transformedData.response.length > 0,
+                firstMatch: transformedData.response?.[0] ? {
+                    id: transformedData.response[0].id,
+                    teams: `${transformedData.response[0].teams?.home?.name} vs ${transformedData.response[0].teams?.away?.name}`,
+                    venue: transformedData.response[0].fixture?.venue?.name,
+                    city: transformedData.response[0].fixture?.venue?.city,
+                    coordinates: transformedData.response[0].fixture?.venue?.coordinates
+                } : 'No matches'
+            });
+        }
         
         // Special logging for Champions League after transformation
         if (competitionId === '2' || competitionId === 2) {

@@ -54,3 +54,4 @@ export const screenKeyboardAvoidingProps = (headerHeight = 0) => ({
   keyboardVerticalOffset: getKeyboardVerticalOffset({ isModal: false, headerHeight }),
 });
 
+

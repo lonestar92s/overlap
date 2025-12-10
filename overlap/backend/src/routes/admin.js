@@ -6,6 +6,7 @@ const Venue = require('../models/Venue');
 const Match = require('../models/Match');
 const User = require('../models/User');
 const League = require('../models/League');
+const Feedback = require('../models/Feedback');
 const teamService = require('../services/teamService');
 const venueService = require('../services/venueService');
 const subscriptionService = require('../services/subscriptionService');
@@ -1256,8 +1257,7 @@ router.put('/leagues/:leagueId/season-year', authenticateToken, ensureAdmin, asy
 });
 
 // GET /api/admin/feedback
-// Get user feedback from Sentry (requires Sentry API integration)
-// Note: This endpoint requires Sentry API token to be configured
+// Get user feedback from MongoDB
 router.get('/feedback', adminAuth, async (req, res) => {
     try {
         const { 
@@ -1265,130 +1265,72 @@ router.get('/feedback', adminAuth, async (req, res) => {
             limit = 50, 
             search = '',
             type = '',
-            sortBy = 'created_at',
+            sortBy = 'createdAt',
             order = 'desc'
         } = req.query;
         
-        // Check if Sentry API token is configured
-        const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
-        const sentryOrg = process.env.SENTRY_ORG;
-        const sentryProject = process.env.SENTRY_PROJECT;
+        // Build MongoDB query
+        const query = {};
         
-        if (!sentryAuthToken || !sentryOrg || !sentryProject) {
-            return res.status(503).json({
-                success: false,
-                message: 'Sentry API not configured. Please set SENTRY_AUTH_TOKEN, SENTRY_ORG, and SENTRY_PROJECT environment variables.'
-            });
+        // Filter by type if provided
+        if (type && ['general', 'bug', 'feature', 'rating'].includes(type)) {
+            query.type = type;
         }
         
-        // Build Sentry API request
-        // Sentry API endpoint for fetching issues/events
-        const sentryApiUrl = `https://sentry.io/api/0/projects/${sentryOrg}/${sentryProject}/events/`;
-        const params = new URLSearchParams({
-            query: `tags[feedback_type]:${type || '*'}`,
-            per_page: limit.toString(),
-        });
-        
+        // Build search query if provided
         if (search) {
-            params.set('query', `${params.get('query')} ${search}`);
+            query.$or = [
+                { message: { $regex: search, $options: 'i' } },
+                { userEmail: { $regex: search, $options: 'i' } },
+                { userName: { $regex: search, $options: 'i' } }
+            ];
         }
         
-        try {
-            const response = await axios.get(`${sentryApiUrl}?${params}`, {
-                headers: {
-                    'Authorization': `Bearer ${sentryAuthToken}`,
-                    'Content-Type': 'application/json'
+        // Build sort object
+        const sortField = sortBy === 'created_at' ? 'createdAt' : sortBy;
+        const sortOrder = order === 'desc' ? -1 : 1;
+        const sort = { [sortField]: sortOrder };
+        
+        // Calculate pagination
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+        
+        // Get total count for pagination
+        const total = await Feedback.countDocuments(query);
+        
+        // Fetch feedback with pagination
+        const feedback = await Feedback.find(query)
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .lean(); // Use lean() for better performance
+        
+        // Transform to match expected format
+        const transformedFeedback = feedback.map(item => ({
+            id: item._id.toString(),
+            type: item.type || 'general',
+            message: item.message,
+            userEmail: item.userEmail || 'Unknown',
+            userName: item.userName || 'Unknown',
+            createdAt: item.createdAt,
+            status: item.status || 'new',
+            attachments: [],
+            metadata: item.metadata || {}
+        }));
+        
+        res.json({
+            success: true,
+            data: {
+                feedback: transformedFeedback,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total: total,
+                    pages: Math.ceil(total / limitNum)
                 }
-            });
-            
-            const data = response.data;
-            
-            // Transform Sentry response to our format
-            // Sentry returns events/issues, we filter for feedback messages
-            const events = Array.isArray(data) ? data : (data.results || []);
-            const transformedFeedback = events
-                .filter(event => {
-                    // Filter for feedback messages (tagged with feedback_type)
-                    const tags = event.tags || [];
-                    return tags.some(tag => tag[0] === 'feedback_type' || tag[0] === 'feedback_request');
-                })
-                .map(item => {
-                    const feedbackType = (item.tags || []).find(tag => tag[0] === 'feedback_type')?.[1] || 'general';
-                    const message = item.message?.formatted || item.message || item.title || '';
-                    const user = item.user || {};
-                    
-                    return {
-                        id: item.id,
-                        type: feedbackType,
-                        message: message,
-                        userEmail: user.email || user.id || 'Unknown',
-                        userName: user.username || user.name || 'Unknown',
-                        createdAt: item.dateCreated || item.timestamp || new Date(),
-                        status: item.status || 'new',
-                        attachments: [],
-                        metadata: item.context || {}
-                    };
-                });
-            
-            // Apply search filter if provided
-            let filteredFeedback = transformedFeedback;
-            if (search) {
-                const searchLower = search.toLowerCase();
-                filteredFeedback = transformedFeedback.filter(item => 
-                    item.message.toLowerCase().includes(searchLower) ||
-                    item.userEmail.toLowerCase().includes(searchLower) ||
-                    item.userName.toLowerCase().includes(searchLower)
-                );
             }
-            
-            // Sort feedback
-            filteredFeedback.sort((a, b) => {
-                const aValue = a[sortBy] || a.createdAt;
-                const bValue = b[sortBy] || b.createdAt;
-                
-                if (order === 'desc') {
-                    return new Date(bValue) - new Date(aValue);
-                } else {
-                    return new Date(aValue) - new Date(bValue);
-                }
-            });
-            
-            // Paginate
-            const startIndex = (parseInt(page) - 1) * parseInt(limit);
-            const endIndex = startIndex + parseInt(limit);
-            const paginatedFeedback = filteredFeedback.slice(startIndex, endIndex);
-            
-            res.json({
-                success: true,
-                data: {
-                    feedback: paginatedFeedback,
-                    pagination: {
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        total: filteredFeedback.length,
-                        pages: Math.ceil(filteredFeedback.length / parseInt(limit))
-                    }
-                }
-            });
-            
-        } catch (apiError) {
-            console.error('Error fetching feedback from Sentry API:', apiError);
-            // Return mock data structure for development/testing
-            // In production, you should handle this error appropriately
-            res.json({
-                success: true,
-                data: {
-                    feedback: [],
-                    pagination: {
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        total: 0,
-                        pages: 0
-                    },
-                    note: 'Sentry API integration pending. Configure SENTRY_AUTH_TOKEN, SENTRY_ORG, and SENTRY_PROJECT to fetch real feedback.'
-                }
-            });
-        }
+        });
         
     } catch (error) {
         console.error('Error fetching feedback:', error);

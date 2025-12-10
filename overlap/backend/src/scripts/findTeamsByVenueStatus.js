@@ -102,3 +102,4 @@ async function findTeamsByVenueStatus() {
 // Run the script
 findTeamsByVenueStatus();
 
+

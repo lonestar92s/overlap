@@ -2729,6 +2729,46 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Submit user feedback
+   * @param {string} message - Feedback message
+   * @param {string} type - Feedback type ('general', 'bug', 'feature', 'rating')
+   * @returns {Promise<Object>} Submission result
+   */
+  async submitFeedback(message, type = 'general') {
+    try {
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        throw new Error('Feedback message is required');
+      }
+
+      const token = await getAuthToken();
+      const response = await fetch(`${this.baseURL}/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: message.trim(),
+          type
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to submit feedback');
+      }
+
+      return data; // { success: true, message: '...', data: {...} }
+    } catch (error) {
+      if (__DEV__) {
+        console.error('Error submitting feedback:', error);
+      }
+      throw error;
+    }
+  }
 }
 
 // Create API service instance

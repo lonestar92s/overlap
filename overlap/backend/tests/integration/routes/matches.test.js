@@ -500,5 +500,227 @@ describe('Matches Routes Integration', () => {
       expect(Array.isArray(response2024.body.data)).toBe(true);
     });
   });
+
+  describe('GET /api/matches/competitions/:competitionId - Season Detection', () => {
+    // Mock axios for these tests to verify season parameter
+    const axios = require('axios');
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should use season 2026 for World Cup matches in 2026', async () => {
+      // Skip if MongoDB not available
+      if (mongoose.connection.readyState === 0) {
+        return;
+      }
+
+      let capturedSeason = null;
+      axios.get.mockImplementation((url, config) => {
+        if (config && config.params) {
+          capturedSeason = config.params.season;
+        }
+        return Promise.resolve({
+          data: {
+            results: 0,
+            response: []
+          }
+        });
+      });
+
+      // Mock authentication middleware
+      const { generateTestToken } = require('../../helpers/testHelpers');
+      const User = require('../../../src/models/User');
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        subscription: { tier: 'pro', isActive: true }
+      };
+      User.findById = jest.fn().mockResolvedValue(mockUser);
+
+      const token = generateTestToken(mockUser._id);
+
+      await request(app)
+        .get('/api/matches/competitions/1')
+        .query({
+          dateFrom: '2026-06-24',
+          dateTo: '2026-06-25'
+        })
+        .set('Authorization', `Bearer ${token}`);
+
+      // Verify season 2026 was used for World Cup
+      expect(capturedSeason).toBe('2026');
+    });
+
+    it('should use season 2025 for Premier League matches in January 2026', async () => {
+      // Skip if MongoDB not available
+      if (mongoose.connection.readyState === 0) {
+        return;
+      }
+
+      let capturedSeason = null;
+      axios.get.mockImplementation((url, config) => {
+        if (config && config.params) {
+          capturedSeason = config.params.season;
+        }
+        return Promise.resolve({
+          data: {
+            results: 0,
+            response: []
+          }
+        });
+      });
+
+      // Mock authentication middleware
+      const { generateTestToken } = require('../../helpers/testHelpers');
+      const User = require('../../../src/models/User');
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        subscription: { tier: 'pro', isActive: true }
+      };
+      User.findById = jest.fn().mockResolvedValue(mockUser);
+
+      const token = generateTestToken(mockUser._id);
+
+      await request(app)
+        .get('/api/matches/competitions/39')
+        .query({
+          dateFrom: '2026-01-15',
+          dateTo: '2026-01-20'
+        })
+        .set('Authorization', `Bearer ${token}`);
+
+      // Verify season 2025 was used for Premier League in January 2026
+      // (January is before July, so it's still the 2025-2026 season)
+      expect(capturedSeason).toBe('2025');
+    });
+
+    it('should use season 2025 for Premier League matches in August 2025', async () => {
+      // Skip if MongoDB not available
+      if (mongoose.connection.readyState === 0) {
+        return;
+      }
+
+      let capturedSeason = null;
+      axios.get.mockImplementation((url, config) => {
+        if (config && config.params) {
+          capturedSeason = config.params.season;
+        }
+        return Promise.resolve({
+          data: {
+            results: 0,
+            response: []
+          }
+        });
+      });
+
+      // Mock authentication middleware
+      const { generateTestToken } = require('../../helpers/testHelpers');
+      const User = require('../../../src/models/User');
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        subscription: { tier: 'pro', isActive: true }
+      };
+      User.findById = jest.fn().mockResolvedValue(mockUser);
+
+      const token = generateTestToken(mockUser._id);
+
+      await request(app)
+        .get('/api/matches/competitions/39')
+        .query({
+          dateFrom: '2025-08-10',
+          dateTo: '2025-08-15'
+        })
+        .set('Authorization', `Bearer ${token}`);
+
+      // Verify season 2025 was used for Premier League in August 2025
+      // (August is >= July, so it's the start of the 2025-2026 season)
+      expect(capturedSeason).toBe('2025');
+    });
+
+    it('should use season 2022 for World Cup matches in 2022', async () => {
+      // Skip if MongoDB not available
+      if (mongoose.connection.readyState === 0) {
+        return;
+      }
+
+      let capturedSeason = null;
+      axios.get.mockImplementation((url, config) => {
+        if (config && config.params) {
+          capturedSeason = config.params.season;
+        }
+        return Promise.resolve({
+          data: {
+            results: 0,
+            response: []
+          }
+        });
+      });
+
+      // Mock authentication middleware
+      const { generateTestToken } = require('../../helpers/testHelpers');
+      const User = require('../../../src/models/User');
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        subscription: { tier: 'pro', isActive: true }
+      };
+      User.findById = jest.fn().mockResolvedValue(mockUser);
+
+      const token = generateTestToken(mockUser._id);
+
+      await request(app)
+        .get('/api/matches/competitions/1')
+        .query({
+          dateFrom: '2022-11-20',
+          dateTo: '2022-11-25'
+        })
+        .set('Authorization', `Bearer ${token}`);
+
+      // Verify season 2022 was used for World Cup
+      expect(capturedSeason).toBe('2022');
+    });
+
+    it('should use season 2024 for Premier League matches in June 2025', async () => {
+      // Skip if MongoDB not available
+      if (mongoose.connection.readyState === 0) {
+        return;
+      }
+
+      let capturedSeason = null;
+      axios.get.mockImplementation((url, config) => {
+        if (config && config.params) {
+          capturedSeason = config.params.season;
+        }
+        return Promise.resolve({
+          data: {
+            results: 0,
+            response: []
+          }
+        });
+      });
+
+      // Mock authentication middleware
+      const { generateTestToken } = require('../../helpers/testHelpers');
+      const User = require('../../../src/models/User');
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        subscription: { tier: 'pro', isActive: true }
+      };
+      User.findById = jest.fn().mockResolvedValue(mockUser);
+
+      const token = generateTestToken(mockUser._id);
+
+      await request(app)
+        .get('/api/matches/competitions/39')
+        .query({
+          dateFrom: '2025-06-01',
+          dateTo: '2025-06-05'
+        })
+        .set('Authorization', `Bearer ${token}`);
+
+      // Verify season 2024 was used for Premier League in June 2025
+      // (June is before July, so it's still the 2024-2025 season)
+      expect(capturedSeason).toBe('2024');
+    });
+  });
 });
 

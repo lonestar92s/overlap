@@ -126,3 +126,4 @@ These document specific fixes that are likely already implemented:
 - Update any cross-references after cleanup
 - Consider creating a `docs/archive/` folder for historical documents
 
+
