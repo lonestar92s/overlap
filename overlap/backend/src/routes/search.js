@@ -252,7 +252,16 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 logo: match.league.logo
             },
             teams: {
-                home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
+                home: await (async () => {
+                    const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
+                    const team = await Team.findOne({ name: mappedName });
+                    return {
+                        id: match.teams.home.id,
+                        name: mappedName,
+                        logo: match.teams.home.logo,
+                        ticketingUrl: team?.ticketingUrl || undefined
+                    };
+                })(),
                 away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
             }
         };

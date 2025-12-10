@@ -1,12 +1,16 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import MatchCard from '../../components/MatchCard';
+import { Linking } from 'react-native';
 
 // Mock dependencies
 jest.mock('../../utils/matchStatus');
 jest.mock('../../utils/timezoneUtils');
 jest.mock('../../components/HeartButton', () => 'HeartButton');
 jest.mock('../../components/PlanningStatusIndicator', () => 'PlanningStatusIndicator');
+jest.mock('react-native/Libraries/Linking/Linking', () => ({
+  openURL: jest.fn(() => Promise.resolve())
+}));
 
 describe('MatchCard', () => {
   const mockMatch = {
@@ -114,6 +118,82 @@ describe('MatchCard', () => {
     // Should display match result or status
     // Exact text depends on implementation
     expect(getByText).toBeDefined();
+  });
+
+  it('should display tickets button when ticketingUrl is available and match is upcoming', () => {
+    const matchWithTickets = {
+      ...mockMatch,
+      fixture: {
+        ...mockMatch.fixture,
+        date: new Date(Date.now() + 86400000).toISOString() // Tomorrow
+      },
+      teams: {
+        ...mockMatch.teams,
+        home: {
+          ...mockMatch.teams.home,
+          ticketingUrl: 'https://www.arsenal.com/tickets'
+        }
+      }
+    };
+
+    const { getByText } = render(
+      <MatchCard match={matchWithTickets} />
+    );
+
+    expect(getByText('Tickets')).toBeTruthy();
+  });
+
+  it('should not display tickets button for past matches even if ticketingUrl is available', () => {
+    const pastMatchWithTickets = {
+      ...mockMatch,
+      fixture: {
+        ...mockMatch.fixture,
+        date: new Date(Date.now() - 86400000).toISOString() // Yesterday
+      },
+      teams: {
+        ...mockMatch.teams,
+        home: {
+          ...mockMatch.teams.home,
+          ticketingUrl: 'https://www.arsenal.com/tickets'
+        }
+      }
+    };
+
+    const { queryByText } = render(
+      <MatchCard match={pastMatchWithTickets} />
+    );
+
+    expect(queryByText('Tickets')).toBeNull();
+  });
+
+  it('should not display tickets button when ticketingUrl is not available', () => {
+    const { queryByText } = render(
+      <MatchCard match={mockMatch} />
+    );
+
+    expect(queryByText('Tickets')).toBeNull();
+  });
+
+  it('should open ticketing URL when tickets button is pressed', () => {
+    const matchWithTickets = {
+      ...mockMatch,
+      teams: {
+        ...mockMatch.teams,
+        home: {
+          ...mockMatch.teams.home,
+          ticketingUrl: 'https://www.arsenal.com/tickets'
+        }
+      }
+    };
+
+    const { getByText } = render(
+      <MatchCard match={matchWithTickets} />
+    );
+
+    const ticketsButton = getByText('Tickets');
+    fireEvent.press(ticketsButton);
+
+    expect(Linking.openURL).toHaveBeenCalledWith('https://www.arsenal.com/tickets');
   });
 });
 

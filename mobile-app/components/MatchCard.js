@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HeartButton from './HeartButton';
@@ -360,6 +361,22 @@ const MatchCard = ({
         </Text>
       </View>
 
+      {/* Tickets Button - only show if ticketing URL is available and match is upcoming */}
+      {teams.home?.ticketingUrl && !isPast && matchStatus.type === 'upcoming' && (
+        <TouchableOpacity
+          style={styles.ticketsButton}
+          onPress={() => {
+            Linking.openURL(teams.home.ticketingUrl).catch(err => {
+              console.error('Failed to open ticketing URL:', err);
+            });
+          }}
+          activeOpacity={0.7}
+        >
+          <Icon name="confirmation-number" size={18} color={colors.primary} />
+          <Text style={styles.ticketsButtonText}>Tickets</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Travel Time Display - only show in overlay variant (used in map view) */}
       {/* Only show travel time if match has an explicitly assigned home base */}
       {variant === 'overlay' && 
@@ -620,6 +637,24 @@ const styles = StyleSheet.create({
     color: colors.error,
     marginLeft: spacing.xs,
     fontWeight: '500',
+  },
+  ticketsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cardGrey || '#f5f5f5',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  ticketsButtonText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
+    marginLeft: spacing.xs,
   },
 });
 

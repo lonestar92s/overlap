@@ -10,7 +10,7 @@ import {
     useMediaQuery,
     useTheme
 } from '@mui/material';
-import { Stadium, AccessTime, LocationOn, FavoriteBorder, Favorite } from '@mui/icons-material';
+import { Stadium, AccessTime, LocationOn, FavoriteBorder, Favorite, ConfirmationNumber } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { formatMatchDateTime } from '../utils/timezone';
 import TeamLogo from './TeamLogo';
@@ -47,6 +47,14 @@ export const MatchCard = ({
 
     const { date, time } = formatMatchDateTime(fixture.date || new Date(), venue);
     const cardRef = useRef(null);
+
+    // Check if match is in the past
+    const isMatchPast = useMemo(() => {
+        if (!fixture.date) return false;
+        const matchDate = new Date(fixture.date);
+        const now = new Date();
+        return matchDate < now;
+    }, [fixture.date]);
 
     useEffect(() => {
         if (isSelected && cardRef.current) {
@@ -231,6 +239,31 @@ export const MatchCard = ({
                         >
                             {distance.toFixed(1)} miles away
                         </Typography>
+                    </Box>
+                )}
+                {teams.home?.ticketingUrl && !isMatchPast && (
+                    <Box sx={{ mt: 2 }}>
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<ConfirmationNumber />}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(teams.home.ticketingUrl, '_blank', 'noopener,noreferrer');
+                            }}
+                            sx={{
+                                borderColor: '#385CFF',
+                                color: '#385CFF',
+                                textTransform: 'none',
+                                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                                '&:hover': {
+                                    borderColor: '#385CFF',
+                                    backgroundColor: 'rgba(56, 92, 255, 0.04)'
+                                }
+                            }}
+                        >
+                            Tickets
+                        </Button>
                     </Box>
                 )}
             </CardContent>

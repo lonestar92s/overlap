@@ -66,6 +66,12 @@ const teamSchema = new mongoose.Schema({
     apiSource: {
         type: String,
         default: 'football-api' // Track which API this came from
+    },
+    
+    // Ticketing information
+    ticketingUrl: {
+        type: String,
+        required: false // Optional - only for teams with official ticketing pages
     }
 }, {
     timestamps: true

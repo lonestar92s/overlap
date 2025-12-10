@@ -286,8 +286,16 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                         teams: {
                             home: {
                                 id: fx.teams.home.id,
-                                name: await teamService.mapApiNameToTeam(fx.teams.home.name),
-                                logo: fx.teams.home.logo
+                                name: await (async () => {
+                                    const mappedName = await teamService.mapApiNameToTeam(fx.teams.home.name);
+                                    return mappedName;
+                                })(),
+                                logo: fx.teams.home.logo,
+                                ticketingUrl: await (async () => {
+                                    const mappedName = await teamService.mapApiNameToTeam(fx.teams.home.name);
+                                    const team = await Team.findOne({ name: mappedName });
+                                    return team?.ticketingUrl || undefined;
+                                })()
                             },
                             away: {
                                 id: fx.teams.away.id,
@@ -1419,7 +1427,19 @@ router.get('/search', async (req, res) => {
                         logo: match.league.logo
                     },
                     teams: {
-                        home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
+                        home: { 
+                            id: match.teams.home.id, 
+                            name: await (async () => {
+                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
+                                return mappedName;
+                            })(), 
+                            logo: match.teams.home.logo,
+                            ticketingUrl: await (async () => {
+                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
+                                const team = await Team.findOne({ name: mappedName });
+                                return team?.ticketingUrl || undefined;
+                            })()
+                        },
                         away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
                     }
                 };
@@ -1745,7 +1765,19 @@ router.get('/search', async (req, res) => {
                         logo: match.league.logo
                     },
                     teams: {
-                        home: { id: match.teams.home.id, name: await teamService.mapApiNameToTeam(match.teams.home.name), logo: match.teams.home.logo },
+                        home: { 
+                            id: match.teams.home.id, 
+                            name: await (async () => {
+                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
+                                return mappedName;
+                            })(), 
+                            logo: match.teams.home.logo,
+                            ticketingUrl: await (async () => {
+                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
+                                const team = await Team.findOne({ name: mappedName });
+                                return team?.ticketingUrl || undefined;
+                            })()
+                        },
                         away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
                     }
                 };
@@ -1830,6 +1862,11 @@ router.get('/search', async (req, res) => {
                             const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
                             const team = await Team.findOne({ name: mappedTeamName });
                             return team?.logo || fixture.teams.home.logo;
+                        })(),
+                        ticketingUrl: await (async () => {
+                            const mappedTeamName = await teamService.mapApiNameToTeam(fixture.teams.home.name);
+                            const team = await Team.findOne({ name: mappedTeamName });
+                            return team?.ticketingUrl || undefined;
                         })()
                     },
                     away: {
@@ -2107,7 +2144,15 @@ router.get('/popular', async (req, res) => {
                     }
                 },
                 teams: {
-                    home: { id: match.teams.home.id, name: match.teams.home.name, logo: match.teams.home.logo },
+                    home: await (async () => {
+                        const homeTeam = await Team.findOne({ apiId: match.teams.home.id.toString() });
+                        return {
+                            id: match.teams.home.id,
+                            name: match.teams.home.name,
+                            logo: match.teams.home.logo,
+                            ticketingUrl: homeTeam?.ticketingUrl || undefined
+                        };
+                    })(),
                     away: { id: match.teams.away.id, name: match.teams.away.name, logo: match.teams.away.logo }
                 },
                 league: {
@@ -2770,6 +2815,10 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 }
                 
                 // Transform to API-Sports format that MatchCard component expects
+                const homeTeam = match.teams?.home?.id 
+                    ? await Team.findOne({ apiId: match.teams.home.id.toString() })
+                    : null;
+                
                 transformedMatches.push({
                     id: match.fixture?.id,
                     fixture: {
@@ -2788,7 +2837,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         home: {
                             id: match.teams?.home?.id,
                             name: match.teams?.home?.name,
-                            logo: match.teams?.home?.logo
+                            logo: match.teams?.home?.logo,
+                            ticketingUrl: homeTeam?.ticketingUrl || undefined
                         },
                         away: {
                             id: match.teams?.away?.id,
@@ -2815,6 +2865,10 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 const fallbackVenueCountry = match.fixture?.venue?.country || match.venue?.country || 'Unknown';
                 const fallbackVenueCoords = match.fixture?.venue?.coordinates || match.venue?.coordinates || null;
                 
+                const homeTeam = match.teams?.home?.id 
+                    ? await Team.findOne({ apiId: match.teams.home.id.toString() })
+                    : null;
+                
                 transformedMatches.push({
                     id: match.fixture?.id,
                     fixture: {
@@ -2833,7 +2887,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         home: {
                             id: match.teams?.home?.id,
                             name: match.teams?.home?.name,
-                            logo: match.teams?.home?.logo
+                            logo: match.teams?.home?.logo,
+                            ticketingUrl: homeTeam?.ticketingUrl || undefined
                         },
                         away: {
                             id: match.teams?.away?.id,
@@ -3037,7 +3092,8 @@ router.get('/by-team/:id', async (req, res) => {
                     home: {
                         id: match.teams.home.id,
                         name: homeTeam?.name || match.teams.home.name,
-                        logo: homeTeam?.logo || match.teams.home.logo
+                        logo: homeTeam?.logo || match.teams.home.logo,
+                        ticketingUrl: homeTeam?.ticketingUrl || undefined
                     },
                     away: {
                         id: match.teams.away.id,
