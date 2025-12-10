@@ -8,6 +8,7 @@ const FilterIcon = ({ onPress, filterCount = 0 }) => {
     <TouchableOpacity 
       style={styles.container} 
       onPress={onPress}
+      testID="filter-icon"
       accessibilityLabel={`Filter matches${filterCount > 0 ? `, ${filterCount} active` : ''}`}
       accessibilityRole="button"
     >

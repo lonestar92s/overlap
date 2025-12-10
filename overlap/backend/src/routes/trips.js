@@ -256,9 +256,15 @@ router.put('/:id', auth, async (req, res) => {
             try {
                 await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
                 console.log(`✅ Regenerated recommendations for trip ${req.params.id} after date changes`);
+                
+                // Invalidate home page recommendations cache since trip recommendations changed
+                const deletedCount = invalidateRecommendedMatchesCache(user.id);
+                console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after trip date changes`);
             } catch (regenError) {
                 console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
-                // Don't fail the request if regeneration fails - dates were still updated
+                // Still invalidate cache even if regeneration fails
+                const deletedCount = invalidateRecommendedMatchesCache(user.id);
+                console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
             }
         }
 
@@ -457,14 +463,16 @@ router.post('/:id/matches', auth, async (req, res) => {
         try {
             await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
             console.log(`✅ Regenerated recommendations for trip ${req.params.id} after adding match`);
+            
+            // Invalidate home page recommendations cache since trip recommendations changed
+            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after adding match to trip`);
         } catch (regenError) {
             console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
-            // Don't fail the request if regeneration fails - match was still added
+            // Still invalidate cache even if regeneration fails
+            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
         }
-        
-        // Also invalidate user-level recommended matches cache for consistency (legacy)
-        const deletedCount = invalidateRecommendedMatchesCache(user.id);
-        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after adding match to trip`);
         
         // Check what was actually saved
         const savedMatch = trip.matches[trip.matches.length - 1];
@@ -506,14 +514,16 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         try {
             await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
             console.log(`✅ Regenerated recommendations for trip ${req.params.id} after removing match`);
+            
+            // Invalidate home page recommendations cache since trip recommendations changed
+            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after removing match from trip`);
         } catch (regenError) {
             console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
-            // Don't fail the request if regeneration fails - match was still removed
+            // Still invalidate cache even if regeneration fails
+            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
         }
-        
-        // Also invalidate user-level recommended matches cache for consistency (legacy)
-        const deletedCount = invalidateRecommendedMatchesCache(user.id);
-        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${user.id} after removing match from trip`);
 
         res.json({
             success: true,

@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
@@ -229,11 +231,13 @@ function AppContent() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="light" backgroundColor={colors.primary} />
-      {isAuthenticated() ? (
-        <FilterProvider>
-          <ItineraryProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <BottomSheetModalProvider>
+        <NavigationContainer>
+        <StatusBar style="light" backgroundColor={colors.primary} />
+        {isAuthenticated() ? (
+          <FilterProvider>
+            <ItineraryProvider>
             <Tab.Navigator
               initialRouteName="SearchTab"
               screenOptions={({ route }) => ({
@@ -307,7 +311,9 @@ function AppContent() {
       ) : (
         <AuthStack />
       )}
-    </NavigationContainer>
+        </NavigationContainer>
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
   );
 }
 

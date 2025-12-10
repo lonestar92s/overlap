@@ -16,7 +16,7 @@ const PREMIER_LEAGUE_TICKETING = {
     "Brentford FC": "https://www.brentfordfc.com/tickets",
     "Brighton & Hove Albion FC": "https://www.brightonandhovealbion.com/tickets",
     "Burnley FC": "https://www.burnleyfootballclub.com/tickets",
-    "Chelsea FC": "https://www.chelseafc.com/en/tickets",
+    "Chelsea FC": "https://www.chelseafc.com/en/tickets/mens-tickets",
     "Crystal Palace FC": "https://www.cpfc.co.uk/tickets",
     "Everton FC": "https://www.evertonfc.com/tickets",
     "Fulham FC": "https://www.fulhamfc.com/tickets",

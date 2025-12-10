@@ -203,6 +203,11 @@ router.post('/:matchId/track', authenticateToken, async (req, res) => {
                 if (trip) {
                     await recommendationService.regenerateTripRecommendations(tripId, user, trip, true);
                     console.log(`✅ Regenerated recommendations for trip ${tripId} after ${action} action`);
+                    
+                    // Invalidate home page recommendations cache since trip recommendations changed
+                    const { invalidateRecommendedMatchesCache } = require('../utils/cache');
+                    const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
+                    console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries after trip recommendation change`);
                 }
             } catch (regenError) {
                 console.error(`❌ Failed to regenerate recommendations for trip ${tripId}:`, regenError);

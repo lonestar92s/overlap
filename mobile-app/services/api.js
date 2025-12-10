@@ -1907,12 +1907,15 @@ class ApiService {
     }
   }
 
-  async getRecommendedMatches(limit = 10, days = 30) {
+  async getRecommendedMatches(limit = 10, days = 30, forceRefresh = false) {
     try {
       const token = await getAuthToken();
       const params = new URLSearchParams();
       params.append('limit', limit.toString());
       params.append('days', days.toString());
+      if (forceRefresh) {
+        params.append('forceRefresh', 'true');
+      }
       
       const url = `${this.baseURL}/matches/recommended?${params.toString()}`;
       const controller = new AbortController();

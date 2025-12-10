@@ -14,6 +14,7 @@ const Team = require('../models/Team');
 const League = require('../models/League');
 const { matchesCache, popularMatchesCache, recommendedMatchesCache } = require('../utils/cache');
 const { shouldFilterMatch } = require('../utils/matchStatus');
+const weights = require('../config/recommendationWeights');
 
 // Create HTTPS agent with SSL certificate check disabled (for development only)
 const httpsAgent = new https.Agent({
@@ -2210,10 +2211,21 @@ router.get('/recommended', authenticateToken, async (req, res) => {
         }
 
         // Check cache first for recommended matches
+        // Cache is invalidated when:
+        // - Trip recommendations are regenerated (adding/removing matches, date changes)
+        // - User preferences change (favorite teams/leagues/venues)
+        // - User dismisses/saves recommendations
         const cacheKey = `recommended_matches_${userId}_${days}_${limit}`;
+        const forceRefresh = req.query.forceRefresh === 'true' || req.query.forceRefresh === '1';
+        
+        if (forceRefresh) {
+            console.log('🔄 Force refresh requested - clearing cache');
+            recommendedMatchesCache.deleteByPattern(`recommended_matches_${userId}_*`);
+        }
+        
         const cachedData = recommendedMatchesCache.get(cacheKey);
         
-        if (cachedData) {
+        if (cachedData && !forceRefresh) {
             console.log('🔍 Recommended matches cache hit - returning cached data');
             clearTimeout(timeout);
             return res.json({ 
@@ -2233,7 +2245,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             favoriteVenues: user.preferences?.favoriteVenues || [],
             defaultLocation: user.preferences?.defaultLocation,
             recommendationRadius: user.preferences?.recommendationRadius || 400,
-            defaultSearchRadius: user.preferences?.defaultSearchRadius || 100
+            defaultSearchRadius: user.preferences?.defaultSearchRadius || 100,
+            preferenceStrength: user.preferences?.preferenceStrength || 'standard'
         };
 
         // Get user's recent search patterns and trip context
@@ -2245,12 +2258,85 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             return tripEnd > new Date();
         }) || [];
 
-        // Determine date range based on user behavior
-        const today = new Date();
-        const dateFrom = today.toISOString().split('T')[0];
-        const dateTo = new Date(today.getTime() + (parseInt(days) * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        // Check if user has active trips with recommendations
+        const tripsWithRecommendations = activeTrips.filter(trip => 
+            trip.recommendationsVersion === 'v2' && 
+            trip.recommendations && 
+            Array.isArray(trip.recommendations) &&
+            trip.recommendations.length > 0
+        );
 
-        // Get leagues to search based on user preferences
+        let tripRecommendations = [];
+        let useTripRecommendations = false;
+
+        if (tripsWithRecommendations.length > 0) {
+            console.log(`🎯 Found ${tripsWithRecommendations.length} active trips with recommendations - prioritizing trip recommendations`);
+            useTripRecommendations = true;
+
+            // Aggregate all recommendations from all active trips
+            const allTripRecs = [];
+            const today = new Date();
+
+            for (const trip of tripsWithRecommendations) {
+                // Calculate trip date proximity (days until trip start)
+                const tripDates = trip.matches?.map(m => new Date(m.date)).filter(d => !isNaN(d.getTime())) || [];
+                const tripStart = tripDates.length > 0 ? new Date(Math.min(...tripDates)) : new Date(trip.createdAt);
+                const daysUntilTrip = Math.max(0, Math.floor((tripStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+
+                // Add trip metadata to each recommendation
+                trip.recommendations.forEach(rec => {
+                    allTripRecs.push({
+                        ...rec,
+                        _tripId: trip._id.toString(),
+                        _tripName: trip.name,
+                        _daysUntilTrip: daysUntilTrip,
+                        _tripStartDate: tripStart
+                    });
+                });
+            }
+
+            // Filter out already saved and recently dismissed matches
+            const savedMatchIds = new Set(savedMatches.map(s => s.matchId?.toString()));
+            const dismissedMatchIds = new Set(
+                recentSearches
+                    .filter(rec => rec.action === 'dismissed' && rec.tripId)
+                    .map(rec => rec.matchId?.toString())
+            );
+
+            tripRecommendations = allTripRecs.filter(rec => {
+                const matchId = rec.matchId?.toString() || rec.match?.id?.toString() || rec.match?.fixture?.id?.toString();
+                return !savedMatchIds.has(matchId) && !dismissedMatchIds.has(matchId);
+            });
+
+            // Sort by: trip date proximity (soonest first), then by score (highest first)
+            tripRecommendations.sort((a, b) => {
+                // First sort by days until trip (soonest trips first)
+                if (a._daysUntilTrip !== b._daysUntilTrip) {
+                    return a._daysUntilTrip - b._daysUntilTrip;
+                }
+                // Then by score (highest first)
+                return (b.score || 0) - (a.score || 0);
+            });
+
+            // Take top N (limit)
+            tripRecommendations = tripRecommendations.slice(0, parseInt(limit));
+            console.log(`✅ Aggregated ${tripRecommendations.length} trip recommendations (from ${tripsWithRecommendations.length} trips)`);
+        }
+
+        // Only generate home page recommendations if:
+        // 1. We don't have trip recommendations, OR
+        // 2. We have trip recommendations but need to supplement (fewer than limit)
+        const needHomePageRecommendations = !useTripRecommendations || (useTripRecommendations && tripRecommendations.length < parseInt(limit));
+
+        let dateFrom, dateTo, targetLeagues, allMatches, upcomingMatches, sortedMatches;
+        
+        if (needHomePageRecommendations) {
+            // Determine date range based on user behavior
+            const today = new Date();
+            dateFrom = today.toISOString().split('T')[0];
+            dateTo = new Date(today.getTime() + (parseInt(days) * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+
+            // Get leagues to search based on user preferences
         let targetLeagues = [];
         
         if (userPreferences.favoriteLeagues.length > 0) {
@@ -2356,11 +2442,11 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             targetLeagues = popularLeagues.map(l => l.apiId.toString());
         }
 
-        console.log(`🔍 Searching leagues: ${targetLeagues.join(', ')}`);
+            console.log(`🔍 Searching leagues: ${targetLeagues.join(', ')}`);
 
-        // Fetch matches from API
-        const allMatches = [];
-        const apiPromises = targetLeagues.map(async (leagueId) => {
+            // Fetch matches from API
+            allMatches = [];
+            const apiPromises = targetLeagues.map(async (leagueId) => {
             try {
                 const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
                     params: { 
@@ -2401,77 +2487,122 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             }
         });
         
-        console.log(`📊 Total matches aggregated: ${allMatches.length}`);
+            console.log(`📊 Total matches aggregated: ${allMatches.length}`);
 
-        if (allMatches.length === 0) {
-            console.log('⚠️ No matches found from any league, returning empty response');
-            clearTimeout(timeout);
-            return res.json({ 
-                success: true, 
-                matches: [], 
-                message: 'No recommended matches found' 
-            });
-        }
-
-        // Filter out matches that are in progress or completed
-        const upcomingMatches = allMatches.filter(match => !shouldFilterMatch(match));
-        console.log(`🔍 Filtered ${allMatches.length - upcomingMatches.length} matches (in progress or completed), ${upcomingMatches.length} upcoming matches remaining`);
-        
-        if (upcomingMatches.length === 0) {
-            console.log('⚠️ No upcoming matches found after filtering, returning empty response');
-            clearTimeout(timeout);
-            return res.json({ 
-                success: true, 
-                matches: [], 
-                message: 'No upcoming matches found' 
-            });
-        }
-
-        // Score and rank matches based on user preferences
-        const scoredMatches = await Promise.all(upcomingMatches.map(async (match) => {
-            let score = 0;
-            const reasons = [];
-
-            // Base score
-            score += 10;
-
-            // Favorite teams bonus
-            if (userPreferences.favoriteTeams.length > 0) {
-                const homeTeam = match.teams?.home?.name?.toLowerCase();
-                const awayTeam = match.teams?.away?.name?.toLowerCase();
-                
-                userPreferences.favoriteTeams.forEach(favTeam => {
-                    const teamName = favTeam.name?.toLowerCase();
-                    if (teamName && (homeTeam?.includes(teamName) || awayTeam?.includes(teamName))) {
-                        score += 50;
-                        reasons.push(`Your favorite team ${favTeam.name} is playing`);
-                    }
-                });
-            }
-
-            // Favorite leagues bonus
-            if (userPreferences.favoriteLeagues.includes(match.league?.id?.toString())) {
-                score += 30;
-                reasons.push(`From your favorite league: ${match.league?.name}`);
-            }
-
-            // Favorite venues bonus
-            if (userPreferences.favoriteVenues.length > 0 && match.venue?.id) {
-                const matchVenueId = match.venue.id.toString();
-                const isFavoriteVenue = userPreferences.favoriteVenues.some(favVenue => 
-                    String(favVenue.venueId) === matchVenueId
-                );
-                if (isFavoriteVenue) {
-                    score += 40;
-                    reasons.push(`At your favorite venue: ${match.venue?.name}`);
+            if (allMatches.length === 0) {
+                console.log('⚠️ No matches found from any league');
+                // If we have trip recommendations, use those. Otherwise return empty.
+                if (useTripRecommendations && tripRecommendations.length > 0) {
+                    // Continue with trip recommendations only
+                } else {
+                    clearTimeout(timeout);
+                    return res.json({ 
+                        success: true, 
+                        matches: [], 
+                        message: 'No recommended matches found' 
+                    });
                 }
             }
 
-            // Location-based scoring (default location)
+            // Filter out matches that are in progress or completed
+            upcomingMatches = allMatches.filter(match => !shouldFilterMatch(match));
+            console.log(`🔍 Filtered ${allMatches.length - upcomingMatches.length} matches (in progress or completed), ${upcomingMatches.length} upcoming matches remaining`);
+            
+            if (upcomingMatches.length === 0) {
+                console.log('⚠️ No upcoming matches found after filtering');
+                // If we have trip recommendations, use those. Otherwise return empty.
+                if (useTripRecommendations && tripRecommendations.length > 0) {
+                    // Continue with trip recommendations only
+                } else {
+                    clearTimeout(timeout);
+                    return res.json({ 
+                        success: true, 
+                        matches: [], 
+                        message: 'No upcoming matches found' 
+                    });
+                }
+            }
+
+        // Filter out already saved and recently dismissed matches (hard filter, not penalty)
+        const savedMatchIds = new Set(savedMatches.map(s => s.matchId?.toString()));
+        const dismissedMatchIds = new Set(
+            recentSearches
+                .filter(rec => rec.action === 'dismissed' && (new Date() - new Date(rec.dismissedAt || rec.recommendedAt)) < (7 * 24 * 60 * 60 * 1000))
+                .map(rec => rec.matchId?.toString())
+        );
+
+        // Score and rank matches based on user preferences
+        const scoredMatches = await Promise.all(upcomingMatches.map(async (match) => {
+            const matchId = match.fixture?.id?.toString();
+            
+            // Hard filter: skip already saved or recently dismissed matches
+            if (savedMatchIds.has(matchId) || dismissedMatchIds.has(matchId)) {
+                return null;
+            }
+
+            let score = weights.baseScore.default;
+            const reasons = [];
+
+            // Get preference strength multiplier
+            const strengthMult = weights.preferenceStrength[userPreferences.preferenceStrength || 'standard'];
+
+            // League quality score (0-20 points) - prioritize better leagues
+            const leagueId = String(match.league?.id || '');
+            if (weights.topLeagues.tier1.includes(leagueId)) {
+                score += weights.context.leagueQuality.topTier;
+            } else if (weights.topLeagues.tier2.includes(leagueId)) {
+                score += weights.context.leagueQuality.secondTier;
+            } else {
+                score += weights.context.leagueQuality.other;
+            }
+
+            // Favorite teams bonus (with preference strength multiplier)
+            if (userPreferences.favoriteTeams.length > 0) {
+                const homeTeamId = String(match.teams?.home?.id || '');
+                const awayTeamId = String(match.teams?.away?.id || '');
+                
+                for (const favTeam of userPreferences.favoriteTeams) {
+                    const favTeamId = favTeam.teamId?.apiId || favTeam.apiId || String(favTeam.teamId || '');
+                    if (homeTeamId === favTeamId || awayTeamId === favTeamId) {
+                        score += weights.preferences.favoriteTeam.playing * strengthMult.favoriteTeam;
+                        reasons.push(`Your favorite team ${favTeam.name || 'is playing'}`);
+                        break; // Only count once per match
+                    }
+                }
+            }
+
+            // Favorite leagues bonus (with preference strength multiplier and tier bonus)
+            const matchLeagueId = String(match.league?.id || '');
+            if (userPreferences.favoriteLeagues.includes(matchLeagueId)) {
+                let leagueBoost = weights.preferences.favoriteLeague.directMatch * strengthMult.favoriteLeague;
+                // Add tier bonus if applicable
+                if (weights.topLeagues.tier1.includes(matchLeagueId)) {
+                    leagueBoost += weights.preferences.favoriteLeague.tier.tier1 * strengthMult.favoriteLeague;
+                } else if (weights.topLeagues.tier2.includes(matchLeagueId)) {
+                    leagueBoost += weights.preferences.favoriteLeague.tier.tier2 * strengthMult.favoriteLeague;
+                }
+                score += leagueBoost;
+                reasons.push(`From your favorite league: ${match.league?.name}`);
+            }
+
+            // Favorite venues bonus (with preference strength multiplier)
+            if (userPreferences.favoriteVenues.length > 0 && match.venue?.id) {
+                const matchVenueId = String(match.venue.id);
+                for (const favVenue of userPreferences.favoriteVenues) {
+                    const favVenueId = String(favVenue.venueId || '');
+                    if (matchVenueId === favVenueId) {
+                        score += weights.preferences.favoriteVenue.directMatch * strengthMult.favoriteVenue;
+                        reasons.push(`At your favorite venue: ${match.venue?.name}`);
+                        break;
+                    }
+                }
+            }
+
+            // Location-based scoring (default location) - only if within reasonable distance
+            // Use stricter radius for default location (use defaultSearchRadius instead of recommendationRadius)
             if (userPreferences.defaultLocation?.coordinates && match.venue?.id) {
                 try {
                     const venueData = await venueService.getVenueByApiId(match.venue.id);
-                    // Venue data can have coordinates in different formats
                     const venueCoords = venueData?.coordinates || 
                                        venueData?.location?.coordinates ||
                                        (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null);
@@ -2483,7 +2614,9 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                             venueCoords[0] // lng
                         );
                         
-                        if (distance <= userPreferences.recommendationRadius) {
+                        // Use defaultSearchRadius (typically 100 miles) instead of recommendationRadius (400 miles)
+                        const locationRadius = userPreferences.defaultSearchRadius || 100;
+                        if (distance <= locationRadius) {
                             const locationScore = Math.max(0, 40 - (distance / 10));
                             score += locationScore;
                             reasons.push(`Close to your location (${Math.round(distance)} miles away)`);
@@ -2671,7 +2804,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 }
             }
 
-            // Avoid recently visited stadiums
+            // Recently visited stadium penalty
             const venueName = match.venue?.name?.toLowerCase();
             const recentlyVisited = visitedStadiums.some(visited => {
                 const visitedName = visited.venueName?.toLowerCase();
@@ -2679,37 +2812,20 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             });
             
             if (recentlyVisited) {
-                score -= 20;
+                score += weights.penalties.recentlyVisitedVenue;
                 reasons.push('You recently visited this stadium');
             }
 
-            // Avoid already saved matches
-            const alreadySaved = savedMatches.some(saved => saved.matchId === match.fixture?.id?.toString());
-            if (alreadySaved) {
-                score -= 100; // Heavily penalize already saved matches
-                reasons.push('You already saved this match');
-            }
-
-            // Avoid recently dismissed recommendations
-            const recentlyDismissed = recentSearches.some(rec => 
-                rec.matchId === match.fixture?.id?.toString() && 
-                rec.action === 'dismissed' &&
-                (new Date() - new Date(rec.dismissedAt)) < (7 * 24 * 60 * 60 * 1000) // 7 days
-            );
-            if (recentlyDismissed) {
-                score -= 30;
-                reasons.push('You recently dismissed this match');
-            }
-
-            // Weekend bonus (if user tends to search weekends)
+            // Weekend bonus - only apply if match already has some relevance (score > base + league quality)
             const matchDate = new Date(match.fixture?.date);
             const dayOfWeek = matchDate.getDay();
-            if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
-                score += 15;
+            const baseRelevanceScore = weights.baseScore.default + weights.context.leagueQuality.other;
+            if ((dayOfWeek === 0 || dayOfWeek === 6) && score > baseRelevanceScore) {
+                score += weights.bonuses.weekendMatch;
                 reasons.push('Weekend match');
             }
 
-            // High-profile match bonus (derbies, big teams)
+            // High-profile match bonus - only apply if match already has some relevance
             const homeTeam = match.teams?.home?.name?.toLowerCase();
             const awayTeam = match.teams?.away?.name?.toLowerCase();
             const bigTeams = ['manchester united', 'manchester city', 'liverpool', 'arsenal', 'chelsea', 'tottenham', 
@@ -2719,8 +2835,8 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             const isBigMatch = bigTeams.some(team => 
                 homeTeam?.includes(team) || awayTeam?.includes(team)
             );
-            if (isBigMatch) {
-                score += 25;
+            if (isBigMatch && score > baseRelevanceScore) {
+                score += weights.bonuses.highProfileMatch;
                 reasons.push('High-profile match');
             }
 
@@ -2731,8 +2847,17 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             };
         }));
 
-        // Sort by score and ensure league diversity
-        const positiveMatches = scoredMatches.filter(match => match.recommendationScore > 0);
+        // Filter out null matches (filtered out) and enforce minimum threshold
+        const validMatches = scoredMatches.filter(match => match !== null);
+        const aboveThreshold = validMatches.filter(match => match.recommendationScore >= weights.baseScore.minThreshold);
+        const belowThreshold = validMatches.filter(match => 
+            match.recommendationScore > 0 && match.recommendationScore < weights.baseScore.minThreshold
+        );
+
+        console.log(`📊 Scoring complete: ${validMatches.length} valid matches, ${aboveThreshold.length} above threshold (${weights.baseScore.minThreshold}), ${belowThreshold.length} below threshold`);
+
+        // Sort by score and ensure league diversity (only for matches above threshold)
+        const positiveMatches = aboveThreshold.length > 0 ? aboveThreshold : belowThreshold;
         
         // Group matches by league for diversity
         const matchesByLeague = new Map();
@@ -2749,43 +2874,228 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             matches.sort((a, b) => b.recommendationScore - a.recommendationScore);
         });
         
-        // Distribute matches across leagues to ensure diversity
-        // Try to get at least 1-2 matches per league, then fill remaining slots with top scores
-        const sortedMatches = [];
-        const maxPerLeague = Math.max(2, Math.floor(parseInt(limit) / matchesByLeague.size));
-        const leagues = Array.from(matchesByLeague.keys());
-        
-        // First pass: take top matches from each league
-        for (let i = 0; i < maxPerLeague && sortedMatches.length < parseInt(limit); i++) {
-            for (const leagueId of leagues) {
-                if (sortedMatches.length >= parseInt(limit)) break;
-                const leagueMatches = matchesByLeague.get(leagueId);
-                if (leagueMatches.length > i) {
-                    sortedMatches.push(leagueMatches[i]);
+            // Distribute matches across leagues to ensure diversity
+            // Only apply diversity algorithm if we have enough matches above threshold
+            // Otherwise, just return top-scoring matches
+            sortedMatches = [];
+            
+            if (positiveMatches.length > 0 && matchesByLeague.size > 1) {
+            // Only do diversity if we have multiple leagues and enough matches
+            const maxPerLeague = Math.max(1, Math.floor(parseInt(limit) / matchesByLeague.size));
+            const leagues = Array.from(matchesByLeague.keys());
+            
+            // First pass: take top matches from each league (prioritize favorite leagues)
+            const favoriteLeagueIds = new Set(userPreferences.favoriteLeagues.map(id => String(id)));
+            const sortedLeagues = leagues.sort((a, b) => {
+                const aIsFavorite = favoriteLeagueIds.has(a);
+                const bIsFavorite = favoriteLeagueIds.has(b);
+                if (aIsFavorite && !bIsFavorite) return -1;
+                if (!aIsFavorite && bIsFavorite) return 1;
+                return 0;
+            });
+            
+            for (let i = 0; i < maxPerLeague && sortedMatches.length < parseInt(limit); i++) {
+                for (const leagueId of sortedLeagues) {
+                    if (sortedMatches.length >= parseInt(limit)) break;
+                    const leagueMatches = matchesByLeague.get(leagueId);
+                    if (leagueMatches.length > i) {
+                        sortedMatches.push(leagueMatches[i]);
+                    }
                 }
             }
+            
+            // Second pass: fill remaining slots with highest scoring matches regardless of league
+            if (sortedMatches.length < parseInt(limit)) {
+                const remaining = positiveMatches
+                    .filter(match => !sortedMatches.includes(match))
+                    .sort((a, b) => b.recommendationScore - a.recommendationScore)
+                    .slice(0, parseInt(limit) - sortedMatches.length);
+                sortedMatches.push(...remaining);
+            }
+            } else {
+                // Not enough matches or only one league - just take top scores
+                sortedMatches = positiveMatches
+                    .sort((a, b) => b.recommendationScore - a.recommendationScore)
+                    .slice(0, parseInt(limit));
+            }
+            
+            // Final sort by score to maintain ranking
+            sortedMatches.sort((a, b) => b.recommendationScore - a.recommendationScore);
+            
+            console.log(`📊 League distribution: ${Array.from(matchesByLeague.keys()).map(leagueId => {
+                const count = sortedMatches.filter(m => (m.league?.id?.toString() || 'unknown') === leagueId).length;
+                return `${leagueId}:${count}`;
+            }).join(', ')}`);
+        } else {
+            // No home page recommendations needed - sortedMatches will be empty array
+            sortedMatches = [];
         }
-        
-        // Second pass: fill remaining slots with highest scoring matches regardless of league
-        if (sortedMatches.length < parseInt(limit)) {
-            const remaining = positiveMatches
-                .filter(match => !sortedMatches.includes(match))
-                .sort((a, b) => b.recommendationScore - a.recommendationScore)
-                .slice(0, parseInt(limit) - sortedMatches.length);
-            sortedMatches.push(...remaining);
-        }
-        
-        // Final sort by score to maintain ranking
-        sortedMatches.sort((a, b) => b.recommendationScore - a.recommendationScore);
-        
-        console.log(`📊 League distribution: ${Array.from(matchesByLeague.keys()).map(leagueId => {
-            const count = sortedMatches.filter(m => (m.league?.id?.toString() || 'unknown') === leagueId).length;
-            return `${leagueId}:${count}`;
-        }).join(', ')}`);
 
-        // Transform matches to match the expected format
-        const transformedMatches = [];
-        for (const match of sortedMatches) {
+        // If we have trip recommendations, transform them first
+        let finalMatches = [];
+        
+        if (useTripRecommendations && tripRecommendations.length > 0) {
+            console.log(`🎯 Using ${tripRecommendations.length} trip recommendations`);
+            
+            // Transform trip recommendations to expected format
+            for (const rec of tripRecommendations) {
+                try {
+                    const match = rec.match || {};
+                    const matchId = rec.matchId || match.id || match.fixture?.id;
+                    
+                    // Get venue data
+                    const venueId = match.fixture?.venue?.id || match.venue?.id;
+                    const venueData = venueId ? await venueService.getVenueByApiId(venueId) : null;
+                    
+                    const venueName = match.fixture?.venue?.name || match.venue?.name || venueData?.name || 'Unknown Venue';
+                    const venueCity = venueData?.city || match.fixture?.venue?.city || match.venue?.city || null;
+                    const venueCountry = venueData?.country || match.fixture?.venue?.country || match.venue?.country || 'Unknown';
+                    const venueCoordinates = venueData?.coordinates || 
+                                            venueData?.location?.coordinates || 
+                                            (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null) ||
+                                            match.fixture?.venue?.coordinates ||
+                                            match.venue?.coordinates;
+                    
+                    // Get team data
+                    const homeTeam = match.teams?.home?.id 
+                        ? await Team.findOne({ apiId: match.teams.home.id.toString() })
+                        : null;
+                    
+                    finalMatches.push({
+                        id: matchId,
+                        fixture: {
+                            id: matchId,
+                            date: match.fixture?.date || match.date,
+                            status: match.fixture?.status || {},
+                            venue: {
+                                id: venueId || null,
+                                name: venueName,
+                                city: venueCity,
+                                country: venueCountry,
+                                coordinates: venueCoordinates
+                            }
+                        },
+                        teams: {
+                            home: {
+                                id: match.teams?.home?.id,
+                                name: match.teams?.home?.name,
+                                logo: match.teams?.home?.logo,
+                                ticketingUrl: homeTeam?.ticketingUrl || undefined
+                            },
+                            away: {
+                                id: match.teams?.away?.id,
+                                name: match.teams?.away?.name,
+                                logo: match.teams?.away?.logo
+                            }
+                        },
+                        league: {
+                            id: match.league?.id,
+                            name: match.league?.name,
+                            logo: match.league?.logo
+                        },
+                        score: match.score || {},
+                        recommendationScore: rec.score || 0,
+                        recommendationReasons: rec.reason ? [rec.reason] : [],
+                        _tripId: rec._tripId,
+                        _tripName: rec._tripName,
+                        _isTripRecommendation: true
+                    });
+                } catch (error) {
+                    console.log(`⚠️ Error transforming trip recommendation ${rec.matchId}: ${error.message}`);
+                }
+            }
+            
+            // If we have fewer than limit, supplement with home page recommendations
+            if (finalMatches.length < parseInt(limit)) {
+                console.log(`📊 Only ${finalMatches.length} trip recommendations, supplementing with ${parseInt(limit) - finalMatches.length} home page recommendations`);
+                
+                // Filter out trip recommendation match IDs to avoid duplicates
+                const tripMatchIds = new Set(finalMatches.map(m => m.id?.toString()));
+                
+                // Transform home page recommendations and add them
+                for (const match of sortedMatches) {
+                    if (finalMatches.length >= parseInt(limit)) break;
+                    
+                    const matchId = match.fixture?.id?.toString();
+                    if (tripMatchIds.has(matchId)) {
+                        continue; // Skip if already in trip recommendations
+                    }
+                    
+                    try {
+                        // Venue can be in match.venue OR match.fixture.venue (check both)
+                        const venueId = match.venue?.id || match.fixture?.venue?.id;
+                        const venueData = venueId ? await venueService.getVenueByApiId(venueId) : null;
+                        
+                        // Extract venue data - getVenueByApiId returns Venue model or null
+                        // Use multiple fallbacks to ensure we always have venue info
+                        // Check fixture.venue first (API-Sports format), then match.venue (transformed format)
+                        const apiVenueName = match.fixture?.venue?.name || match.venue?.name;
+                        const apiVenueCity = match.fixture?.venue?.city || match.venue?.city;
+                        const apiVenueCountry = match.fixture?.venue?.country || match.venue?.country;
+                        
+                        const venueName = apiVenueName || venueData?.name || 'Unknown Venue';
+                        const venueCity = venueData?.city || apiVenueCity || venueData?.name || apiVenueName || null;
+                        const venueCountry = venueData?.country || apiVenueCountry || 'Unknown';
+                        const venueCoordinates = venueData?.coordinates || 
+                                                venueData?.location?.coordinates || 
+                                                (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null) ||
+                                                match.fixture?.venue?.coordinates ||
+                                                match.venue?.coordinates;
+                        
+                        // Transform to API-Sports format that MatchCard component expects
+                        const homeTeam = match.teams?.home?.id 
+                            ? await Team.findOne({ apiId: match.teams.home.id.toString() })
+                            : null;
+                        
+                        finalMatches.push({
+                            id: match.fixture?.id,
+                            fixture: {
+                                id: match.fixture?.id,
+                                date: match.fixture?.date,
+                                status: match.fixture?.status || {},
+                                venue: {
+                                    id: venueId || match.venue?.id || match.fixture?.venue?.id || null,
+                                    name: venueName,
+                                    city: venueCity,
+                                    country: venueCountry,
+                                    coordinates: venueCoordinates
+                                }
+                            },
+                            teams: {
+                                home: {
+                                    id: match.teams?.home?.id,
+                                    name: match.teams?.home?.name,
+                                    logo: match.teams?.home?.logo,
+                                    ticketingUrl: homeTeam?.ticketingUrl || undefined
+                                },
+                                away: {
+                                    id: match.teams?.away?.id,
+                                    name: match.teams?.away?.name,
+                                    logo: match.teams?.away?.logo
+                                }
+                            },
+                            league: {
+                                id: match.league?.id,
+                                name: match.league?.name,
+                                logo: match.league?.logo
+                            },
+                            score: match.score || {},
+                            recommendationScore: match.recommendationScore,
+                            recommendationReasons: match.recommendationReasons,
+                            _isTripRecommendation: false
+                        });
+                    } catch (error) {
+                        console.log(`⚠️ Error processing match ${match.fixture?.id}: ${error.message}`);
+                    }
+                }
+            }
+        } else {
+            // No trip recommendations - use home page recommendations (existing logic)
+            console.log('📊 No trip recommendations found, using home page recommendations');
+            
+            // Transform matches to match the expected format
+            const transformedMatches = [];
+            for (const match of sortedMatches) {
             try {
                 // Venue can be in match.venue OR match.fixture.venue (check both)
                 const venueId = match.venue?.id || match.fixture?.venue?.id;
@@ -2906,21 +3216,25 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     recommendationReasons: match.recommendationReasons
                 });
             }
+            
+            finalMatches = transformedMatches;
         }
         
         // Cache the recommended matches for future requests (daily cache)
-        recommendedMatchesCache.set(cacheKey, transformedMatches);
-        console.log('💾 Recommended matches cached for future requests');
+        recommendedMatchesCache.set(cacheKey, finalMatches);
+        console.log(`💾 Recommended matches cached (${finalMatches.length} total: ${tripRecommendations.length} from trips, ${finalMatches.length - tripRecommendations.length} from home page)`);
         
         clearTimeout(timeout);
         res.json({ 
             success: true, 
-            matches: transformedMatches, 
-            totalFound: upcomingMatches.length,
-            totalBeforeFilter: allMatches.length,
+            matches: finalMatches, 
+            totalFound: useTripRecommendations ? tripRecommendations.length : upcomingMatches.length,
+            totalBeforeFilter: useTripRecommendations ? tripRecommendations.length : allMatches.length,
             personalized: true,
-            dateRange: { from: dateFrom, to: dateTo }, 
-            leagues: targetLeagues,
+            fromTripRecommendations: useTripRecommendations,
+            tripRecommendationsCount: tripRecommendations.length,
+            dateRange: useTripRecommendations ? null : { from: dateFrom, to: dateTo }, 
+            leagues: useTripRecommendations ? null : targetLeagues,
             fromCache: false,
             cachedAt: new Date().toISOString()
         });

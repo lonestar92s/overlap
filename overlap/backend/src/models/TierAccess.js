@@ -27,3 +27,4 @@ const tierAccessSchema = new mongoose.Schema({
 tierAccessSchema.index({ tier: 1 });
 
 module.exports = mongoose.model('TierAccess', tierAccessSchema);
+

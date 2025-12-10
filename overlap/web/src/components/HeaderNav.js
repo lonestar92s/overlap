@@ -156,6 +156,24 @@ const HeaderNav = () => {
                 />
             );
         }
+        if (subscriptionTier === 'freemium') {
+            return (
+                <Chip 
+                    label="FREEMIUM" 
+                    size="small" 
+                    sx={{ 
+                        backgroundColor: '#757575',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '0.65rem',
+                        height: '18px',
+                        '& .MuiChip-label': {
+                            px: 0.5
+                        }
+                    }}
+                />
+            );
+        }
         return null;
     };
 

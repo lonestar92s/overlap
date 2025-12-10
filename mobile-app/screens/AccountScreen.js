@@ -244,7 +244,7 @@ const AccountScreen = ({ navigation }) => {
   
   // Get subscription tier for badge display
   const subscriptionTier = user?.subscription?.tier;
-  const showSubscriptionBadge = subscriptionTier && (subscriptionTier === 'pro' || subscriptionTier === 'planner');
+  const showSubscriptionBadge = subscriptionTier && (subscriptionTier === 'pro' || subscriptionTier === 'planner' || subscriptionTier === 'freemium');
   const subscriptionBadgeText = subscriptionTier?.toUpperCase() || '';
   
   const tabs = [

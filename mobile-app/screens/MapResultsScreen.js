@@ -95,6 +95,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Bottom sheet state
   const [sheetState, setSheetState] = useState('collapsed');
   const bottomSheetRef = useRef(null);
+  const filterBottomSheetRef = useRef(null);
   
   // Snap points for bottom sheet
   const snapPoints = useMemo(() => [48, '55%', '85%'], []);
@@ -1150,11 +1151,31 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   const handleFilterOpen = () => {
+    if (__DEV__) {
+      console.log('🔵 [FILTER] Filter button pressed');
+      console.log('🔵 [FILTER] Current filterModalVisible:', filterModalVisible);
+      console.log('🔵 [FILTER] Calling openFilterModal()');
+    }
+    // Open filter drawer - it will overlay on top of match list drawer if open
     openFilterModal();
+    if (__DEV__) {
+      console.log('🔵 [FILTER] openFilterModal() called');
+      console.log('🔵 [FILTER] filterBottomSheetRef.current:', filterBottomSheetRef.current);
+      if (filterBottomSheetRef.current) {
+        console.log('🔵 [FILTER] filterBottomSheetRef methods:', {
+          hasExpand: typeof filterBottomSheetRef.current.expand === 'function',
+          hasClose: typeof filterBottomSheetRef.current.close === 'function',
+          hasSnapToIndex: typeof filterBottomSheetRef.current.snapToIndex === 'function',
+        });
+      }
+    }
   };
 
   const handleFilterClose = () => {
     closeFilterModal();
+    if (filterBottomSheetRef.current && typeof filterBottomSheetRef.current.close === 'function') {
+      filterBottomSheetRef.current.close();
+    }
   };
 
   const handleApplyFilters = (filters) => {
@@ -1162,7 +1183,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       console.log('Applying filters:', filters);
     }
     updateSelectedFilters(filters);
-    closeFilterModal();
+    // Do NOT close filter drawer - it should remain open
   };
 
   // Filter matches based on selected filters
@@ -2405,6 +2426,7 @@ const MapResultsScreen = ({ navigation, route }) => {
             setSheetState('closed');
           } else {
             setSheetState(states[index]);
+            // Filter drawer can remain open on top - no need to close it
           }
         }}
         enablePanDownToClose={false}
@@ -2498,8 +2520,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         loading={searchLoading}
       />
 
-      {/* Filter Modal */}
+      {/* Filter Bottom Sheet */}
       <FilterModal
+        ref={filterBottomSheetRef}
         visible={filterModalVisible}
         onClose={handleFilterClose}
         filterData={filterData}

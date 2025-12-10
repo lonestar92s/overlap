@@ -21,13 +21,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.85; // 85% of screen width for horizontal cards
 
 const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:25',message:'Component render started',data:{hasOnMatchPress:!!onMatchPress,hasOnMatchesLoaded:!!onMatchesLoaded},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRecommended, setIsRecommended] = useState(false);
   const { isMatchInItinerary } = useItineraries();
   const { user } = useAuth();
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:30',message:'Initial hooks called',data:{matchesLength:matches.length,loading,isRecommended,refreshing,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 
-  const fetchMatches = async (retryCount = 0) => {
+  const fetchMatches = async (retryCount = 0, forceRefresh = false) => {
     try {
       setLoading(true);
       let response;
@@ -36,7 +42,7 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
       // Try to fetch recommended matches if user is authenticated
       if (user) {
         try {
-          response = await ApiService.getRecommendedMatches();
+          response = await ApiService.getRecommendedMatches(10, 30, forceRefresh);
           isRecommendedData = true;
           setIsRecommended(true);
           if (__DEV__) {
@@ -129,7 +135,13 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
     </View>
   );
 
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:133',message:'Before early return checks',data:{loading,matchesLength:matches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (loading) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:135',message:'Early return due to loading',data:{loading},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -141,6 +153,9 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   }
 
   if (matches.length === 0) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:145',message:'Early return due to empty matches',data:{matchesLength:matches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyText}>

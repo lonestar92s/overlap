@@ -1,30 +1,29 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import {
-  Modal,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Dimensions,
-  Alert,
 } from 'react-native';
-import { CheckBox, Button } from 'react-native-elements';
+import { CheckBox } from 'react-native-elements';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetModal, BottomSheetView, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ErrorBoundary from './ErrorBoundary';
 import FilterSection from './FilterSection';
 import FilterAccordion from './FilterAccordion';
-import { colors, spacing, typography, borderRadius, iconSizes, shadows } from '../styles/designTokens';
+import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
 
-const FilterModal = ({ 
+const FilterModal = forwardRef(({ 
   visible, 
   onClose, 
   filterData,
   selectedFilters,
   onFiltersChange 
-}) => {
+}, ref) => {
   const insets = useSafeAreaInsets();
+  const bottomSheetRef = React.useRef(null);
   const [expandedCountryId, setExpandedCountryId] = useState(null);
   const [expandedLeagueId, setExpandedLeagueId] = useState(null);
 
@@ -34,35 +33,45 @@ const FilterModal = ({
     teams: []
   });
 
+  // Snap points for bottom sheet - single fixed height at 75%
+  const snapPoints = useMemo(() => ['75%'], []);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    present: () => {
+      bottomSheetRef.current?.present();
+    },
+    dismiss: () => {
+      bottomSheetRef.current?.dismiss();
+    },
+    // Keep expand/close for backwards compatibility
+    expand: () => {
+      bottomSheetRef.current?.present();
+    },
+    close: () => {
+      bottomSheetRef.current?.dismiss();
+    },
+  }));
+
   // Helper function to get total filters count
   const getTotalFilters = useCallback(() => {
     return localFilters.countries.length + localFilters.leagues.length + localFilters.teams.length;
   }, [localFilters]);
 
-  // Calculate fixed modal height to prevent resizing
-  const screenHeight = Dimensions.get('window').height;
-  const modalMaxHeight = screenHeight * 0.8; // 80% of screen
-  const headerHeight = 60; // Approximate header height
-  const availableFiltersHeight = 50; // Available filters summary
-  const activeFiltersHeight = 50; // Active filters summary (always rendered)
-  const footerHeight = 80; // Footer with buttons
-  
-  // Calculate current filters height based on whether filters are selected
-  const currentFiltersHeight = useMemo(() => {
-    return getTotalFilters() > 0 ? 80 : 0;
-  }, [getTotalFilters]);
-  
-  // Calculate content wrapper height - fixed to prevent modal resizing
-  const contentWrapperHeight = useMemo(() => {
-    return modalMaxHeight - headerHeight - availableFiltersHeight - activeFiltersHeight - currentFiltersHeight - footerHeight - (insets?.bottom || 0);
-  }, [modalMaxHeight, currentFiltersHeight, insets?.bottom]);
-
-  // Initialize local filters when modal opens
+  // Initialize local filters when drawer opens
   useEffect(() => {
+    if (__DEV__) {
+      console.log('🟢 [FILTER_MODAL] Initialize filters useEffect, visible:', visible, 'selectedFilters:', selectedFilters);
+    }
     if (visible && selectedFilters) {
       setLocalFilters(selectedFilters);
+      if (__DEV__) {
+        console.log('🟢 [FILTER_MODAL] Local filters initialized');
+      }
     }
   }, [visible, selectedFilters]);
+
+  // BottomSheetModal doesn't need index prop - controlled via present()/dismiss()
 
   const handleCountryChange = (countryId) => {
     setLocalFilters(prev => {
@@ -233,7 +242,7 @@ const FilterModal = ({
 
   const handleApply = () => {
     onFiltersChange(localFilters);
-    onClose();
+    // Do NOT call onClose() - drawer should remain open
   };
 
   // Render nested leagues section for a country
@@ -337,29 +346,99 @@ const FilterModal = ({
     );
   };
 
+  // Handle modal dismissal (when user closes it)
+  const handleDismiss = useCallback(() => {
+    if (__DEV__) {
+      console.log('🟡 [FILTER_MODAL] BottomSheetModal dismissed');
+    }
+    if (onClose) {
+      onClose();
+    }
+  }, [onClose]);
+
+  // Handle visibility changes - use present()/dismiss() for BottomSheetModal
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('🟡 [FILTER_MODAL] Visibility useEffect triggered, visible:', visible);
+      console.log('🟡 [FILTER_MODAL] bottomSheetRef.current:', bottomSheetRef.current);
+    }
+    
+    if (!bottomSheetRef.current) {
+      if (__DEV__) {
+        console.warn('🟡 [FILTER_MODAL] bottomSheetRef.current is null, returning early');
+      }
+      return;
+    }
+    
+    if (visible) {
+      if (__DEV__) {
+        console.log('🟡 [FILTER_MODAL] Calling present() to open drawer...');
+      }
+      try {
+        bottomSheetRef.current.present();
+        if (__DEV__) {
+          console.log('🟡 [FILTER_MODAL] present() called successfully');
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.error('🟡 [FILTER_MODAL] Error opening filter drawer:', error);
+        }
+      }
+    } else {
+      if (__DEV__) {
+        console.log('🟡 [FILTER_MODAL] Calling dismiss() to close drawer...');
+      }
+      try {
+        bottomSheetRef.current.dismiss();
+        if (__DEV__) {
+          console.log('🟡 [FILTER_MODAL] dismiss() called successfully');
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.error('🟡 [FILTER_MODAL] Error closing filter drawer:', error);
+        }
+      }
+    }
+  }, [visible]);
+
+  // Custom handle component for bottom sheet
+  const renderHandle = () => (
+    <View style={styles.handleContainer}>
+      <View style={styles.handleBar} />
+      <View style={styles.handleContent}>
+        <Text style={styles.handleTitle}>Filter Matches</Text>
+        <TouchableOpacity 
+          onPress={onClose} 
+          style={styles.closeButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close filter drawer"
+        >
+          <Ionicons name="close" size={iconSizes.md} color={colors.text.secondary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Log when component renders
+  if (__DEV__) {
+    console.log('🟣 [FILTER_MODAL] Component rendering, visible:', visible);
+  }
+
   return (
     <ErrorBoundary>
-      <Modal
-        visible={visible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={onClose}
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        snapPoints={snapPoints}
+        enablePanDownToClose={true}
+        enableContentPanningGesture={true}
+        enableHandlePanningGesture={true}
+        keyboardBehavior="interactive"
+        onDismiss={handleDismiss}
+        backgroundStyle={styles.bottomSheetBackground}
+        handleComponent={renderHandle}
+        bottomInset={insets.bottom}
       >
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Filter Matches</Text>
-            <TouchableOpacity 
-              onPress={onClose} 
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close filter modal"
-            >
-              <Ionicons name="close" size={iconSizes.md} color={colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
-
+        <BottomSheetView style={styles.content}>
           {/* Available Filters Summary (always visible) */}
           <View style={styles.availableFiltersContainer}>
             <Text style={styles.availableFiltersText}>
@@ -373,7 +452,11 @@ const FilterModal = ({
               <Text style={styles.activeFiltersText}>
                 {getTotalFilters()} filter{getTotalFilters() !== 1 ? 's' : ''} selected
               </Text>
-              <TouchableOpacity onPress={handleClearAll}>
+              <TouchableOpacity 
+                onPress={handleClearAll}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+              >
                 <Text style={styles.clearAllText}>Clear All</Text>
               </TouchableOpacity>
             </View>
@@ -383,54 +466,47 @@ const FilterModal = ({
             </View>
           )}
 
-          {/* Current Filters Summary - Always rendered to maintain fixed size */}
-          <View style={[
-            styles.currentFiltersSummary,
-            getTotalFilters() === 0 && styles.currentFiltersSummaryHidden
-          ]}>
-            <Text style={styles.currentFiltersTitle}>Currently Applied:</Text>
-            {localFilters.countries.length > 0 && (
-              <Text style={styles.currentFilterItem}>
-                Countries: {localFilters.countries.length} selected
-              </Text>
-            )}
-            {localFilters.leagues.length > 0 && (
-              <Text style={styles.currentFilterItem}>
-                Leagues: {localFilters.leagues.length} selected
-              </Text>
-            )}
-            {localFilters.teams.length > 0 && (
-              <Text style={styles.currentFilterItem}>
-                Teams: {localFilters.teams.length} selected
-              </Text>
-            )}
-          </View>
+          {/* Current Filters Summary */}
+          {getTotalFilters() > 0 && (
+            <View style={styles.currentFiltersSummary}>
+              <Text style={styles.currentFiltersTitle}>Currently Applied:</Text>
+              {localFilters.countries.length > 0 && (
+                <Text style={styles.currentFilterItem}>
+                  Countries: {localFilters.countries.length} selected
+                </Text>
+              )}
+              {localFilters.leagues.length > 0 && (
+                <Text style={styles.currentFilterItem}>
+                  Leagues: {localFilters.leagues.length} selected
+                </Text>
+              )}
+              {localFilters.teams.length > 0 && (
+                <Text style={styles.currentFilterItem}>
+                  Teams: {localFilters.teams.length} selected
+                </Text>
+              )}
+            </View>
+          )}
 
-          {/* Filter Content - Fixed height to prevent modal resizing */}
-          <View style={[
-            styles.contentWrapper,
-            { height: contentWrapperHeight }
-          ]}>
-            <ScrollView 
-              style={styles.scrollView}
-              showsVerticalScrollIndicator={true}
-              nestedScrollEnabled={true}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: spacing.md + spacing.lg + (insets?.bottom || 0) }
-              ]}
-            >
-
-              
-              {renderCountrySection()}
-            </ScrollView>
-          </View>
+          {/* Filter Content */}
+          <BottomSheetScrollView 
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={true}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: spacing.lg + (insets?.bottom || 0) }
+            ]}
+          >
+            {renderCountrySection()}
+          </BottomSheetScrollView>
 
           {/* Footer Actions */}
           <View style={[styles.footer, { paddingBottom: spacing.md + (insets?.bottom || 0) }]}>
             <TouchableOpacity
               style={styles.resetButton}
               onPress={handleReset}
+              accessibilityRole="button"
+              accessibilityLabel="Reset filters to previous selection"
             >
               <Text style={styles.resetButtonText}>Reset</Text>
             </TouchableOpacity>
@@ -439,51 +515,60 @@ const FilterModal = ({
               style={styles.applyButton}
               onPress={handleApply}
               disabled={false}
+              accessibilityRole="button"
+              accessibilityLabel={`Apply ${getTotalFilters()} filter${getTotalFilters() !== 1 ? 's' : ''}`}
             >
               <Text style={styles.applyButtonText}>
                 Apply Filters ({getTotalFilters()})
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
-      </Modal>
+        </BottomSheetView>
+      </BottomSheetModal>
     </ErrorBoundary>
   );
-};
+});
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modal: {
+  bottomSheetBackground: {
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    width: '90%',
-    maxHeight: '80%',
-    ...shadows.large,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.md,
+  handleContainer: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  title: {
-    ...typography.h2, // Uses design token fontFamily
+  handleBar: {
+    width: spacing.xl * 2,
+    height: spacing.xs / 2,
+    backgroundColor: colors.border,
+    borderRadius: borderRadius.pill,
+    alignSelf: 'center',
+    marginBottom: spacing.sm,
+  },
+  handleContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  handleTitle: {
+    ...typography.h2,
     color: colors.text.primary,
   },
   closeButton: {
     padding: spacing.sm,
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: spacing.xl + spacing.xs,
+    minHeight: spacing.xl + spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  content: {
+    flex: 1,
+    backgroundColor: colors.card,
   },
   activeFiltersContainer: {
     flexDirection: 'row',
@@ -529,17 +614,6 @@ const styles = StyleSheet.create({
     ...typography.caption, // Uses design token fontFamily
     color: colors.text.secondary,
     marginBottom: spacing.xs,
-  },
-  contentWrapper: {
-    backgroundColor: colors.card,
-    // height is set dynamically via inline style to maintain fixed modal size
-  },
-  currentFiltersSummaryHidden: {
-    height: 0,
-    padding: 0,
-    margin: 0,
-    overflow: 'hidden',
-    opacity: 0,
   },
   scrollView: {
     flex: 1,
@@ -649,5 +723,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+FilterModal.displayName = 'FilterModal';
 
 export default FilterModal;
