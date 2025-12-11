@@ -30,7 +30,7 @@ const PopularMatches = ({ onMatchPress, onMatchesLoaded }) => {
   const { isMatchInItinerary } = useItineraries();
   const { user } = useAuth();
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:30',message:'Initial hooks called',data:{matchesLength:matches.length,loading,isRecommended,refreshing,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/23441687-a102-405f-bf20-3f2e950047b0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PopularMatches.js:30',message:'Initial hooks called',data:{matchesLength:matches.length,loading,isRecommended,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
 
   const fetchMatches = async (retryCount = 0, forceRefresh = false) => {

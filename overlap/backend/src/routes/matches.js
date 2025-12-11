@@ -3219,6 +3219,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             
             finalMatches = transformedMatches;
         }
+        }
         
         // Cache the recommended matches for future requests (daily cache)
         recommendedMatchesCache.set(cacheKey, finalMatches);
