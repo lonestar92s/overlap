@@ -384,7 +384,9 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    // Clamp a to [0, 1] to avoid NaN from floating point precision issues
+    const clampedA = Math.min(1, Math.max(0, a));
+    const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
     return R * c;
 }
 
@@ -396,7 +398,9 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    // Clamp a to [0, 1] to avoid NaN from floating point precision issues
+    const clampedA = Math.min(1, Math.max(0, a));
+    const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
     return R * c; // Distance in kilometers
 }
 
@@ -2991,30 +2995,64 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     const match = rec.match || {};
                     const matchId = rec.matchId || match.id || match.fixture?.id;
                     
-                    // Get venue data
-                    const venueId = match.fixture?.venue?.id || match.venue?.id;
+                    // Get venue data with better fallbacks
+                    const venueId = match.fixture?.venue?.id || match.venue?.id || match.venueId;
                     const venueData = venueId ? await venueService.getVenueByApiId(venueId) : null;
                     
-                    const venueName = match.fixture?.venue?.name || match.venue?.name || venueData?.name || 'Unknown Venue';
-                    const venueCity = venueData?.city || match.fixture?.venue?.city || match.venue?.city || null;
-                    const venueCountry = venueData?.country || match.fixture?.venue?.country || match.venue?.country || 'Unknown';
+                    // Better venue name extraction with more fallbacks
+                    const venueName = match.fixture?.venue?.name || 
+                                    match.venue?.name || 
+                                    (typeof match.venue === 'string' ? match.venue : null) ||
+                                    venueData?.name || 
+                                    'Unknown Venue';
+                    
+                    const venueCity = venueData?.city || 
+                                    match.fixture?.venue?.city || 
+                                    match.venue?.city || 
+                                    null;
+                    
+                    const venueCountry = venueData?.country || 
+                                       match.fixture?.venue?.country || 
+                                       match.venue?.country || 
+                                       'Unknown';
+                    
                     const venueCoordinates = venueData?.coordinates || 
                                             venueData?.location?.coordinates || 
                                             (venueData?.location?.type === 'Point' ? venueData.location.coordinates : null) ||
                                             match.fixture?.venue?.coordinates ||
                                             match.venue?.coordinates;
                     
-                    // Get team data
-                    const homeTeam = match.teams?.home?.id 
-                        ? await Team.findOne({ apiId: match.teams.home.id.toString() })
+                    // Better date extraction with more fallbacks
+                    const matchDate = match.fixture?.date || 
+                                    match.date || 
+                                    match.fixtureDate ||
+                                    null;
+                    
+                    // Better team name extraction with more fallbacks
+                    const homeTeamName = match.teams?.home?.name || 
+                                       (typeof match.teams?.home === 'string' ? match.teams.home : null) ||
+                                       match.homeTeam ||
+                                       'TBD';
+                    
+                    const awayTeamName = match.teams?.away?.name || 
+                                       (typeof match.teams?.away === 'string' ? match.teams.away : null) ||
+                                       match.awayTeam ||
+                                       'TBD';
+                    
+                    const homeTeamId = match.teams?.home?.id || match.homeTeamId;
+                    const awayTeamId = match.teams?.away?.id || match.awayTeamId;
+                    
+                    // Get team data from database if we have IDs
+                    const homeTeam = homeTeamId 
+                        ? await Team.findOne({ apiId: homeTeamId.toString() })
                         : null;
                     
                     finalMatches.push({
                         id: matchId,
                         fixture: {
                             id: matchId,
-                            date: match.fixture?.date || match.date,
-                            status: match.fixture?.status || {},
+                            date: matchDate,
+                            status: match.fixture?.status || match.status || {},
                             venue: {
                                 id: venueId || null,
                                 name: venueName,
@@ -3025,21 +3063,21 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                         },
                         teams: {
                             home: {
-                                id: match.teams?.home?.id,
-                                name: match.teams?.home?.name,
-                                logo: match.teams?.home?.logo,
+                                id: homeTeamId || null,
+                                name: homeTeamName,
+                                logo: match.teams?.home?.logo || match.homeTeamLogo || null,
                                 ticketingUrl: homeTeam?.ticketingUrl || undefined
                             },
                             away: {
-                                id: match.teams?.away?.id,
-                                name: match.teams?.away?.name,
-                                logo: match.teams?.away?.logo
+                                id: awayTeamId || null,
+                                name: awayTeamName,
+                                logo: match.teams?.away?.logo || match.awayTeamLogo || null
                             }
                         },
                         league: {
-                            id: match.league?.id,
-                            name: match.league?.name,
-                            logo: match.league?.logo
+                            id: match.league?.id || match.leagueId || null,
+                            name: match.league?.name || match.leagueName || 'Unknown League',
+                            logo: match.league?.logo || match.leagueLogo || null
                         },
                         score: match.score || {},
                         recommendationScore: rec.score || 0,
@@ -3050,6 +3088,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     });
                 } catch (error) {
                     console.log(`⚠️ Error transforming trip recommendation ${rec.matchId}: ${error.message}`);
+                    console.log(`⚠️ Match data structure:`, JSON.stringify(match, null, 2));
                 }
             }
             

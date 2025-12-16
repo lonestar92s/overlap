@@ -83,7 +83,7 @@ export const SubscriptionProvider = ({ children }) => {
         hasLeagueAccess,
         getSubscriptionInfo,
         getUpgradeMessage,
-        tierAccess
+        tierAccess: defaultTierAccess
     };
 
     return (

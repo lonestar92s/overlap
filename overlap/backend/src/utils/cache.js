@@ -32,6 +32,11 @@ class Cache {
         this.cache.clear();
     }
 
+    // Delete a specific key from the cache
+    delete(key) {
+        return this.cache.delete(key);
+    }
+
     // Remove expired entries
     cleanup() {
         const now = Date.now();
