@@ -835,6 +835,14 @@ router.put('/tier-access/:tier', adminAuth, async (req, res) => {
             restrictedLeagues
         );
         
+        // Refresh tier access cache to reflect changes immediately
+        await subscriptionService.refreshTierAccess();
+        
+        // Clear matches cache since league access restrictions have changed
+        // This ensures users see updated results immediately
+        matchesCache.clear();
+        console.log('🗑️ Cleared matches cache after tier access update');
+        
         res.json({
             success: true,
             message: `Successfully updated ${tier} tier access`,

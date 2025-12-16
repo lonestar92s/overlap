@@ -1646,7 +1646,9 @@ const MapResultsScreen = ({ navigation, route }) => {
     try {
       let response;
       
-      if (hasWho || hasWhoFilters) {
+      // FIXED: Only use searchAggregatedMatches if filters are actually selected
+      // If filters were removed, use searchMatchesByBounds which searches all relevant leagues
+      if (hasWhoFilters) {
         // Use searchAggregatedMatches when Who filters are present
         const apiParams = {
           competitions: leagueIds,
@@ -1693,7 +1695,16 @@ const MapResultsScreen = ({ navigation, route }) => {
 
       if (response.success) {
         const newMatches = Array.isArray(response.data) ? response.data : [];
-        setMatches(newMatches);
+        
+        // FIXED: When filters are removed and we're doing a location-based search,
+        // merge matches instead of replacing to preserve existing matches
+        if (hasWhoFilters) {
+          // Filters are active - replace matches (filtered search)
+          setMatches(newMatches);
+        } else {
+          // No filters - merge matches to preserve existing results
+          updateMatchesEfficiently(newMatches);
+        }
         setLastSuccessfulRequestId(requestId);
         setOriginalSearchBounds(response.bounds || bounds);
         
@@ -2173,7 +2184,10 @@ const MapResultsScreen = ({ navigation, route }) => {
     const teamIds = (selectedFilters?.teams || []).map(id => String(id));
     const hasWhoFilters = leagueIds.length > 0 || teamIds.length > 0;
     
-    if (hasWho || hasWhoFilters) {
+    // FIXED: Only use performSearchWithFilters if filters are actually selected
+    // If filters were removed, use performBoundsSearch which will search all relevant leagues
+    // and merge results with existing matches
+    if (hasWhoFilters) {
       // Use performSearchWithFilters which handles Who-based searches
       await performSearchWithFilters(selectedFilters);
     } else {

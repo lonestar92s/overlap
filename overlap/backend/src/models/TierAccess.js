@@ -28,3 +28,6 @@ tierAccessSchema.index({ tier: 1 });
 
 module.exports = mongoose.model('TierAccess', tierAccessSchema);
 
+
+
+

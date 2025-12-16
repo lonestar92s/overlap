@@ -70,10 +70,17 @@ router.get('/', authenticateToken, async (req, res) => {
             subscriptionRequired: !(await subscriptionService.hasLeagueAccess(user, league.apiId))
         })));
 
+        // Get restricted leagues for the user's tier
+        const userTier = user?.subscription?.tier || 'freemium';
+        const tierConfig = await subscriptionService.getTierAccessConfig();
+        const userTierConfig = tierConfig[userTier] || tierConfig.freemium;
+        const restrictedLeagues = userTierConfig.restrictedLeagues || [];
+
         res.json({
             success: true,
             data: formattedLeagues,
-            userTier: user?.subscription?.tier || 'freemium'
+            userTier: userTier,
+            restrictedLeagues: restrictedLeagues
         });
     } catch (error) {
         console.error('Error fetching leagues:', error);

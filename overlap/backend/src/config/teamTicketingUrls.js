@@ -21,12 +21,10 @@ const PREMIER_LEAGUE_TICKETING = {
     "Everton FC": "https://www.evertonfc.com/tickets",
     "Fulham FC": "https://www.fulhamfc.com/tickets",
     "Liverpool FC": "https://www.liverpoolfc.com/tickets",
-    "Luton Town FC": "https://www.lutontown.co.uk/tickets",
     "Manchester City FC": "https://www.mancity.com/tickets",
     "Manchester United FC": "https://www.manutd.com/en/tickets-and-hospitality",
     "Newcastle United FC": "https://www.nufc.co.uk/tickets",
     "Nottingham Forest FC": "https://www.nottinghamforest.co.uk/tickets",
-    "Sheffield United FC": "https://www.sufc.co.uk/tickets",
     "Tottenham Hotspur FC": "https://www.tottenhamhotspur.com/tickets",
     "West Ham United FC": "https://www.whufc.com/tickets",
     "Wolverhampton Wanderers FC": "https://www.wolves.co.uk/tickets"

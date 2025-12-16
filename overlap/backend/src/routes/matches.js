@@ -586,11 +586,15 @@ function detectCountryFromBounds(bounds) {
     };
 }
 
-// Helper function to filter leagues by geographic relevance
-async function getRelevantLeagueIds(bounds) {
+// Helper function to filter leagues by geographic relevance and subscription tier
+async function getRelevantLeagueIds(bounds, user = null) {
     // Calculate center point of search bounds
     const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
     const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+
+    // Get accessible leagues based on subscription tier
+    const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
+    const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
 
     // Get all active leagues from MongoDB
     const allLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
@@ -658,14 +662,17 @@ async function getRelevantLeagueIds(bounds) {
         }
 
         if (shouldInclude) {
-            const leagueId = parseInt(league.apiId);
-            if (!isNaN(leagueId)) {
-                relevantLeagueIds.push(leagueId);
+            // Check if user has access to this league
+            if (accessibleLeagueIdsSet.has(league.apiId)) {
+                const leagueId = parseInt(league.apiId);
+                if (!isNaN(leagueId)) {
+                    relevantLeagueIds.push(leagueId);
+                }
             }
         }
     }
 
-    // Fallback: if no relevant leagues found, include top European leagues plus international
+    // Fallback: if no relevant leagues found, include top European leagues plus international (filtered by subscription)
     if (relevantLeagueIds.length === 0) {
         const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
         const fallbackLeagues = await League.find({ 
@@ -673,7 +680,13 @@ async function getRelevantLeagueIds(bounds) {
             isActive: true 
         }).select('apiId').lean();
         
-        return fallbackLeagues.map(l => parseInt(l.apiId)).filter(id => !isNaN(id));
+        // Filter fallback leagues by subscription access
+        const filteredFallback = fallbackLeagues
+            .filter(l => accessibleLeagueIdsSet.has(l.apiId))
+            .map(l => parseInt(l.apiId))
+            .filter(id => !isNaN(id));
+        
+        return filteredFallback;
     }
 
     return relevantLeagueIds;
@@ -874,6 +887,12 @@ router.get('/search', async (req, res) => {
         if (hasBounds && dateFrom && dateTo && !hasCompetitionsOrTeams && !hasTeamMatchup) {
             // Location-only search: use geographic filtering to find relevant leagues
             
+            // Get user for subscription filtering (optional authentication)
+            let user = null;
+            if (req.user) {
+                user = await User.findById(req.user.id);
+            }
+            
             // PHASE 1: Buffer Zones - Expand bounds by 30% to prevent gaps when panning
             const originalBounds = {
                 northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
@@ -1067,9 +1086,19 @@ router.get('/search', async (req, res) => {
                         matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
                     }
                     
-                    // Filter cached matches by original bounds (not the buffered bounds used for caching)
-                    // This ensures we only return matches within the user's requested viewport
+                    // Filter cached matches by original bounds and subscription tier
+                    // This ensures we only return matches within the user's requested viewport and accessible leagues
+                    const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
+                    const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
+                    
                     const filteredByOriginalBounds = matchesWithCoords.filter(match => {
+                        // First check subscription access
+                        const leagueId = match.league?.id?.toString() || match.fixture?.league?.id?.toString();
+                        if (leagueId && !accessibleLeagueIdsSet.has(leagueId)) {
+                            return false; // User doesn't have access to this league
+                        }
+                        
+                        // Then check bounds
                         const coords = match.fixture?.venue?.coordinates;
                         if (!coords || !Array.isArray(coords) || coords.length !== 2) {
                             return false;
@@ -1110,8 +1139,8 @@ router.get('/search', async (req, res) => {
             // Cache miss or invalidated - fetch fresh data
             console.log(`🔍 Location-only search: Cache miss for ${searchCountry || 'unknown'}, ${dateFrom} to ${dateTo} - fetching from API`);
             
-            // Get relevant league IDs using geographic filtering (similar to /leagues/relevant)
-            const majorLeagueIds = await getRelevantLeagueIds(bounds);
+            // Get relevant league IDs using geographic filtering and subscription tier (similar to /leagues/relevant)
+            const majorLeagueIds = await getRelevantLeagueIds(bounds, user);
             
             if (majorLeagueIds.length === 0) {
                 console.log('⚠️ No relevant leagues found after filtering, using fallback');
@@ -1192,11 +1221,15 @@ router.get('/search', async (req, res) => {
             console.log(`📊 After deduplication: ${uniqueFixtures.length} unique fixtures`);
             console.log(`📊 Unique fixture IDs:`, uniqueFixtures.map(f => f.fixture?.id).slice(0, 20).join(', '));
 
-            // Transform and filter by bounds
+            // Transform and filter by bounds and subscription tier
             const transformedMatches = [];
             let matchesWithoutCoords = 0;
             let matchesFilteredOut = 0;
             let matchesByLeague = {}; // Track matches by league for logging
+            
+            // Get accessible leagues for subscription filtering
+            const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
+            const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
             
             for (const match of uniqueFixtures) {
                 const leagueId = match.league?.id;
@@ -1204,6 +1237,14 @@ router.get('/search', async (req, res) => {
                     matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
                 }
                 matchesByLeague[leagueId].total++;
+                
+                // Check subscription access first - skip if user doesn't have access
+                const leagueIdStr = leagueId?.toString();
+                if (leagueIdStr && !accessibleLeagueIdsSet.has(leagueIdStr)) {
+                    matchesFilteredOut++;
+                    matchesByLeague[leagueId].filteredOut++;
+                    continue; // Skip this match - user doesn't have access to this league
+                }
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
                 if (venue?.id) {
@@ -1558,7 +1599,14 @@ router.get('/search', async (req, res) => {
             // PHASE 1: Return ALL matches with valid coordinates (buffer zone included)
             // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern)
             // This allows markers to appear smoothly as user pans without gaps
+            // Also filter by subscription tier to ensure only accessible leagues are returned
             const filteredMatches = transformedMatches.filter(match => {
+                // Check subscription access
+                const matchLeagueId = match.league?.id?.toString() || match.fixture?.league?.id?.toString();
+                if (matchLeagueId && !accessibleLeagueIdsSet.has(matchLeagueId)) {
+                    return false; // User doesn't have access to this league
+                }
+                
                 const coords = match.fixture?.venue?.coordinates;
                 
                 // Only filter out matches WITHOUT valid coordinates

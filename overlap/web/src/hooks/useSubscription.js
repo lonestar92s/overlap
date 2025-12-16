@@ -10,7 +10,8 @@ export const SubscriptionProvider = ({ children }) => {
     const [restrictedLeagues, setRestrictedLeagues] = useState([]); // Will be set based on user tier
     const [loading, setLoading] = useState(true);
 
-    const tierAccess = {
+    // Default tier access (fallback only)
+    const defaultTierAccess = {
         freemium: {
             restrictedLeagues: ["40", "41"], // Championship and League One are restricted for freemium
             description: "Access to Premier League and international competitions only"
@@ -29,7 +30,7 @@ export const SubscriptionProvider = ({ children }) => {
         const fetchUserSubscription = async () => {
             if (!user) {
                 setSubscriptionTier("freemium");
-                setRestrictedLeagues(tierAccess.freemium.restrictedLeagues);
+                setRestrictedLeagues(defaultTierAccess.freemium.restrictedLeagues);
                 setLoading(false);
                 return;
             }
@@ -46,12 +47,14 @@ export const SubscriptionProvider = ({ children }) => {
                 if (data.success) {
                     const userTier = data.userTier || "freemium";
                     setSubscriptionTier(userTier);
-                    setRestrictedLeagues(tierAccess[userTier]?.restrictedLeagues || tierAccess.freemium.restrictedLeagues);
+                    // Use restrictedLeagues from backend response, fallback to default if not provided
+                    const backendRestrictedLeagues = data.restrictedLeagues || defaultTierAccess[userTier]?.restrictedLeagues || defaultTierAccess.freemium.restrictedLeagues;
+                    setRestrictedLeagues(backendRestrictedLeagues);
                 }
             } catch (error) {
                 console.error("Error fetching user subscription:", error);
                 setSubscriptionTier("freemium");
-                setRestrictedLeagues(tierAccess.freemium.restrictedLeagues);
+                setRestrictedLeagues(defaultTierAccess.freemium.restrictedLeagues);
             }
             
             setLoading(false);
@@ -66,7 +69,7 @@ export const SubscriptionProvider = ({ children }) => {
     };
 
     const getSubscriptionInfo = () => {
-        return tierAccess[subscriptionTier] || tierAccess.freemium;
+        return defaultTierAccess[subscriptionTier] || defaultTierAccess.freemium;
     };
 
     const getUpgradeMessage = (leagueId) => {
