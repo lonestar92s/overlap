@@ -1551,9 +1551,27 @@ class ApiService {
         
         const url = `${this.baseURL}/matches/search?${params.toString()}`;
         const networkStartTime = performance.now();
+        
+        // Get auth token for subscription filtering
+        let headers = {};
+        try {
+          const token = await getAuthToken();
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+        } catch (error) {
+          // Token not available - user will be treated as freemium
+          if (__DEV__) {
+            console.warn('⚠️ [API] No auth token available for match search - user will be treated as freemium');
+          }
+        }
+        
         // Location-only searches can take longer due to multiple league API calls with retries
         // Increased timeout to 60 seconds to accommodate backend processing
-        const response = await this.fetchWithTimeout(url, { method: 'GET' }, 60000, signal);
+        const response = await this.fetchWithTimeout(url, { 
+          method: 'GET',
+          headers: headers
+        }, 60000, signal);
         const networkEndTime = performance.now();
         const networkDuration = networkEndTime - networkStartTime;
         

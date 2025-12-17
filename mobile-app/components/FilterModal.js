@@ -421,7 +421,6 @@ const FilterModal = forwardRef(({
 
   // Log when component renders
   if (__DEV__) {
-    console.log('🟣 [FILTER_MODAL] Component rendering, visible:', visible);
   }
 
   return (
