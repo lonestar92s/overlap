@@ -526,7 +526,7 @@ function detectCountryFromBounds(bounds) {
     let minDistance = Infinity;
     
     // Increased threshold to 800km to catch more border regions
-    const DISTANCE_THRESHOLD = 800;
+    const DISTANCE_THRESHOLD = 750;
     
     // NEW: Track ALL nearby countries within 400km for border region handling
     // This fixes issues where border cities are closer to a neighboring country's center
