@@ -1584,10 +1584,10 @@ router.get('/search', async (req, res) => {
             }
             
             console.log(`🔍 [MATCH FILTER] Matches filtered out by subscription: ${matchesFilteredOut}`);
-            const leagueStats = Object.entries(matchesByLeague).slice(0, 10).map(([id, stats]) => 
+            const leagueStatsString = Object.entries(matchesByLeague).slice(0, 10).map(([id, stats]) => 
                 `League ${id}: ${stats.total} total, ${stats.filteredOut} filtered out, ${stats.transformed} transformed`
             ).join(' | ');
-            console.log(`🔍 [MATCH FILTER] Matches by league: ${leagueStats}`);
+            console.log(`🔍 [MATCH FILTER] Matches by league: ${leagueStatsString}`);
             
             console.log(`📊 Location-only search filtering stats: ${transformedMatches.length} included, ${matchesWithoutCoords} without coordinates, ${matchesFilteredOut} filtered out (outside bounds)`);
             console.log(`📊 Matches by league breakdown:`, JSON.stringify(matchesByLeague, null, 2));
