@@ -609,9 +609,23 @@ async function getRelevantLeagueIds(bounds, user = null) {
     const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
 
     const relevantLeagueIds = [];
+    
+    // Track FA Cup specifically for debugging
+    let faCupFound = false;
+    let faCupShouldInclude = false;
+    let faCupHasAccess = false;
+    let faCupFilterReason = '';
 
     for (const league of allLeagues) {
         let shouldInclude = false;
+        let filterReason = '';
+
+        // Track FA Cup (ID 45) specifically
+        const isFACup = league.apiId === '45' || league.apiId === 45 || league.name === 'FA Cup';
+        if (isFACup) {
+            faCupFound = true;
+            console.log(`🔍 [FA CUP DEBUG] Found FA Cup: apiId=${league.apiId} (type: ${typeof league.apiId}), name=${league.name}, country=${league.country}`);
+        }
 
         // Always include international competitions
         if (league.country === 'International' || league.country === 'Europe' || 
@@ -619,6 +633,9 @@ async function getRelevantLeagueIds(bounds, user = null) {
             league.name.includes('World Cup') || league.name.includes('European Championship') ||
             league.name.includes('Nations League') || league.name.includes('Friendlies')) {
             shouldInclude = true;
+            if (isFACup) {
+                filterReason = 'International competition check';
+            }
         } else {
             // Get country coordinates if available
             const countryCoords = COUNTRY_COORDS[league.country];
@@ -643,6 +660,13 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
                 if (distance <= maxDistance) {
                     shouldInclude = true;
+                    if (isFACup) {
+                        filterReason = `Distance check: ${distance.toFixed(2)}km <= ${maxDistance}km`;
+                    }
+                } else {
+                    if (isFACup) {
+                        filterReason = `Distance check FAILED: ${distance.toFixed(2)}km > ${maxDistance}km`;
+                    }
                 }
             } else {
                 // For countries without coordinates, use country matching based on bounds
@@ -661,19 +685,72 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
                 if (countryMatches[league.country]) {
                     shouldInclude = true;
+                    if (isFACup) {
+                        filterReason = `Country match check: ${league.country}`;
+                    }
+                } else {
+                    if (isFACup) {
+                        filterReason = `Country match check FAILED: ${league.country} not in countryMatches`;
+                    }
                 }
             }
         }
 
         if (shouldInclude) {
             // Check if user has access to this league
-            if (accessibleLeagueIdsSet.has(league.apiId)) {
+            const leagueApiIdStr = String(league.apiId);
+            const hasAccess = accessibleLeagueIdsSet.has(leagueApiIdStr);
+            
+            if (isFACup) {
+                faCupShouldInclude = true;
+                faCupHasAccess = hasAccess;
+                console.log(`🔍 [FA CUP DEBUG] Geographic check PASSED: ${filterReason}`);
+                console.log(`🔍 [FA CUP DEBUG] Checking subscription access: apiId="${leagueApiIdStr}" (type: ${typeof leagueApiIdStr})`);
+                console.log(`🔍 [FA CUP DEBUG] Accessible leagues set size: ${accessibleLeagueIdsSet.size}`);
+                console.log(`🔍 [FA CUP DEBUG] Has "45" in set? ${accessibleLeagueIdsSet.has('45')}`);
+                console.log(`🔍 [FA CUP DEBUG] Has access? ${hasAccess}`);
+            }
+            
+            if (hasAccess) {
                 const leagueId = parseInt(league.apiId);
                 if (!isNaN(leagueId)) {
                     relevantLeagueIds.push(leagueId);
+                    if (isFACup) {
+                        console.log(`✅ [FA CUP DEBUG] FA Cup (ID ${leagueId}) ADDED to relevantLeagueIds`);
+                    }
+                } else {
+                    if (isFACup) {
+                        console.log(`❌ [FA CUP DEBUG] FA Cup apiId "${league.apiId}" could not be parsed as integer`);
+                    }
+                }
+            } else {
+                if (isFACup) {
+                    faCupFilterReason = `Subscription access DENIED: "${leagueApiIdStr}" not in accessibleLeagueIdsSet`;
+                    console.log(`❌ [FA CUP DEBUG] ${faCupFilterReason}`);
                 }
             }
+        } else {
+            if (isFACup) {
+                faCupFilterReason = `Geographic check FAILED: ${filterReason}`;
+                console.log(`❌ [FA CUP DEBUG] ${faCupFilterReason}`);
+            }
         }
+    }
+    
+    // Log FA Cup summary
+    if (faCupFound) {
+        console.log(`\n📊 [FA CUP SUMMARY]`);
+        console.log(`   Found in database: ${faCupFound}`);
+        console.log(`   Geographic check passed: ${faCupShouldInclude}`);
+        console.log(`   Subscription access: ${faCupHasAccess}`);
+        console.log(`   Final status: ${faCupShouldInclude && faCupHasAccess ? '✅ INCLUDED' : '❌ FILTERED OUT'}`);
+        if (faCupFilterReason) {
+            console.log(`   Filter reason: ${faCupFilterReason}`);
+        }
+        console.log(`   Relevant league IDs count: ${relevantLeagueIds.length}`);
+        console.log(`   FA Cup in relevantLeagueIds? ${relevantLeagueIds.includes(45)}\n`);
+    } else {
+        console.log(`⚠️ [FA CUP DEBUG] FA Cup (ID 45) NOT FOUND in allLeagues from database`);
     }
 
     // Fallback: if no relevant leagues found, include top European leagues plus international (filtered by subscription)
@@ -3017,8 +3094,13 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                                 hasAwayTeam: !!match.teams?.away,
                                 hasLeague: !!match.league,
                                 hasFixture: !!match.fixture,
-                                hasVenue: !!match.venue
-                            }
+                                hasVenue: !!match.venue,
+                                homeTeamId: match.teams?.home?.id || match.homeTeamId,
+                                awayTeamId: match.teams?.away?.id || match.awayTeamId,
+                                leagueId: match.league?.id || match.leagueId,
+                                venueId: match.fixture?.venue?.id || match.venue?.id || match.venueId
+                            },
+                            rawMatch: JSON.stringify(match, null, 2).substring(0, 500) // First 500 chars for debugging
                         });
                     }
                     
@@ -3061,13 +3143,30 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     const awayTeamId = match.teams?.away?.id || match.awayTeamId;
                     
                     // Get team data from database if we have IDs (even if we have names, to get logos/ticketing)
-                    const homeTeam = homeTeamId 
-                        ? await Team.findOne({ apiId: homeTeamId.toString() })
-                        : null;
+                    let homeTeam = null;
+                    let awayTeam = null;
                     
-                    const awayTeam = awayTeamId 
-                        ? await Team.findOne({ apiId: awayTeamId.toString() })
-                        : null;
+                    if (homeTeamId) {
+                        try {
+                            homeTeam = await Team.findOne({ apiId: homeTeamId.toString() });
+                            if (!homeTeam && __DEV__) {
+                                console.log(`⚠️ Team lookup failed for homeTeamId: ${homeTeamId}`);
+                            }
+                        } catch (teamError) {
+                            console.log(`⚠️ Error looking up home team ${homeTeamId}: ${teamError.message}`);
+                        }
+                    }
+                    
+                    if (awayTeamId) {
+                        try {
+                            awayTeam = await Team.findOne({ apiId: awayTeamId.toString() });
+                            if (!awayTeam && __DEV__) {
+                                console.log(`⚠️ Team lookup failed for awayTeamId: ${awayTeamId}`);
+                            }
+                        } catch (teamError) {
+                            console.log(`⚠️ Error looking up away team ${awayTeamId}: ${teamError.message}`);
+                        }
+                    }
                     
                     // Better team name extraction with database lookup fallback
                     let homeTeamName = match.teams?.home?.name || 
@@ -3078,10 +3177,16 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     // If we don't have a name but have a team in database, use that
                     if (!homeTeamName && homeTeam) {
                         homeTeamName = homeTeam.name;
+                        console.log(`✅ Looked up home team name from DB: ${homeTeamName} (ID: ${homeTeamId})`);
+                    } else if (!homeTeamName && homeTeamId) {
+                        console.log(`⚠️ Home team ID ${homeTeamId} exists but not found in database`);
                     }
                     // Final fallback
                     if (!homeTeamName) {
                         homeTeamName = 'TBD';
+                        if (homeTeamId) {
+                            console.log(`⚠️ Using TBD for home team despite having ID: ${homeTeamId}`);
+                        }
                     }
                     
                     let awayTeamName = match.teams?.away?.name || 
@@ -3092,10 +3197,16 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     // If we don't have a name but have a team in database, use that
                     if (!awayTeamName && awayTeam) {
                         awayTeamName = awayTeam.name;
+                        console.log(`✅ Looked up away team name from DB: ${awayTeamName} (ID: ${awayTeamId})`);
+                    } else if (!awayTeamName && awayTeamId) {
+                        console.log(`⚠️ Away team ID ${awayTeamId} exists but not found in database`);
                     }
                     // Final fallback
                     if (!awayTeamName) {
                         awayTeamName = 'TBD';
+                        if (awayTeamId) {
+                            console.log(`⚠️ Using TBD for away team despite having ID: ${awayTeamId}`);
+                        }
                     }
                     
                     // Get league ID and lookup from database if name is missing
@@ -3108,6 +3219,9 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                             const leagueFromDb = await League.findOne({ apiId: leagueId.toString() });
                             if (leagueFromDb) {
                                 leagueName = leagueFromDb.name;
+                                console.log(`✅ Looked up league name from DB: ${leagueName} (ID: ${leagueId})`);
+                            } else {
+                                console.log(`⚠️ League ID ${leagueId} exists but not found in database`);
                             }
                         } catch (leagueLookupError) {
                             console.log(`⚠️ Error looking up league ${leagueId}: ${leagueLookupError.message}`);
@@ -3117,6 +3231,9 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     // Final fallback for league name
                     if (!leagueName) {
                         leagueName = 'Unknown League';
+                        if (leagueId) {
+                            console.log(`⚠️ Using Unknown League despite having ID: ${leagueId}`);
+                        }
                     }
                     
                     finalMatches.push({
