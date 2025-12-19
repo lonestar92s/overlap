@@ -323,7 +323,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
 
   // Calculate map region to fit all matches, recommended matches, and home bases
   const mapRegion = useMemo(() => {
-    console.log('🗺️ ItineraryMapScreen - Calculating map region for matches, recommendations, and home bases:', itinerary?.matches, recommendations, itinerary?.homeBases);
+   
     
     const allCoordinates = [];
 

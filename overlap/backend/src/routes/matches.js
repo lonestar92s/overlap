@@ -3001,6 +3001,27 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     const match = rec.match || {};
                     const matchId = rec.matchId || match.id || match.fixture?.id;
                     
+                    // Log the match structure for debugging if we're missing critical data
+                    const hasTeamNames = match.teams?.home?.name && match.teams?.away?.name;
+                    const hasLeagueName = match.league?.name;
+                    const hasVenueName = match.fixture?.venue?.name || match.venue?.name;
+                    
+                    if (!hasTeamNames || !hasLeagueName || !hasVenueName) {
+                        console.log(`⚠️ Trip recommendation ${matchId} missing data:`, {
+                            hasTeamNames,
+                            hasLeagueName,
+                            hasVenueName,
+                            matchStructure: {
+                                hasTeams: !!match.teams,
+                                hasHomeTeam: !!match.teams?.home,
+                                hasAwayTeam: !!match.teams?.away,
+                                hasLeague: !!match.league,
+                                hasFixture: !!match.fixture,
+                                hasVenue: !!match.venue
+                            }
+                        });
+                    }
+                    
                     // Get venue data with better fallbacks
                     const venueId = match.fixture?.venue?.id || match.venue?.id || match.venueId;
                     const venueData = venueId ? await venueService.getVenueByApiId(venueId) : null;
@@ -3009,6 +3030,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     const venueName = match.fixture?.venue?.name || 
                                     match.venue?.name || 
                                     (typeof match.venue === 'string' ? match.venue : null) ||
+                                    (match.venue?.name ? match.venue.name : null) ||
                                     venueData?.name || 
                                     'Unknown Venue';
                     
@@ -3034,24 +3056,68 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                                     match.fixtureDate ||
                                     null;
                     
-                    // Better team name extraction with more fallbacks
-                    const homeTeamName = match.teams?.home?.name || 
-                                       (typeof match.teams?.home === 'string' ? match.teams.home : null) ||
-                                       match.homeTeam ||
-                                       'TBD';
-                    
-                    const awayTeamName = match.teams?.away?.name || 
-                                       (typeof match.teams?.away === 'string' ? match.teams.away : null) ||
-                                       match.awayTeam ||
-                                       'TBD';
-                    
+                    // Get team IDs first
                     const homeTeamId = match.teams?.home?.id || match.homeTeamId;
                     const awayTeamId = match.teams?.away?.id || match.awayTeamId;
                     
-                    // Get team data from database if we have IDs
+                    // Get team data from database if we have IDs (even if we have names, to get logos/ticketing)
                     const homeTeam = homeTeamId 
                         ? await Team.findOne({ apiId: homeTeamId.toString() })
                         : null;
+                    
+                    const awayTeam = awayTeamId 
+                        ? await Team.findOne({ apiId: awayTeamId.toString() })
+                        : null;
+                    
+                    // Better team name extraction with database lookup fallback
+                    let homeTeamName = match.teams?.home?.name || 
+                                      (typeof match.teams?.home === 'string' ? match.teams.home : null) ||
+                                      match.homeTeam ||
+                                      null;
+                    
+                    // If we don't have a name but have a team in database, use that
+                    if (!homeTeamName && homeTeam) {
+                        homeTeamName = homeTeam.name;
+                    }
+                    // Final fallback
+                    if (!homeTeamName) {
+                        homeTeamName = 'TBD';
+                    }
+                    
+                    let awayTeamName = match.teams?.away?.name || 
+                                      (typeof match.teams?.away === 'string' ? match.teams.away : null) ||
+                                      match.awayTeam ||
+                                      null;
+                    
+                    // If we don't have a name but have a team in database, use that
+                    if (!awayTeamName && awayTeam) {
+                        awayTeamName = awayTeam.name;
+                    }
+                    // Final fallback
+                    if (!awayTeamName) {
+                        awayTeamName = 'TBD';
+                    }
+                    
+                    // Get league ID and lookup from database if name is missing
+                    const leagueId = match.league?.id || match.leagueId;
+                    let leagueName = match.league?.name || match.leagueName || null;
+                    
+                    // If we don't have a league name but have an ID, look it up
+                    if (!leagueName && leagueId) {
+                        try {
+                            const leagueFromDb = await League.findOne({ apiId: leagueId.toString() });
+                            if (leagueFromDb) {
+                                leagueName = leagueFromDb.name;
+                            }
+                        } catch (leagueLookupError) {
+                            console.log(`⚠️ Error looking up league ${leagueId}: ${leagueLookupError.message}`);
+                        }
+                    }
+                    
+                    // Final fallback for league name
+                    if (!leagueName) {
+                        leagueName = 'Unknown League';
+                    }
                     
                     finalMatches.push({
                         id: matchId,
@@ -3071,18 +3137,18 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                             home: {
                                 id: homeTeamId || null,
                                 name: homeTeamName,
-                                logo: match.teams?.home?.logo || match.homeTeamLogo || null,
+                                logo: match.teams?.home?.logo || match.homeTeamLogo || homeTeam?.logo || null,
                                 ticketingUrl: homeTeam?.ticketingUrl || undefined
                             },
                             away: {
                                 id: awayTeamId || null,
                                 name: awayTeamName,
-                                logo: match.teams?.away?.logo || match.awayTeamLogo || null
+                                logo: match.teams?.away?.logo || match.awayTeamLogo || awayTeam?.logo || null
                             }
                         },
                         league: {
-                            id: match.league?.id || match.leagueId || null,
-                            name: match.league?.name || match.leagueName || 'Unknown League',
+                            id: leagueId || null,
+                            name: leagueName,
                             logo: match.league?.logo || match.leagueLogo || null
                         },
                         score: match.score || {},
@@ -3095,6 +3161,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                 } catch (error) {
                     console.log(`⚠️ Error transforming trip recommendation ${rec.matchId}: ${error.message}`);
                     console.log(`⚠️ Match data structure:`, JSON.stringify(match, null, 2));
+                    console.log(`⚠️ Error stack:`, error.stack);
                 }
             }
             

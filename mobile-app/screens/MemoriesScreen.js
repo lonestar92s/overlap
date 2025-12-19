@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -255,6 +255,25 @@ const MemoriesScreen = () => {
     return null;
   }, []);
 
+  // Check if a memory has invalid/corrupted photos (has photos array but no valid URLs)
+  const hasInvalidPhotos = useCallback((memory) => {
+    // If memory has no photos at all, it's valid (will show placeholder)
+    if (!memory.photos || memory.photos.length === 0) return false;
+    
+    // If memory has photos but none have valid URLs, it's invalid
+    const hasValidPhoto = memory.photos.some(photo => {
+      const imageUrl = getImageUrl(photo);
+      return imageUrl !== null;
+    });
+    
+    return !hasValidPhoto;
+  }, [getImageUrl]);
+
+  // Filter out memories with invalid/corrupted photos (but keep memories with no photos)
+  const validMemories = useMemo(() => {
+    return memories.filter(memory => !hasInvalidPhotos(memory));
+  }, [memories, hasInvalidPhotos]);
+
   // Render memory grid item (single square)
   const renderMemoryItem = useCallback(({ item: memory }) => {
     const hasPhotos = memory.photos && memory.photos.length > 0;
@@ -436,10 +455,10 @@ const MemoriesScreen = () => {
         {/* Memories Grid */}
         {activeTab === 'memories' && (
           <>
-            {memories.length > 0 ? (
+            {validMemories.length > 0 ? (
               <View style={styles.memoriesGridContainer}>
                 <FlatList
-                  data={memories}
+                  data={validMemories}
                   renderItem={renderMemoryItem}
                   keyExtractor={(item) => item._id || item.matchId || String(Math.random())}
                   numColumns={3}
@@ -631,12 +650,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   gridRow: {
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginBottom: spacing.sm,
   },
   memoryGridItem: {
-    width: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3, // Account for padding and gaps
+    width: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3, // Account for padding and 2 gaps between 3 items
     height: (SCREEN_WIDTH - spacing.xl * 2 - spacing.sm * 2) / 3,
+    marginRight: spacing.sm,
     position: 'relative',
     backgroundColor: colors.borderLight,
     borderRadius: borderRadius.xs,
