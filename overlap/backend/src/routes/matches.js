@@ -1242,13 +1242,52 @@ router.get('/search', async (req, res) => {
             async function fetchWithRetry(leagueId, maxRetries = 3) {
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
+                        const isFACup = leagueId === 45;
+                        const params = { league: leagueId, season: season, from: dateFrom, to: dateTo };
+                        
+                        if (isFACup) {
+                            console.log(`🔍 [FA CUP] Making API call with params:`, JSON.stringify(params));
+                        }
+                        
                         const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                            params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
+                            params: params,
                             headers: { 'x-apisports-key': API_SPORTS_KEY },
                             httpsAgent,
                             timeout: 10000
                         });
-                        console.log(`✅ League ${leagueId} API call successful (attempt ${attempt + 1}): ${response.data?.response?.length || 0} fixtures`);
+                        
+                        const fixtureCount = response.data?.response?.length || 0;
+                        console.log(`✅ League ${leagueId} API call successful (attempt ${attempt + 1}): ${fixtureCount} fixtures`);
+                        
+                        // Extra logging for FA Cup to compare with Premier League
+                        if (isFACup) {
+                            console.log(`🔍 [FA CUP DEBUG] Full API Response:`, {
+                                results: response.data?.results || 0,
+                                responseLength: fixtureCount,
+                                params: params,
+                                hasResponse: !!response.data?.response,
+                                responseType: Array.isArray(response.data?.response) ? 'array' : typeof response.data?.response,
+                                firstFixture: response.data?.response?.[0] ? {
+                                    id: response.data.response[0].fixture?.id,
+                                    leagueId: response.data.response[0].league?.id,
+                                    teams: `${response.data.response[0].teams?.home?.name} vs ${response.data.response[0].teams?.away?.name}`,
+                                    date: response.data.response[0].fixture?.date,
+                                    venue: response.data.response[0].fixture?.venue?.name,
+                                    city: response.data.response[0].fixture?.venue?.city
+                                } : null,
+                                rawResponseKeys: Object.keys(response.data || {})
+                            });
+                        }
+                        
+                        // Also log Premier League for comparison
+                        if (leagueId === 39) {
+                            console.log(`🔍 [PL DEBUG] Premier League API Response:`, {
+                                results: response.data?.results || 0,
+                                responseLength: fixtureCount,
+                                params: params
+                            });
+                        }
+                        
                         return { type: 'league', id: leagueId, data: response.data, success: true };
                     } catch (error) {
                         const isLastAttempt = attempt === maxRetries - 1;
