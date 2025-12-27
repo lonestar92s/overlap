@@ -1661,21 +1661,21 @@ class ApiService {
         }
       } else {
         // Fetch relevant leagues from backend based on bounds
-        try {
-          const relevantLeaguesFromBackend = await this.getRelevantLeaguesFromBackend(bounds);
-          // Transform backend response to match expected format
-          targetLeagues = relevantLeaguesFromBackend.map(league => ({
-            id: league.id,
-            name: league.name,
-            country: league.country || 'Unknown',
-            coords: null, // Coordinates not needed when using backend filtering
-            isInternational: league.country === 'International' || league.country === 'Europe'
-          }));
-          console.log('🔍 searchMatchesByBounds: Using leagues from backend:', targetLeagues.map(l => `${l.name} (${l.id})`));
-        } catch (error) {
-          console.warn('⚠️ Failed to fetch leagues from backend, using hardcoded fallback:', error);
-          // Fallback to local getRelevantLeagues (uses hardcoded AVAILABLE_LEAGUES)
-          targetLeagues = this.getRelevantLeagues(bounds);
+        // CRITICAL: Always use backend as source of truth - no fallback to AVAILABLE_LEAGUES
+        const relevantLeaguesFromBackend = await this.getRelevantLeaguesFromBackend(bounds);
+        // Transform backend response to match expected format
+        targetLeagues = relevantLeaguesFromBackend.map(league => ({
+          id: league.id,
+          name: league.name,
+          country: league.country || 'Unknown',
+          coords: null, // Coordinates not needed when using backend filtering
+          isInternational: league.country === 'International' || league.country === 'Europe'
+        }));
+        console.log('🔍 searchMatchesByBounds: Using leagues from backend:', targetLeagues.map(l => `${l.name} (${l.id})`));
+        
+        // If backend returns empty, log warning but don't fallback to hardcoded leagues
+        if (targetLeagues.length === 0) {
+          console.warn('⚠️ Backend returned no relevant leagues - this may indicate a configuration issue');
         }
       }
 
@@ -2560,12 +2560,11 @@ class ApiService {
       }
 
       return data.leagues || [];
-      } catch (error) {
-        console.error('Error fetching relevant leagues from backend:', error);
-        console.warn('⚠️ Falling back to hardcoded leagues - API unavailable');
-        // Fallback to local getRelevantLeagues (uses hardcoded AVAILABLE_LEAGUES) if backend fails
-        return this.getRelevantLeagues(bounds);
-      }
+    } catch (error) {
+      console.error('Error fetching relevant leagues from backend:', error);
+      // CRITICAL: Don't fallback to hardcoded leagues - throw error to ensure backend is always used
+      throw new Error(`Failed to fetch leagues from backend: ${error.message}. Backend must be available for accurate league filtering.`);
+    }
   }
 
   // Location autocomplete - uses backend endpoint which proxies LocationIQ

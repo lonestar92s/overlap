@@ -178,5 +178,177 @@ describe('API Service', () => {
       await expect(ApiService.getCurrentUser()).rejects.toThrow();
     });
   });
+
+  describe('getRelevantLeaguesFromBackend', () => {
+    it('should fetch relevant leagues with bounds', async () => {
+      const mockLeagues = [
+        { id: 39, name: 'Premier League', country: 'England' },
+        { id: 45, name: 'FA Cup', country: 'England' },
+        { id: 140, name: 'La Liga', country: 'Spain' }
+      ];
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ leagues: mockLeagues })
+      });
+
+      const bounds = {
+        northeast: { lat: 51.5, lng: -0.1 },
+        southwest: { lat: 51.4, lng: -0.2 }
+      };
+
+      const result = await ApiService.getRelevantLeaguesFromBackend(bounds);
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/leagues/relevant'),
+        expect.any(Object)
+      );
+      expect(result).toEqual(mockLeagues);
+    });
+
+    it('should fetch all leagues when no bounds provided', async () => {
+      const mockLeagues = [
+        { id: 39, name: 'Premier League', country: 'England' }
+      ];
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ leagues: mockLeagues })
+      });
+
+      const result = await ApiService.getRelevantLeaguesFromBackend(null);
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/leagues/relevant'),
+        expect.any(Object)
+      );
+      expect(result).toEqual(mockLeagues);
+    });
+
+    it('should throw error when backend fails', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ message: 'Server error' })
+      });
+
+      const bounds = {
+        northeast: { lat: 51.5, lng: -0.1 },
+        southwest: { lat: 51.4, lng: -0.2 }
+      };
+
+      await expect(
+        ApiService.getRelevantLeaguesFromBackend(bounds)
+      ).rejects.toThrow('Failed to fetch leagues from backend');
+    });
+
+    it('should throw error on network failure', async () => {
+      fetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const bounds = {
+        northeast: { lat: 51.5, lng: -0.1 },
+        southwest: { lat: 51.4, lng: -0.2 }
+      };
+
+      await expect(
+        ApiService.getRelevantLeaguesFromBackend(bounds)
+      ).rejects.toThrow('Failed to fetch leagues from backend');
+    });
+  });
+
+  describe('searchMatchesByBounds', () => {
+    it('should use location-only search endpoint when no competitions specified', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            { id: 1, fixture: { date: '2025-01-15' } }
+          ]
+        })
+      });
+
+      const result = await ApiService.searchMatchesByBounds({
+        bounds: {
+          northeast: { lat: 51.5, lng: -0.1 },
+          southwest: { lat: 51.4, lng: -0.2 }
+        },
+        dateFrom: '2025-01-01',
+        dateTo: '2025-01-31'
+      });
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/matches/search'),
+        expect.any(Object)
+      );
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should use backend leagues when using legacy path without location-only endpoint', async () => {
+      const mockBackendLeagues = [
+        { id: 39, name: 'Premier League', country: 'England' },
+        { id: 45, name: 'FA Cup', country: 'England' }
+      ];
+
+      // Mock getRelevantLeaguesFromBackend
+      ApiService.getRelevantLeaguesFromBackend = jest.fn().mockResolvedValue(mockBackendLeagues);
+
+      // Mock competition endpoint responses (one for each league)
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, data: { response: [] } })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, data: { response: [] } })
+        });
+
+      // This path is used when bounds are missing (so location-only endpoint isn't used)
+      // but competitions are also empty, triggering backend league fetch
+      const result = await ApiService.searchMatchesByBounds({
+        bounds: null, // No bounds - won't use location-only endpoint
+        dateFrom: '2025-01-01',
+        dateTo: '2025-01-31',
+        competitions: [] // Empty competitions triggers backend league fetch
+      });
+
+      expect(ApiService.getRelevantLeaguesFromBackend).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw error when backend leagues fetch fails', async () => {
+      // Mock getRelevantLeaguesFromBackend to throw
+      ApiService.getRelevantLeaguesFromBackend = jest.fn().mockRejectedValue(
+        new Error('Backend unavailable')
+      );
+
+      await expect(
+        ApiService.searchMatchesByBounds({
+          bounds: null, // No bounds - won't use location-only endpoint
+          dateFrom: '2025-01-01',
+          dateTo: '2025-01-31',
+          competitions: [] // Empty competitions triggers backend league fetch
+        })
+      ).rejects.toThrow('Backend unavailable');
+    });
+
+    it('should handle empty leagues from backend gracefully', async () => {
+      // Mock getRelevantLeaguesFromBackend to return empty array
+      ApiService.getRelevantLeaguesFromBackend = jest.fn().mockResolvedValue([]);
+
+      const result = await ApiService.searchMatchesByBounds({
+        bounds: null, // No bounds - won't use location-only endpoint
+        dateFrom: '2025-01-01',
+        dateTo: '2025-01-31',
+        competitions: [] // Empty competitions triggers backend league fetch
+      });
+
+      expect(ApiService.getRelevantLeaguesFromBackend).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual([]);
+    });
+  });
 });
 
