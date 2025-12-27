@@ -135,6 +135,7 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Track if pre-selected filters have been applied (prevent reappearance)
   const hasAppliedPreSelectedFiltersRef = useRef(false);
+  const isInitialMountRef = useRef(true);
 
   
   // Refs
@@ -154,7 +155,8 @@ const MapResultsScreen = ({ navigation, route }) => {
     updateSelectedFilters,
     filterModalVisible,
     openFilterModal,
-    closeFilterModal
+    closeFilterModal,
+    clearAllFilters
   } = useFilter();
 
   // Use the extracted filter data processor utility
@@ -468,6 +470,21 @@ const MapResultsScreen = ({ navigation, route }) => {
       updateSelectedFilters(cleanedFilters);
     }
   }, [filterData, selectedFilters, updateSelectedFilters]);
+
+  // Clear filters when starting a new search (route params change)
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    
+    // If searchParams exist, this is a new search - clear filters
+    if (route.params?.searchParams) {
+      clearAllFilters();
+      hasAppliedPreSelectedFiltersRef.current = false;
+    }
+  }, [route.params?.searchParams?.location?.city, route.params?.searchParams?.dateFrom, clearAllFilters]);
 
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {
@@ -1153,6 +1170,9 @@ const MapResultsScreen = ({ navigation, route }) => {
   };
 
   const handleSearchUpdate = async (newSearchParams) => {
+    // Clear all filters when starting a new search
+    clearAllFilters();
+    
     setSearchLoading(true);
     setSearchModalVisible(false);
     
