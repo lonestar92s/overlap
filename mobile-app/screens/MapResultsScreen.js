@@ -418,6 +418,57 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, [preSelectedFilters, filterData, updateSelectedFilters]);
 
+  // Clean up invalid filters when filterData changes after a new search
+  // This ensures filters from a previous search don't persist if they're not valid for the new results
+  useEffect(() => {
+    if (!filterData || !filterData.matchIds || filterData.matchIds.length === 0) {
+      return; // Filter data not ready yet
+    }
+    
+    // Skip cleanup if no filters are selected
+    if (!selectedFilters || 
+        (selectedFilters.countries.length === 0 && 
+         selectedFilters.leagues.length === 0 && 
+         selectedFilters.teams.length === 0)) {
+      return;
+    }
+    
+    // Validate selected filters against new filterData
+    const validCountryIds = new Set(filterData.countries.map(c => String(c.id)));
+    const validLeagueIds = new Set(filterData.leagues.map(l => String(l.id)));
+    const validTeamIds = new Set(filterData.teams.map(t => String(t.id)));
+    
+    const cleanedFilters = {
+      countries: selectedFilters.countries.filter(id => validCountryIds.has(String(id))),
+      leagues: selectedFilters.leagues.filter(id => validLeagueIds.has(String(id))),
+      teams: selectedFilters.teams.filter(id => validTeamIds.has(String(id)))
+    };
+    
+    // Only update if filters were actually cleaned (some were invalid)
+    const wasCleaned = 
+      cleanedFilters.countries.length !== selectedFilters.countries.length ||
+      cleanedFilters.leagues.length !== selectedFilters.leagues.length ||
+      cleanedFilters.teams.length !== selectedFilters.teams.length;
+    
+    if (wasCleaned) {
+      if (__DEV__) {
+        console.log('🧹 [FILTER] Cleaned invalid filters after new search:', {
+          removed: {
+            countries: selectedFilters.countries.length - cleanedFilters.countries.length,
+            leagues: selectedFilters.leagues.length - cleanedFilters.leagues.length,
+            teams: selectedFilters.teams.length - cleanedFilters.teams.length
+          },
+          remaining: {
+            countries: cleanedFilters.countries.length,
+            leagues: cleanedFilters.leagues.length,
+            teams: cleanedFilters.teams.length
+          }
+        });
+      }
+      updateSelectedFilters(cleanedFilters);
+    }
+  }, [filterData, selectedFilters, updateSelectedFilters]);
+
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {
     const screenHeight = Dimensions.get('window').height;

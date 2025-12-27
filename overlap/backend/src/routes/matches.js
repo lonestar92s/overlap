@@ -690,12 +690,32 @@ async function getRelevantLeagueIds(bounds, user = null) {
     const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
     const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
 
+    console.log(`🔍 [LEAGUE FILTER] Starting league filtering for bounds center: [${centerLat}, ${centerLng}]`);
+
     // Get accessible leagues based on subscription tier
     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
+    
+    console.log(`🔍 [LEAGUE FILTER] Accessible leagues (${accessibleLeagueIdsSet.size}):`, Array.from(accessibleLeagueIdsSet).slice(0, 20));
+    console.log(`🔍 [LEAGUE FILTER] Has "39" in accessible set? ${accessibleLeagueIdsSet.has('39')}`);
 
     // Get all active leagues from MongoDB
     const allLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
+    
+    console.log(`🔍 [LEAGUE FILTER] Total active leagues in database: ${allLeagues.length}`);
+    
+    // Check if Premier League is in database
+    const premierLeague = allLeagues.find(l => {
+        const apiIdStr = String(l.apiId);
+        const apiIdNum = parseInt(l.apiId);
+        return apiIdStr === '39' || apiIdNum === 39 || l.name === 'Premier League';
+    });
+    
+    if (premierLeague) {
+        console.log(`✅ [PL DEBUG] Premier League found in database: apiId=${premierLeague.apiId} (type: ${typeof premierLeague.apiId}), country=${premierLeague.country}, name=${premierLeague.name}`);
+    } else {
+        console.log(`❌ [PL DEBUG] Premier League (39) NOT FOUND in database`);
+    }
 
     // Define regional groupings
     const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
@@ -709,6 +729,12 @@ async function getRelevantLeagueIds(bounds, user = null) {
     let faCupShouldInclude = false;
     let faCupHasAccess = false;
     let faCupFilterReason = '';
+    
+    // Track Premier League specifically for debugging
+    let premierLeagueFound = false;
+    let premierLeagueShouldInclude = false;
+    let premierLeagueHasAccess = false;
+    let premierLeagueFilterReason = '';
 
     for (const league of allLeagues) {
         let shouldInclude = false;
@@ -720,6 +746,13 @@ async function getRelevantLeagueIds(bounds, user = null) {
             faCupFound = true;
             console.log(`🔍 [FA CUP DEBUG] Found FA Cup: apiId=${league.apiId} (type: ${typeof league.apiId}), name=${league.name}, country=${league.country}`);
         }
+        
+        // Track Premier League (ID 39) specifically
+        const isPremierLeague = league.apiId === '39' || league.apiId === 39 || league.name === 'Premier League';
+        if (isPremierLeague) {
+            premierLeagueFound = true;
+            console.log(`🔍 [PL DEBUG] Found Premier League: apiId=${league.apiId} (type: ${typeof league.apiId}), name=${league.name}, country=${league.country}`);
+        }
 
         // Always include international competitions
         if (league.country === 'International' || league.country === 'Europe' || 
@@ -727,7 +760,7 @@ async function getRelevantLeagueIds(bounds, user = null) {
             league.name.includes('World Cup') || league.name.includes('European Championship') ||
             league.name.includes('Nations League') || league.name.includes('Friendlies')) {
             shouldInclude = true;
-            if (isFACup) {
+            if (isFACup || isPremierLeague) {
                 filterReason = 'International competition check';
             }
         } else {
@@ -754,11 +787,11 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
                 if (distance <= maxDistance) {
                     shouldInclude = true;
-                    if (isFACup) {
+                    if (isFACup || isPremierLeague) {
                         filterReason = `Distance check: ${distance.toFixed(2)}km <= ${maxDistance}km`;
                     }
                 } else {
-                    if (isFACup) {
+                    if (isFACup || isPremierLeague) {
                         filterReason = `Distance check FAILED: ${distance.toFixed(2)}km > ${maxDistance}km`;
                     }
                 }
@@ -779,11 +812,11 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
                 if (countryMatches[league.country]) {
                     shouldInclude = true;
-                    if (isFACup) {
+                    if (isFACup || isPremierLeague) {
                         filterReason = `Country match check: ${league.country}`;
                     }
                 } else {
-                    if (isFACup) {
+                    if (isFACup || isPremierLeague) {
                         filterReason = `Country match check FAILED: ${league.country} not in countryMatches`;
                     }
                 }
@@ -805,6 +838,16 @@ async function getRelevantLeagueIds(bounds, user = null) {
                 console.log(`🔍 [FA CUP DEBUG] Has access? ${hasAccess}`);
             }
             
+            if (isPremierLeague) {
+                premierLeagueShouldInclude = true;
+                premierLeagueHasAccess = hasAccess;
+                console.log(`🔍 [PL DEBUG] Geographic check PASSED: ${filterReason}`);
+                console.log(`🔍 [PL DEBUG] Checking subscription access: apiId="${leagueApiIdStr}" (type: ${typeof leagueApiIdStr})`);
+                console.log(`🔍 [PL DEBUG] Accessible leagues set size: ${accessibleLeagueIdsSet.size}`);
+                console.log(`🔍 [PL DEBUG] Has "39" in set? ${accessibleLeagueIdsSet.has('39')}`);
+                console.log(`🔍 [PL DEBUG] Has access? ${hasAccess}`);
+            }
+            
             if (hasAccess) {
                 const leagueId = parseInt(league.apiId);
                 if (!isNaN(leagueId)) {
@@ -812,9 +855,15 @@ async function getRelevantLeagueIds(bounds, user = null) {
                     if (isFACup) {
                         console.log(`✅ [FA CUP DEBUG] FA Cup (ID ${leagueId}) ADDED to relevantLeagueIds`);
                     }
+                    if (isPremierLeague) {
+                        console.log(`✅ [PL DEBUG] Premier League (ID ${leagueId}) ADDED to relevantLeagueIds`);
+                    }
                 } else {
                     if (isFACup) {
                         console.log(`❌ [FA CUP DEBUG] FA Cup apiId "${league.apiId}" could not be parsed as integer`);
+                    }
+                    if (isPremierLeague) {
+                        console.log(`❌ [PL DEBUG] Premier League apiId "${league.apiId}" could not be parsed as integer`);
                     }
                 }
             } else {
@@ -822,11 +871,19 @@ async function getRelevantLeagueIds(bounds, user = null) {
                     faCupFilterReason = `Subscription access DENIED: "${leagueApiIdStr}" not in accessibleLeagueIdsSet`;
                     console.log(`❌ [FA CUP DEBUG] ${faCupFilterReason}`);
                 }
+                if (isPremierLeague) {
+                    premierLeagueFilterReason = `Subscription access DENIED: "${leagueApiIdStr}" not in accessibleLeagueIdsSet`;
+                    console.log(`❌ [PL DEBUG] ${premierLeagueFilterReason}`);
+                }
             }
         } else {
             if (isFACup) {
                 faCupFilterReason = `Geographic check FAILED: ${filterReason}`;
                 console.log(`❌ [FA CUP DEBUG] ${faCupFilterReason}`);
+            }
+            if (isPremierLeague) {
+                premierLeagueFilterReason = `Geographic check FAILED: ${filterReason}`;
+                console.log(`❌ [PL DEBUG] ${premierLeagueFilterReason}`);
             }
         }
     }
@@ -846,6 +903,22 @@ async function getRelevantLeagueIds(bounds, user = null) {
     } else {
         console.log(`⚠️ [FA CUP DEBUG] FA Cup (ID 45) NOT FOUND in allLeagues from database`);
     }
+    
+    // Log Premier League summary
+    if (premierLeagueFound) {
+        console.log(`\n📊 [PL SUMMARY]`);
+        console.log(`   Found in database: ${premierLeagueFound}`);
+        console.log(`   Geographic check passed: ${premierLeagueShouldInclude}`);
+        console.log(`   Subscription access: ${premierLeagueHasAccess}`);
+        console.log(`   Final status: ${premierLeagueShouldInclude && premierLeagueHasAccess ? '✅ INCLUDED' : '❌ FILTERED OUT'}`);
+        if (premierLeagueFilterReason) {
+            console.log(`   Filter reason: ${premierLeagueFilterReason}`);
+        }
+        console.log(`   Relevant league IDs count: ${relevantLeagueIds.length}`);
+        console.log(`   Premier League in relevantLeagueIds? ${relevantLeagueIds.includes(39)}\n`);
+    } else {
+        console.log(`⚠️ [PL DEBUG] Premier League (ID 39) NOT FOUND in allLeagues from database`);
+    }
 
     // Fallback: if no relevant leagues found, include top European leagues plus international (filtered by subscription)
     if (relevantLeagueIds.length === 0) {
@@ -863,7 +936,15 @@ async function getRelevantLeagueIds(bounds, user = null) {
         
         return filteredFallback;
     }
+    
+    // Special case: Always ensure Premier League is included for England searches if user has access
+    const isEnglandSearch = centerLat > 49 && centerLat < 59 && centerLng > -8 && centerLng < 2;
+    if (isEnglandSearch && !relevantLeagueIds.includes(39) && accessibleLeagueIdsSet.has('39')) {
+        console.log(`🔍 [PL DEBUG] Adding Premier League (39) as fallback for England search`);
+        relevantLeagueIds.push(39);
+    }
 
+    console.log(`🔍 [LEAGUE FILTER] Final relevant league IDs (${relevantLeagueIds.length}):`, relevantLeagueIds);
     return relevantLeagueIds;
 }
 
