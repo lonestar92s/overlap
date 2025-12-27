@@ -85,13 +85,13 @@ async function batchGetVenuesFromApiFootball(venueIds) {
     }
 
     if (uncachedIds.length === 0) {
-        if (__DEV__) {
+        if (process.env.NODE_ENV !== 'production') {
             console.log(`🎯 Batch API-Sports: All ${uniqueIds.length} venues found in cache`);
         }
         return venueMap;
     }
 
-    if (__DEV__) {
+    if (process.env.NODE_ENV !== 'production') {
         console.log(`🔍 Batch API-Sports: Fetching ${uncachedIds.length} venues (${venueMap.size} from cache)`);
     }
 
@@ -143,7 +143,7 @@ async function batchGetVenuesFromApiFootball(venueIds) {
         }
     }
 
-    if (__DEV__) {
+    if (process.env.NODE_ENV !== 'production') {
         const successCount = Array.from(venueMap.values()).filter(v => v != null).length;
         console.log(`✅ Batch API-Sports complete: ${successCount}/${uniqueIds.length} venues fetched successfully`);
     }
@@ -1462,7 +1462,7 @@ router.get('/search', async (req, res) => {
             });
             
             const matchesFilteredOut = uniqueFixtures.length - accessibleFixtures.length;
-            if (__DEV__ && matchesFilteredOut > 0) {
+            if (process.env.NODE_ENV !== 'production' && matchesFilteredOut > 0) {
                 console.log(`🔒 Subscription filtering: ${matchesFilteredOut} matches filtered out, ${accessibleFixtures.length} accessible`);
             }
 
@@ -1486,7 +1486,7 @@ router.get('/search', async (req, res) => {
                 venueNameLookups.map(v => [`${v.name}|${v.city}`, v])
             ).values()];
             
-            if (__DEV__) {
+            if (process.env.NODE_ENV !== 'production') {
                 console.log(`📦 Batch processing: ${uniqueVenueIds.length} unique venue IDs, ${uniqueVenueNames.length} unique name/city combinations`);
             }
 
@@ -1503,7 +1503,7 @@ router.get('/search', async (req, res) => {
             const apiVenuesMap = await batchGetVenuesFromApiFootball(uniqueVenueIds);
             
             const batchEndTime = performance.now();
-            if (__DEV__) {
+            if (process.env.NODE_ENV !== 'production') {
                 console.log(`⏱️ Batch venue fetching completed in ${(batchEndTime - batchStartTime).toFixed(2)}ms`);
             }
 
@@ -1584,9 +1584,9 @@ router.get('/search', async (req, res) => {
                                 coordinates: coords,
                                 image: venueInfo?.image || null
                             };
-                            if (__DEV__) {
-                                console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
-                            }
+                                if (process.env.NODE_ENV !== 'production') {
+                                    console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
+                                }
                         }
                     }
                 }
@@ -1828,7 +1828,7 @@ router.get('/search', async (req, res) => {
             // PHASE 5: Batch Geocode Venues Needing Coordinates
             if (venuesNeedingGeocode.length > 0) {
                 const geocodeStartTime = performance.now();
-                if (__DEV__) {
+                if (process.env.NODE_ENV !== 'production') {
                     console.log(`🔍 Batch geocoding ${venuesNeedingGeocode.length} venues needing coordinates`);
                 }
                 
@@ -1858,7 +1858,7 @@ router.get('/search', async (req, res) => {
                             country: country,
                             coordinates: coords
                         }).then(savedVenue => {
-                            if (savedVenue && __DEV__) {
+                            if (savedVenue && process.env.NODE_ENV !== 'production') {
                                 console.log(`💾 Saved geocoded venue to MongoDB: ${venueInfo.name}`);
                             }
                         }).catch(error => {
@@ -1874,7 +1874,7 @@ router.get('/search', async (req, res) => {
                 }
                 
                 const geocodeEndTime = performance.now();
-                if (__DEV__) {
+                if (process.env.NODE_ENV !== 'production') {
                     console.log(`✅ Batch geocoding complete: ${geocodedCount}/${venuesNeedingGeocode.length} venues geocoded in ${(geocodeEndTime - geocodeStartTime).toFixed(2)}ms`);
                 }
             }
@@ -3368,7 +3368,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     if (homeTeamId) {
                         try {
                             homeTeam = await Team.findOne({ apiId: homeTeamId.toString() });
-                            if (!homeTeam && __DEV__) {
+                            if (!homeTeam && process.env.NODE_ENV !== 'production') {
                                 console.log(`⚠️ Team lookup failed for homeTeamId: ${homeTeamId}`);
                             }
                         } catch (teamError) {
@@ -3379,7 +3379,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     if (awayTeamId) {
                         try {
                             awayTeam = await Team.findOne({ apiId: awayTeamId.toString() });
-                            if (!awayTeam && __DEV__) {
+                            if (!awayTeam && process.env.NODE_ENV !== 'production') {
                                 console.log(`⚠️ Team lookup failed for awayTeamId: ${awayTeamId}`);
                             }
                         } catch (teamError) {

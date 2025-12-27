@@ -444,7 +444,7 @@ class VenueService {
                 }
             });
 
-            if (__DEV__) {
+            if (process.env.NODE_ENV !== 'production') {
                 console.log(`📦 Batch fetched ${venues.length} venues from ${uniqueIds.length} unique IDs`);
             }
 
@@ -506,7 +506,7 @@ class VenueService {
                 venueMap.set(key, venue);
             });
 
-            if (__DEV__) {
+            if (process.env.NODE_ENV !== 'production') {
                 console.log(`📦 Batch fetched ${venues.length} venues from ${uniqueNames.length} unique name/city combinations`);
             }
 

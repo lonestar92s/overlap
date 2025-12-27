@@ -155,14 +155,14 @@ class GeocodingService {
         }
 
         if (uncachedVenues.length === 0) {
-            if (__DEV__) {
+            if (process.env.NODE_ENV !== 'production') {
                 console.log(`🎯 Batch geocoding: All ${uniqueVenues.length} venues found in cache`);
             }
             return cachedResults;
         }
 
         // Process uncached venues in parallel
-        if (__DEV__) {
+        if (process.env.NODE_ENV !== 'production') {
             console.log(`🔍 Batch geocoding: ${uncachedVenues.length} venues need API calls (${cachedResults.size} from cache)`);
         }
 
@@ -196,7 +196,7 @@ class GeocodingService {
             }
         });
 
-        if (__DEV__) {
+        if (process.env.NODE_ENV !== 'production') {
             const successCount = Array.from(geocodeMap.values()).filter(v => v != null).length;
             console.log(`✅ Batch geocoding complete: ${successCount}/${uniqueVenues.length} venues geocoded successfully`);
         }
