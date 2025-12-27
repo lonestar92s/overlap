@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const https = require('https');
+const { performance } = require('perf_hooks');
 const venueService = require('../services/venueService');
 const leagueService = require('../services/leagueService');
 const teamService = require('../services/teamService');
@@ -55,6 +56,99 @@ async function getVenueFromApiFootball(venueId) {
         console.log(`❌ Failed to fetch venue ${venueId}: ${error.message}`);
         return null;
     }
+}
+
+// Batch fetch venue data from API-Football (optimized for processing multiple matches)
+// Processes venues in batches of 10 to respect rate limits
+async function batchGetVenuesFromApiFootball(venueIds) {
+    if (!venueIds || venueIds.length === 0) {
+        return new Map();
+    }
+
+    // Remove duplicates and filter out null/undefined
+    const uniqueIds = [...new Set(venueIds.filter(id => id != null))];
+    
+    if (uniqueIds.length === 0) {
+        return new Map();
+    }
+
+    const venueMap = new Map();
+    const uncachedIds = [];
+
+    // Check cache first
+    for (const venueId of uniqueIds) {
+        if (venueCache.has(venueId)) {
+            venueMap.set(venueId, venueCache.get(venueId));
+        } else {
+            uncachedIds.push(venueId);
+        }
+    }
+
+    if (uncachedIds.length === 0) {
+        if (__DEV__) {
+            console.log(`🎯 Batch API-Sports: All ${uniqueIds.length} venues found in cache`);
+        }
+        return venueMap;
+    }
+
+    if (__DEV__) {
+        console.log(`🔍 Batch API-Sports: Fetching ${uncachedIds.length} venues (${venueMap.size} from cache)`);
+    }
+
+    // Process in batches of 10 to respect rate limits
+    const BATCH_SIZE = 10;
+    const batches = [];
+    for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
+        batches.push(uncachedIds.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process batches sequentially with delay between batches
+    for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (venueId) => {
+            try {
+                const response = await axios.get(`${API_SPORTS_BASE_URL}/venues`, {
+                    params: { id: venueId },
+                    headers: { 'x-apisports-key': API_SPORTS_KEY },
+                    httpsAgent,
+                    timeout: 3000
+                });
+                
+                if (response.data && response.data.response && response.data.response.length > 0) {
+                    const venueData = response.data.response[0];
+                    venueCache.set(venueId, venueData);
+                    return { venueId, venueData };
+                }
+                return { venueId, venueData: null };
+            } catch (error) {
+                console.log(`❌ Failed to fetch venue ${venueId}: ${error.message}`);
+                return { venueId, venueData: null };
+            }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Add successful results to map
+        batchResults.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value && result.value.venueData) {
+                venueMap.set(result.value.venueId, result.value.venueData);
+            }
+        });
+
+        // Add delay between batches (except for last batch)
+        if (i < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
+    if (__DEV__) {
+        const successCount = Array.from(venueMap.values()).filter(v => v != null).length;
+        console.log(`✅ Batch API-Sports complete: ${successCount}/${uniqueIds.length} venues fetched successfully`);
+    }
+
+    return venueMap;
 }
 
 // Function to transform API-Sports data to match frontend expectations
@@ -1106,16 +1200,22 @@ router.get('/search', async (req, res) => {
                             venueIds.push(venueId);
                         }
                         if (venueName) {
-                            venueNameLookups.push({ match, name: venueName, city: venueCity });
+                            venueNameLookups.push({ name: venueName, city: venueCity });
                         }
                     }
+                    
+                    // Remove duplicates for name lookups
+                    const uniqueNameLookups = [...new Map(
+                        venueNameLookups.map(v => [`${v.name}|${v.city || ''}`, v])
+                    ).values()];
                     
                     // Batch query all venues by ID at once (single database query)
                     let venueMapById = new Map();
                     if (venueIds.length > 0) {
+                        const uniqueVenueIds = [...new Set(venueIds)];
                         const Venue = require('../models/Venue');
                         const venues = await Venue.find({ 
-                            venueId: { $in: venueIds },
+                            venueId: { $in: uniqueVenueIds },
                             isActive: true 
                         });
                         
@@ -1126,7 +1226,14 @@ router.get('/search', async (req, res) => {
                             }
                         });
                         
-                        console.log(`🔄 Cache enrichment: Batch queried ${venueIds.length} venue IDs, found ${venueMapById.size} with coordinates`);
+                        console.log(`🔄 Cache enrichment: Batch queried ${uniqueVenueIds.length} venue IDs, found ${venueMapById.size} with coordinates`);
+                    }
+                    
+                    // Batch query all venues by name (single database query)
+                    let venueMapByName = new Map();
+                    if (uniqueNameLookups.length > 0) {
+                        venueMapByName = await venueService.batchGetVenuesByName(uniqueNameLookups);
+                        console.log(`🔄 Cache enrichment: Batch queried ${uniqueNameLookups.length} venue names, found ${venueMapByName.size} with coordinates`);
                     }
                     
                     // Enrich matches using batch results
@@ -1143,11 +1250,15 @@ router.get('/search', async (req, res) => {
                             enrichedCoords = venueMapById.get(venueId);
                         }
                         
-                        // Fallback to name lookup (still individual queries, but less common)
+                        // Fallback to batch name lookup (using batch Map)
                         if (!enrichedCoords && venueName) {
-                            const byName = await venueService.getVenueByName(venueName, venueCity);
-                            if (byName?.coordinates) {
-                                enrichedCoords = byName.coordinates;
+                            const key = `${venueName}|${venueCity || ''}`;
+                            const byName = venueMapByName.get(key);
+                            if (byName) {
+                                const coords = byName.coordinates || byName.location?.coordinates;
+                                if (coords && Array.isArray(coords) && coords.length === 2) {
+                                    enrichedCoords = coords;
+                                }
                             }
                         }
                         
@@ -1341,43 +1452,80 @@ router.get('/search', async (req, res) => {
             console.log(`📊 After deduplication: ${uniqueFixtures.length} unique fixtures`);
             console.log(`📊 Unique fixture IDs:`, uniqueFixtures.map(f => f.fixture?.id).slice(0, 20).join(', '));
 
-            // Transform and filter by bounds and subscription tier
-            const transformedMatches = [];
-            let matchesWithoutCoords = 0;
-            let matchesFilteredOut = 0;
-            let matchesByLeague = {}; // Track matches by league for logging
-            
-            // Get accessible leagues for subscription filtering
+            // PHASE 2: Early Subscription Filtering - Filter BEFORE venue enrichment to avoid wasted lookups
             const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
             const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
             
-            for (const match of uniqueFixtures) {
+            const accessibleFixtures = uniqueFixtures.filter(match => {
+                const leagueIdStr = match.league?.id?.toString();
+                return !leagueIdStr || accessibleLeagueIdsSet.has(leagueIdStr);
+            });
+            
+            const matchesFilteredOut = uniqueFixtures.length - accessibleFixtures.length;
+            if (__DEV__ && matchesFilteredOut > 0) {
+                console.log(`🔒 Subscription filtering: ${matchesFilteredOut} matches filtered out, ${accessibleFixtures.length} accessible`);
+            }
+
+            // PHASE 3: Collect All Venue Data Upfront
+            const venueIds = [];
+            const venueNameLookups = [];
+            
+            for (const match of accessibleFixtures) {
+                const venue = match.fixture?.venue;
+                if (venue?.id) {
+                    venueIds.push(venue.id);
+                }
+                if (venue?.name && venue?.city) {
+                    venueNameLookups.push({ name: venue.name, city: venue.city });
+                }
+            }
+            
+            // Remove duplicates
+            const uniqueVenueIds = [...new Set(venueIds)];
+            const uniqueVenueNames = [...new Map(
+                venueNameLookups.map(v => [`${v.name}|${v.city}`, v])
+            ).values()];
+            
+            if (__DEV__) {
+                console.log(`📦 Batch processing: ${uniqueVenueIds.length} unique venue IDs, ${uniqueVenueNames.length} unique name/city combinations`);
+            }
+
+            // PHASE 4: Batch Fetch All Venue Data
+            const batchStartTime = performance.now();
+            
+            // Batch fetch from MongoDB by ID
+            const venueMapById = await venueService.batchGetVenuesById(uniqueVenueIds);
+            
+            // Batch fetch from MongoDB by name (for fallbacks)
+            const venueMapByName = await venueService.batchGetVenuesByName(uniqueVenueNames);
+            
+            // Batch fetch from API-Sports for images
+            const apiVenuesMap = await batchGetVenuesFromApiFootball(uniqueVenueIds);
+            
+            const batchEndTime = performance.now();
+            if (__DEV__) {
+                console.log(`⏱️ Batch venue fetching completed in ${(batchEndTime - batchStartTime).toFixed(2)}ms`);
+            }
+
+            // Transform and filter by bounds
+            const transformedMatches = [];
+            let matchesWithoutCoords = 0;
+            let matchesByLeague = {}; // Track matches by league for logging
+            const venuesNeedingGeocode = []; // Collect venues needing geocoding for batch processing
+            
+            for (const match of accessibleFixtures) {
                 const leagueId = match.league?.id;
                 if (!matchesByLeague[leagueId]) {
                     matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
                 }
                 matchesByLeague[leagueId].total++;
-                
-                // Check subscription access first - skip if user doesn't have access
-                const leagueIdStr = leagueId?.toString();
-                if (leagueIdStr && !accessibleLeagueIdsSet.has(leagueIdStr)) {
-                    matchesFilteredOut++;
-                    matchesByLeague[leagueId].filteredOut++;
-                    continue; // Skip this match - user doesn't have access to this league
-                }
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
+                
+                // Use batch-fetched data (O(1) lookup from Maps)
                 if (venue?.id) {
-                    // Always fetch venue data from API-Football to get image (MongoDB doesn't store images)
-                    // This is cached, so subsequent calls are fast
-                    let apiVenueData = null;
-                    try {
-                        apiVenueData = await getVenueFromApiFootball(venue.id);
-                    } catch (error) {
-                        console.log(`⚠️ Failed to fetch venue data for ID ${venue.id}: ${error.message}`);
-                    }
-                    
-                    const localVenue = await venueService.getVenueByApiId(venue.id);
+                    const localVenue = venueMapById.get(venue.id);
+                    const apiVenueData = apiVenuesMap.get(venue.id);
                     const localCoords = localVenue?.coordinates || localVenue?.location?.coordinates;
                     
                     if (localVenue && localCoords) {
@@ -1420,59 +1568,37 @@ router.get('/search', async (req, res) => {
                     }
                 }
                 
-                // Fallback: If venue lookup by ID failed, try name-based lookup (handles duplicate venues)
-                // This is important because API-Sports might assign different venueIds to the same stadium for different teams
+                // Fallback: If venue lookup by ID failed, try name-based lookup using batch Map
                 if (!venueInfo || (!venueInfo.coordinates && venue?.name)) {
-                    const byName = await venueService.getVenueByName(venue?.name, venue?.city);
+                    const key = `${venue?.name}|${venue?.city || ''}`;
+                    const byName = venueMapByName.get(key);
                     if (byName && byName.coordinates) {
-                        // Found venue by name with coordinates - use it (this handles duplicate venue records)
-                        venueInfo = {
-                            id: venue?.id || venueInfo?.id || null,
-                            name: byName.name || venue?.name,
-                            city: byName.city || venue?.city,
-                            country: byName.country || venue?.country || match.league?.country,
-                            coordinates: byName.coordinates,
-                            image: venueInfo?.image || null
-                        };
-                        console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
+                        const coords = byName.coordinates || byName.location?.coordinates;
+                        if (coords && Array.isArray(coords) && coords.length === 2) {
+                            // Found venue by name with coordinates - use it (this handles duplicate venue records)
+                            venueInfo = {
+                                id: venue?.id || venueInfo?.id || null,
+                                name: byName.name || venue?.name,
+                                city: byName.city || venue?.city,
+                                country: byName.country || venue?.country || match.league?.country,
+                                coordinates: coords,
+                                image: venueInfo?.image || null
+                            };
+                            if (__DEV__) {
+                                console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
+                            }
+                        }
                     }
                 }
                 
-                // CRITICAL: If venue still has no coordinates but we have name/city, geocode and save it
-                // This ensures every match gets coordinates - the missing piece!
+                // Collect venues needing geocoding (don't geocode yet - batch process after loop)
                 if (venueInfo && !venueInfo.coordinates && venueInfo.name && venueInfo.city) {
-                    try {
-                        console.log(`🔍 Geocoding venue (missing coordinates): ${venueInfo.name}, ${venueInfo.city}, ${venueInfo.country}`);
-                        const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
-                            venueInfo.name,
-                            venueInfo.city,
-                            venueInfo.country || match.league?.country
-                        );
-                        
-                        if (geocodedCoords) {
-                            console.log(`✅ Geocoded ${venueInfo.name}: [${geocodedCoords[0]}, ${geocodedCoords[1]}]`);
-                            
-                            // Save to MongoDB for future use
-                            const savedVenue = await venueService.saveVenueWithCoordinates({
-                                venueId: venue?.id || venueInfo.id || null,
-                                name: venueInfo.name,
-                                city: venueInfo.city,
-                                country: venueInfo.country || match.league?.country,
-                                coordinates: geocodedCoords
-                            });
-                            
-                            if (savedVenue) {
-                                console.log(`💾 Saved venue to MongoDB: ${venueInfo.name}`);
-                            }
-                            
-                            // Update venueInfo with geocoded coordinates
-                            venueInfo.coordinates = geocodedCoords;
-                        } else {
-                            console.log(`⚠️ Geocoding failed for ${venueInfo.name}`);
-                        }
-                    } catch (geocodeError) {
-                        console.error(`❌ Geocoding error for ${venueInfo.name}:`, geocodeError.message);
-                    }
+                    venuesNeedingGeocode.push({
+                        match,
+                        venueInfo,
+                        country: venueInfo.country || match.league?.country,
+                        venueId: venue?.id || venueInfo.id || null
+                    });
                 }
                 
                 if (!venueInfo) {
@@ -1696,6 +1822,60 @@ router.get('/search', async (req, res) => {
                 if (shouldInclude) {
                     transformedMatches.push(transformed);
                     matchesByLeague[leagueId].transformed++;
+                }
+            }
+            
+            // PHASE 5: Batch Geocode Venues Needing Coordinates
+            if (venuesNeedingGeocode.length > 0) {
+                const geocodeStartTime = performance.now();
+                if (__DEV__) {
+                    console.log(`🔍 Batch geocoding ${venuesNeedingGeocode.length} venues needing coordinates`);
+                }
+                
+                const geocodeInputs = venuesNeedingGeocode.map(v => ({
+                    name: v.venueInfo.name,
+                    city: v.venueInfo.city,
+                    country: v.country
+                }));
+                
+                const geocodeResults = await geocodingService.batchGeocodeVenues(geocodeInputs);
+                
+                // Apply geocoded coordinates back to matches
+                let geocodedCount = 0;
+                for (const { match, venueInfo, country, venueId } of venuesNeedingGeocode) {
+                    const key = `${venueInfo.name}|${venueInfo.city}|${country}`;
+                    const coords = geocodeResults.get(key);
+                    
+                    if (coords) {
+                        venueInfo.coordinates = coords;
+                        geocodedCount++;
+                        
+                        // Save to MongoDB (async, non-blocking)
+                        venueService.saveVenueWithCoordinates({
+                            venueId: venueId,
+                            name: venueInfo.name,
+                            city: venueInfo.city,
+                            country: country,
+                            coordinates: coords
+                        }).then(savedVenue => {
+                            if (savedVenue && __DEV__) {
+                                console.log(`💾 Saved geocoded venue to MongoDB: ${venueInfo.name}`);
+                            }
+                        }).catch(error => {
+                            console.error(`❌ Error saving geocoded venue ${venueInfo.name}:`, error.message);
+                        });
+                        
+                        // Update the transformed match if it was already added
+                        const transformedMatch = transformedMatches.find(m => m.id === match.fixture.id);
+                        if (transformedMatch && transformedMatch.fixture.venue) {
+                            transformedMatch.fixture.venue.coordinates = coords;
+                        }
+                    }
+                }
+                
+                const geocodeEndTime = performance.now();
+                if (__DEV__) {
+                    console.log(`✅ Batch geocoding complete: ${geocodedCount}/${venuesNeedingGeocode.length} venues geocoded in ${(geocodeEndTime - geocodeStartTime).toFixed(2)}ms`);
                 }
             }
             

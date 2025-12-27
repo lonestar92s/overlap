@@ -411,6 +411,114 @@ class VenueService {
     }
 
     /**
+     * Batch get venues by API IDs (optimized for processing multiple matches)
+     * @param {number[]} venueIds - Array of venue IDs to fetch
+     * @returns {Promise<Map<number, Venue>>} - Map of venueId -> Venue object
+     */
+    async batchGetVenuesById(venueIds) {
+        try {
+            if (!venueIds || venueIds.length === 0) {
+                return new Map();
+            }
+
+            // Remove duplicates
+            const uniqueIds = [...new Set(venueIds.filter(id => id != null))];
+            
+            if (uniqueIds.length === 0) {
+                return new Map();
+            }
+
+            this.cacheStats.dbQueries++;
+            
+            // Single batch query
+            const venues = await Venue.find({ 
+                venueId: { $in: uniqueIds },
+                isActive: true 
+            });
+
+            // Create Map for O(1) lookups
+            const venueMap = new Map();
+            venues.forEach(venue => {
+                if (venue.venueId != null) {
+                    venueMap.set(venue.venueId, venue);
+                }
+            });
+
+            if (__DEV__) {
+                console.log(`📦 Batch fetched ${venues.length} venues from ${uniqueIds.length} unique IDs`);
+            }
+
+            return venueMap;
+        } catch (error) {
+            console.error('Error batch getting venues by API ID:', error);
+            // Return empty Map on error (graceful degradation)
+            return new Map();
+        }
+    }
+
+    /**
+     * Batch get venues by name and city (optimized for processing multiple matches)
+     * @param {Array<{name: string, city: string}>} venueNames - Array of {name, city} objects
+     * @returns {Promise<Map<string, Venue>>} - Map of "name|city" -> Venue object
+     */
+    async batchGetVenuesByName(venueNames) {
+        try {
+            if (!venueNames || venueNames.length === 0) {
+                return new Map();
+            }
+
+            // Remove duplicates and filter out invalid entries
+            const uniqueNames = [...new Map(
+                venueNames
+                    .filter(v => v && v.name)
+                    .map(v => [`${v.name}|${v.city || ''}`, v])
+            ).values()];
+
+            if (uniqueNames.length === 0) {
+                return new Map();
+            }
+
+            this.cacheStats.dbQueries++;
+
+            // Build $or query for all name/city combinations
+            const escapeRegex = (string) => {
+                if (!string) return '';
+                return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            };
+
+            const orQueries = uniqueNames.map(({ name, city }) => {
+                const query = {
+                    name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') }
+                };
+                if (city) {
+                    query.city = { $regex: new RegExp(`^${escapeRegex(city)}$`, 'i') };
+                }
+                return query;
+            });
+
+            // Single batch query
+            const venues = await Venue.find({ $or: orQueries });
+
+            // Create Map keyed by "name|city" for O(1) lookups
+            const venueMap = new Map();
+            venues.forEach(venue => {
+                const key = `${venue.name}|${venue.city || ''}`;
+                venueMap.set(key, venue);
+            });
+
+            if (__DEV__) {
+                console.log(`📦 Batch fetched ${venues.length} venues from ${uniqueNames.length} unique name/city combinations`);
+            }
+
+            return venueMap;
+        } catch (error) {
+            console.error('Error batch getting venues by name:', error);
+            // Return empty Map on error (graceful degradation)
+            return new Map();
+        }
+    }
+
+    /**
      * Validate coordinates are within country bounds
      * @param {Array} coordinates - [longitude, latitude] array
      * @param {string} country - Country name
