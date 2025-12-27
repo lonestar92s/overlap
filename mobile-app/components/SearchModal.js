@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   searchButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#E8F5E9',
     borderRadius: borderRadius.sm,
     paddingVertical: spacing.sm,
   },

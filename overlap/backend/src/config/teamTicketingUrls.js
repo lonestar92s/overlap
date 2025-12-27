@@ -77,7 +77,7 @@ const SERIE_A_TICKETING = {
 
 // Ligue 1
 const LIGUE_1_TICKETING = {
-    "Paris Saint Germain": "https://www.psg.fr/en/tickets",
+    "Paris Saint Germain": "https://billetterie.psg.fr/en/?utm_source=PSG_Site&utm_medium=referral&utm_campaign=Menu_Top_PSG",
     "AS Monaco": "https://www.asmonaco.com/en/tickets",
     "Olympique Marseille": "https://www.om.fr/en/tickets",
     "Olympique Lyon": "https://www.ol.fr/en/tickets",

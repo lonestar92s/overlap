@@ -300,6 +300,7 @@ const AVAILABLE_LEAGUES = [
   { id: 39, name: 'Premier League', country: 'England', coords: [52.3555, -1.1743] },
   { id: 40, name: 'Championship', country: 'England', coords: [52.3555, -1.1743] },
   { id: 41, name: 'League One', country: 'England', coords: [52.3555, -1.1743] },
+  { id: 45, name: 'FA Cup', country: 'England', coords: [52.3555, -1.1743] },
   { id: 44, name: "Women's Super League", country: 'England', coords: [52.3555, -1.1743] },
   { id: 699, name: "Women's Championship", country: 'England', coords: [52.3555, -1.1743] },
   { id: 140, name: 'La Liga', country: 'Spain', coords: [40.4637, -3.7492] },

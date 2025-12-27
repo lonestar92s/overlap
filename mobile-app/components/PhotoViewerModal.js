@@ -54,24 +54,34 @@ const PhotoViewerModal = ({
   const hasPhotos = memory?.photos && memory.photos.length > 0;
   const photos = memory?.photos || [];
 
+  // Get stable memory ID to prevent unnecessary remounts
+  const memoryId = memory?._id || memory?.id || memory?.matchId;
+  
+  // Create a stable string representation of photos for memoization
+  const photosKey = useMemo(() => {
+    if (!photos || photos.length === 0) return '';
+    return photos.map(p => p.url || p.publicId || p._id || '').join('|');
+  }, [photos]);
+
   // Convert photos to format expected by react-native-image-viewing
   const images = useMemo(() => {
+    if (!photos || photos.length === 0) return [];
     return photos
       .map((photo) => {
         const url = getImageUrl(photo);
         return url ? { uri: url } : null;
       })
       .filter(Boolean);
-  }, [photos, getImageUrl]);
+  }, [photosKey, getImageUrl]);
 
-  // Reset image index when memory changes
+  // Reset image index when memory changes (not when imageIndex changes)
   useEffect(() => {
     if (visible && memory && photos.length > 0) {
       setImageIndex(0);
       setActionSheetVisible(false);
       slideAnim.setValue(0);
     }
-  }, [visible, memory, photos, slideAnim]);
+  }, [visible, memoryId, photos.length, slideAnim]);
 
   // Animate action sheet
   useEffect(() => {
@@ -237,7 +247,7 @@ const PhotoViewerModal = ({
         </View>
       </SafeAreaView>
     );
-  }, [memory, handleClose, handleMenuPress]);
+  }, [memory?.venue, handleClose, handleMenuPress]);
 
   // Footer Component - Teams, score, date below image
   const FooterComponent = useCallback(({ imageIndex: currentIndex }) => {
@@ -263,12 +273,18 @@ const PhotoViewerModal = ({
         )}
       </SafeAreaView>
     );
-  }, [memory]);
+  }, [memory?.homeTeam?.name, memory?.awayTeam?.name, memory?.userScore, memory?.apiMatchData?.officialScore, memory?.date]);
 
   // Log when memory changes
   useEffect(() => {
     console.log('PhotoViewerModal memory changed:', memory?.id || memory?._id, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
   }, [memory, hasPhotos, images.length]);
+
+  // Only return null if modal shouldn't be visible or if we truly don't have a memory
+  // Don't return null during photo switches - keep the modal open
+  if (!visible) {
+    return null;
+  }
 
   if (!memory || !hasPhotos || images.length === 0) {
     console.log('PhotoViewerModal returning null - memory:', !!memory, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
