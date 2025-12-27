@@ -1461,7 +1461,8 @@ router.get('/search', async (req, res) => {
                 return !leagueIdStr || accessibleLeagueIdsSet.has(leagueIdStr);
             });
             
-            const matchesFilteredOut = uniqueFixtures.length - accessibleFixtures.length;
+            // Track matches filtered out (starts with subscription filtering, then adds bounds filtering)
+            let matchesFilteredOut = uniqueFixtures.length - accessibleFixtures.length;
             if (process.env.NODE_ENV !== 'production' && matchesFilteredOut > 0) {
                 console.log(`🔒 Subscription filtering: ${matchesFilteredOut} matches filtered out, ${accessibleFixtures.length} accessible`);
             }
