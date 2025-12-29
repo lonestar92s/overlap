@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,27 @@ import {
   SafeAreaView,
   FlatList,
   Image,
+  ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
 import LocationSearchModal from '../components/LocationSearchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
+import MatchMapView from '../components/MapView';
+import ApiService from '../services/api';
+import { FEATURE_FLAGS } from '../utils/featureFlags';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+
+// Default to London if location permissions denied
+const DEFAULT_LOCATION = {
+  latitude: 51.5074,
+  longitude: -0.1278,
+  city: 'London',
+};
 
 // Popular destinations data
 const popularDestinations = [
@@ -62,11 +75,160 @@ const popularDestinations = [
 ];
 
 const SearchScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  
+  // Map-based home screen state (only used if flag is enabled)
+  const [userLocation, setUserLocation] = useState(null);
+  const [userCity, setUserCity] = useState(null);
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mapRegion, setMapRegion] = useState(null);
+  const matchesCacheRef = useRef(null);
+  const hasSearchedRef = useRef(false);
+
+  // Original home screen state (only used if flag is disabled)
   const [showLocationSearchModal, setShowLocationSearchModal] = useState(false);
   const [initialLocation, setInitialLocation] = useState(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
   const [popularMatches, setPopularMatches] = useState([]);
+
+  // Map-based home screen: Get user location and search for matches
+  useEffect(() => {
+    if (!FEATURE_FLAGS.enableMapHomeScreen) {
+      setLoading(false);
+      return;
+    }
+
+    if (hasSearchedRef.current) {
+      return; // Already searched this session
+    }
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        let locationObj = DEFAULT_LOCATION;
+        let city = DEFAULT_LOCATION.city;
+
+        if (status === 'granted') {
+          try {
+            const location = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+
+            const { latitude, longitude } = location.coords;
+            locationObj = { latitude, longitude };
+
+            // Reverse geocode to get city
+            try {
+              const reverseGeocode = await Location.reverseGeocodeAsync({
+                latitude,
+                longitude,
+              });
+
+              if (reverseGeocode && reverseGeocode.length > 0) {
+                const address = reverseGeocode[0];
+                city = address.city || address.subAdministrativeArea || address.administrativeArea || DEFAULT_LOCATION.city;
+              }
+            } catch (error) {
+              console.error('Reverse geocoding error:', error);
+            }
+          } catch (error) {
+            console.error('Location error:', error);
+          }
+        }
+
+        setUserLocation(locationObj);
+        setUserCity(city);
+
+        // Set initial map region
+        setMapRegion({
+          latitude: locationObj.latitude,
+          longitude: locationObj.longitude,
+          latitudeDelta: 0.1,
+          longitudeDelta: 0.1,
+        });
+
+        // Search for matches within 3 days (cached for session)
+        await searchMatchesInCity(locationObj.latitude, locationObj.longitude, city);
+        hasSearchedRef.current = true;
+      } catch (error) {
+        console.error('Error initializing location:', error);
+        setUserLocation(DEFAULT_LOCATION);
+        setUserCity(DEFAULT_LOCATION.city);
+        setMapRegion({
+          latitude: DEFAULT_LOCATION.latitude,
+          longitude: DEFAULT_LOCATION.longitude,
+          latitudeDelta: 0.1,
+          longitudeDelta: 0.1,
+        });
+        await searchMatchesInCity(DEFAULT_LOCATION.latitude, DEFAULT_LOCATION.longitude, DEFAULT_LOCATION.city);
+        hasSearchedRef.current = true;
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const searchMatchesInCity = async (lat, lon, city) => {
+    try {
+      // Check cache first
+      if (matchesCacheRef.current) {
+        setMatches(matchesCacheRef.current);
+        return;
+      }
+
+      // Calculate date range: today to 3 days from now
+      const today = new Date();
+      const threeDaysLater = new Date();
+      threeDaysLater.setDate(today.getDate() + 3);
+
+      const dateFrom = today.toISOString().split('T')[0];
+      const dateTo = threeDaysLater.toISOString().split('T')[0];
+
+      // Create bounds around location (small radius for city-level search)
+      const bounds = {
+        northeast: {
+          lat: lat + 0.05, // ~5km radius
+          lng: lon + 0.05,
+        },
+        southwest: {
+          lat: lat - 0.05,
+          lng: lon - 0.05,
+        },
+      };
+
+      const response = await ApiService.searchMatchesByBounds({
+        bounds,
+        dateFrom,
+        dateTo,
+      });
+
+      if (response.success && response.matches) {
+        // Filter matches to only those in the user's city
+        let filteredMatches = response.matches;
+        
+        if (city) {
+          filteredMatches = response.matches.filter(match => {
+            const matchCity = match.fixture?.venue?.city;
+            return matchCity && 
+                   matchCity.toLowerCase().includes(city.toLowerCase());
+          });
+        }
+
+        // Cache the results for the session
+        matchesCacheRef.current = filteredMatches;
+        setMatches(filteredMatches);
+      } else {
+        matchesCacheRef.current = [];
+        setMatches([]);
+      }
+    } catch (error) {
+      console.error('Error searching matches:', error);
+      matchesCacheRef.current = [];
+      setMatches([]);
+    }
+  };
 
   const handleDestinationPress = (destination) => {
     // Convert destination to location object format expected by LocationSearchModal
@@ -148,6 +310,21 @@ const SearchScreen = ({ navigation }) => {
     }
   };
 
+  const handleMarkerPress = (match) => {
+    navigation.navigate('SearchTab', {
+      screen: 'MapResults',
+      params: {
+        matches: [match],
+        initialRegion: match.fixture?.venue?.coordinates ? {
+          latitude: match.fixture.venue.coordinates[1],
+          longitude: match.fixture.venue.coordinates[0],
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        } : null,
+      },
+    });
+  };
+
   const handleTripPress = (trip) => {
     // Navigate to trip overview screen in TripsTab, ensuring TripsList is in the stack
     // so the back button goes to TripsList instead of SearchScreen
@@ -163,6 +340,56 @@ const SearchScreen = ({ navigation }) => {
     });
   };
 
+  // Render map-based home screen
+  if (FEATURE_FLAGS.enableMapHomeScreen) {
+    if (loading) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.mapContainer}>
+          {mapRegion && (
+            <MatchMapView
+              matches={matches}
+              initialRegion={mapRegion}
+              onMarkerPress={handleMarkerPress}
+              showLocationButton={true}
+              style={styles.map}
+            />
+          )}
+        </View>
+
+        <View style={[styles.mapOverlay, { paddingTop: insets.top + spacing.md }]}>
+          <TouchableOpacity
+            style={[styles.startLapButton, styles.startLapButtonOverlay]}
+            onPress={() => setShowLocationSearchModal(true)}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
+            <Text style={styles.startLapButtonText}>Start your lap</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TripCountdownWidget onTripPress={handleTripPress} />
+
+        <LocationSearchModal
+          visible={showLocationSearchModal}
+          onClose={handleLocationModalClose}
+          navigation={navigation}
+          initialLocation={initialLocation}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Render original home screen
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
@@ -224,6 +451,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  mapContainer: {
+    flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+  mapOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: {
     flex: 1,
   },
@@ -249,6 +495,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.primary,
     flex: 1,
+  },
+  startLapButtonOverlay: {
+    marginHorizontal: 0,
+    marginBottom: 0,
   },
   section: {
     marginBottom: spacing.xl,

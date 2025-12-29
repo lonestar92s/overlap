@@ -37,15 +37,18 @@ import { validateEnvironmentVariables } from './utils/envValidation';
 import { FEATURE_FLAGS } from './utils/featureFlags';
 
 // Validate environment variables on app startup
-// This now uses fallbacks instead of crashing
+// In production, this will fail fast if required variables are missing
+// In development, warnings are logged but app continues with fallbacks
 try {
   validateEnvironmentVariables();
 } catch (error) {
-  // Log error but don't crash - validation should handle fallbacks
-  if (__DEV__) {
-    console.error('⚠️ Environment validation error:', error.message);
+  // In production, fail fast - required environment variables must be set
+  if (!__DEV__) {
+    console.error('❌ Environment validation failed:', error.message);
+    throw error; // Crash the app in production if required vars are missing
   }
-  // Don't throw - let the app continue with fallback values
+  // In development, log warning but allow app to continue with fallbacks
+  console.error('⚠️ Environment validation error:', error.message);
 }
 
 // Loading screen component

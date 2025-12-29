@@ -5,18 +5,20 @@
 
 /**
  * Validates that required environment variables are set
- * Uses fallback values instead of crashing in production
+ * Fails fast in production if required variables are missing
  */
 export const validateEnvironmentVariables = () => {
   const warnings = [];
+  const errors = [];
   
   // Production environment checks
   if (!__DEV__) {
-    // API URL is required in production - use fallback if missing
+    // API URL is required in production - fail fast if missing
     if (!process.env.EXPO_PUBLIC_API_URL) {
-      warnings.push('EXPO_PUBLIC_API_URL not set - using production fallback');
-      // Set fallback production URL
-      process.env.EXPO_PUBLIC_API_URL = 'https://friendly-gratitude-production-3f31.up.railway.app/api';
+      errors.push(
+        'EXPO_PUBLIC_API_URL is required in production. ' +
+        'Set it in EAS secrets: eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "https://your-api.com/api"'
+      );
     }
     
     // Mapbox token required if using Mapbox
@@ -29,13 +31,20 @@ export const validateEnvironmentVariables = () => {
   // Development environment warnings
   if (__DEV__) {
     if (!process.env.EXPO_PUBLIC_API_URL) {
-      console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback');
+      warnings.push('EXPO_PUBLIC_API_URL not set - using localhost fallback');
     }
   }
   
-  // Log warnings but don't crash
+  // Fail fast in production if required variables are missing
+  if (errors.length > 0) {
+    const errorMessage = `Environment validation errors:\n${errors.join('\n')}`;
+    console.error('❌ ENVIRONMENT VALIDATION ERROR:', errorMessage);
+    throw new Error(errorMessage);
+  }
+  
+  // Log warnings in development
   if (warnings.length > 0) {
-    const warningMessage = `Environment validation warnings:\n${warnings.join('\n')}\n\nPlease set EXPO_PUBLIC_API_URL in EAS secrets for production builds.`;
+    const warningMessage = `Environment validation warnings:\n${warnings.join('\n')}`;
     console.warn('⚠️ ENVIRONMENT VALIDATION WARNING:', warningMessage);
   }
   
@@ -73,6 +82,7 @@ export const getEnvVar = (key, defaultValue = null, required = false) => {
   
   return value || defaultValue;
 };
+
 
 
 

@@ -9,11 +9,12 @@ const getApiBaseUrl = () => {
       console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');
       return 'http://localhost:3001/api';
     } else {
-      // Production: Use fallback to prevent crashes, but log warning
-      // This allows the app to work even if the EAS secret isn't set
-      console.warn('⚠️ EXPO_PUBLIC_API_URL not set in production - using fallback URL');
-      console.warn('⚠️ Please set EXPO_PUBLIC_API_URL in EAS secrets for proper configuration');
-      return 'https://friendly-gratitude-production-3f31.up.railway.app/api';
+      // Production: Fail fast if environment variable is missing
+      // This ensures proper configuration and prevents hardcoded URLs in production
+      throw new Error(
+        'EXPO_PUBLIC_API_URL must be set in production. ' +
+        'Please configure it in EAS secrets: eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "https://your-api.com/api"'
+      );
     }
   }
   
