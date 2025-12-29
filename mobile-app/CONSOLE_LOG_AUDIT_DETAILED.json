@@ -1,0 +1,3180 @@
+{
+  "summary": {
+    "total": 527,
+    "keep": 96,
+    "wrap": 369,
+    "remove": 62,
+    "alreadyWrapped": 0
+  },
+  "details": {
+    "keep": [
+      {
+        "file": "components/ErrorBoundary.js",
+        "line": 30,
+        "type": "warn",
+        "code": "console.warn('Timezone error caught by ErrorBoundary:', error.message);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 368,
+        "type": "warn",
+        "code": "console.warn('🟡 [FILTER_MODAL] bottomSheetRef.current is null, returning early');"
+      },
+      {
+        "file": "components/LeaguePicker.js",
+        "line": 49,
+        "type": "warn",
+        "code": "console.warn('Failed to fetch leagues from API, using fallback');"
+      },
+      {
+        "file": "components/LeaguePicker.js",
+        "line": 54,
+        "type": "error",
+        "code": "console.error('Error fetching leagues:', error);"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 172,
+        "type": "error",
+        "code": "console.error('Error fetching location suggestions:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 628,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid center coordinates calculated from matches:', { centerLat, centerLng });"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 638,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid deltas calculated from matches:', { latitudeDelta, longitudeDelta });"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 109,
+        "type": "warn",
+        "code": "console.warn('MapView: Invalid match data in handleMarkerPress');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 184,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid coordinates in fitToMatches, skipping:', {"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 197,
+        "type": "warn",
+        "code": "console.warn('⚠️ Coordinates out of bounds in fitToMatches, skipping:', {"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 308,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid coordinates in getVenueGroupKey:', {"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 334,
+        "type": "warn",
+        "code": "console.warn('⚠️ No valid key for venue:', {"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 398,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid venueGroup.key, skipping marker:', {"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 410,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid firstMatch in venueGroup, skipping marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 418,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid venue coordinates, skipping marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 430,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid coordinate values, skipping marker:', { lon, lat });"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 447,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid markerKey after construction, skipping marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 532,
+        "type": "warn",
+        "code": "console.warn('⚠️ Match missing fixture.id, skipping recommended marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 542,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid markerKey, skipping recommended marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 650,
+        "type": "warn",
+        "code": "console.warn('⚠️ Home base missing ID/name, skipping marker');"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 660,
+        "type": "warn",
+        "code": "console.warn('⚠️ Invalid markerKey, skipping home base marker');"
+      },
+      {
+        "file": "components/MatchCard.js",
+        "line": 67,
+        "type": "warn",
+        "code": "console.warn('Error formatting date with timezone:', dateString, error);"
+      },
+      {
+        "file": "components/PopularMatches.js",
+        "line": 90,
+        "type": "error",
+        "code": "console.error('Error fetching matches:', error);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 42,
+        "type": "warn",
+        "code": "console.warn('SecureStore getItem failed, using AsyncStorage:', error.message);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 60,
+        "type": "warn",
+        "code": "console.warn('SecureStore setItem failed, using AsyncStorage only:', error.message);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 74,
+        "type": "warn",
+        "code": "console.warn('SecureStore removeItem failed:', error.message);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 160,
+        "type": "error",
+        "code": "console.error('Error checking auth state:', error);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 194,
+        "type": "error",
+        "code": "console.error('Login error:', error);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 281,
+        "type": "error",
+        "code": "console.error('WorkOS login error:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 326,
+        "type": "warn",
+        "code": "console.warn('⚠️ Failed to refresh itinerary:', response.error);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 142,
+        "type": "warn",
+        "code": "console.warn(`⚠️ Failed to track recommendation ${matchId}:`, err.message);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 240,
+        "type": "warn",
+        "code": "console.warn('Existing request failed, starting new request:', err);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 384,
+        "type": "error",
+        "code": "console.error('Error fetching recommendations:', err);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 399,
+        "type": "warn",
+        "code": "console.warn('Cannot dismiss recommendation: no matchId found');"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 80,
+        "type": "warn",
+        "code": "console.warn('⚠️ Failed to load itinerary from API:', response.error);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 245,
+        "type": "error",
+        "code": "console.error('Error fetching travel times:', error);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 963,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: handleMarkerPress called with null/undefined match');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 970,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: handleMarkerPress called with match missing fixture');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 998,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: No venue groups available - markers may not be ready yet');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1007,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: Could not generate venue group key for match', match.fixture.id);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1019,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: Venue group not found for key', key, 'match ID:', match.fixture.id);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1038,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: No matches found in venue group', key);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1049,
+        "type": "warn",
+        "code": "console.warn('MapResultsScreen: Could not find venue group index for key', key);"
+      },
+      {
+        "file": "screens/MemoriesMapScreen.js",
+        "line": 80,
+        "type": "error",
+        "code": "console.error('Error fetching memories:', error);"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 57,
+        "type": "error",
+        "code": "console.error('Error fetching memories:', error);"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 251,
+        "type": "warn",
+        "code": "console.warn('⚠️ Photo object missing essential fields:', photo);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 688,
+        "type": "error",
+        "code": "console.error('Error fetching match scores:', err);"
+      },
+      {
+        "file": "screens/WorkOSLoginScreen.js",
+        "line": 21,
+        "type": "warn",
+        "code": "console.warn('react-native-webview not available. Please build a development client.');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 8,
+        "type": "warn",
+        "code": "console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback for development');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 9,
+        "type": "warn",
+        "code": "console.warn('⚠️ For physical devices, set EXPO_PUBLIC_API_URL to your machine IP (e.g., http://192.168.1.100:3001/api)');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 14,
+        "type": "warn",
+        "code": "console.warn('⚠️ EXPO_PUBLIC_API_URL not set in production - using fallback URL');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 15,
+        "type": "warn",
+        "code": "console.warn('⚠️ Please set EXPO_PUBLIC_API_URL in EAS secrets for proper configuration');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 52,
+        "type": "error",
+        "code": "console.error('Error getting token from storage:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 94,
+        "type": "error",
+        "code": "console.error('Login error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 633,
+        "type": "error",
+        "code": "console.error('Error fetching trips:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 653,
+        "type": "error",
+        "code": "console.error('❌ API Error - Non-JSON response when fetching trip:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 665,
+        "type": "error",
+        "code": "console.error('❌ API Error fetching trip:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 680,
+        "type": "error",
+        "code": "console.error('Error fetching trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1175,
+        "type": "warn",
+        "code": "console.warn('⚠️ Rate limited and no cached travel times available');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1202,
+        "type": "warn",
+        "code": "console.warn('⚠️ Rate limited and no cached travel times available');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1241,
+        "type": "warn",
+        "code": "console.warn('⚠️ Rate limited and no cached travel times available');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1247,
+        "type": "error",
+        "code": "console.error('Error fetching travel times:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1303,
+        "type": "error",
+        "code": "console.error('Error fetching team matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1319,
+        "type": "error",
+        "code": "console.error('Error fetching teams:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1335,
+        "type": "error",
+        "code": "console.error('Error fetching leagues:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1410,
+        "type": "warn",
+        "code": "console.warn('⚠️ Using hardcoded leagues - API should be used instead. This is a fallback only.');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1501,
+        "type": "warn",
+        "code": "console.warn('⚠️ Using hardcoded leagues - API should be used instead. This is a fallback only.');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1566,
+        "type": "warn",
+        "code": "console.warn('⚠️ [API] No auth token available for match search - user will be treated as freemium');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1599,
+        "type": "warn",
+        "code": "console.warn(`⚠️ [API] Slow network request: ${networkDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1622,
+        "type": "warn",
+        "code": "console.warn(`⚠️ [API] Very slow API call: ${totalApiDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1654,
+        "type": "warn",
+        "code": "console.warn('⚠️ API leagues fetch failed, using hardcoded fallback for competitions');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1658,
+        "type": "error",
+        "code": "console.error('Error fetching leagues for competitions:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1678,
+        "type": "warn",
+        "code": "console.warn('⚠️ Backend returned no relevant leagues - this may indicate a configuration issue');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1764,
+        "type": "warn",
+        "code": "console.warn(`⚠️ [API] Very slow API call (legacy): ${totalApiDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1853,
+        "type": "error",
+        "code": "console.error('Error fetching attended matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1888,
+        "type": "warn",
+        "code": "console.warn('⚠️ searchAllMatchesByLocation is deprecated - use searchMatchesByBounds instead');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1921,
+        "type": "error",
+        "code": "console.error('Error fetching popular matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1964,
+        "type": "error",
+        "code": "console.error('❌ Error fetching recommended matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1997,
+        "type": "error",
+        "code": "console.error('Error fetching saved matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2118,
+        "type": "error",
+        "code": "console.error('Error fetching memories:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2139,
+        "type": "error",
+        "code": "console.error('Error fetching memory stats:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2406,
+        "type": "error",
+        "code": "console.error('Error fetching recommendations:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2489,
+        "type": "error",
+        "code": "console.error('Error fetching match scores:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2564,
+        "type": "error",
+        "code": "console.error('Error fetching relevant leagues from backend:', error);"
+      },
+      {
+        "file": "utils/dateUtils.js",
+        "line": 106,
+        "type": "warn",
+        "code": "console.warn('Error formatting display date:', dateString, error);"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 25,
+        "type": "warn",
+        "code": "console.warn('⚠️ EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN not set - Mapbox will not work if enabled');"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 32,
+        "type": "warn",
+        "code": "console.warn('⚠️ EXPO_PUBLIC_API_URL not set - using localhost fallback');"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 39,
+        "type": "warn",
+        "code": "console.warn('⚠️ ENVIRONMENT VALIDATION WARNING:', warningMessage);"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 65,
+        "type": "warn",
+        "code": "console.warn(`⚠️ ${key} not set, using default value`);"
+      },
+      {
+        "file": "utils/mapConfig.js",
+        "line": 18,
+        "type": "warn",
+        "code": "console.warn('⚠️ GOOGLE_API_KEY not set - Google Maps features may not work');"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 224,
+        "type": "warn",
+        "code": "console.warn(`  ⚠️ [PHASE] ${phaseName} is very slow: ${phaseDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 226,
+        "type": "warn",
+        "code": "console.warn(`  ⚠️ [PHASE] ${phaseName} is slow: ${phaseDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 330,
+        "type": "warn",
+        "code": "console.warn(`  ⚠️ [PHASE] ${phaseName} is very slow: ${phaseDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 332,
+        "type": "warn",
+        "code": "console.warn(`  ⚠️ [PHASE] ${phaseName} is slow: ${phaseDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 575,
+        "type": "warn",
+        "code": "console.warn('Timezone formatting failed, using UTC fallback:', timeError);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 601,
+        "type": "warn",
+        "code": "console.warn('Date formatting failed, using UTC fallback:', dateError);"
+      }
+    ],
+    "wrap": [
+      {
+        "file": "App.js",
+        "line": 46,
+        "type": "error",
+        "code": "console.error('⚠️ Environment validation error:', error.message);"
+      },
+      {
+        "file": "components/AddFlightModal.js",
+        "line": 64,
+        "type": "error",
+        "code": "console.error('Error searching airports:', error);"
+      },
+      {
+        "file": "components/AddFlightModal.js",
+        "line": 88,
+        "type": "error",
+        "code": "console.error('Error searching airports:', error);"
+      },
+      {
+        "file": "components/AddFlightModal.js",
+        "line": 185,
+        "type": "error",
+        "code": "console.error('Error looking up flight:', error);"
+      },
+      {
+        "file": "components/AddFlightModal.js",
+        "line": 242,
+        "type": "error",
+        "code": "console.error('Error saving flight:', error);"
+      },
+      {
+        "file": "components/AttendanceModal.js",
+        "line": 49,
+        "type": "error",
+        "code": "console.error('Error marking match as attended:', error);"
+      },
+      {
+        "file": "components/CreateTripModal.js",
+        "line": 135,
+        "type": "error",
+        "code": "console.error('Error creating trip:', error);"
+      },
+      {
+        "file": "components/ErrorBoundary.js",
+        "line": 19,
+        "type": "error",
+        "code": "console.error('ErrorBoundary caught an error:', error, errorInfo);"
+      },
+      {
+        "file": "components/FeedbackModal.js",
+        "line": 26,
+        "type": "error",
+        "code": "console.error('Error sending feedback:', error);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 64,
+        "type": "log",
+        "code": "console.log('🟢 [FILTER_MODAL] Initialize filters useEffect, visible:', visible, 'selectedFilters:', selectedFilters);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 69,
+        "type": "log",
+        "code": "console.log('🟢 [FILTER_MODAL] Local filters initialized');"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 352,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] BottomSheetModal dismissed');"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 362,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] Visibility useEffect triggered, visible:', visible);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 363,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] bottomSheetRef.current:', bottomSheetRef.current);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 375,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] Calling present() to open drawer...');"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 384,
+        "type": "error",
+        "code": "console.error('🟡 [FILTER_MODAL] Error opening filter drawer:', error);"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 389,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] Calling dismiss() to close drawer...');"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 398,
+        "type": "error",
+        "code": "console.error('🟡 [FILTER_MODAL] Error closing filter drawer:', error);"
+      },
+      {
+        "file": "components/FlightSearchTab.js",
+        "line": 68,
+        "type": "error",
+        "code": "console.error('Error searching airports:', error);"
+      },
+      {
+        "file": "components/FlightSearchTab.js",
+        "line": 91,
+        "type": "error",
+        "code": "console.error('Error searching airports:', error);"
+      },
+      {
+        "file": "components/FlightSearchTab.js",
+        "line": 230,
+        "type": "error",
+        "code": "console.error('Error searching flights:', error);"
+      },
+      {
+        "file": "components/FlightSearchTab.js",
+        "line": 457,
+        "type": "error",
+        "code": "console.error('Error opening booking URL:', error);"
+      },
+      {
+        "file": "components/HeartButton.js",
+        "line": 39,
+        "type": "error",
+        "code": "console.error('Error removing match from itinerary:', error);"
+      },
+      {
+        "file": "components/ItineraryModal.js",
+        "line": 66,
+        "type": "error",
+        "code": "console.error('Error adding match to itinerary:', error);"
+      },
+      {
+        "file": "components/ItineraryModal.js",
+        "line": 105,
+        "type": "error",
+        "code": "console.error('Error creating itinerary:', error);"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 52,
+        "type": "log",
+        "code": "console.log('Location permission denied');"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 70,
+        "type": "log",
+        "code": "console.log('Error getting location:', error);"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 258,
+        "type": "log",
+        "code": "console.log('[LocationAutocomplete] Location selected:', location?.city, location?.country);"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 269,
+        "type": "log",
+        "code": "console.log('[LocationAutocomplete] Attempting to blur input via ref');"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 273,
+        "type": "log",
+        "code": "console.log('[LocationAutocomplete] Input ref not available or blur method not found');"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 278,
+        "type": "log",
+        "code": "console.log('[LocationAutocomplete] Dismissing keyboard immediately');"
+      },
+      {
+        "file": "components/LocationAutocomplete.js",
+        "line": 285,
+        "type": "log",
+        "code": "console.log('[LocationAutocomplete] Calling onSelect and dismissing keyboard again');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 101,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Pre-populating with initial location:', initialLocation.city, initialLocation.country);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 155,
+        "type": "error",
+        "code": "console.error('Error loading recent searches:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 203,
+        "type": "error",
+        "code": "console.error('Error saving recent search:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 214,
+        "type": "error",
+        "code": "console.error('Error clearing recent searches:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 240,
+        "type": "error",
+        "code": "console.error('Error searching locations:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 275,
+        "type": "error",
+        "code": "console.error('Error searching unified:', error);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 325,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Skipping search - location selection in progress');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 333,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Skipping search - location already selected');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 371,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Location selected:', selectedLocation?.city, selectedLocation?.country);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 380,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Cancelling pending debounced search');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 407,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Location selection complete, flag cleared');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 418,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Blurring location input');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 425,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Dismissing keyboard');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 432,
+        "type": "log",
+        "code": "console.log('[LocationSearchModal] Auto-opening When section');"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 651,
+        "type": "log",
+        "code": "console.log('🗺️ Calculated region from matches (validated):', {"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 791,
+        "type": "log",
+        "code": "console.log('🔍 Who-based search params:', apiParams);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 804,
+        "type": "log",
+        "code": "console.log('🗺️ Using calculated region from matches (no location provided):', initialRegion);"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 842,
+        "type": "log",
+        "code": "console.log('🔍 Initial search bounds (unified):', {"
+      },
+      {
+        "file": "components/LocationSearchModal.js",
+        "line": 887,
+        "type": "error",
+        "code": "console.error('Search error:', error);"
+      },
+      {
+        "file": "components/MapView.js",
+        "line": 349,
+        "type": "log",
+        "code": "console.log('MapView: No matches, clearing all markers');"
+      },
+      {
+        "file": "components/MatchCard.js",
+        "line": 371,
+        "type": "error",
+        "code": "console.error('Failed to open ticketing URL:', err);"
+      },
+      {
+        "file": "components/MatchPlanningModal.js",
+        "line": 122,
+        "type": "error",
+        "code": "console.error('Error saving planning details:', error);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 37,
+        "type": "log",
+        "code": "console.log('Memory ref updated:', memory?.id || memory?._id);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 149,
+        "type": "log",
+        "code": "console.log('No memory available in handleEdit');"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 160,
+        "type": "log",
+        "code": "console.log('Calling onEdit with memory:', currentMemory?.id || currentMemory?._id);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 165,
+        "type": "log",
+        "code": "console.log('onEdit is not defined');"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 280,
+        "type": "log",
+        "code": "console.log('PhotoViewerModal memory changed:', memory?.id || memory?._id, 'hasPhotos:', hasPhotos, 'images.length:', images.length);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 290,
+        "type": "log",
+        "code": "console.log('PhotoViewerModal returning null - memory:', !!memory, 'hasPhotos:', hasPhotos, 'images.length:', images.length);"
+      },
+      {
+        "file": "components/PopularMatchModal.js",
+        "line": 24,
+        "type": "log",
+        "code": "// console.log('PopularMatchModal received props:', {"
+      },
+      {
+        "file": "components/PopularMatchModal.js",
+        "line": 40,
+        "type": "log",
+        "code": "console.log('PopularMatchModal: No valid data, returning null');"
+      },
+      {
+        "file": "components/PopularMatchModal.js",
+        "line": 46,
+        "type": "log",
+        "code": "console.log('PopularMatchModal: Missing required props, returning null');"
+      },
+      {
+        "file": "components/PopularMatches.js",
+        "line": 49,
+        "type": "log",
+        "code": "console.log('🎯 Using recommended matches for authenticated user');"
+      },
+      {
+        "file": "components/PopularMatches.js",
+        "line": 53,
+        "type": "log",
+        "code": "console.log('⚠️ Failed to fetch recommended matches, falling back to popular:', authError.message);"
+      },
+      {
+        "file": "components/PopularMatches.js",
+        "line": 96,
+        "type": "log",
+        "code": "console.log('🔄 Retrying matches request...');"
+      },
+      {
+        "file": "components/SearchModal.js",
+        "line": 65,
+        "type": "log",
+        "code": "console.log('[SearchModal] Location selected, auto-opening calendar:', location?.city, location?.country);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 132,
+        "type": "log",
+        "code": "console.log('Rate limit during token validation, keeping token for retry');"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 140,
+        "type": "log",
+        "code": "console.log('Token validation failed - authentication error, clearing auth state');"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 141,
+        "type": "log",
+        "code": "console.log('Token validation error details:', error.message);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 149,
+        "type": "log",
+        "code": "console.log('Network error during token validation, keeping token for retry');"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 154,
+        "type": "log",
+        "code": "console.log('Token validation error (non-auth), keeping token:', error.message);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 226,
+        "type": "error",
+        "code": "console.error('Registration error:', error);"
+      },
+      {
+        "file": "contexts/AuthContext.js",
+        "line": 252,
+        "type": "error",
+        "code": "console.error('Logout error:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 37,
+        "type": "error",
+        "code": "console.error('Error loading itineraries from API:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 50,
+        "type": "log",
+        "code": "console.log('🆕 Creating itinerary with name:', name, 'dates:', { startDate, endDate });"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 60,
+        "type": "log",
+        "code": "console.log('🆕 New itinerary normalized:', { id: newItinerary.id, _id: newItinerary._id });"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 69,
+        "type": "error",
+        "code": "console.error('Error creating itinerary via API:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 94,
+        "type": "log",
+        "code": "console.log('➕ Updated trip normalized:', { id: updatedTrip.id, _id: updatedTrip._id });"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 95,
+        "type": "log",
+        "code": "console.log('➕ Updated trip matches:', updatedTrip.matches.map(m => ({ matchId: m.matchId, fixtureId: m.fixtureId })));"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 104,
+        "type": "log",
+        "code": "console.log('➕ Local state updated, new itineraries count:', updated.length);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 116,
+        "type": "error",
+        "code": "console.error('Error adding match to itinerary via API:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 151,
+        "type": "error",
+        "code": "console.error('Error updating match planning:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 183,
+        "type": "log",
+        "code": "console.log('🔄 Backend API not available, using local state update');"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 204,
+        "type": "error",
+        "code": "console.error('Error removing match from itinerary:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 214,
+        "type": "log",
+        "code": "console.log('🔄 Updating itinerary:', { itineraryId, updates });"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 225,
+        "type": "log",
+        "code": "console.log('🔄 Updated trip from API:', updatedTrip);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 239,
+        "type": "error",
+        "code": "console.error('Error updating itinerary via API:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 275,
+        "type": "log",
+        "code": "console.log('✅ Itinerary deleted successfully via API');"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 283,
+        "type": "error",
+        "code": "console.error('Error deleting itinerary:', error);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 335,
+        "type": "error",
+        "code": "console.error('Error refreshing itinerary:', error);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 87,
+        "type": "log",
+        "code": "console.log(`⚠️ Filtering duplicate recommendation in UI for matchId: ${matchId}`);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 156,
+        "type": "log",
+        "code": "console.log('📊 Rate limited while tracking recommendations - stopping to avoid errors');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 162,
+        "type": "error",
+        "code": "console.error('Error tracking viewed recommendations:', err);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 198,
+        "type": "log",
+        "code": "console.log('📥 Using stored recommendations from trip document');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 232,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - using cached recommendations');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 252,
+        "type": "log",
+        "code": "console.log('📥 Using cached recommendations (debounced)');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 265,
+        "type": "log",
+        "code": "console.log('📥 Fetching recommendations from API (fallback or force refresh)');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 292,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - using cached recommendations');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 314,
+        "type": "log",
+        "code": "console.log(`📥 API returned ${uniqueRecommendations.length} stored recommendations from trip document`);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 316,
+        "type": "log",
+        "code": "console.log(`📥 API returned ${uniqueRecommendations.length} newly generated recommendations`);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 343,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited (error) - using cached recommendations');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 424,
+        "type": "error",
+        "code": "console.error('Error dismissing recommendation:', err);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 490,
+        "type": "error",
+        "code": "console.error('Error adding recommendation to trip:', err);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 526,
+        "type": "log",
+        "code": "console.log(`📥 Using ${trip.recommendations.length} stored recommendations from trip document (cancelled API request)`);"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 545,
+        "type": "log",
+        "code": "console.log('📥 Trip has empty stored recommendations (v2) - this is expected');"
+      },
+      {
+        "file": "hooks/useRecommendations.js",
+        "line": 555,
+        "type": "log",
+        "code": "console.log('📥 Waiting for trip to load before fetching recommendations');"
+      },
+      {
+        "file": "screens/AccountScreen.js",
+        "line": 83,
+        "type": "error",
+        "code": "console.error('Error loading completed trips:', e);"
+      },
+      {
+        "file": "screens/AddMemoryScreen.js",
+        "line": 163,
+        "type": "error",
+        "code": "console.error('Error picking image:', error);"
+      },
+      {
+        "file": "screens/AddMemoryScreen.js",
+        "line": 194,
+        "type": "error",
+        "code": "console.error('Error taking photo:', error);"
+      },
+      {
+        "file": "screens/AddMemoryScreen.js",
+        "line": 252,
+        "type": "error",
+        "code": "console.error('Error creating memory:', error);"
+      },
+      {
+        "file": "screens/AttendedMatchesScreen.js",
+        "line": 35,
+        "type": "error",
+        "code": "console.error('Error loading attended matches:', error);"
+      },
+      {
+        "file": "screens/AttendedMatchesScreen.js",
+        "line": 68,
+        "type": "error",
+        "code": "console.error('Error removing match:', error);"
+      },
+      {
+        "file": "screens/EditMemoryScreen.js",
+        "line": 70,
+        "type": "error",
+        "code": "console.error('Error picking image:', error);"
+      },
+      {
+        "file": "screens/EditMemoryScreen.js",
+        "line": 101,
+        "type": "error",
+        "code": "console.error('Error taking photo:', error);"
+      },
+      {
+        "file": "screens/EditMemoryScreen.js",
+        "line": 152,
+        "type": "error",
+        "code": "console.error('Error deleting memory:', error);"
+      },
+      {
+        "file": "screens/EditMemoryScreen.js",
+        "line": 203,
+        "type": "error",
+        "code": "console.error('Error updating memory:', error);"
+      },
+      {
+        "file": "screens/FeedbackScreen.js",
+        "line": 46,
+        "type": "error",
+        "code": "console.error('Error sending feedback:', error);"
+      },
+      {
+        "file": "screens/ForgotPasswordScreen.js",
+        "line": 65,
+        "type": "error",
+        "code": "console.error('Forgot password error:', error);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 65,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Loaded from context:', loadedItinerary);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 87,
+        "type": "error",
+        "code": "console.error('Error loading itinerary:', error);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 127,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Syncing itinerary from context update:', {"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 343,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Found coordinates:', coords);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 401,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Extracted coordinates:', allCoordinates);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 420,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Calculated region:', region);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 425,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - No coordinates found, using default region');"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 520,
+        "type": "error",
+        "code": "console.error('Error dismissing recommendation:', err);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 529,
+        "type": "log",
+        "code": "console.log('⚠️ Add match operation already in progress, ignoring duplicate call');"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 549,
+        "type": "error",
+        "code": "console.error('Error adding recommendation to trip:', err);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 51,
+        "type": "log",
+        "code": "console.log('📍 [VENUE COORDS] Initial matches venue coordinate analysis:');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 74,
+        "type": "log",
+        "code": "console.log(`  Initial Match ${idx + 1}: ${match.teams?.home?.name} vs ${match.teams?.away?.name}`, {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 207,
+        "type": "log",
+        "code": "console.log('🔧 [FILTER] Processing filterData:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 237,
+        "type": "log",
+        "code": "console.log('✅ [FILTER] Initialized filterData synchronously from initialMatches:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 253,
+        "type": "log",
+        "code": "console.log('🗺️ [INIT] Setting initial region:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 275,
+        "type": "log",
+        "code": "console.log('📍 [INIT] Set original search bounds from initialRegion:', boundsFromRegion);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 297,
+        "type": "log",
+        "code": "console.log('🗺️ [AUTO-FIT] Fitting map to markers from global search:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 317,
+        "type": "log",
+        "code": "console.log('🎯 Applying pre-selected filters:', preSelectedFilters);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 335,
+        "type": "log",
+        "code": "console.log('🏴 Selected country:', countryMatch.name, countryMatch.id);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 368,
+        "type": "log",
+        "code": "console.log('🏆 Selected leagues:', leagueMatches.map(l => l.name), selectedFilters.leagues);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 401,
+        "type": "log",
+        "code": "console.log('⚽ Selected teams:', teamMatches.map(t => t.name), selectedFilters.teams);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 415,
+        "type": "log",
+        "code": "console.log('✅ Applied pre-selected filters:', selectedFilters);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 418,
+        "type": "log",
+        "code": "console.log('⚠️ No matching filters found for pre-selected values');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 457,
+        "type": "log",
+        "code": "console.log('🧹 [FILTER] Cleaned invalid filters after new search:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 517,
+        "type": "log",
+        "code": "console.log('🛑 [SEARCH] Cancelling previous request');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 559,
+        "type": "log",
+        "code": "console.log('📍 [SEARCH] Pending search bounds (awaiting confirmation):', pendingBounds);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 560,
+        "type": "log",
+        "code": "console.log('🔍 [SEARCH] Starting bounds search:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 601,
+        "type": "log",
+        "code": "console.log('⏭️ [SEARCH] REJECTED - Stale request:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 625,
+        "type": "log",
+        "code": "console.log('📍 [SEARCH] Updated search bounds:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 635,
+        "type": "log",
+        "code": "console.log('✅ [SEARCH] Results received:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 650,
+        "type": "log",
+        "code": "console.log('📍 [VENUE COORDS] Venue coordinate analysis (first 10 matches):');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 675,
+        "type": "log",
+        "code": "console.log(`  Match ${idx + 1}: ${match.teams?.home?.name} vs ${match.teams?.away?.name}`, {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 707,
+        "type": "log",
+        "code": "console.log(`⚠️ [SEARCH] ${excludedCount} matches excluded due to missing coordinates`);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 722,
+        "type": "log",
+        "code": "console.log('⚠️ [SEARCH] No results found for this area');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 726,
+        "type": "error",
+        "code": "console.error('❌ [SEARCH] API error:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 738,
+        "type": "log",
+        "code": "console.log('⏭️ [SEARCH] Request cancelled:', { requestId, currentRequestId });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 744,
+        "type": "error",
+        "code": "console.error('❌ [SEARCH] Error:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 760,
+        "type": "log",
+        "code": "console.log('✅ [SEARCH] Completed:', { requestId, currentRequestId });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 768,
+        "type": "log",
+        "code": "console.log('⏭️ [SEARCH] Skipping cleanup for stale request:', { requestId, currentRequestId });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 806,
+        "type": "log",
+        "code": "console.log('🔄 [MATCHES] Merging:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 826,
+        "type": "log",
+        "code": "console.log('No markers to center on');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 833,
+        "type": "log",
+        "code": "console.log('Map ref not available');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 846,
+        "type": "log",
+        "code": "console.log('No valid markers with coordinates');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 877,
+        "type": "log",
+        "code": "console.log('🎯 Centering map on markers:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1083,
+        "type": "error",
+        "code": "console.error('MapResultsScreen: Error in handleMarkerPress', error);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1216,
+        "type": "error",
+        "code": "console.error('MapResultsScreen: Search update error:', error);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1254,
+        "type": "log",
+        "code": "console.log('Applying filters:', filters);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1269,
+        "type": "log",
+        "code": "console.log('⚠️ [FILTER] Filter data not ready, showing all matches:', matches.length);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1413,
+        "type": "log",
+        "code": "console.log('🔍 [FILTER DEBUG] Match bounds check:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1511,
+        "type": "log",
+        "code": "console.log('🗺️ [MAP MARKERS] Displaying markers:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1681,
+        "type": "log",
+        "code": "console.log('❌ [FILTER SEARCH] Missing dates:', { dateFrom, dateTo });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1690,
+        "type": "log",
+        "code": "console.log('❌ [FILTER SEARCH] No region available');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1733,
+        "type": "log",
+        "code": "console.log('🔍 [FILTER SEARCH] Using searchAggregatedMatches:', apiParams);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1740,
+        "type": "log",
+        "code": "console.log('🔍 [FILTER SEARCH] Using searchMatchesByBounds:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1762,
+        "type": "log",
+        "code": "console.log('⏭️ [FILTER SEARCH] REJECTED - Stale request:', { requestId, latestRequestId });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1783,
+        "type": "log",
+        "code": "console.log('✅ [FILTER SEARCH] Search complete:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1790,
+        "type": "error",
+        "code": "console.error('Error in filter search:', error);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2062,
+        "type": "log",
+        "code": "console.log('⚠️ Match missing league data:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2156,
+        "type": "log",
+        "code": "console.log(`⏱️ [PERF] End-to-end search complete: ${duration.toFixed(2)}ms (button press → rendered)`);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2204,
+        "type": "log",
+        "code": "console.log(`⏱️ [PERF] End-to-end initial search complete: ${duration.toFixed(2)}ms (button press → rendered)`);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2219,
+        "type": "log",
+        "code": "console.log('❌ [SEARCH THIS AREA] Missing dates:', { dateFrom, dateTo });"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2229,
+        "type": "log",
+        "code": "console.log('🔍 [SEARCH THIS AREA] Region state:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2247,
+        "type": "log",
+        "code": "console.log('❌ [SEARCH THIS AREA] No region available');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2268,
+        "type": "log",
+        "code": "console.log('🚀 [SEARCH THIS AREA] Starting bounds search:', {"
+      },
+      {
+        "file": "screens/MapSearchScreen.js",
+        "line": 66,
+        "type": "error",
+        "code": "console.error('Search error:', error);"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 122,
+        "type": "error",
+        "code": "console.error('Error deleting memory:', error);"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 156,
+        "type": "error",
+        "code": "console.error('Error deleting memory:', error);"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 171,
+        "type": "log",
+        "code": "console.log('No memory to edit, returning early');"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 176,
+        "type": "log",
+        "code": "console.log('Navigating to EditMemory with memory:', memoryToEdit.id);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 68,
+        "type": "log",
+        "code": "console.log('🚀 MessagesScreen - Starting natural language query...');"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 99,
+        "type": "error",
+        "code": "console.error('🚨 MessagesScreen - Error processing query:', error);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 100,
+        "type": "error",
+        "code": "console.error('🚨 MessagesScreen - Error details:', {"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 222,
+        "type": "log",
+        "code": "console.log('MessagesScreen: Calling searchAggregatedMatches with params:', apiParams);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 227,
+        "type": "log",
+        "code": "console.log('MessagesScreen: Final matches from aggregated search:', matches);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 267,
+        "type": "error",
+        "code": "console.error('MessagesScreen: Search error:', error);"
+      },
+      {
+        "file": "screens/ResetPasswordScreen.js",
+        "line": 95,
+        "type": "error",
+        "code": "console.error('Reset password error:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 162,
+        "type": "log",
+        "code": "console.log('Loaded itinerary on mount with flights:', tripData.flights?.length || 0);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 179,
+        "type": "log",
+        "code": "console.log('📥 Itinerary was deleted, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 195,
+        "type": "log",
+        "code": "console.log('📥 Itinerary not found in context or API, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 201,
+        "type": "error",
+        "code": "console.error('Error loading itinerary:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 211,
+        "type": "log",
+        "code": "console.log('📥 Itinerary not found in context after error, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 278,
+        "type": "log",
+        "code": "console.log('📥 Itinerary not found in state or context, refreshing from API');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 284,
+        "type": "log",
+        "code": "console.log('📥 Itinerary was deleted, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 299,
+        "type": "log",
+        "code": "console.log('📥 Could not refresh itinerary, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 303,
+        "type": "error",
+        "code": "console.error('Error refreshing itinerary:', err);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 319,
+        "type": "log",
+        "code": "console.log(`📥 Trip has ${currentItinerary.recommendations.length} stored recommendations - refreshing trip data instead of forcing recommendation refresh`);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 326,
+        "type": "log",
+        "code": "console.log('📥 Itinerary was deleted, navigating back');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 334,
+        "type": "error",
+        "code": "console.error('Error refreshing itinerary:', err);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 342,
+        "type": "log",
+        "code": "console.log('📥 No stored recommendations or empty - fetching from API');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 353,
+        "type": "log",
+        "code": "console.log('Refreshing itinerary after flight added:', itineraryId);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 356,
+        "type": "log",
+        "code": "console.log('Updated itinerary from context:', updatedItinerary);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 358,
+        "type": "log",
+        "code": "console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 362,
+        "type": "log",
+        "code": "console.log('Context refresh failed, fetching directly...');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 368,
+        "type": "log",
+        "code": "console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 373,
+        "type": "error",
+        "code": "console.error('Error refreshing itinerary:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 402,
+        "type": "log",
+        "code": "console.log('Flight deleted, refreshing itinerary...');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 406,
+        "type": "log",
+        "code": "console.log('Updated itinerary after delete:', updatedItinerary);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 408,
+        "type": "log",
+        "code": "console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 412,
+        "type": "log",
+        "code": "console.log('Context refresh failed, fetching directly...');"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 418,
+        "type": "log",
+        "code": "console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 423,
+        "type": "error",
+        "code": "console.error('Error deleting flight:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 424,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 473,
+        "type": "error",
+        "code": "console.error('Error saving description:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 497,
+        "type": "error",
+        "code": "console.error('Error saving notes:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 529,
+        "type": "error",
+        "code": "console.error('Error saving dates:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 665,
+        "type": "log",
+        "code": "console.log(`🏆 Fetched scores for ${data.updatedMatches.length} matches`);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 701,
+        "type": "error",
+        "code": "console.error('Error adding recommendation to trip:', err);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 710,
+        "type": "error",
+        "code": "console.error('Error dismissing recommendation:', err);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 770,
+        "type": "log",
+        "code": "console.log('TripOverviewScreen: Date grouping results:', {"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 1493,
+        "type": "error",
+        "code": "console.error('Error refreshing itinerary after home base update:', error);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 1502,
+        "type": "error",
+        "code": "console.error('Error in fallback itinerary refresh:', fallbackError);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 1728,
+        "type": "error",
+        "code": "console.error('Error deleting trip:', error);"
+      },
+      {
+        "file": "screens/TripsListScreen.js",
+        "line": 82,
+        "type": "error",
+        "code": "console.error('Error refreshing itineraries:', error);"
+      },
+      {
+        "file": "screens/TripsListScreen.js",
+        "line": 107,
+        "type": "error",
+        "code": "console.error('Error deleting trip:', error);"
+      },
+      {
+        "file": "screens/TripsListScreen.js",
+        "line": 158,
+        "type": "error",
+        "code": "console.error('Error renaming trip:', error);"
+      },
+      {
+        "file": "screens/UnifiedSearchScreen.js",
+        "line": 89,
+        "type": "error",
+        "code": "console.error('Failed to load recent searches:', error);"
+      },
+      {
+        "file": "screens/UnifiedSearchScreen.js",
+        "line": 111,
+        "type": "error",
+        "code": "console.error('Failed to save recent search:', error);"
+      },
+      {
+        "file": "screens/UnifiedSearchScreen.js",
+        "line": 148,
+        "type": "log",
+        "code": "console.log('Could not load suggested items:', error);"
+      },
+      {
+        "file": "screens/UnifiedSearchScreen.js",
+        "line": 262,
+        "type": "error",
+        "code": "console.error('Failed to clear recent searches:', error);"
+      },
+      {
+        "file": "screens/WorkOSLoginScreen.js",
+        "line": 127,
+        "type": "error",
+        "code": "console.error('WorkOS callback error:', error);"
+      },
+      {
+        "file": "screens/WorkOSLoginScreen.js",
+        "line": 142,
+        "type": "error",
+        "code": "console.error('WebView error:', nativeEvent);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 137,
+        "type": "error",
+        "code": "console.error('Registration error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 177,
+        "type": "error",
+        "code": "console.error('WorkOS callback error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 201,
+        "type": "error",
+        "code": "console.error('Request password reset error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 226,
+        "type": "error",
+        "code": "console.error('Reset password error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 285,
+        "type": "error",
+        "code": "console.error('Get current user error:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 446,
+        "type": "error",
+        "code": "console.error('Error in searchAggregatedMatches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 470,
+        "type": "error",
+        "code": "console.error('Error searching matches:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 495,
+        "type": "error",
+        "code": "console.error('Error searching teams:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 519,
+        "type": "error",
+        "code": "console.error('Error in searchUnified:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 536,
+        "type": "error",
+        "code": "console.error('getPreferences error:', e);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 723,
+        "type": "error",
+        "code": "console.error('Error creating trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 762,
+        "type": "error",
+        "code": "console.error('Error updating trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 794,
+        "type": "error",
+        "code": "console.error('❌ API Error - Non-JSON response:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 804,
+        "type": "error",
+        "code": "console.error('❌ API Error adding match to trip:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 816,
+        "type": "error",
+        "code": "console.error('Error adding match to trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 843,
+        "type": "error",
+        "code": "console.error('Error deleting trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 870,
+        "type": "error",
+        "code": "console.error('Error removing match from trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 910,
+        "type": "error",
+        "code": "console.error('Error adding flight to trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 944,
+        "type": "error",
+        "code": "console.error('Delete flight API error:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 954,
+        "type": "error",
+        "code": "console.error('Error deleting flight from trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 955,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 991,
+        "type": "error",
+        "code": "console.error('Add home base API error:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1004,
+        "type": "error",
+        "code": "console.error('Error adding home base to trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1005,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1039,
+        "type": "error",
+        "code": "console.error('Update home base API error:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1052,
+        "type": "error",
+        "code": "console.error('Error updating home base:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1053,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1086,
+        "type": "error",
+        "code": "console.error('Delete home base API error:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1099,
+        "type": "error",
+        "code": "console.error('Error deleting home base from trip:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1100,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1209,
+        "type": "error",
+        "code": "console.error('Get travel times API error:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1248,
+        "type": "error",
+        "code": "console.error('Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1280,
+        "type": "error",
+        "code": "console.error('Error updating match planning:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1358,
+        "type": "error",
+        "code": "console.error('Error searching leagues:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1387,
+        "type": "error",
+        "code": "console.error('Error searching matches by location:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1409,
+        "type": "log",
+        "code": "console.log('🔍 getRelevantLeagues: No bounds provided, using fallback hardcoded leagues');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1418,
+        "type": "log",
+        "code": "console.log('🔍 getRelevantLeagues: Search center:', { centerLat, centerLng });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1433,
+        "type": "log",
+        "code": "console.log(`✅ Including international competition: ${league.name}`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1439,
+        "type": "log",
+        "code": "console.log(`✅ Including Champions League specifically: ${league.name}`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1480,
+        "type": "log",
+        "code": "console.log(`🔍 League ${league.name} (${league.country}):`, {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1489,
+        "type": "log",
+        "code": "console.log(`✅ Including ${league.name} due to country match`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1500,
+        "type": "log",
+        "code": "console.log('⚠️ No relevant leagues found, using hardcoded fallback');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1505,
+        "type": "log",
+        "code": "console.log('🔍 Fallback leagues:', fallbackLeagues.map(l => l.name));"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1509,
+        "type": "log",
+        "code": "console.log('🔍 Final relevant leagues:', relevantLeagues.map(l => l.name));"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1528,
+        "type": "error",
+        "code": "console.error('❌ [API] Invalid bounds:', { bounds, latSpan, lngSpan });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1541,
+        "type": "log",
+        "code": "console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1586,
+        "type": "error",
+        "code": "console.error('❌ [API] Failed to parse JSON response:', parseError);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1597,
+        "type": "log",
+        "code": "console.log(`⏱️ [API] Network: ${networkDuration.toFixed(2)}ms, Parse: ${parseDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1606,
+        "type": "error",
+        "code": "console.error('❌ [API] Response not OK:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1620,
+        "type": "log",
+        "code": "console.log(`⏱️ [API] Total API duration: ${totalApiDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1674,
+        "type": "log",
+        "code": "console.log('🔍 searchMatchesByBounds: Using leagues from backend:', targetLeagues.map(l => `${l.name} (${l.id})`));"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1682,
+        "type": "log",
+        "code": "console.log('🔍 searchMatchesByBounds: Target leagues:', targetLeagues.map(l => `${l.name} (${l.id})`));"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1687,
+        "type": "log",
+        "code": "console.log('🏆 CHAMPIONS LEAGUE INCLUDED in search!', championsLeague);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1689,
+        "type": "log",
+        "code": "console.log('❌ CHAMPIONS LEAGUE NOT FOUND in target leagues');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1762,
+        "type": "log",
+        "code": "console.log(`⏱️ [API] Legacy path - Total: ${totalApiDuration.toFixed(2)}ms, League fetch: ${legacyDuration.toFixed(2)}ms`);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1783,
+        "type": "error",
+        "code": "console.error(`❌ [API] Error after ${totalApiDuration.toFixed(2)}ms:`, {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1825,
+        "type": "error",
+        "code": "console.error('Error marking match as attended:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1881,
+        "type": "error",
+        "code": "console.error('Error removing attended match:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1957,
+        "type": "error",
+        "code": "console.error(`❌ Recommended matches API error (${response.status}):`, errorMessage);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1958,
+        "type": "error",
+        "code": "console.error('❌ Full error response:', JSON.stringify(data, null, 2));"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1965,
+        "type": "error",
+        "code": "console.error('❌ Error details:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2015,
+        "type": "log",
+        "code": "console.log('API Service - Sending save match request:', requestBody);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2028,
+        "type": "error",
+        "code": "console.error('API Service - Save match failed:', data);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2032,
+        "type": "log",
+        "code": "console.log('API Service - Save match successful:', data);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2035,
+        "type": "error",
+        "code": "console.error('Error saving match:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2056,
+        "type": "error",
+        "code": "console.error('Error unsaving match:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2076,
+        "type": "error",
+        "code": "console.error('Error checking saved match:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2096,
+        "type": "error",
+        "code": "console.error('Error getting saved match count:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2184,
+        "type": "error",
+        "code": "console.error('Error creating memory:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2230,
+        "type": "error",
+        "code": "console.error('Error updating memory:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2252,
+        "type": "error",
+        "code": "console.error('Error deleting memory:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2277,
+        "type": "log",
+        "code": "console.log('🎯 API Service - Getting recommendations for trip:', tripId, forceRefresh ? '(force refresh)' : '');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2289,
+        "type": "log",
+        "code": "console.log('🔄 API Service - Force refresh - bypassing client cache');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2350,
+        "type": "log",
+        "code": "console.log('🚫 Dismissed matches filtered out:', data.diagnostics.dismissedMatches);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2352,
+        "type": "log",
+        "code": "console.log('✅ No dismissed matches for this trip');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2414,
+        "type": "log",
+        "code": "console.log('📊 API Service - Tracking recommendation:', { matchId, action, tripId });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2461,
+        "type": "error",
+        "code": "console.error('Error tracking recommendation:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2470,
+        "type": "log",
+        "code": "console.log('🏆 API Service - Fetching scores for trip:', tripId);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2591,
+        "type": "error",
+        "code": "console.error('Error in searchLocations:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2617,
+        "type": "error",
+        "code": "console.error('Error in searchAirports:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2659,
+        "type": "error",
+        "code": "console.error('Error in searchFlights:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2682,
+        "type": "error",
+        "code": "console.error('Error in getNearestAirports:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2713,
+        "type": "error",
+        "code": "console.error('Error in getFlightStatus:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2749,
+        "type": "error",
+        "code": "console.error('Error in getFlightByNumber:', error);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2788,
+        "type": "error",
+        "code": "console.error('Error submitting feedback:', error);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 8,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - Sending query:', query);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 9,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - Conversation history length:', conversationHistory.length);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 10,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - API URL:', `${API_BASE_URL}/search/natural-language`);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 28,
+        "type": "error",
+        "code": "console.error('🤖 Natural Language Service - API Error:', errorData);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 36,
+        "type": "error",
+        "code": "console.error('🤖 Natural Language Service - Error:', error);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 37,
+        "type": "error",
+        "code": "console.error('🤖 Natural Language Service - Error details:', {"
+      },
+      {
+        "file": "utils/apiErrorHandler.js",
+        "line": 15,
+        "type": "error",
+        "code": "console.error(`Error in ${context}:`, error);"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 44,
+        "type": "log",
+        "code": "console.log('✅ Environment variables validated successfully');"
+      },
+      {
+        "file": "utils/envValidation.js",
+        "line": 45,
+        "type": "log",
+        "code": "console.log('API URL:', process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api (fallback)');"
+      },
+      {
+        "file": "utils/filterDataProcessor.js",
+        "line": 159,
+        "type": "log",
+        "code": "console.log('No structured data found, creating fallback data');"
+      },
+      {
+        "file": "utils/mapConfig.js",
+        "line": 20,
+        "type": "error",
+        "code": "console.error('❌ GOOGLE_API_KEY environment variable is required in production');"
+      },
+      {
+        "file": "utils/matchStatus.js",
+        "line": 80,
+        "type": "log",
+        "code": "console.log('🔍 Time-based live detection:', {"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 56,
+        "type": "log",
+        "code": "console.log(`⏱️ [PERF] ${type}: ${duration.toFixed(2)}ms`, metadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 82,
+        "type": "error",
+        "code": "console.error(`⏱️ [PERF] ${type} FAILED: ${duration.toFixed(2)}ms`, error);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 122,
+        "type": "log",
+        "code": "console.log(`⏱️ [PERF] ${type}: ${duration.toFixed(2)}ms`, metadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 136,
+        "type": "error",
+        "code": "console.error(`⏱️ [PERF] ${type} FAILED: ${duration.toFixed(2)}ms`, error);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 189,
+        "type": "log",
+        "code": "console.log(logMessage, metadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 220,
+        "type": "log",
+        "code": "console.log(`  ⏱️ [PHASE] ${phaseName}: ${phaseDuration.toFixed(2)}ms`, phaseMetadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 297,
+        "type": "log",
+        "code": "console.log(logMessage, metadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 326,
+        "type": "log",
+        "code": "console.log(`  ⏱️ [PHASE] ${phaseName}: ${phaseDuration.toFixed(2)}ms`, phaseMetadata);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 367,
+        "type": "error",
+        "code": "console.error('Failed to store performance metric:', error);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 389,
+        "type": "error",
+        "code": "console.error('Failed to get performance metrics:', error);"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 497,
+        "type": "log",
+        "code": "console.log('✅ Performance metrics cleared');"
+      },
+      {
+        "file": "utils/performanceTracker.js",
+        "line": 501,
+        "type": "error",
+        "code": "console.error('Failed to clear performance metrics:', error);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 435,
+        "type": "error",
+        "code": "console.error('Invalid date string:', dateString);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 447,
+        "type": "error",
+        "code": "console.error('Error parsing match date:', error);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 472,
+        "type": "error",
+        "code": "console.error('Error converting to venue timezone:', error);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 630,
+        "type": "error",
+        "code": "console.error('Error formatting match time:', error);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 763,
+        "type": "error",
+        "code": "console.error('Error getting relative time:', error);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 784,
+        "type": "log",
+        "code": "console.log('🧪 Testing timezone conversion:');"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 785,
+        "type": "log",
+        "code": "console.log('Fixture:', testFixture);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 788,
+        "type": "log",
+        "code": "console.log('Venue timezone:', timezone);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 791,
+        "type": "log",
+        "code": "console.log('Venue local time:', venueDate);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 799,
+        "type": "log",
+        "code": "console.log('Formatted time:', formattedTime);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 802,
+        "type": "log",
+        "code": "console.log('Relative time:', relativeTime);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 815,
+        "type": "log",
+        "code": "console.log('\\n🧪 Testing Madrid timezone:');"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 817,
+        "type": "log",
+        "code": "console.log('Madrid timezone:', timezone2);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 824,
+        "type": "log",
+        "code": "console.log('Madrid formatted time:', formattedTime2);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 841,
+        "type": "log",
+        "code": "console.log('🔍 Testing timezone conversion with your real data:');"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 849,
+        "type": "log",
+        "code": "console.log(`📊 Found ${matches.length} matches to test`);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 853,
+        "type": "log",
+        "code": "console.log(`\\n--- Match ${index + 1} ---`);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 873,
+        "type": "log",
+        "code": "console.log('🕐 Formatted Time:', formattedTime);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 876,
+        "type": "log",
+        "code": "console.log('⏱️ Relative Time:', relativeTime);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 880,
+        "type": "log",
+        "code": "console.log('\\n✅ Test complete! Check the console for timezone conversion results.');"
+      }
+    ],
+    "remove": [
+      {
+        "file": "components/FilterModal.js",
+        "line": 380,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] present() called successfully');"
+      },
+      {
+        "file": "components/FilterModal.js",
+        "line": 394,
+        "type": "log",
+        "code": "console.log('🟡 [FILTER_MODAL] dismiss() called successfully');"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 112,
+        "type": "log",
+        "code": "console.log('handleMenuPress called, memory:', memory?.id || memory?._id);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 142,
+        "type": "log",
+        "code": "console.log('handleEdit called, memory from ref:', memoryRef.current?.id || memoryRef.current?._id);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 143,
+        "type": "log",
+        "code": "console.log('handleEdit called, memory from prop:', memory?.id || memory?._id);"
+      },
+      {
+        "file": "components/PhotoViewerModal.js",
+        "line": 144,
+        "type": "log",
+        "code": "console.log('handleEdit called, currentMemory:', currentMemory?.id || currentMemory?._id);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 54,
+        "type": "log",
+        "code": "console.log('🆕 API response:', response);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 79,
+        "type": "log",
+        "code": "console.log('➕ Adding match to itinerary:', {"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 88,
+        "type": "log",
+        "code": "console.log('➕ API response:', response);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 126,
+        "type": "log",
+        "code": "console.log('📋 Updating match planning:', { itineraryId, matchId, planningData });"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 131,
+        "type": "log",
+        "code": "console.log('📋 Planning update response:', response);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 137,
+        "type": "log",
+        "code": "console.log('📋 Updated trip from API:', updatedTrip);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 219,
+        "type": "log",
+        "code": "console.log('🔄 API response:', response);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 249,
+        "type": "log",
+        "code": "console.log('🗑️ Attempting to delete itinerary:', itineraryId);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 260,
+        "type": "log",
+        "code": "console.log('🗑️ Using trip ID for API:', tripIdForApi, 'from itinerary:', itinerary?.name);"
+      },
+      {
+        "file": "contexts/ItineraryContext.js",
+        "line": 266,
+        "type": "log",
+        "code": "console.log('🗑️ Backend delete response:', response);"
+      },
+      {
+        "file": "screens/ItineraryMapScreen.js",
+        "line": 73,
+        "type": "log",
+        "code": "console.log('🗺️ ItineraryMapScreen - Loaded from API:', response.data);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1226,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] Filter button pressed');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1227,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] Current filterModalVisible:', filterModalVisible);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1228,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] Calling openFilterModal()');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1233,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] openFilterModal() called');"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1234,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] filterBottomSheetRef.current:', filterBottomSheetRef.current);"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1236,
+        "type": "log",
+        "code": "console.log('🔵 [FILTER] filterBottomSheetRef methods:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 1426,
+        "type": "log",
+        "code": "console.log('📋 [LIST] Filtered by original bounds:', {"
+      },
+      {
+        "file": "screens/MapResultsScreen.js",
+        "line": 2214,
+        "type": "log",
+        "code": "console.log('🔘 [SEARCH THIS AREA] Button clicked');"
+      },
+      {
+        "file": "screens/MemoriesScreen.js",
+        "line": 168,
+        "type": "log",
+        "code": "console.log('handleEditMemoryFromViewer called, memory:', memoryToEdit?.id);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 70,
+        "type": "log",
+        "code": "console.log('🚀 MessagesScreen - Got response:', response);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 73,
+        "type": "log",
+        "code": "console.log('🚀 MessagesScreen - Formatted response:', formattedResponse);"
+      },
+      {
+        "file": "screens/MessagesScreen.js",
+        "line": 225,
+        "type": "log",
+        "code": "console.log('MessagesScreen: searchAggregatedMatches response:', agg);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 149,
+        "type": "log",
+        "code": "console.log('⚡ Cached recommendations available:', uniqueRecommendations.length);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 364,
+        "type": "log",
+        "code": "console.log('Direct fetch response:', response);"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 398,
+        "type": "log",
+        "code": "console.log('Deleting flight:', { tripId, flightId: flightIdString, originalFlightId: flightId });"
+      },
+      {
+        "file": "screens/TripOverviewScreen.js",
+        "line": 414,
+        "type": "log",
+        "code": "console.log('Direct fetch response:', response);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 823,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Deleting trip:', tripId);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 834,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Delete trip response:', { status: response.status, data });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 850,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Removing match from trip:', { tripId, matchId });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 861,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Remove match response:', { status: response.status, data });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1117,
+        "type": "log",
+        "code": "console.log('⚡ API Service - Returning cached travel times');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1171,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - returning cached travel times');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1186,
+        "type": "log",
+        "code": "console.log('⚠️ Non-JSON response - returning cached travel times');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1198,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - returning cached travel times');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1237,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited (error) - returning cached travel times');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1260,
+        "type": "log",
+        "code": "console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 1272,
+        "type": "log",
+        "code": "console.log('📋 API Service - Update planning response:', { status: response.status, data });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2266,
+        "type": "log",
+        "code": "console.log('⚡ API Service - Returning cached recommendations (legacy fallback)');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2285,
+        "type": "log",
+        "code": "console.log('⚡ API Service - Returning client-side cached recommendations (legacy fallback)');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2310,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - returning cached recommendations');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2329,
+        "type": "log",
+        "code": "console.log('⚠️ Non-JSON response - returning cached recommendations');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2337,
+        "type": "log",
+        "code": "console.log('🎯 API Service - Recommendations response:', {"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2361,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited - returning cached recommendations');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2392,
+        "type": "log",
+        "code": "console.log('⚠️ Rate limited (error) - returning cached recommendations');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2446,
+        "type": "log",
+        "code": "console.log('📊 API Service - Track recommendation response:', { status: response.status, data });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2481,
+        "type": "log",
+        "code": "console.log('🏆 API Service - Fetch scores response:', { status: response.status, data });"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2499,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Invalidated recommendation cache for trip:', tripId);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2503,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Cleared all recommendation cache');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2517,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Invalidated travel times cache for trip:', tripId);"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2521,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Cleared all travel times cache');"
+      },
+      {
+        "file": "services/api.js",
+        "line": 2528,
+        "type": "log",
+        "code": "console.log('🗑️ API Service - Cleared all cache');"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 23,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - Response status:', response.status);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 24,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - Response ok:', response.ok);"
+      },
+      {
+        "file": "services/naturalLanguageService.js",
+        "line": 33,
+        "type": "log",
+        "code": "console.log('🤖 Natural Language Service - Response data:', data);"
+      },
+      {
+        "file": "utils/timezoneUtils.js",
+        "line": 844,
+        "type": "log",
+        "code": "console.log('❌ No response data found');"
+      }
+    ],
+    "alreadyWrapped": []
+  }
+}

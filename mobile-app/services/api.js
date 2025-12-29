@@ -282,7 +282,9 @@ const getCurrentUser = async () => {
   } catch (error) {
     // Only log if it's not a rate limit error (to reduce noise)
     if (!error.isRateLimit) {
-      console.error('Get current user error:', error);
+      if (__DEV__) {
+        console.error('Get current user error:', error);
+      }
     }
     
     // Distinguish between network errors and authentication errors
@@ -443,7 +445,9 @@ class ApiService {
       }
       return data; // { success, data: [matches], count }
     } catch (error) {
-      console.error('Error in searchAggregatedMatches:', error);
+      if (__DEV__) {
+        console.error('Error in searchAggregatedMatches:', error);
+      }
       throw error;
     }
   }
@@ -467,7 +471,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('Error searching matches:', error);
+      if (__DEV__) {
+        console.error('Error searching matches:', error);
+      }
       throw error;
     }
   }
@@ -492,7 +498,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('Error searching teams:', error);
+      if (__DEV__) {
+        console.error('Error searching teams:', error);
+      }
       throw error;
     }
   }
@@ -516,7 +524,9 @@ class ApiService {
 
       return data; // { success, results: { leagues, teams, venues }, counts }
     } catch (error) {
-      console.error('Error in searchUnified:', error);
+      if (__DEV__) {
+        console.error('Error in searchUnified:', error);
+      }
       return { success: false, results: { leagues: [], teams: [], venues: [] }, counts: { leagues: 0, teams: 0, venues: 0, total: 0 } };
     }
   }
@@ -533,7 +543,9 @@ class ApiService {
       if (!response.ok) throw new Error(data.error || 'Failed to load preferences');
       return data.preferences || {};
     } catch (e) {
-      console.error('getPreferences error:', e);
+      if (__DEV__) {
+        console.error('getPreferences error:', e);
+      }
       throw e;
     }
   }
@@ -630,7 +642,9 @@ class ApiService {
       
       return data;
     } catch (error) {
-      console.error('Error fetching trips:', error);
+      if (__DEV__) {
+        console.error('Error fetching trips:', error);
+      }
       throw error;
     }
   }
@@ -650,18 +664,20 @@ class ApiService {
       } catch (jsonError) {
         // If response isn't JSON, get text instead
         const text = await response.text();
-        console.error('❌ API Error - Non-JSON response when fetching trip:', {
-          status: response.status,
-          statusText: response.statusText,
-          text: text
-        });
+        if (__DEV__) {
+          console.error('❌ API Error - Non-JSON response when fetching trip:', {
+            status: response.status,
+            statusText: response.statusText,
+            text: text
+          });
+        }
         return { success: false, error: `Failed to fetch trip (${response.status}): ${text}` };
       }
       
       if (!response.ok) {
         const errorMessage = data.message || data.error || `Failed to fetch trip (${response.status})`;
         // Only log non-429 errors to avoid noise from rate limiting
-        if (response.status !== 429) {
+        if (response.status !== 429 && __DEV__) {
           console.error('❌ API Error fetching trip:', {
             status: response.status,
             statusText: response.statusText,
@@ -676,7 +692,7 @@ class ApiService {
       return { success: true, data: data.trip || data };
     } catch (error) {
       // Only log if it's not a network error that might be transient
-      if (error.message && !error.message.includes('Network request failed')) {
+      if (error.message && !error.message.includes('Network request failed') && __DEV__) {
         console.error('Error fetching trip:', error);
       }
       return { success: false, error: error.message || 'Failed to fetch trip' };
@@ -719,7 +735,7 @@ class ApiService {
       return data;
     } catch (error) {
       // Suppress logging for rate limit errors
-      if (!this.isRateLimitError(error)) {
+      if (!this.isRateLimitError(error) && __DEV__) {
         console.error('Error creating trip:', error);
       }
       throw error;
@@ -758,7 +774,7 @@ class ApiService {
       return data;
     } catch (error) {
       // Suppress logging for rate limit errors
-      if (!this.isRateLimitError(error)) {
+      if (!this.isRateLimitError(error) && __DEV__) {
         console.error('Error updating trip:', error);
       }
       throw error;
@@ -791,37 +807,41 @@ class ApiService {
       } catch (jsonError) {
         // If response isn't JSON, get text instead
         const text = await response.text();
-        console.error('❌ API Error - Non-JSON response:', {
-          status: response.status,
-          statusText: response.statusText,
-          text: text
-        });
+        if (__DEV__) {
+          console.error('❌ API Error - Non-JSON response:', {
+            status: response.status,
+            statusText: response.statusText,
+            text: text
+          });
+        }
         throw new Error(`Failed to add match to trip (${response.status}): ${text}`);
       }
       
       if (!response.ok) {
         const errorMessage = data.message || data.error || `Failed to add match to trip (${response.status})`;
-        console.error('❌ API Error adding match to trip:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: data.error,
-          message: data.message,
-          data: data
-        });
+        if (__DEV__) {
+          console.error('❌ API Error adding match to trip:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: data.error,
+            message: data.message,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
       
       return data;
     } catch (error) {
-      console.error('Error adding match to trip:', error);
+      if (__DEV__) {
+        console.error('Error adding match to trip:', error);
+      }
       throw error;
     }
   }
 
   async deleteTrip(tripId) {
     try {
-      console.log('🗑️ API Service - Deleting trip:', tripId);
-      
       const response = await fetch(`${this.baseURL}/trips/${tripId}`, {
         method: 'DELETE',
         headers: {
@@ -831,7 +851,6 @@ class ApiService {
       });
       
       const data = await response.json();
-      console.log('🗑️ API Service - Delete trip response:', { status: response.status, data });
       
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Failed to delete trip');
@@ -840,15 +859,15 @@ class ApiService {
       // Return a consistent format that the context expects
       return { success: true, data };
     } catch (error) {
-      console.error('Error deleting trip:', error);
+      if (__DEV__) {
+        console.error('Error deleting trip:', error);
+      }
       throw error;
     }
   }
 
   async removeMatchFromTrip(tripId, matchId) {
     try {
-      console.log('🗑️ API Service - Removing match from trip:', { tripId, matchId });
-      
       const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}`, {
         method: 'DELETE',
         headers: {
@@ -858,7 +877,6 @@ class ApiService {
       });
       
       const data = await response.json();
-      console.log('🗑️ API Service - Remove match response:', { status: response.status, data });
       
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Failed to remove match from trip');
@@ -867,7 +885,9 @@ class ApiService {
       // Return a consistent format that the context expects
       return { success: true, data };
     } catch (error) {
-      console.error('Error removing match from trip:', error);
+      if (__DEV__) {
+        console.error('Error removing match from trip:', error);
+      }
       throw error;
     }
   }
@@ -907,7 +927,9 @@ class ApiService {
 
       return data; // { success: true, flight: {...} }
     } catch (error) {
-      console.error('Error adding flight to trip:', error);
+      if (__DEV__) {
+        console.error('Error adding flight to trip:', error);
+      }
       throw error;
     }
   }
@@ -941,23 +963,27 @@ class ApiService {
 
       if (!response.ok) {
         const errorMessage = data?.message || data?.error || 'Failed to delete flight from trip';
-        console.error('Delete flight API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: data
-        });
+        if (__DEV__) {
+          console.error('Delete flight API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
 
       return data; // { success: true, message: '...' }
     } catch (error) {
-      console.error('Error deleting flight from trip:', error);
-      console.error('Error details:', {
-        tripId,
-        flightId,
-        message: error.message,
-        response: error.response
-      });
+      if (__DEV__) {
+        console.error('Error deleting flight from trip:', error);
+        console.error('Error details:', {
+          tripId,
+          flightId,
+          message: error.message,
+          response: error.response
+        });
+      }
       throw error;
     }
   }
@@ -988,11 +1014,13 @@ class ApiService {
 
       if (!response.ok) {
         const errorMessage = data?.message || data?.error || 'Failed to add home base to trip';
-        console.error('Add home base API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: data
-        });
+        if (__DEV__) {
+          console.error('Add home base API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
 
@@ -1001,12 +1029,14 @@ class ApiService {
       
       return data; // { success: true, homeBase: {...}, message: '...' }
     } catch (error) {
-      console.error('Error adding home base to trip:', error);
-      console.error('Error details:', {
-        tripId,
-        homeBaseData,
-        message: error.message
-      });
+      if (__DEV__) {
+        console.error('Error adding home base to trip:', error);
+        console.error('Error details:', {
+          tripId,
+          homeBaseData,
+          message: error.message
+        });
+      }
       throw error;
     }
   }
@@ -1036,11 +1066,13 @@ class ApiService {
 
       if (!response.ok) {
         const errorMessage = data?.message || data?.error || 'Failed to update home base';
-        console.error('Update home base API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: data
-        });
+        if (__DEV__) {
+          console.error('Update home base API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
 
@@ -1049,13 +1081,15 @@ class ApiService {
       
       return data; // { success: true, homeBase: {...}, message: '...' }
     } catch (error) {
-      console.error('Error updating home base:', error);
-      console.error('Error details:', {
-        tripId,
-        homeBaseId,
-        updates,
-        message: error.message
-      });
+      if (__DEV__) {
+        console.error('Error updating home base:', error);
+        console.error('Error details:', {
+          tripId,
+          homeBaseId,
+          updates,
+          message: error.message
+        });
+      }
       throw error;
     }
   }
@@ -1083,11 +1117,13 @@ class ApiService {
 
       if (!response.ok) {
         const errorMessage = data?.message || data?.error || 'Failed to delete home base from trip';
-        console.error('Delete home base API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: data
-        });
+        if (__DEV__) {
+          console.error('Delete home base API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
         throw new Error(errorMessage);
       }
 
@@ -1096,12 +1132,14 @@ class ApiService {
       
       return data; // { success: true, message: '...' }
     } catch (error) {
-      console.error('Error deleting home base from trip:', error);
-      console.error('Error details:', {
-        tripId,
-        homeBaseId,
-        message: error.message
-      });
+      if (__DEV__) {
+        console.error('Error deleting home base from trip:', error);
+        console.error('Error details:', {
+          tripId,
+          homeBaseId,
+          message: error.message
+        });
+      }
       throw error;
     }
   }
@@ -1114,7 +1152,6 @@ class ApiService {
     
     const cached = travelTimesCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < TRAVEL_TIMES_CACHE_EXPIRY) {
-      console.log('⚡ API Service - Returning cached travel times');
       return cached.data;
     }
     return null;
@@ -1168,7 +1205,6 @@ class ApiService {
         // Return cached travel times if available when rate limited
         const cached = this.getCachedTravelTimes(tripId, matchIds);
         if (cached) {
-          console.log('⚠️ Rate limited - returning cached travel times');
           return cached;
         }
         // If no cache, return empty object (don't throw error)
@@ -1183,7 +1219,6 @@ class ApiService {
         // If response isn't JSON, try to get cached data
         const cached = this.getCachedTravelTimes(tripId, matchIds);
         if (cached) {
-          console.log('⚠️ Non-JSON response - returning cached travel times');
           return cached;
         }
         throw new Error(`Failed to parse travel times response (${response.status})`);
@@ -1195,7 +1230,6 @@ class ApiService {
           // Return cached travel times if available
           const cached = this.getCachedTravelTimes(tripId, matchIds);
           if (cached) {
-            console.log('⚠️ Rate limited - returning cached travel times');
             return cached;
           }
           // Return empty object instead of throwing error
@@ -1205,7 +1239,7 @@ class ApiService {
         
         const errorMessage = data?.message || data?.error || 'Failed to fetch travel times';
         // Only log non-rate-limit errors
-        if (response.status !== 429) {
+        if (response.status !== 429 && __DEV__) {
           console.error('Get travel times API error:', {
             status: response.status,
             statusText: response.statusText,
@@ -1234,7 +1268,6 @@ class ApiService {
         // Return cached travel times if available
         const cached = this.getCachedTravelTimes(tripId, matchIds);
         if (cached) {
-          console.log('⚠️ Rate limited (error) - returning cached travel times');
           return cached;
         }
         // Return empty object instead of throwing error
@@ -1243,7 +1276,7 @@ class ApiService {
       }
       
       // Only log non-rate-limit errors
-      if (!error.message?.includes('429') && !error.message?.includes('rate limit')) {
+      if (!error.message?.includes('429') && !error.message?.includes('rate limit') && __DEV__) {
         console.error('Error fetching travel times:', error);
         console.error('Error details:', {
           tripId,
@@ -1257,8 +1290,6 @@ class ApiService {
 
   async updateMatchPlanning(tripId, matchId, planningData) {
     try {
-      console.log('📋 API Service - Updating match planning:', { tripId, matchId, planningData });
-      
       const response = await fetch(`${this.baseURL}/trips/${tripId}/matches/${matchId}/planning`, {
         method: 'PUT',
         headers: {
@@ -1269,7 +1300,6 @@ class ApiService {
       });
       
       const data = await response.json();
-      console.log('📋 API Service - Update planning response:', { status: response.status, data });
       
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Failed to update match planning');
@@ -1277,7 +1307,9 @@ class ApiService {
       
       return { success: true, data };
     } catch (error) {
-      console.error('Error updating match planning:', error);
+      if (__DEV__) {
+        console.error('Error updating match planning:', error);
+      }
       throw error;
     }
   }
@@ -1300,7 +1332,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('Error fetching team matches:', error);
+      if (__DEV__) {
+        console.error('Error fetching team matches:', error);
+      }
       throw error;
     }
   }
@@ -1316,7 +1350,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('Error fetching teams:', error);
+      if (__DEV__) {
+        console.error('Error fetching teams:', error);
+      }
       throw error;
     }
   }
@@ -1332,7 +1368,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('Error fetching leagues:', error);
+      if (__DEV__) {
+        console.error('Error fetching leagues:', error);
+      }
       throw error;
     }
   }
@@ -1406,7 +1444,6 @@ class ApiService {
   // This method uses hardcoded AVAILABLE_LEAGUES as a last resort fallback when API is unavailable.
   getRelevantLeagues(searchBounds) {
     if (!searchBounds || !searchBounds.northeast || !searchBounds.southwest) {
-      console.log('🔍 getRelevantLeagues: No bounds provided, using fallback hardcoded leagues');
       console.warn('⚠️ Using hardcoded leagues - API should be used instead. This is a fallback only.');
       return AVAILABLE_LEAGUES; // Fallback to hardcoded leagues if no bounds
     }
@@ -1414,8 +1451,6 @@ class ApiService {
     // Calculate center point of search bounds
     const centerLat = (searchBounds.northeast.lat + searchBounds.southwest.lat) / 2;
     const centerLng = (searchBounds.northeast.lng + searchBounds.southwest.lng) / 2;
-    
-    console.log('🔍 getRelevantLeagues: Search center:', { centerLat, centerLng });
 
     const relevantLeagues = [];
     
@@ -1430,13 +1465,11 @@ class ApiService {
       // Always include international competitions globally
       if (league.isInternational) {
         shouldInclude = true; // International competitions can happen anywhere
-        console.log(`✅ Including international competition: ${league.name}`);
       }
       
       // Always include Champions League specifically (backup for international competitions)
       if (league.name === 'Champions League' || league.id === 2) {
         shouldInclude = true;
-        console.log(`✅ Including Champions League specifically: ${league.name}`);
       } else {
         // Skip leagues without coordinates
         if (!league.coords || league.coords.length !== 2) {
@@ -1477,16 +1510,8 @@ class ApiService {
           'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
         };
 
-        console.log(`🔍 League ${league.name} (${league.country}):`, {
-          isInternational: league.isInternational,
-          hasCoords: !!league.coords,
-          countryMatch: countryMatches[league.country],
-          shouldInclude
-        });
-
         if (countryMatches[league.country]) {
           shouldInclude = true;
-          console.log(`✅ Including ${league.name} due to country match`);
         }
       }
 
@@ -1497,16 +1522,13 @@ class ApiService {
 
     // If no relevant leagues found (edge case), include at least top European leagues
     if (relevantLeagues.length === 0) {
-      console.log('⚠️ No relevant leagues found, using hardcoded fallback');
       console.warn('⚠️ Using hardcoded leagues - API should be used instead. This is a fallback only.');
       const fallbackLeagues = AVAILABLE_LEAGUES.filter(l => 
         ['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Champions League'].includes(l.name)
       );
-      console.log('🔍 Fallback leagues:', fallbackLeagues.map(l => l.name));
       return fallbackLeagues.length > 0 ? fallbackLeagues : AVAILABLE_LEAGUES;
     }
 
-    console.log('🔍 Final relevant leagues:', relevantLeagues.map(l => l.name));
     return relevantLeagues;
   }
 
@@ -1655,7 +1677,9 @@ class ApiService {
             targetLeagues = AVAILABLE_LEAGUES.filter(league => competitionIds.includes(league.id));
           }
         } catch (error) {
-          console.error('Error fetching leagues for competitions:', error);
+          if (__DEV__) {
+            console.error('Error fetching leagues for competitions:', error);
+          }
           // Fallback to AVAILABLE_LEAGUES
           targetLeagues = AVAILABLE_LEAGUES.filter(league => competitionIds.includes(league.id));
         }
@@ -1671,15 +1695,12 @@ class ApiService {
           coords: null, // Coordinates not needed when using backend filtering
           isInternational: league.country === 'International' || league.country === 'Europe'
         }));
-        console.log('🔍 searchMatchesByBounds: Using leagues from backend:', targetLeagues.map(l => `${l.name} (${l.id})`));
         
         // If backend returns empty, log warning but don't fallback to hardcoded leagues
         if (targetLeagues.length === 0) {
           console.warn('⚠️ Backend returned no relevant leagues - this may indicate a configuration issue');
         }
       }
-
-      console.log('🔍 searchMatchesByBounds: Target leagues:', targetLeagues.map(l => `${l.name} (${l.id})`));
       
       // Special logging for Champions League
       const championsLeague = targetLeagues.find(l => l.id === 2 || l.name === 'Champions League');
@@ -2263,7 +2284,6 @@ class ApiService {
     const cacheKey = `recommendations:${tripId}`;
     const cached = recommendationCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-      console.log('⚡ API Service - Returning cached recommendations (legacy fallback)');
       return {
         ...cached.data,
         cached: true
@@ -2274,19 +2294,14 @@ class ApiService {
 
   async getRecommendations(tripId, forceRefresh = false) {
     try {
-      console.log('🎯 API Service - Getting recommendations for trip:', tripId, forceRefresh ? '(force refresh)' : '');
-      
       // Note: Client-side cache check removed - recommendations are now in trip.recommendations
       // Cache kept for backward compatibility during migration
       // Only check cache if forcing refresh (legacy fallback)
       if (!forceRefresh) {
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
-          console.log('⚡ API Service - Returning client-side cached recommendations (legacy fallback)');
           return cached;
         }
-      } else {
-        console.log('🔄 API Service - Force refresh - bypassing client cache');
       }
       
       // Build URL with forceRefresh query parameter if needed
@@ -2307,7 +2322,6 @@ class ApiService {
         // Return cached recommendations if available when rate limited
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
-          console.log('⚠️ Rate limited - returning cached recommendations');
           return cached;
         }
         // If no cache, return empty recommendations with rate limit flag
@@ -2326,31 +2340,11 @@ class ApiService {
         // If response isn't JSON, try to get cached data
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
-          console.log('⚠️ Non-JSON response - returning cached recommendations');
           return cached;
         }
         throw new Error(`Failed to parse recommendations response (${response.status})`);
       }
       
-      // Suppress logging for rate limit errors to reduce console noise
-      if (response.status !== 429) {
-        console.log('🎯 API Service - Recommendations response:', { 
-          status: response.status, 
-          cached: data.cached,
-          recommendationCount: data.recommendations?.length || 0,
-          diagnostics: data.diagnostics ? {
-            reason: data.diagnostics.reason,
-            message: data.diagnostics.message
-          } : null
-        });
-      }
-      
-      // Log dismissed matches if available
-      if (data.diagnostics?.dismissedMatches && data.diagnostics.dismissedMatches.length > 0) {
-        console.log('🚫 Dismissed matches filtered out:', data.diagnostics.dismissedMatches);
-      } else if (data.diagnostics?.dismissedMatches) {
-        console.log('✅ No dismissed matches for this trip');
-      }
       
       if (!response.ok) {
         // Check if it's a rate limit error
@@ -2358,7 +2352,6 @@ class ApiService {
           // Return cached recommendations if available
           const cached = this.getCachedRecommendations(tripId);
           if (cached) {
-            console.log('⚠️ Rate limited - returning cached recommendations');
             return cached;
           }
           // Return error with rate limit flag
@@ -2389,7 +2382,6 @@ class ApiService {
         // Return cached recommendations if available
         const cached = this.getCachedRecommendations(tripId);
         if (cached) {
-          console.log('⚠️ Rate limited (error) - returning cached recommendations');
           return cached;
         }
         // Return error with rate limit flag
@@ -2411,8 +2403,6 @@ class ApiService {
 
   async trackRecommendation(matchId, action, tripId, recommendedDate, score, reason) {
     try {
-      console.log('📊 API Service - Tracking recommendation:', { matchId, action, tripId });
-      
       const response = await fetch(`${this.baseURL}/recommendations/${matchId}/track`, {
         method: 'POST',
         headers: {
@@ -2441,10 +2431,6 @@ class ApiService {
         throw new Error(`Failed to track recommendation (${response.status}): ${text}`);
       }
       
-      // Suppress logging for rate limit errors to avoid noise
-      if (response.status !== 429) {
-        console.log('📊 API Service - Track recommendation response:', { status: response.status, data });
-      }
       
       if (!response.ok) {
         // Don't throw for rate limit errors - just return failure
@@ -2467,8 +2453,6 @@ class ApiService {
   // Fetch scores for completed matches in a trip
   async fetchScores(tripId) {
     try {
-      console.log('🏆 API Service - Fetching scores for trip:', tripId);
-      
       const response = await fetch(`${this.baseURL}/trips/${tripId}/fetch-scores`, {
         method: 'POST',
         headers: {
@@ -2478,7 +2462,6 @@ class ApiService {
       });
       
       const data = await response.json();
-      console.log('🏆 API Service - Fetch scores response:', { status: response.status, data });
       
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch match scores');

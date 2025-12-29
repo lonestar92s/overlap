@@ -60,14 +60,8 @@ const FilterModal = forwardRef(({
 
   // Initialize local filters when drawer opens
   useEffect(() => {
-    if (__DEV__) {
-      console.log('🟢 [FILTER_MODAL] Initialize filters useEffect, visible:', visible, 'selectedFilters:', selectedFilters);
-    }
     if (visible && selectedFilters) {
       setLocalFilters(selectedFilters);
-      if (__DEV__) {
-        console.log('🟢 [FILTER_MODAL] Local filters initialized');
-      }
     }
   }, [visible, selectedFilters]);
 
@@ -348,9 +342,6 @@ const FilterModal = forwardRef(({
 
   // Handle modal dismissal (when user closes it)
   const handleDismiss = useCallback(() => {
-    if (__DEV__) {
-      console.log('🟡 [FILTER_MODAL] BottomSheetModal dismissed');
-    }
     if (onClose) {
       onClose();
     }
@@ -358,44 +349,24 @@ const FilterModal = forwardRef(({
 
   // Handle visibility changes - use present()/dismiss() for BottomSheetModal
   useEffect(() => {
-    if (__DEV__) {
-      console.log('🟡 [FILTER_MODAL] Visibility useEffect triggered, visible:', visible);
-      console.log('🟡 [FILTER_MODAL] bottomSheetRef.current:', bottomSheetRef.current);
-    }
-    
     if (!bottomSheetRef.current) {
-      if (__DEV__) {
-        console.warn('🟡 [FILTER_MODAL] bottomSheetRef.current is null, returning early');
-      }
       return;
     }
-    
+
     if (visible) {
-      if (__DEV__) {
-        console.log('🟡 [FILTER_MODAL] Calling present() to open drawer...');
-      }
       try {
         bottomSheetRef.current.present();
-        if (__DEV__) {
-          console.log('🟡 [FILTER_MODAL] present() called successfully');
-        }
       } catch (error) {
         if (__DEV__) {
-          console.error('🟡 [FILTER_MODAL] Error opening filter drawer:', error);
+          console.error('Error opening filter drawer:', error);
         }
       }
     } else {
-      if (__DEV__) {
-        console.log('🟡 [FILTER_MODAL] Calling dismiss() to close drawer...');
-      }
       try {
         bottomSheetRef.current.dismiss();
-        if (__DEV__) {
-          console.log('🟡 [FILTER_MODAL] dismiss() called successfully');
-        }
       } catch (error) {
         if (__DEV__) {
-          console.error('🟡 [FILTER_MODAL] Error closing filter drawer:', error);
+          console.error('Error closing filter drawer:', error);
         }
       }
     }

@@ -146,7 +146,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
           return true;
         });
         // Recommendations are managed by useRecommendations hook - no need to set manually
-        console.log('⚡ Cached recommendations available:', uniqueRecommendations.length);
       }
 
       // Always fetch fresh data from API on mount to ensure we have latest flights
@@ -159,7 +158,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
           // Handle both response.trip and response.data formats
           const tripData = response.trip || response.data;
           if (response.success && tripData) {
-            console.log('Loaded itinerary on mount with flights:', tripData.flights?.length || 0);
             setItinerary(tripData);
             setDescriptionText(tripData.description || '');
             setNotesText(tripData.notes || '');
@@ -176,7 +174,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
             
             if (isNotFound) {
               // Trip was deleted - navigate back
-              console.log('📥 Itinerary was deleted, navigating back');
               setLoading(false);
               navigation.goBack();
               return;
@@ -192,13 +189,14 @@ const TripOverviewScreen = ({ navigation, route }) => {
               // The hook will fetch when tripId becomes available
             } else {
               // Not in context and API failed - navigate back
-              console.log('📥 Itinerary not found in context or API, navigating back');
               setLoading(false);
               navigation.goBack();
             }
           }
         } catch (error) {
-          console.error('Error loading itinerary:', error);
+          if (__DEV__) {
+            console.error('Error loading itinerary:', error);
+          }
           // Fallback to context
           const foundItinerary = getItineraryById(itineraryId);
           if (foundItinerary) {
@@ -208,7 +206,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
             // Recommendations are automatically fetched by useRecommendations hook
           } else {
             // Not in context and error occurred - navigate back
-            console.log('📥 Itinerary not found in context after error, navigating back');
             setLoading(false);
             navigation.goBack();
           }
@@ -275,13 +272,11 @@ const TripOverviewScreen = ({ navigation, route }) => {
       // If we don't have the itinerary in state or context, try to refresh it from API
       // This handles the case where it's a past trip not in context
       if (!hasItinerary) {
-        console.log('📥 Itinerary not found in state or context, refreshing from API');
         isRefreshingRef.current = true;
         lastRefreshTimeRef.current = now;
         refreshItinerary(itineraryId).then(updatedItinerary => {
           // Check if itinerary was deleted
           if (updatedItinerary?.deleted) {
-            console.log('📥 Itinerary was deleted, navigating back');
             navigation.goBack();
             return;
           }
@@ -296,11 +291,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
             }
           } else {
             // Couldn't refresh - might be deleted, navigate back
-            console.log('📥 Could not refresh itinerary, navigating back');
             navigation.goBack();
           }
         }).catch(err => {
-          console.error('Error refreshing itinerary:', err);
+          if (__DEV__) {
+            console.error('Error refreshing itinerary:', err);
+          }
           // If refresh fails, try fetching recommendations as fallback
           refetchRecommendations(false);
         }).finally(() => {
@@ -316,14 +312,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
       if (hasNonEmptyStoredRecommendations) {
         // Trip has non-empty stored recommendations - just refresh the trip data to get latest recommendations
         // The useRecommendations hook will pick them up automatically when itinerary updates
-        console.log(`📥 Trip has ${currentItinerary.recommendations.length} stored recommendations - refreshing trip data instead of forcing recommendation refresh`);
         isRefreshingRef.current = true;
         lastRefreshTimeRef.current = now;
         // Refresh itinerary to get latest recommendations from backend
         refreshItinerary(itineraryId).then(updatedItinerary => {
           // Check if itinerary was deleted
           if (updatedItinerary?.deleted) {
-            console.log('📥 Itinerary was deleted, navigating back');
             navigation.goBack();
             return;
           }
@@ -331,7 +325,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setItinerary(updatedItinerary);
           }
         }).catch(err => {
-          console.error('Error refreshing itinerary:', err);
+          if (__DEV__) {
+            console.error('Error refreshing itinerary:', err);
+          }
           // If refresh fails, fall back to fetching recommendations normally
           refetchRecommendations(false);
         }).finally(() => {
@@ -339,7 +335,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
         });
       } else {
         // No stored recommendations or empty - fetch from API
-        console.log('📥 No stored recommendations or empty - fetching from API');
         lastRefreshTimeRef.current = now;
         refetchRecommendations(false); // Don't force refresh, just fetch normally
       }
@@ -350,27 +345,23 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const handleFlightAdded = async () => {
     if (itineraryId) {
       try {
-        console.log('Refreshing itinerary after flight added:', itineraryId);
         // Refresh from context (which will update both context and local state)
         const updatedItinerary = await refreshItinerary(itineraryId);
-        console.log('Updated itinerary from context:', updatedItinerary);
         if (updatedItinerary) {
-          console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);
           setItinerary(updatedItinerary);
         } else {
           // Fallback: fetch directly if context refresh fails
-          console.log('Context refresh failed, fetching directly...');
           const response = await apiService.getTripById(itineraryId);
-          console.log('Direct fetch response:', response);
           // Handle both response.trip and response.data formats
           const tripData = response.trip || response.data;
           if (response.success && tripData) {
-            console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);
             setItinerary(tripData);
           }
         }
       } catch (error) {
-        console.error('Error refreshing itinerary:', error);
+        if (__DEV__) {
+          console.error('Error refreshing itinerary:', error);
+        }
       }
     }
   };
@@ -395,32 +386,25 @@ const TripOverviewScreen = ({ navigation, route }) => {
               // Ensure flightId is a string (Mongoose subdocuments use _id)
               const flightIdString = String(flightId);
               
-              console.log('Deleting flight:', { tripId, flightId: flightIdString, originalFlightId: flightId });
-              
               await apiService.deleteFlightFromTrip(tripId, flightIdString);
-              
-              console.log('Flight deleted, refreshing itinerary...');
               
               // Refresh itinerary from context (which updates both context and local state)
               const updatedItinerary = await refreshItinerary(tripId);
-              console.log('Updated itinerary after delete:', updatedItinerary);
               if (updatedItinerary) {
-                console.log('Setting itinerary with flights:', updatedItinerary.flights?.length || 0);
                 setItinerary(updatedItinerary);
               } else {
                 // Fallback: fetch directly if context refresh fails
-                console.log('Context refresh failed, fetching directly...');
                 const response = await apiService.getTripById(tripId);
-                console.log('Direct fetch response:', response);
                 // Handle both response.trip and response.data formats
                 const tripData = response.trip || response.data;
                 if (response.success && tripData) {
-                  console.log('Setting itinerary from direct fetch with flights:', tripData.flights?.length || 0);
                   setItinerary(tripData);
                 }
               }
             } catch (error) {
-              console.error('Error deleting flight:', error);
+              if (__DEV__) {
+                console.error('Error deleting flight:', error);
+              }
               console.error('Error details:', {
                 message: error.message,
                 tripId: itinerary.id || itinerary._id,
