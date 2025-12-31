@@ -19,8 +19,10 @@ import PopularMatchModal from '../components/PopularMatchModal';
 import LocationSearchModal from '../components/LocationSearchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import MatchMapView from '../components/MapView';
+import MatchCard from '../components/MatchCard';
 import ApiService from '../services/api';
 import { FEATURE_FLAGS } from '../utils/featureFlags';
+import { getMatchStatus } from '../utils/matchStatus';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
 
 // Default to London if location permissions denied
@@ -83,6 +85,7 @@ const SearchScreen = ({ navigation }) => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mapRegion, setMapRegion] = useState(null);
+  const [selectedMatch, setSelectedMatch] = useState(null);
   const matchesCacheRef = useRef(null);
   const hasSearchedRef = useRef(false);
 
@@ -178,23 +181,20 @@ const SearchScreen = ({ navigation }) => {
         return;
       }
 
-      // Calculate date range: today to 3 days from now
+      // Calculate date range: today only (same day for both start and end)
       const today = new Date();
-      const threeDaysLater = new Date();
-      threeDaysLater.setDate(today.getDate() + 3);
-
       const dateFrom = today.toISOString().split('T')[0];
-      const dateTo = threeDaysLater.toISOString().split('T')[0];
+      const dateTo = today.toISOString().split('T')[0];
 
       // Create bounds around location (small radius for city-level search)
       const bounds = {
         northeast: {
-          lat: lat + 0.05, // ~5km radius
-          lng: lon + 0.05,
+          lat: lat + 0.1, // ~10km radius
+          lng: lon + 0.1,
         },
         southwest: {
-          lat: lat - 0.05,
-          lng: lon - 0.05,
+          lat: lat - 0.1,
+          lng: lon - 0.1,
         },
       };
 
@@ -204,12 +204,12 @@ const SearchScreen = ({ navigation }) => {
         dateTo,
       });
 
-      if (response.success && response.matches) {
+      if (response.success && response.data) {
         // Filter matches to only those in the user's city
-        let filteredMatches = response.matches;
+        let filteredMatches = response.data;
         
         if (city) {
-          filteredMatches = response.matches.filter(match => {
+          filteredMatches = response.data.filter(match => {
             const matchCity = match.fixture?.venue?.city;
             return matchCity && 
                    matchCity.toLowerCase().includes(city.toLowerCase());
@@ -311,18 +311,11 @@ const SearchScreen = ({ navigation }) => {
   };
 
   const handleMarkerPress = (match) => {
-    navigation.navigate('SearchTab', {
-      screen: 'MapResults',
-      params: {
-        matches: [match],
-        initialRegion: match.fixture?.venue?.coordinates ? {
-          latitude: match.fixture.venue.coordinates[1],
-          longitude: match.fixture.venue.coordinates[0],
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        } : null,
-      },
-    });
+    setSelectedMatch(match);
+  };
+
+  const handleCloseMatchCard = () => {
+    setSelectedMatch(null);
   };
 
   const handleTripPress = (trip) => {
@@ -378,6 +371,46 @@ const SearchScreen = ({ navigation }) => {
         </View>
 
         <TripCountdownWidget onTripPress={handleTripPress} />
+
+        {/* Match Card Overlay - shows when a pin is tapped (centered to avoid blocking countdown) */}
+        {selectedMatch && (() => {
+          const matchStatus = getMatchStatus(selectedMatch);
+          const isCompleted = matchStatus.type === 'completed';
+          
+          // Debug: Check if match has score data
+          if (__DEV__ && isCompleted) {
+            console.log('🔍 Match score data:', {
+              hasScore: !!selectedMatch.score,
+              score: selectedMatch.score,
+              fullTime: selectedMatch.score?.fullTime,
+              goals: selectedMatch.goals,
+              fixture: selectedMatch.fixture
+            });
+          }
+          
+          return (
+            <>
+              {/* Backdrop - tap outside to close */}
+              <TouchableOpacity 
+                style={styles.matchCardBackdrop}
+                activeOpacity={1}
+                onPress={handleCloseMatchCard}
+              />
+              {/* Match Card */}
+              <View style={[styles.matchCardOverlay, { 
+                top: insets.top + spacing.xl + 60, // Position below search button, above countdown
+              }]}>
+                <MatchCard
+                  match={selectedMatch}
+                  onPress={() => {}} // Don't close on card tap
+                  variant="default"
+                  showHeart={!isCompleted} // Only show heart for non-completed matches
+                  showResults={isCompleted} // Show score for completed matches
+                />
+              </View>
+            </>
+          );
+        })()}
 
         <LocationSearchModal
           visible={showLocationSearchModal}
@@ -537,6 +570,29 @@ const styles = StyleSheet.create({
   cardCountry: {
     ...typography.caption,
     color: colors.text.secondary,
+  },
+  matchCardBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 1,
+  },
+  matchCardOverlay: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    // No backgroundColor - MatchCard has its own background
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    ...shadows.lg,
+    maxWidth: '100%',
+    alignSelf: 'center',
+    zIndex: 2,
   },
 });
 

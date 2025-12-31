@@ -275,9 +275,11 @@ const PhotoViewerModal = ({
     );
   }, [memory?.homeTeam?.name, memory?.awayTeam?.name, memory?.userScore, memory?.apiMatchData?.officialScore, memory?.date]);
 
-  // Log when memory changes
+  // Log when memory changes (only when memory is actually selected)
   useEffect(() => {
-    console.log('PhotoViewerModal memory changed:', memory?.id || memory?._id, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
+    if (memory) {
+      console.log('PhotoViewerModal memory changed:', memory?.id || memory?._id, 'hasPhotos:', hasPhotos, 'images.length:', images.length);
+    }
   }, [memory, hasPhotos, images.length]);
 
   // Only return null if modal shouldn't be visible or if we truly don't have a memory
