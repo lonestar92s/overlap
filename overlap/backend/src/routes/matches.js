@@ -293,17 +293,17 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                                 const foundCoords = localVenue.coordinates || localVenue.location?.coordinates;
                                 if (foundCoords) {
                                     console.log(`✅ Found venue by API ID ${apiVenue.id}: ${localVenue.name}, ${localVenue.city} with coordinates`);
-                                    return {
-                                        id: apiVenue.id,
-                                        name: localVenue.name,
-                                        city: localVenue.city,
-                                        country: localVenue.country,
+                                return {
+                                    id: apiVenue.id,
+                                    name: localVenue.name,
+                                    city: localVenue.city,
+                                    country: localVenue.country,
                                         coordinates: foundCoords,
-                                        capacity: localVenue.capacity,
-                                        surface: localVenue.surface,
-                                        address: localVenue.address,
-                                        image: localVenue.image
-                                    };
+                                    capacity: localVenue.capacity,
+                                    surface: localVenue.surface,
+                                    address: localVenue.address,
+                                    image: localVenue.image
+                                };
                                 }
                             }
                         }
@@ -411,33 +411,33 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             const hasValidCity = minimal.city && minimal.city !== 'Unknown City' && minimal.city !== 'Unknown';
                             
                             if (hasValidCity) {
-                                try {
-                                    // Try geocoding with venue name + city + country
-                                    const geocodeQuery = minimal.country ? 
-                                        `${minimal.name}, ${minimal.city}, ${minimal.country}` :
-                                        `${minimal.name}, ${minimal.city}`;
-                                    
-                                    console.log(`🔍 Attempting geocoding for: ${geocodeQuery}`);
-                                    const coords = await geocodingService.geocodeVenueCoordinates(
-                                        minimal.name,
-                                        minimal.city,
-                                        minimal.country
-                                    );
-                                    console.log(`🎯 Geocoding result for ${minimal.name}:`, coords);
-                                    if (coords) {
-                                        // Persist for future
-                                        const savedVenue = await venueService.saveVenueWithCoordinates({
-                                            venueId: apiVenue?.id || null,
-                                            name: minimal.name,
-                                            city: minimal.city,
-                                            country: minimal.country,
-                                            coordinates: coords
-                                        });
-                                        console.log(`💾 Venue saved to DB:`, savedVenue ? 'success' : 'failed');
-                                        minimal.coordinates = coords;
-                                    }
-                                } catch (e) {
-                                    console.error(`❌ Geocoding error for ${minimal.name}:`, e.message);
+                            try {
+                                // Try geocoding with venue name + city + country
+                                const geocodeQuery = minimal.country ? 
+                                    `${minimal.name}, ${minimal.city}, ${minimal.country}` :
+                                    `${minimal.name}, ${minimal.city}`;
+                                
+                                console.log(`🔍 Attempting geocoding for: ${geocodeQuery}`);
+                                const coords = await geocodingService.geocodeVenueCoordinates(
+                                    minimal.name,
+                                    minimal.city,
+                                    minimal.country
+                                );
+                                console.log(`🎯 Geocoding result for ${minimal.name}:`, coords);
+                                if (coords) {
+                                    // Persist for future
+                                    const savedVenue = await venueService.saveVenueWithCoordinates({
+                                        venueId: apiVenue?.id || null,
+                                        name: minimal.name,
+                                        city: minimal.city,
+                                        country: minimal.country,
+                                        coordinates: coords
+                                    });
+                                    console.log(`💾 Venue saved to DB:`, savedVenue ? 'success' : 'failed');
+                                    minimal.coordinates = coords;
+                                }
+                            } catch (e) {
+                                console.error(`❌ Geocoding error for ${minimal.name}:`, e.message);
                                 }
                             } else {
                                 console.log(`⚠️ Skipping geocoding for ${minimal.name} - no valid city (city: ${minimal.city})`);
@@ -859,9 +859,37 @@ async function getRelevantLeagueIds(bounds, user = null) {
     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
     
     console.log(`🔍 [LEAGUE FILTER] Accessible leagues (${accessibleLeagueIdsSet.size}):`, Array.from(accessibleLeagueIdsSet).slice(0, 20));
+    
     // Detect country and nearby countries for domestic league filtering
     const countryDetection = detectCountryFromBounds(bounds);
-    const nearbyCountries = countryDetection.nearbyCountries || [countryDetection.country];
+    
+    // FIX: Empty array is truthy, so check length instead
+    let nearbyCountries = countryDetection.nearbyCountries && countryDetection.nearbyCountries.length > 0 
+        ? [...countryDetection.nearbyCountries] 
+        : [];
+    
+    // ALWAYS include the primary detected country, even if it's far from center
+    // This fixes the "Chicago is 719km from USA center" problem
+    if (countryDetection.country && !nearbyCountries.includes(countryDetection.country)) {
+        // Only add real countries, not regional fallbacks
+        if (!countryDetection.country.endsWith('-Region') && !countryDetection.country.startsWith('Remote-')) {
+            nearbyCountries.push(countryDetection.country);
+        }
+    }
+    
+    // If we got a regional fallback and still have no countries, expand the region
+    if (nearbyCountries.length === 0 && countryDetection.country) {
+        if (countryDetection.country === 'Americas-Region') {
+            nearbyCountries = ['USA', 'Canada', 'Mexico'];
+        } else if (countryDetection.country === 'Europe-Region') {
+            nearbyCountries = ['England', 'Spain', 'Germany', 'Italy', 'France'];
+        } else if (countryDetection.country === 'AsiaPacific-Region') {
+            nearbyCountries = ['Japan', 'Australia', 'South-Korea', 'China'];
+        } else if (countryDetection.country === 'Africa-Region') {
+            nearbyCountries = ['Egypt', 'South-Africa', 'Morocco', 'Nigeria'];
+        }
+    }
+    
     console.log(`🌍 [LEAGUE FILTER] Nearby countries for domestic check: ${nearbyCountries.join(', ')}`);
 
     // Get all active leagues from MongoDB
@@ -903,7 +931,7 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
         // A. DOMESTIC: If country is nearby, include ALL its leagues
         if (nearbyCountries.includes(league.country)) {
-            shouldInclude = true;
+                    shouldInclude = true;
         }
         // B. INTERNATIONAL: Filter based on detected regions
         else if (league.country === 'International' || league.country === 'Europe') {
@@ -925,7 +953,17 @@ async function getRelevantLeagueIds(bounds, user = null) {
             if (!shouldInclude && activeRegions.has('Europe') && 
                 (league.name.includes('Champions League') || league.name.includes('Europa') || 
                  league.name.includes('Nations League') || league.name.includes('Euro'))) {
-                shouldInclude = true;
+                    shouldInclude = true;
+            }
+        }
+        // C. REGIONAL LEAGUES: Check regional mappings even for non-International leagues
+        // Example: MLS (253) is marked as country: 'USA' but should be included for North America searches
+        else {
+            for (const [region, ids] of Object.entries(REGIONAL_INTERNATIONALS)) {
+                if (activeRegions.has(region) && ids.includes(leagueId)) {
+                    shouldInclude = true;
+                    break;
+                }
             }
         }
 
@@ -938,7 +976,7 @@ async function getRelevantLeagueIds(bounds, user = null) {
             }
         }
     }
-    
+
     // Fallback: if no relevant leagues found, include top European leagues plus international (filtered by subscription)
     if (relevantLeagueIds.length === 0) {
         const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
@@ -955,7 +993,7 @@ async function getRelevantLeagueIds(bounds, user = null) {
         
         return filteredFallback;
     }
-    
+
     console.log(`🔍 [LEAGUE FILTER] Final relevant league IDs (${relevantLeagueIds.length}):`, relevantLeagueIds);
     return relevantLeagueIds;
 }
@@ -1075,7 +1113,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                 // December-February would be off-season, but if queried, use previous year
                 if (startMonth >= 3) {
                     season = startYear.toString();
-                } else {
+            } else {
                     // Jan-Feb: use previous year (off-season, but might have preseason matches)
                     season = (startYear - 1).toString();
                 }
