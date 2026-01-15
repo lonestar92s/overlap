@@ -700,9 +700,30 @@ async function getRelevantLeagueIds(bounds, user = null) {
     console.log(`🔍 [LEAGUE FILTER] Has "39" in accessible set? ${accessibleLeagueIdsSet.has('39')}`);
 
     // Get all active leagues from MongoDB
-    const allLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
+    const dbLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
     
-    console.log(`🔍 [LEAGUE FILTER] Total active leagues in database: ${allLeagues.length}`);
+    // Get API mappings for leagues not in database
+    const apiMappings = leagueService.getApiLeagueMappings();
+    
+    // Create a Set of database league API IDs for quick lookup
+    const dbLeagueIds = new Set(dbLeagues.map(l => String(l.apiId)));
+    
+    // Merge database leagues with API mappings (only include mappings not in database)
+    const allLeagues = [...dbLeagues];
+    
+    // Add API mappings that aren't in database
+    Object.entries(apiMappings).forEach(([apiId, leagueData]) => {
+        if (!dbLeagueIds.has(apiId)) {
+            allLeagues.push({
+                apiId: apiId,
+                country: leagueData.country,
+                name: leagueData.name
+            });
+        }
+    });
+    
+    console.log(`🔍 [LEAGUE FILTER] Total active leagues in database: ${dbLeagues.length}`);
+    console.log(`🔍 [LEAGUE FILTER] Total leagues (DB + API fallback): ${allLeagues.length}`);
     
     // Check if Premier League is in database
     const premierLeague = allLeagues.find(l => {

@@ -277,6 +277,13 @@ class LeagueService {
     }
 
     /**
+     * Get API league mappings (for fallback when leagues not in database)
+     */
+    getApiLeagueMappings() {
+        return this.apiLeagueMappings;
+    }
+
+    /**
      * Search leagues by name or aliases
      */
     async searchLeagues(searchTerm, options = {}) {
