@@ -1036,8 +1036,20 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                 console.log(`🌍 [${searchSessionId}] WORLD CUP SEARCH DETECTED! Competition ID: ${competitionId}`);
                 console.log(`🌍 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
                 console.log(`🌍 [${searchSessionId}] Using season: ${season} (from year ${startYear})`);
+            } else if (competitionId === '253' || competitionId === 253) {
+                // MLS (ID 253) runs March-November, so use current year for March+
+                // December-February would be off-season, but if queried, use previous year
+                if (startMonth >= 3) {
+                    season = startYear.toString();
+                } else {
+                    // Jan-Feb: use previous year (off-season, but might have preseason matches)
+                    season = (startYear - 1).toString();
+                }
+                console.log(`🇺🇸 [${searchSessionId}] MLS SEARCH DETECTED! Competition ID: ${competitionId}`);
+                console.log(`🇺🇸 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
+                console.log(`🇺🇸 [${searchSessionId}] Using season: ${season} (month: ${startMonth}, year: ${startYear})`);
             } else {
-                // For regular leagues (Premier League, etc.), determine season based on month
+                // For European leagues (Premier League, etc.), determine season based on month
                 // If date is in second half of year (July+), it's the start of that season
                 // If date is Jan-June, it's still the previous season
                 if (startMonth >= 7) {
