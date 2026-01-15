@@ -192,25 +192,29 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                         const apiVenue = fx.fixture?.venue || {};
                         let apiFootballVenue = null; // Declare outside the if block
 
-                        // Prefer local DB for PL (39)
-                        if (parseInt(competitionId) === 39 && apiVenue?.id) {
+                        // Try local DB lookup by API ID for all leagues (not just PL)
+                        if (apiVenue?.id) {
                             const localVenue = await venueService.getVenueByApiId(apiVenue.id);
                             if (localVenue) {
-                                return {
-                                    id: apiVenue.id,
-                                    name: localVenue.name,
-                                    city: localVenue.city,
-                                    country: localVenue.country,
-                                    coordinates: localVenue.coordinates || localVenue.location?.coordinates,
-                                    capacity: localVenue.capacity,
-                                    surface: localVenue.surface,
-                                    address: localVenue.address,
-                                    image: localVenue.image
-                                };
+                                const foundCoords = localVenue.coordinates || localVenue.location?.coordinates;
+                                if (foundCoords) {
+                                    console.log(`✅ Found venue by API ID ${apiVenue.id}: ${localVenue.name}, ${localVenue.city} with coordinates`);
+                                    return {
+                                        id: apiVenue.id,
+                                        name: localVenue.name,
+                                        city: localVenue.city,
+                                        country: localVenue.country,
+                                        coordinates: foundCoords,
+                                        capacity: localVenue.capacity,
+                                        surface: localVenue.surface,
+                                        address: localVenue.address,
+                                        image: localVenue.image
+                                    };
+                                }
                             }
                         }
 
-                        // API venue by ID
+                        // API venue by ID (for additional metadata)
                         if (apiVenue?.id) {
                             apiFootballVenue = await getVenueFromApiFootball(apiVenue.id);
                             if (apiFootballVenue) {
@@ -220,16 +224,29 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                         }
 
                         // Look up by name in our DB
+                        // Treat "Unknown City" as null to allow name-only matching
                         if (apiVenue?.name) {
-                            const byName = await venueService.getVenueByName(apiVenue.name, apiVenue.city);
-                            if (byName?.coordinates) {
+                            const cityForLookup = (apiVenue.city === 'Unknown City' || apiVenue.city === 'Unknown' || !apiVenue.city) ? null : apiVenue.city;
+                            console.log(`🔍 Looking up venue by name: "${apiVenue.name}", city: ${cityForLookup || 'null (name-only search)'}`);
+                            
+                            const byName = await venueService.getVenueByName(apiVenue.name, cityForLookup);
+                            
+                            // Check both potential coordinate fields (GeoJSON vs Flat array)
+                            const foundCoords = byName?.coordinates || byName?.location?.coordinates;
+                            
+                            if (byName && foundCoords) {
+                                console.log(`✅ Found venue by name: ${byName.name}, ${byName.city} with coordinates`);
                                 return {
                                     id: apiVenue.id || `venue-${apiVenue.name.replace(/\s+/g, '-').toLowerCase()}`,
                                     name: byName.name,
                                     city: byName.city,
                                     country: byName.country,
-                                    coordinates: byName.coordinates
+                                    coordinates: foundCoords
                                 };
+                            } else if (byName) {
+                                console.log(`⚠️ Found venue by name but no coordinates: ${byName.name}, ${byName.city}`);
+                            } else {
+                                console.log(`❌ Venue not found in DB: ${apiVenue.name}`);
                             }
                         }
 
@@ -295,34 +312,41 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
                             console.log(`🏟️ Extracted venue data from fixture.venue for European competition: ${minimal.name}, ${minimal.city}, ${minimal.country}`);
                         }
 
-                        if (!minimal.coordinates && minimal.name && minimal.city) {
-                            try {
-                                // Try geocoding with venue name + city + country
-                                const geocodeQuery = minimal.country ? 
-                                    `${minimal.name}, ${minimal.city}, ${minimal.country}` :
-                                    `${minimal.name}, ${minimal.city}`;
-                                
-                                console.log(`🔍 Attempting geocoding for: ${geocodeQuery}`);
-                                const coords = await geocodingService.geocodeVenueCoordinates(
-                                    minimal.name,
-                                    minimal.city,
-                                    minimal.country
-                                );
-                                console.log(`🎯 Geocoding result for ${minimal.name}:`, coords);
-                                if (coords) {
-                                    // Persist for future
-                                    const savedVenue = await venueService.saveVenueWithCoordinates({
-                                        venueId: apiVenue?.id || null,
-                                        name: minimal.name,
-                                        city: minimal.city,
-                                        country: minimal.country,
-                                        coordinates: coords
-                                    });
-                                    console.log(`💾 Venue saved to DB:`, savedVenue ? 'success' : 'failed');
-                                    minimal.coordinates = coords;
+                        // Geocode as last resort (skip if city is "Unknown")
+                        if (!minimal.coordinates && minimal.name) {
+                            const hasValidCity = minimal.city && minimal.city !== 'Unknown City' && minimal.city !== 'Unknown';
+                            
+                            if (hasValidCity) {
+                                try {
+                                    // Try geocoding with venue name + city + country
+                                    const geocodeQuery = minimal.country ? 
+                                        `${minimal.name}, ${minimal.city}, ${minimal.country}` :
+                                        `${minimal.name}, ${minimal.city}`;
+                                    
+                                    console.log(`🔍 Attempting geocoding for: ${geocodeQuery}`);
+                                    const coords = await geocodingService.geocodeVenueCoordinates(
+                                        minimal.name,
+                                        minimal.city,
+                                        minimal.country
+                                    );
+                                    console.log(`🎯 Geocoding result for ${minimal.name}:`, coords);
+                                    if (coords) {
+                                        // Persist for future
+                                        const savedVenue = await venueService.saveVenueWithCoordinates({
+                                            venueId: apiVenue?.id || null,
+                                            name: minimal.name,
+                                            city: minimal.city,
+                                            country: minimal.country,
+                                            coordinates: coords
+                                        });
+                                        console.log(`💾 Venue saved to DB:`, savedVenue ? 'success' : 'failed');
+                                        minimal.coordinates = coords;
+                                    }
+                                } catch (e) {
+                                    console.error(`❌ Geocoding error for ${minimal.name}:`, e.message);
                                 }
-                            } catch (e) {
-                                console.error(`❌ Geocoding error for ${minimal.name}:`, e.message);
+                            } else {
+                                console.log(`⚠️ Skipping geocoding for ${minimal.name} - no valid city (city: ${minimal.city})`);
                             }
                         }
                         return minimal;
