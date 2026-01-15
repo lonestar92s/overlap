@@ -969,6 +969,38 @@ async function getRelevantLeagueIds(bounds, user = null) {
     return relevantLeagueIds;
 }
 
+// Helper function to calculate season based on competition type and date
+function calculateSeasonForCompetition(competitionId, dateFrom) {
+    if (!dateFrom) return '2025'; // Default
+    
+    const startYear = new Date(dateFrom).getFullYear();
+    const startMonth = new Date(dateFrom).getMonth() + 1;
+    
+    // World Cup (ID 1) uses the year of the tournament as the season
+    if (competitionId === '1' || competitionId === 1) {
+        return startYear.toString();
+    }
+    
+    // MLS (ID 253) runs March-November, so use current year for March+
+    if (competitionId === '253' || competitionId === 253) {
+        if (startMonth >= 3) {
+            return startYear.toString();
+        } else {
+            // Jan-Feb: use previous year (off-season, but might have preseason matches)
+            return (startYear - 1).toString();
+        }
+    }
+    
+    // For European leagues, determine season based on month
+    // If date is in second half of year (July+), it's the start of that season
+    // If date is Jan-June, it's still the previous season
+    if (startMonth >= 7) {
+        return startYear.toString();
+    } else {
+        return (startYear - 1).toString();
+    }
+}
+
 // Get matches for a competition
 router.get('/competitions/:competitionId', authenticateToken, async (req, res) => {
     try {
@@ -1468,7 +1500,9 @@ router.get('/search', async (req, res) => {
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
                         const isFACup = leagueId === 45;
-                        const params = { league: leagueId, season: season, from: dateFrom, to: dateTo };
+                        // Calculate season for this specific league based on its calendar
+                        const leagueSeason = calculateSeasonForCompetition(leagueId.toString(), dateFrom);
+                        const params = { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo };
                         
                         if (isFACup) {
                             console.log(`🔍 [FA CUP] Making API call with params:`, JSON.stringify(params));
@@ -2079,9 +2113,12 @@ router.get('/search', async (req, res) => {
             const requests = [];
             // League requests
             for (const leagueId of leagueIds) {
+                // Calculate season for this specific league based on its calendar
+                const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
+                
                 requests.push(
                     axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                        params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
+                        params: { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo },
                         headers: { 'x-apisports-key': API_SPORTS_KEY },
                         httpsAgent,
                         timeout: 10000
@@ -2468,8 +2505,10 @@ router.get('/popular', async (req, res) => {
         const apiPromises = popularLeagueIds.map(async (leagueId, index) => {
             const leagueName = popularLeagueNames[index];
             try {
+                // Calculate season for this specific league based on its calendar
+                const leagueSeason = calculateSeasonForCompetition(leagueId.toString(), dateFrom);
                 const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                    params: { league: leagueId, season: '2025', from: dateFrom, to: dateTo },
+                    params: { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo },
                     headers: { 'x-apisports-key': API_SPORTS_KEY },
                     httpsAgent,
                     timeout: 10000
