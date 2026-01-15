@@ -153,18 +153,29 @@ async function batchGetVenuesFromApiFootball(venueIds) {
 
 /**
  * Shared venue resolution logic - works for all leagues (MLS, EPL, etc.)
- * Tries multiple strategies to find venue coordinates
+ * Tries multiple strategies to find venue coordinates.
+ * Supports optional batch maps for O(1) lookups in loops.
+ * @param {Object} venue - Venue object from API with id, name, city
+ * @param {string} leagueName - League name for logging
+ * @param {Object} batchMaps - Optional batch maps for O(1) lookups: { venueMapById, venueMapByName, apiVenuesMap }
  */
-async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown') {
+async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown', batchMaps = {}) {
     if (!venue) return null;
+    
+    const { venueMapById, venueMapByName, apiVenuesMap } = batchMaps;
+    const useBatchMaps = venueMapById || venueMapByName;
     
     // Strategy 1: Try local DB lookup by API ID
     if (venue.id) {
-        const localVenue = await venueService.getVenueByApiId(venue.id);
+        const localVenue = venueMapById ? venueMapById.get(venue.id) : await venueService.getVenueByApiId(venue.id);
+        const apiVenueData = apiVenuesMap ? apiVenuesMap.get(venue.id) : null;
+        
         if (localVenue) {
             const foundCoords = localVenue.coordinates || localVenue.location?.coordinates;
             if (foundCoords) {
-                console.log(`✅ [${leagueName}] Found venue by API ID ${venue.id}: ${localVenue.name}, ${localVenue.city}`);
+                if (!useBatchMaps) {
+                    console.log(`✅ [${leagueName}] Found venue by API ID ${venue.id}: ${localVenue.name}, ${localVenue.city}`);
+                }
                 return {
                     id: venue.id,
                     name: localVenue.name,
@@ -174,7 +185,7 @@ async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown') {
                     capacity: localVenue.capacity,
                     surface: localVenue.surface,
                     address: localVenue.address,
-                    image: localVenue.image
+                    image: apiVenueData?.image || localVenue.image || null
                 };
             }
         }
@@ -183,15 +194,38 @@ async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown') {
     // Strategy 2: Try name-based lookup (handles "Unknown City" and null city)
     if (venue.name) {
         const cityForLookup = (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city;
-        console.log(`🔍 [${leagueName}] Looking up venue by name: "${venue.name}", city: ${cityForLookup || 'null'}`);
         
-        const byName = await venueService.getVenueByName(venue.name, cityForLookup);
+        let byName = null;
+        if (venueMapByName) {
+            // Check multiple key formats to handle database vs API city mismatches
+            // The DB stores "Gillette Stadium|Foxborough" but API sends "Gillette Stadium|" (null city)
+            const keyWithCity = `${venue.name}|${cityForLookup || ''}`;
+            byName = venueMapByName.get(keyWithCity);
+            
+            // If not found and we're searching with empty city, iterate to find by name only
+            if (!byName && !cityForLookup) {
+                for (const [key, value] of venueMapByName.entries()) {
+                    if (key.startsWith(`${venue.name}|`)) {
+                        byName = value;
+                        break;
+                    }
+                }
+            }
+        } else {
+            if (!useBatchMaps) {
+                console.log(`🔍 [${leagueName}] Looking up venue by name: "${venue.name}", city: ${cityForLookup || 'null'}`);
+            }
+            byName = await venueService.getVenueByName(venue.name, cityForLookup);
+        }
+        
         const foundCoords = byName?.coordinates || byName?.location?.coordinates;
         
         if (byName && foundCoords) {
-            console.log(`✅ [${leagueName}] Found venue by name: ${byName.name}, ${byName.city}`);
+            if (!useBatchMaps) {
+                console.log(`✅ [${leagueName}] Found venue by name: ${byName.name}, ${byName.city}`);
+            }
             return {
-                id: venue.id || `venue-${venue.name.replace(/\s+/g, '-').toLowerCase()}`,
+                id: venue.id || byName.venueId || `venue-${venue.name.replace(/\s+/g, '-').toLowerCase()}`,
                 name: byName.name,
                 city: byName.city,
                 country: byName.country,
@@ -201,9 +235,9 @@ async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown') {
                 address: byName.address,
                 image: byName.image
             };
-        } else if (byName) {
+        } else if (byName && !useBatchMaps) {
             console.log(`⚠️ [${leagueName}] Found venue by name but no coordinates: ${byName.name}`);
-        } else {
+        } else if (!byName && !useBatchMaps) {
             console.log(`❌ [${leagueName}] Venue not found in DB: ${venue.name}`);
         }
     }
@@ -1773,74 +1807,12 @@ router.get('/search', async (req, res) => {
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
                 
-                // Use batch-fetched data (O(1) lookup from Maps)
-                if (venue?.id) {
-                    const localVenue = venueMapById.get(venue.id);
-                    const apiVenueData = apiVenuesMap.get(venue.id);
-                    const localCoords = localVenue?.coordinates || localVenue?.location?.coordinates;
-                    
-                    if (localVenue && localCoords) {
-                        // MongoDB has venue with coordinates - use it, but get image from API
-                        venueInfo = {
-                            id: venue.id,
-                            name: localVenue.name,
-                            city: localVenue.city,
-                            country: localVenue.country,
-                            coordinates: localCoords,
-                            image: apiVenueData?.image || null // Use image from API-Football (MongoDB doesn't store images)
-                        };
-                    } else if (apiVenueData) {
-                        // MongoDB doesn't have venue OR doesn't have coordinates - use API-Sports data
-                        // API-Sports venue data - check for coordinates in multiple places
-                        const apiCoords = apiVenueData.coordinates || 
-                                         (Array.isArray(apiVenueData.location) ? apiVenueData.location : null) ||
-                                         (apiVenueData.lat && apiVenueData.lng ? [apiVenueData.lng, apiVenueData.lat] : null) ||
-                                         venue?.coordinates || null;
-                        
-                        venueInfo = {
-                            id: venue.id,
-                            name: apiVenueData.name || localVenue?.name || venue?.name,
-                            city: apiVenueData.city || localVenue?.city || venue?.city,
-                            country: apiVenueData.country || localVenue?.country || venue?.country,
-                            coordinates: apiCoords,
-                            image: apiVenueData.image || null // Use image from API-Football
-                        };
-                    } else if (localVenue) {
-                        // MongoDB has venue but no coordinates, and API-Sports also failed - use MongoDB data without coords
-                        // This will trigger the fallback logic to include based on country matching
-                        venueInfo = {
-                            id: venue.id,
-                            name: localVenue.name,
-                            city: localVenue.city,
-                            country: localVenue.country,
-                            coordinates: null, // No coordinates available
-                            image: apiVenueData?.image || null // Use image from API-Football if we fetched it
-                        };
-                    }
-                }
-                
-                // Fallback: If venue lookup by ID failed, try name-based lookup using batch Map
-                if (!venueInfo || (!venueInfo.coordinates && venue?.name)) {
-                    const key = `${venue?.name}|${venue?.city || ''}`;
-                    const byName = venueMapByName.get(key);
-                    if (byName && byName.coordinates) {
-                        const coords = byName.coordinates || byName.location?.coordinates;
-                        if (coords && Array.isArray(coords) && coords.length === 2) {
-                            // Found venue by name with coordinates - use it (this handles duplicate venue records)
-                            venueInfo = {
-                                id: venue?.id || venueInfo?.id || null,
-                                name: byName.name || venue?.name,
-                                city: byName.city || venue?.city,
-                                country: byName.country || venue?.country || match.league?.country,
-                                coordinates: coords,
-                                image: venueInfo?.image || null
-                            };
-                                if (process.env.NODE_ENV !== 'production') {
-                                    console.log(`📍 Found venue by name fallback: ${byName.name} (had coordinates, venueId lookup failed or had no coords)`);
-                                }
-                        }
-                    }
-                }
+                // Use the shared helper with batch maps for O(1) lookups
+                venueInfo = await resolveVenueWithCoordinates(venue, match.league?.name || 'Unknown', {
+                    venueMapById,
+                    venueMapByName,
+                    apiVenuesMap
+                });
                 
                 // Collect venues needing geocoding (don't geocode yet - batch process after loop)
                 if (venueInfo && !venueInfo.coordinates && venueInfo.name && venueInfo.city) {
