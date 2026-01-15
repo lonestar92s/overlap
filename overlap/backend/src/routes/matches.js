@@ -151,6 +151,66 @@ async function batchGetVenuesFromApiFootball(venueIds) {
     return venueMap;
 }
 
+/**
+ * Shared venue resolution logic - works for all leagues (MLS, EPL, etc.)
+ * Tries multiple strategies to find venue coordinates
+ */
+async function resolveVenueWithCoordinates(venue, leagueName = 'Unknown') {
+    if (!venue) return null;
+    
+    // Strategy 1: Try local DB lookup by API ID
+    if (venue.id) {
+        const localVenue = await venueService.getVenueByApiId(venue.id);
+        if (localVenue) {
+            const foundCoords = localVenue.coordinates || localVenue.location?.coordinates;
+            if (foundCoords) {
+                console.log(`✅ [${leagueName}] Found venue by API ID ${venue.id}: ${localVenue.name}, ${localVenue.city}`);
+                return {
+                    id: venue.id,
+                    name: localVenue.name,
+                    city: localVenue.city,
+                    country: localVenue.country,
+                    coordinates: foundCoords,
+                    capacity: localVenue.capacity,
+                    surface: localVenue.surface,
+                    address: localVenue.address,
+                    image: localVenue.image
+                };
+            }
+        }
+    }
+    
+    // Strategy 2: Try name-based lookup (handles "Unknown City" and null city)
+    if (venue.name) {
+        const cityForLookup = (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city;
+        console.log(`🔍 [${leagueName}] Looking up venue by name: "${venue.name}", city: ${cityForLookup || 'null'}`);
+        
+        const byName = await venueService.getVenueByName(venue.name, cityForLookup);
+        const foundCoords = byName?.coordinates || byName?.location?.coordinates;
+        
+        if (byName && foundCoords) {
+            console.log(`✅ [${leagueName}] Found venue by name: ${byName.name}, ${byName.city}`);
+            return {
+                id: venue.id || `venue-${venue.name.replace(/\s+/g, '-').toLowerCase()}`,
+                name: byName.name,
+                city: byName.city,
+                country: byName.country,
+                coordinates: foundCoords,
+                capacity: byName.capacity,
+                surface: byName.surface,
+                address: byName.address,
+                image: byName.image
+            };
+        } else if (byName) {
+            console.log(`⚠️ [${leagueName}] Found venue by name but no coordinates: ${byName.name}`);
+        } else {
+            console.log(`❌ [${leagueName}] Venue not found in DB: ${venue.name}`);
+        }
+    }
+    
+    return null;
+}
+
 // Function to transform API-Sports data to match frontend expectations
 async function transformApiSportsData(apiResponse, competitionId, bounds = null, searchSessionId = 'unknown') {
     const fixtures = apiResponse.response || [];
@@ -1664,8 +1724,10 @@ router.get('/search', async (req, res) => {
                 if (venue?.id) {
                     venueIds.push(venue.id);
                 }
-                if (venue?.name && venue?.city) {
-                    venueNameLookups.push({ name: venue.name, city: venue.city });
+                // Include venues with name, even if city is null/Unknown (for MLS 2026 fixtures)
+                if (venue?.name) {
+                    const cityForLookup = (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city;
+                    venueNameLookups.push({ name: venue.name, city: cityForLookup });
                 }
             }
             
