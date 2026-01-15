@@ -971,34 +971,45 @@ async function getRelevantLeagueIds(bounds, user = null) {
 
 // Helper function to calculate season based on competition type and date
 function calculateSeasonForCompetition(competitionId, dateFrom) {
-    if (!dateFrom) return '2025'; // Default
+    if (!dateFrom) {
+        console.log(`📅 [SEASON CALC] No dateFrom provided, using default: 2025`);
+        return '2025'; // Default
+    }
     
     const startYear = new Date(dateFrom).getFullYear();
     const startMonth = new Date(dateFrom).getMonth() + 1;
     
     // World Cup (ID 1) uses the year of the tournament as the season
     if (competitionId === '1' || competitionId === 1) {
-        return startYear.toString();
+        const season = startYear.toString();
+        console.log(`📅 [SEASON CALC] World Cup (${competitionId}): dateFrom=${dateFrom}, month=${startMonth}, season=${season}`);
+        return season;
     }
     
     // MLS (ID 253) runs March-November, so use current year for March+
     if (competitionId === '253' || competitionId === 253) {
+        let season;
         if (startMonth >= 3) {
-            return startYear.toString();
+            season = startYear.toString();
         } else {
             // Jan-Feb: use previous year (off-season, but might have preseason matches)
-            return (startYear - 1).toString();
+            season = (startYear - 1).toString();
         }
+        console.log(`📅 [SEASON CALC] MLS (${competitionId}): dateFrom=${dateFrom}, month=${startMonth}, year=${startYear}, season=${season}`);
+        return season;
     }
     
     // For European leagues, determine season based on month
     // If date is in second half of year (July+), it's the start of that season
     // If date is Jan-June, it's still the previous season
+    let season;
     if (startMonth >= 7) {
-        return startYear.toString();
+        season = startYear.toString();
     } else {
-        return (startYear - 1).toString();
+        season = (startYear - 1).toString();
     }
+    console.log(`📅 [SEASON CALC] European League (${competitionId}): dateFrom=${dateFrom}, month=${startMonth}, year=${startYear}, season=${season}`);
+    return season;
 }
 
 // Get matches for a competition
@@ -1503,6 +1514,11 @@ router.get('/search', async (req, res) => {
                         // Calculate season for this specific league based on its calendar
                         const leagueSeason = calculateSeasonForCompetition(leagueId.toString(), dateFrom);
                         const params = { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo };
+                        
+                        // Log season calculation for all leagues, especially MLS
+                        if (leagueId === 253 || isFACup) {
+                            console.log(`🔍 [LOCATION SEARCH] League ${leagueId} (${isFACup ? 'FA Cup' : 'MLS'}): dateFrom=${dateFrom}, calculated season=${leagueSeason}, params:`, JSON.stringify(params));
+                        }
                         
                         if (isFACup) {
                             console.log(`🔍 [FA CUP] Making API call with params:`, JSON.stringify(params));
@@ -2105,6 +2121,8 @@ router.get('/search', async (req, res) => {
             }
             const leagueIds = (competitions ? competitions.split(',') : []).map(v => v.trim()).filter(Boolean);
             const teamIds = (teams ? teams.split(',') : []).map(v => v.trim()).filter(Boolean);
+            
+            console.log(`🔍 [AGGREGATED SEARCH] Starting search: leagues=[${leagueIds.join(',')}], teams=[${teamIds.join(',')}], dateFrom=${dateFrom}, dateTo=${dateTo}`);
             const bounds = (neLat && neLng && swLat && swLng) ? {
                 northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
                 southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
@@ -2115,6 +2133,7 @@ router.get('/search', async (req, res) => {
             for (const leagueId of leagueIds) {
                 // Calculate season for this specific league based on its calendar
                 const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
+                console.log(`🔍 [AGGREGATED SEARCH] League ${leagueId}: dateFrom=${dateFrom}, dateTo=${dateTo}, calculated season=${leagueSeason}`);
                 
                 requests.push(
                     axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
@@ -2122,8 +2141,15 @@ router.get('/search', async (req, res) => {
                         headers: { 'x-apisports-key': API_SPORTS_KEY },
                         httpsAgent,
                         timeout: 10000
-                    }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
-                      .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
+                    }).then(r => {
+                        const matchCount = r.data?.response?.length || 0;
+                        console.log(`✅ [AGGREGATED SEARCH] League ${leagueId} (season ${leagueSeason}): ${matchCount} matches found`);
+                        return { type: 'league', id: leagueId, data: r.data };
+                    })
+                      .catch((error) => {
+                        console.error(`❌ [AGGREGATED SEARCH] League ${leagueId} (season ${leagueSeason}) API error:`, error.message);
+                        return { type: 'league', id: leagueId, data: { response: [] } };
+                      })
                 );
             }
             // Team requests
@@ -2141,14 +2167,23 @@ router.get('/search', async (req, res) => {
 
             const settled = await Promise.allSettled(requests);
             const fixtures = [];
+            let totalMatches = 0;
             for (const s of settled) {
                 if (s.status === 'fulfilled') {
                     const payload = s.value;
                     if (payload?.data?.response?.length) {
+                        const matchCount = payload.data.response.length;
+                        totalMatches += matchCount;
+                        console.log(`📊 [AGGREGATED SEARCH] League ${payload.id}: ${matchCount} matches added`);
                         fixtures.push(...payload.data.response);
+                    } else {
+                        console.log(`⚠️ [AGGREGATED SEARCH] League ${payload.id}: No matches in response`);
                     }
+                } else {
+                    console.error(`❌ [AGGREGATED SEARCH] Request failed:`, s.reason);
                 }
             }
+            console.log(`📊 [AGGREGATED SEARCH] Total fixtures collected: ${totalMatches} from ${fixtures.length} raw fixtures`);
 
             // Dedupe by fixture id
             const seen = new Set();
@@ -2304,6 +2339,12 @@ router.get('/search', async (req, res) => {
 
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+            
+            console.log(`📊 [AGGREGATED SEARCH] Final results: ${transformedMatches.length} transformed matches (from ${uniqueFixtures.length} unique fixtures, ${totalMatches} total raw matches)`);
+            if (transformedMatches.length === 0 && totalMatches > 0) {
+                console.log(`⚠️ [AGGREGATED SEARCH] WARNING: Had ${totalMatches} raw matches but 0 after transformation - possible coordinate/bounds filtering issue`);
+            }
+            
             return res.json({ success: true, data: transformedMatches, count: transformedMatches.length });
         }
 
