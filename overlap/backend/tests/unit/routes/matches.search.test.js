@@ -98,6 +98,33 @@ function detectCountryFromBounds(bounds) {
     };
 }
 
+/**
+ * Detect which geographic regions intersect with the search bounds
+ */
+function getIntersectingRegions(bounds) {
+    const regions = new Set();
+    
+    // Define region bounding boxes (approximate)
+    const REGION_BOUNDS = {
+        'Europe': { ne: { lat: 71, lng: 40 }, sw: { lat: 35, lng: -10 } },
+        'Africa': { ne: { lat: 37, lng: 52 }, sw: { lat: -35, lng: -20 } },
+        'SouthAmerica': { ne: { lat: 15, lng: -30 }, sw: { lat: -55, lng: -85 } },
+        'NorthAmerica': { ne: { lat: 75, lng: -50 }, sw: { lat: 15, lng: -170 } },
+        'Asia': { ne: { lat: 75, lng: 180 }, sw: { lat: -10, lng: 60 } }
+    };
+
+    for (const [region, regBounds] of Object.entries(REGION_BOUNDS)) {
+        const latIntersects = Math.max(bounds.southwest.lat, regBounds.sw.lat) <= Math.min(bounds.northeast.lat, regBounds.ne.lat);
+        const lngIntersects = Math.max(bounds.southwest.lng, regBounds.sw.lng) <= Math.min(bounds.northeast.lng, regBounds.ne.lng);
+        
+        if (latIntersects && lngIntersects) {
+            regions.add(region);
+        }
+    }
+    
+    return regions;
+}
+
 describe('Match Search Utilities', () => {
     describe('calculateDistanceKm', () => {
         it('should calculate distance between two points correctly', () => {
@@ -559,6 +586,46 @@ describe('Match Search Utilities', () => {
             expect(generateBoundsHash(null)).toBe('unknown');
             expect(generateBoundsHash({})).toBe('unknown');
             expect(generateBoundsHash({ northeast: {} })).toBe('unknown');
+        });
+    });
+
+    describe('getIntersectingRegions', () => {
+        it('should detect Europe for London search', () => {
+            const bounds = {
+                northeast: { lat: 51.8, lng: 0.2 },
+                southwest: { lat: 51.2, lng: -0.5 }
+            };
+            const regions = getIntersectingRegions(bounds);
+            expect(regions.has('Europe')).toBe(true);
+            expect(regions.has('Africa')).toBe(false);
+        });
+
+        it('should detect Africa for Morocco search', () => {
+            const bounds = {
+                northeast: { lat: 36.0, lng: -5.0 },
+                southwest: { lat: 30.0, lng: -10.0 }
+            };
+            const regions = getIntersectingRegions(bounds);
+            expect(regions.has('Africa')).toBe(true);
+        });
+
+        it('should detect both Europe and Africa for Gibraltar search', () => {
+            const bounds = {
+                northeast: { lat: 37.0, lng: -4.0 },
+                southwest: { lat: 35.0, lng: -6.0 }
+            };
+            const regions = getIntersectingRegions(bounds);
+            expect(regions.has('Europe')).toBe(true);
+            expect(regions.has('Africa')).toBe(true);
+        });
+
+        it('should detect North America for USA search', () => {
+            const bounds = {
+                northeast: { lat: 45.0, lng: -70.0 },
+                southwest: { lat: 30.0, lng: -120.0 }
+            };
+            const regions = getIntersectingRegions(bounds);
+            expect(regions.has('NorthAmerica')).toBe(true);
         });
     });
 });
