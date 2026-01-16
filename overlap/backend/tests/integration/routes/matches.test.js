@@ -524,6 +524,10 @@ describe('Matches Routes Integration', () => {
         return;
       }
 
+      // Clear cache to ensure API call is made
+      const { matchesCache } = require('../../../src/utils/cache');
+      matchesCache.clear();
+
       let capturedSeason = null;
       axios.get.mockImplementation((url, config) => {
         if (config && config.params) {

@@ -1120,6 +1120,13 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                 console.log(`🇺🇸 [${searchSessionId}] MLS SEARCH DETECTED! Competition ID: ${competitionId}`);
                 console.log(`🇺🇸 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
                 console.log(`🇺🇸 [${searchSessionId}] Using season: ${season} (month: ${startMonth}, year: ${startYear})`);
+            } else if (competitionId === '71' || competitionId === 71) {
+                // Brazilian Serie A (ID 71) now runs on calendar year (starts January)
+                // Use current year for all matches in that year
+                season = startYear.toString();
+                console.log(`🇧🇷 [${searchSessionId}] BRAZILIAN SERIE A SEARCH DETECTED! Competition ID: ${competitionId}`);
+                console.log(`🇧🇷 [${searchSessionId}] Date range: ${dateFrom} to ${dateTo}`);
+                console.log(`🇧🇷 [${searchSessionId}] Using season: ${season} (calendar year season)`);
             } else {
                 // For European leagues (Premier League, etc.), determine season based on month
                 // If date is in second half of year (July+), it's the start of that season
