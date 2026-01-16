@@ -1027,6 +1027,13 @@ function calculateSeasonForCompetition(competitionId, dateFrom) {
         console.log(`📅 [SEASON CALC] MLS (${competitionId}): dateFrom=${dateFrom}, month=${startMonth}, year=${startYear}, season=${season}`);
         return season;
     }
+
+    // Brazilian Serie A (ID 71) now runs on calendar year (starts January)
+    if (competitionId === '71' || competitionId === 71) {
+        const season = startYear.toString();
+        console.log(`📅 [SEASON CALC] Brazilian Serie A (${competitionId}): dateFrom=${dateFrom}, month=${startMonth}, year=${startYear}, season=${season} (calendar year)`);
+        return season;
+    }
     
     // For European leagues, determine season based on month
     // If date is in second half of year (July+), it's the start of that season
