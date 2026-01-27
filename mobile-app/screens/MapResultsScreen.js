@@ -621,6 +621,38 @@ const MapResultsScreen = ({ navigation, route }) => {
         const newMatches = Array.isArray(response.data) ? response.data : [];
         const previousMatchCount = matches.length;
         
+        // Log all matches returned from backend with bounds check
+        if (__DEV__ && newMatches.length > 0 && confirmedBounds) {
+          console.log('📥 [BACKEND MATCHES] All matches returned from backend:');
+          newMatches.forEach((match, idx) => {
+            const venue = match.fixture?.venue;
+            const coordinates = venue?.coordinates;
+            const hasCoords = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
+            const [lon, lat] = hasCoords ? coordinates : [null, null];
+            
+            let inBounds = false;
+            let reason = '';
+            if (!hasCoords) {
+              reason = 'missing coordinates';
+            } else if (typeof lon !== 'number' || typeof lat !== 'number' ||
+                       lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+              reason = 'invalid coordinates';
+            } else {
+              // Check if within bounds (without the 5% buffer - this is just for logging)
+              inBounds = lat >= confirmedBounds.southwest.lat && 
+                        lat <= confirmedBounds.northeast.lat &&
+                        lon >= confirmedBounds.southwest.lng && 
+                        lon <= confirmedBounds.northeast.lng;
+              reason = inBounds ? 'in bounds' : 'out of bounds';
+            }
+            
+            const matchName = `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`;
+            const coordsStr = hasCoords ? `[${lat.toFixed(6)}, ${lon.toFixed(6)}]` : 'none';
+            console.log(`  ${idx + 1}. ${matchName} | Coords: ${coordsStr} | ${reason}`);
+          });
+          console.log(`📥 [BACKEND MATCHES] Total: ${newMatches.length} matches`);
+        }
+        
         if (__DEV__) {
           console.log('📍 [SEARCH] Updated search bounds:', {
             previous: originalSearchBounds,
@@ -1196,6 +1228,37 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       const newMatches = response.data || [];
       
+      // Log all matches returned from backend with bounds check
+      if (__DEV__ && newMatches.length > 0 && bounds) {
+        console.log('📥 [BACKEND MATCHES] All matches returned from backend (search update):');
+        newMatches.forEach((match, idx) => {
+          const venue = match.fixture?.venue;
+          const coordinates = venue?.coordinates;
+          const hasCoords = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
+          const [lon, lat] = hasCoords ? coordinates : [null, null];
+          
+          let inBounds = false;
+          let reason = '';
+          if (!hasCoords) {
+            reason = 'missing coordinates';
+          } else if (typeof lon !== 'number' || typeof lat !== 'number' ||
+                     lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+            reason = 'invalid coordinates';
+          } else {
+            inBounds = lat >= bounds.southwest.lat && 
+                      lat <= bounds.northeast.lat &&
+                      lon >= bounds.southwest.lng && 
+                      lon <= bounds.northeast.lng;
+            reason = inBounds ? 'in bounds' : 'out of bounds';
+          }
+          
+          const matchName = `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`;
+          const coordsStr = hasCoords ? `[${lat.toFixed(6)}, ${lon.toFixed(6)}]` : 'none';
+          console.log(`  ${idx + 1}. ${matchName} | Coords: ${coordsStr} | ${reason}`);
+        });
+        console.log(`📥 [BACKEND MATCHES] Total: ${newMatches.length} matches`);
+      }
+      
       // Update state with new search results
       setMatches(newMatches);
       
@@ -1387,18 +1450,34 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
       };
       
+      // Track filtered matches for logging
+      const filteredOutMatches = [];
+      
       const filteredByOriginalBounds = final.filter(match => {
         const venue = match.fixture?.venue;
         const coordinates = venue?.coordinates;
         
         // Validate coordinates
         if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+          if (__DEV__) {
+            filteredOutMatches.push({
+              match,
+              reason: 'missing coordinates'
+            });
+          }
           return false;
         }
         
         const [lon, lat] = coordinates; // Backend returns [lng, lat]
         if (typeof lon !== 'number' || typeof lat !== 'number' ||
             lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          if (__DEV__) {
+            filteredOutMatches.push({
+              match,
+              reason: 'invalid coordinates',
+              coordinates: { lon, lat }
+            });
+          }
           return false;
         }
         
@@ -1408,19 +1487,43 @@ const MapResultsScreen = ({ navigation, route }) => {
                          lon >= strictBounds.southwest.lng && 
                          lon <= strictBounds.northeast.lng;
         
-        // Debug logging for first few matches
-        if (__DEV__ && final.indexOf(match) < 3) {
-          console.log('🔍 [FILTER DEBUG] Match bounds check:', {
-            matchName: `${match.teams?.home?.name} vs ${match.teams?.away?.name}`,
-            coordinates: { lon, lat },
-            strictBounds,
-            originalSearchBounds,
-            inBounds
+        if (!inBounds && __DEV__) {
+          // Determine why it's out of bounds
+          let reason = 'out of bounds';
+          if (lat < strictBounds.southwest.lat) {
+            reason = 'out of bounds (too far south)';
+          } else if (lat > strictBounds.northeast.lat) {
+            reason = 'out of bounds (too far north)';
+          } else if (lon < strictBounds.southwest.lng) {
+            reason = 'out of bounds (too far west)';
+          } else if (lon > strictBounds.northeast.lng) {
+            reason = 'out of bounds (too far east)';
+          }
+          
+          filteredOutMatches.push({
+            match,
+            reason,
+            coordinates: { lat, lon },
+            bounds: {
+              sw: { lat: strictBounds.southwest.lat, lng: strictBounds.southwest.lng },
+              ne: { lat: strictBounds.northeast.lat, lng: strictBounds.northeast.lng }
+            }
           });
         }
         
         return inBounds;
       });
+      
+      // Log filtered out matches
+      if (__DEV__ && filteredOutMatches.length > 0) {
+        console.log('🚫 [FILTERED OUT] Matches filtered by bounds:');
+        filteredOutMatches.forEach((item, idx) => {
+          const matchName = `${item.match.teams?.home?.name || 'Unknown'} vs ${item.match.teams?.away?.name || 'Unknown'}`;
+          const coordsStr = item.coordinates ? `[${item.coordinates.lat.toFixed(6)}, ${item.coordinates.lon.toFixed(6)}]` : 'none';
+          console.log(`  ${idx + 1}. ${matchName} | Reason: ${item.reason} | Coords: ${coordsStr}`);
+        });
+        console.log(`🚫 [FILTERED OUT] Total filtered: ${filteredOutMatches.length} of ${final.length} matches`);
+      }
       
       if (__DEV__) {
         console.log('📋 [LIST] Filtered by original bounds:', {
@@ -1766,6 +1869,38 @@ const MapResultsScreen = ({ navigation, route }) => {
 
       if (response.success) {
         const newMatches = Array.isArray(response.data) ? response.data : [];
+        const confirmedBounds = response.bounds || bounds;
+        
+        // Log all matches returned from backend with bounds check
+        if (__DEV__ && newMatches.length > 0 && confirmedBounds) {
+          console.log('📥 [BACKEND MATCHES] All matches returned from backend (filter search):');
+          newMatches.forEach((match, idx) => {
+            const venue = match.fixture?.venue;
+            const coordinates = venue?.coordinates;
+            const hasCoords = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
+            const [lon, lat] = hasCoords ? coordinates : [null, null];
+            
+            let inBounds = false;
+            let reason = '';
+            if (!hasCoords) {
+              reason = 'missing coordinates';
+            } else if (typeof lon !== 'number' || typeof lat !== 'number' ||
+                       lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+              reason = 'invalid coordinates';
+            } else {
+              inBounds = lat >= confirmedBounds.southwest.lat && 
+                        lat <= confirmedBounds.northeast.lat &&
+                        lon >= confirmedBounds.southwest.lng && 
+                        lon <= confirmedBounds.northeast.lng;
+              reason = inBounds ? 'in bounds' : 'out of bounds';
+            }
+            
+            const matchName = `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`;
+            const coordsStr = hasCoords ? `[${lat.toFixed(6)}, ${lon.toFixed(6)}]` : 'none';
+            console.log(`  ${idx + 1}. ${matchName} | Coords: ${coordsStr} | ${reason}`);
+          });
+          console.log(`📥 [BACKEND MATCHES] Total: ${newMatches.length} matches`);
+        }
         
         // FIXED: When filters are removed and we're doing a location-based search,
         // merge matches instead of replacing to preserve existing matches
@@ -1777,7 +1912,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           updateMatchesEfficiently(newMatches);
         }
         setLastSuccessfulRequestId(requestId);
-        setOriginalSearchBounds(response.bounds || bounds);
+        setOriginalSearchBounds(confirmedBounds);
         
         if (__DEV__) {
           console.log('✅ [FILTER SEARCH] Search complete:', {
