@@ -5,7 +5,6 @@ const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
 const mongoose = require('mongoose');
-
 const transportationRoutes = require('./routes/transportation');
 const matchesRoutes = require('./routes/matches');
 const searchRoutes = require('./routes/search');
@@ -21,17 +20,10 @@ const venuesRoutes = require('./routes/venues');
 const recommendationsRoutes = require('./routes/recommendations');
 const feedbackRoutes = require('./routes/feedback');
 const adminRouter = require('./routes/admin');
-
-
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
-
 dotenv.config({ path: envPath });
-
-
-
 const app = express();
-
 // Security headers middleware (must be before other middleware)
 app.use(helmet({
     contentSecurityPolicy: {
@@ -55,7 +47,6 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false, // Allow external resources if needed
     crossOriginResourcePolicy: { policy: "cross-origin" } // Allow CORS resources
 }));
-
 // Rate limiting configuration
 // General API rate limit - 100 requests per 15 minutes per IP
 const apiLimiter = rateLimit({
@@ -65,7 +56,6 @@ const apiLimiter = rateLimit({
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
-
 // Stricter rate limit for auth endpoints - 5 attempts per 15 minutes
 // In development, allow more attempts to avoid blocking during testing
 const authLimiter = rateLimit({
@@ -76,7 +66,6 @@ const authLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
 });
-
 // Configure CORS with more detailed options
 app.use(cors({
     origin: function (origin, callback) {
@@ -90,7 +79,6 @@ app.use(cors({
             // This is acceptable for mobile apps, but we should validate via other means
             return callback(null, true);
         }
-        
         // Allow localhost and local network IPs in development
         if (process.env.NODE_ENV !== 'production') {
             if (origin.match(/^http:\/\/localhost:\d+$/) || 
@@ -100,13 +88,11 @@ app.use(cors({
                 return callback(null, true);
             }
         }
-        
         // Allow Expo tunnel domains
         if (origin.match(/^https:\/\/.*\.exp\.direct$/) ||
             origin.match(/^https:\/\/.*\.exp\.dev$/)) {
             return callback(null, true);
         }
-        
         // In production, check allowed origins from environment variable
         if (process.env.NODE_ENV === 'production') {
             const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
@@ -114,7 +100,6 @@ app.use(cors({
                 return callback(null, true);
             }
         }
-        
         // Reject other origins
         callback(new Error('Not allowed by CORS'));
     },
@@ -122,14 +107,11 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token'],
     credentials: true
 }));
-
 app.use(express.json({ limit: '10mb' })); // Limit request body size
 app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Limit URL-encoded body size
-
 // Apply rate limiting to API routes
 app.use('/api/', apiLimiter);
 app.use('/api/auth/', authLimiter);
-
 // Log security headers in development (for verification)
 // Note: Headers are set by Helmet before response is sent
 if (process.env.NODE_ENV !== 'production') {
@@ -144,16 +126,13 @@ if (process.env.NODE_ENV !== 'production') {
                     'strict-transport-security': res.getHeader('strict-transport-security'),
                     'content-security-policy': res.getHeader('content-security-policy') ? 'Set' : 'Not set',
                 };
-                console.log(`🔒 [${req.method} ${req.path}] Security Headers:`, securityHeaders);
             }
         });
         next();
     });
 }
-
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
 // Connect to MongoDB
 const mongoUri = process.env.MONGO_URL || process.env.MONGODB_URI;
 if (mongoUri) {
@@ -161,14 +140,9 @@ if (mongoUri) {
     const safeUri = mongoUri.replace(/mongodb:\/\/([^:]+):([^@]+)@/, 'mongodb://***:***@');
     const isRailway = mongoUri.includes('railway') || mongoUri.includes('rlwy.net') || mongoUri.includes('proxy.rlwy.net');
     const isLocal = mongoUri.includes('localhost') || mongoUri.includes('127.0.0.1');
-    
-    console.log(`🔌 Connecting to MongoDB: ${isRailway ? '✅ Railway' : isLocal ? '⚠️ LOCAL' : '✅ Remote'} - ${safeUri}`);
-    
     mongoose.connect(mongoUri)
     .then(() => {
         const dbName = mongoose.connection.db.databaseName;
-        console.log(`✅ Connected to MongoDB database: ${dbName}`);
-        
         // Warn if connecting to local in production
         if (isLocal && process.env.NODE_ENV === 'production') {
             console.error('⚠️ WARNING: Connecting to LOCAL MongoDB in PRODUCTION! This should not happen.');
@@ -181,7 +155,6 @@ if (mongoUri) {
     console.error('❌ MongoDB URI not found - MONGODB_URI or MONGO_URL environment variable must be set');
     console.error('⚠️ Auth and database features will be disabled');
 }
-
 // Mount routes
 app.use('/api/matches', matchesRoutes);
 app.use('/api/auth', authRoutes);
@@ -198,7 +171,6 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
-
 // Test endpoint to check environment variables (only in development)
 if (process.env.NODE_ENV !== 'production') {
     app.get('/api/debug/env', (req, res) => {
@@ -209,16 +181,13 @@ if (process.env.NODE_ENV !== 'production') {
         });
     });
 }
-
 // Set up unmapped team logging after routes are loaded
 const teamService = require('./services/teamService');
 teamService.setUnmappedLogger(adminRouter.logUnmappedTeam);
-
 // Global error handler
 app.use((err, req, res, next) => {
     // Log error to console (will be replaced with logger later)
     console.error('Unhandled error:', err);
-    
     res.status(err.status || 500).json({
         error: process.env.NODE_ENV === 'production' 
             ? 'Internal server error' 
@@ -226,14 +195,11 @@ app.use((err, req, res, next) => {
         ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
     });
 });
-
 const PORT = process.env.PORT || 3001;
-
 // Only start server if not in test environment (supertest handles this)
 if (process.env.NODE_ENV !== 'test') {
     app.listen(PORT, '0.0.0.0', () => {
         // Server is running
     });
 }
-
 module.exports = app; 

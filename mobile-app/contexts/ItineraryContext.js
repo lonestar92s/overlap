@@ -47,17 +47,14 @@ export const ItineraryProvider = ({ children }) => {
   const createItinerary = async (name, destination, startDate, endDate) => {
     try {
       if (__DEV__) {
-        console.log('🆕 Creating itinerary with name:', name, 'dates:', { startDate, endDate });
       }
       const response = await ApiService.createTrip(name, '', startDate, endDate);
       if (__DEV__) {
-        console.log('🆕 API response:', response);
       }
       
       if (response.success && response.trip) {
         const newItinerary = normalizeId(response.trip);
         if (__DEV__) {
-          console.log('🆕 New itinerary normalized:', { id: newItinerary.id, _id: newItinerary._id });
         }
         setItineraries(prev => [...prev, newItinerary]);
         return newItinerary;
@@ -76,23 +73,20 @@ export const ItineraryProvider = ({ children }) => {
   const addMatchToItinerary = async (itineraryId, matchData) => {
     try {
       if (__DEV__) {
-        console.log('➕ Adding match to itinerary:', { 
-          itineraryId, 
+        console.log({
+          itineraryId,
           matchId: matchData.matchId,
-          matchData: JSON.stringify(matchData, null, 2) 
+          matchData: JSON.stringify(matchData, null, 2)
         });
       }
       
       const response = await ApiService.addMatchToTrip(itineraryId, matchData);
       if (__DEV__) {
-        console.log('➕ API response:', response);
       }
       
       if (response.success && response.trip) {
         const updatedTrip = normalizeId(response.trip);
         if (__DEV__) {
-          console.log('➕ Updated trip normalized:', { id: updatedTrip.id, _id: updatedTrip._id });
-          console.log('➕ Updated trip matches:', updatedTrip.matches.map(m => ({ matchId: m.matchId, fixtureId: m.fixtureId })));
         }
         
         // Update local state with the updated trip from API
@@ -101,7 +95,6 @@ export const ItineraryProvider = ({ children }) => {
             idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
           );
           if (__DEV__) {
-            console.log('➕ Local state updated, new itineraries count:', updated.length);
           }
           return updated;
         });
@@ -123,18 +116,15 @@ export const ItineraryProvider = ({ children }) => {
   const updateMatchPlanning = async (itineraryId, matchId, planningData) => {
     try {
       if (__DEV__) {
-        console.log('📋 Updating match planning:', { itineraryId, matchId, planningData });
       }
       
       const response = await ApiService.updateMatchPlanning(itineraryId, matchId, planningData);
       if (__DEV__) {
-        console.log('📋 Planning update response:', response);
       }
       
       if (response.success && response.data.trip) {
         const updatedTrip = normalizeId(response.data.trip);
         if (__DEV__) {
-          console.log('📋 Updated trip from API:', updatedTrip);
         }
         
         // Update local state with the updated trip from API
@@ -180,7 +170,6 @@ export const ItineraryProvider = ({ children }) => {
         }
       } catch (apiError) {
         if (__DEV__) {
-          console.log('🔄 Backend API not available, using local state update');
         }
       }
       
@@ -211,18 +200,15 @@ export const ItineraryProvider = ({ children }) => {
   const updateItinerary = async (itineraryId, updates) => {
     try {
       if (__DEV__) {
-        console.log('🔄 Updating itinerary:', { itineraryId, updates });
       }
       
       const response = await ApiService.updateTrip(itineraryId, updates);
       if (__DEV__) {
-        console.log('🔄 API response:', response);
       }
       
       if (response.success && response.trip) {
         const updatedTrip = normalizeId(response.trip);
         if (__DEV__) {
-          console.log('🔄 Updated trip from API:', updatedTrip);
         }
         
         // Update local state with the updated trip from API
@@ -246,7 +232,6 @@ export const ItineraryProvider = ({ children }) => {
   const deleteItinerary = async (itineraryId) => {
     try {
       if (__DEV__) {
-        console.log('🗑️ Attempting to delete itinerary:', itineraryId);
       }
       
       // Find the itinerary to get the correct ID format
@@ -257,13 +242,11 @@ export const ItineraryProvider = ({ children }) => {
       // Prefer _id for backend calls (MongoDB format), fallback to id
       const tripIdForApi = itinerary?._id || itinerary?.id || itineraryId;
       if (__DEV__) {
-        console.log('🗑️ Using trip ID for API:', tripIdForApi, 'from itinerary:', itinerary?.name);
       }
       
       // Use the backend API - don't allow local-only deletion
       const response = await ApiService.deleteTrip(tripIdForApi);
       if (__DEV__) {
-        console.log('🗑️ Backend delete response:', response);
       }
       
       if (response.success) {
@@ -272,7 +255,6 @@ export const ItineraryProvider = ({ children }) => {
           !idsEqual(it.id || it._id, itineraryId)
         ));
         if (__DEV__) {
-          console.log('✅ Itinerary deleted successfully via API');
         }
         return;
       } else {

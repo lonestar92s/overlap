@@ -2,7 +2,6 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const router = express.Router();
-
 /**
  * POST /api/attendance/mark-attended
  * Mark a match as attended by the user
@@ -10,14 +9,12 @@ const router = express.Router();
 router.post('/mark-attended', authenticateToken, async (req, res) => {
     try {
         const { matchId, matchData, userScore, userNotes } = req.body;
-        
         if (!matchId || !matchData) {
             return res.status(400).json({
                 success: false,
                 message: 'Match ID and match data are required'
             });
         }
-
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -25,19 +22,16 @@ router.post('/mark-attended', authenticateToken, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         // Check if match is already marked as attended
         const existingAttendance = user.attendedMatches.find(
             match => match.matchId === matchId
         );
-
         if (existingAttendance) {
             return res.status(400).json({
                 success: false,
                 message: 'Match already marked as attended'
             });
         }
-
         // Create attended match entry
         const attendedMatch = {
             matchId,
@@ -71,19 +65,14 @@ router.post('/mark-attended', authenticateToken, async (req, res) => {
                 leagueId: matchData.competition?.id || matchData.leagueId
             }
         };
-
         // Add to user's attended matches
         user.attendedMatches.push(attendedMatch);
         await user.save();
-
-        console.log(`✅ User ${user.email} marked match ${matchId} as attended`);
-
         res.json({
             success: true,
             message: 'Match marked as attended',
             attendedMatch
         });
-
     } catch (error) {
         console.error('Error marking match as attended:', error);
         res.status(500).json({
@@ -93,7 +82,6 @@ router.post('/mark-attended', authenticateToken, async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/attendance/user-matches
  * Get all attended matches for the current user
@@ -107,18 +95,15 @@ router.get('/user-matches', authenticateToken, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         // Sort by attended date (most recent first)
         const attendedMatches = user.attendedMatches.sort(
             (a, b) => new Date(b.attendedDate) - new Date(a.attendedDate)
         );
-
         res.json({
             success: true,
             matches: attendedMatches,
             totalCount: attendedMatches.length
         });
-
     } catch (error) {
         console.error('Error fetching attended matches:', error);
         res.status(500).json({
@@ -128,7 +113,6 @@ router.get('/user-matches', authenticateToken, async (req, res) => {
         });
     }
 });
-
 /**
  * DELETE /api/attendance/:matchId
  * Remove a match from attended matches
@@ -136,7 +120,6 @@ router.get('/user-matches', authenticateToken, async (req, res) => {
 router.delete('/:matchId', authenticateToken, async (req, res) => {
     try {
         const { matchId } = req.params;
-        
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -144,29 +127,22 @@ router.delete('/:matchId', authenticateToken, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         // Find and remove the match
         const matchIndex = user.attendedMatches.findIndex(
             match => match.matchId === matchId
         );
-
         if (matchIndex === -1) {
             return res.status(404).json({
                 success: false,
                 message: 'Attended match not found'
             });
         }
-
         user.attendedMatches.splice(matchIndex, 1);
         await user.save();
-
-        console.log(`🗑️ User ${user.email} removed match ${matchId} from attended matches`);
-
         res.json({
             success: true,
             message: 'Match removed from attended matches'
         });
-
     } catch (error) {
         console.error('Error removing attended match:', error);
         res.status(500).json({
@@ -176,7 +152,6 @@ router.delete('/:matchId', authenticateToken, async (req, res) => {
         });
     }
 });
-
 /**
  * PUT /api/attendance/:matchId
  * Update an attended match (score, notes, etc.)
@@ -185,7 +160,6 @@ router.put('/:matchId', authenticateToken, async (req, res) => {
     try {
         const { matchId } = req.params;
         const { userScore, userNotes } = req.body;
-        
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -193,30 +167,24 @@ router.put('/:matchId', authenticateToken, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const match = user.attendedMatches.find(
             match => match.matchId === matchId
         );
-
         if (!match) {
             return res.status(404).json({
                 success: false,
                 message: 'Attended match not found'
             });
         }
-
         // Update match data
         if (userScore !== undefined) match.userScore = userScore;
         if (userNotes !== undefined) match.userNotes = userNotes;
-
         await user.save();
-
         res.json({
             success: true,
             message: 'Attended match updated',
             match
         });
-
     } catch (error) {
         console.error('Error updating attended match:', error);
         res.status(500).json({
@@ -226,5 +194,4 @@ router.put('/:matchId', authenticateToken, async (req, res) => {
         });
     }
 });
-
 module.exports = router;

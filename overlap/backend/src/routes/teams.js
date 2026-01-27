@@ -4,13 +4,10 @@ const teamService = require('../services/teamService');
 const Team = require('../models/Team');
 const axios = require('axios');
 const { teamSearchCache } = require('../utils/cache');
-
 const router = express.Router();
-
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
-
 /**
  * GET /api/teams/search
  * Search teams by name, returns both database teams and API results
@@ -18,24 +15,19 @@ const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 router.get('/search', async (req, res) => {
     try {
         const { query } = req.query;
-        
         // Sanitize and validate query input
         const { sanitizeSearchQuery } = require('../utils/security');
         const validation = sanitizeSearchQuery(query, 100);
-        
         if (!validation.valid) {
             return res.status(400).json({
                 success: false,
                 message: validation.error || 'Invalid search query'
             });
         }
-
         const sanitizedQuery = validation.sanitized;
-
         // Check cache first
         const cacheKey = `search_${sanitizedQuery.toLowerCase()}`;
         const cachedResults = teamSearchCache.get(cacheKey);
-        
         if (cachedResults) {
             return res.json({
                 success: true,
@@ -43,7 +35,6 @@ router.get('/search', async (req, res) => {
                 fromCache: true
             });
         }
-
         // Search local database first
         const dbTeams = await Team.find({
             $or: [
@@ -53,7 +44,6 @@ router.get('/search', async (req, res) => {
         })
         .select('name apiId logo country city')
         .limit(10);
-
         // If we have enough results from DB, cache and return them
         if (dbTeams.length >= 5) {
             const results = dbTeams.map(team => ({
@@ -63,16 +53,13 @@ router.get('/search', async (req, res) => {
                 country: team.country,
                 city: team.city
             }));
-
             teamSearchCache.set(cacheKey, results);
-            
             return res.json({
                 success: true,
                 results,
                 fromCache: false
             });
         }
-
         // Otherwise, also search API-Sports
         try {
             const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/teams`, {
@@ -81,9 +68,7 @@ router.get('/search', async (req, res) => {
                     'x-apisports-key': API_SPORTS_KEY
                 }
             });
-
             const apiTeams = apiResponse.data.response || [];
-            
             // Save API teams to database (on-demand caching)
             if (apiTeams.length > 0) {
                 // Use setImmediate to avoid blocking the response
@@ -92,11 +77,9 @@ router.get('/search', async (req, res) => {
                         for (const teamData of apiTeams) {
                             const team = teamData.team;
                             const venue = teamData.venue;
-                            
                             try {
                                 // Check if team already exists
                                 const existingTeam = await Team.findOne({ apiId: team.id.toString() });
-                                
                                 if (!existingTeam) {
                                     // Create new team from API data
                                     let venueInfo = null;
@@ -135,7 +118,6 @@ router.get('/search', async (req, res) => {
                                             };
                                         }
                                     }
-                                    
                                     await Team.create({
                                         apiId: team.id.toString(),
                                         name: team.name,
@@ -148,12 +130,9 @@ router.get('/search', async (req, res) => {
                                         apiSource: 'api-sports',
                                         lastUpdated: new Date()
                                     });
-                                    
-                                    console.log(`💾 Saved new team to DB: ${team.name}`);
                                 }
                             } catch (saveError) {
                                 // Ignore save errors (might be duplicates, etc.)
-                                console.log(`⚠️ Could not save team ${team.name}: ${saveError.message}`);
                             }
                         }
                     } catch (bulkError) {
@@ -161,7 +140,6 @@ router.get('/search', async (req, res) => {
                     }
                 });
             }
-            
             // Combine and deduplicate results
             const allTeams = [
                 ...dbTeams.map(team => ({
@@ -181,21 +159,17 @@ router.get('/search', async (req, res) => {
                     source: 'api'
                 }))
             ];
-
             // Remove duplicates based on team ID
             const uniqueTeams = Array.from(
                 new Map(allTeams.map(team => [team.id, team])).values()
             ).slice(0, 10); // Limit to 10 results
-
             // Cache the results
             teamSearchCache.set(cacheKey, uniqueTeams);
-
             res.json({
                 success: true,
                 results: uniqueTeams,
                 fromCache: false
             });
-
         } catch (apiError) {
             // If API call fails, return and cache database results
             console.error('API search failed:', apiError.message);
@@ -207,16 +181,13 @@ router.get('/search', async (req, res) => {
                 city: team.city,
                 source: 'db'
             }));
-
             teamSearchCache.set(cacheKey, results);
-
             res.json({
                 success: true,
                 results,
                 fromCache: false
             });
         }
-
     } catch (error) {
         console.error('Team search error:', error);
         res.status(500).json({
@@ -225,7 +196,6 @@ router.get('/search', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/teams/popular
  * Get popular/featured teams
@@ -237,9 +207,7 @@ router.get('/popular', async (req, res) => {
             league,
             limit = 20 
         } = req.query;
-
         const teams = await teamService.getPopularTeams(parseInt(limit));
-
         res.json({
             success: true,
             teams
@@ -252,7 +220,6 @@ router.get('/popular', async (req, res) => {
         });
     }
 });
-
 /**
  * POST /api/teams/populate
  * Admin endpoint to populate database with teams from major leagues
@@ -261,7 +228,6 @@ router.get('/popular', async (req, res) => {
 router.post('/populate', adminAuth, async (req, res) => {
     try {
         await teamService.populatePopularTeams();
-        
         res.json({
             success: true,
             message: 'Started populating teams database'
@@ -274,7 +240,6 @@ router.post('/populate', adminAuth, async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/teams/stats
  * Get statistics about cached teams
@@ -282,7 +247,6 @@ router.post('/populate', adminAuth, async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const Team = require('../models/Team');
-        
         const stats = await Team.aggregate([
             {
                 $group: {
@@ -294,12 +258,10 @@ router.get('/stats', async (req, res) => {
                 }
             }
         ]);
-
         const topTeams = await Team.find({})
             .sort({ searchCount: -1 })
             .limit(10)
             .select('name country searchCount popularity');
-
         res.json({
             success: true,
             data: {
@@ -321,7 +283,6 @@ router.get('/stats', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/teams/cache/stats
  * Get cache statistics (for monitoring)
@@ -333,7 +294,6 @@ router.get('/cache/stats', adminAuth, (req, res) => {
         stats
     });
 });
-
 /**
  * POST /api/teams/cache/clear
  * Clear the cache (admin only)
@@ -345,5 +305,4 @@ router.post('/cache/clear', adminAuth, (req, res) => {
         message: 'Cache cleared'
     });
 });
-
 module.exports = router; 

@@ -1,15 +1,12 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const Feedback = require('../models/Feedback');
-
 const router = express.Router();
-
 // POST /api/feedback
 // Submit user feedback (requires authentication)
 router.post('/', authenticateToken, async (req, res) => {
     try {
         const { message, type = 'general', metadata = {} } = req.body;
-
         // Validate message
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
             return res.status(400).json({
@@ -17,14 +14,12 @@ router.post('/', authenticateToken, async (req, res) => {
                 error: 'Feedback message is required'
             });
         }
-
         if (message.trim().length > 2000) {
             return res.status(400).json({
                 success: false,
                 error: 'Feedback message is too long (max 2000 characters)'
             });
         }
-
         // Validate type
         const validTypes = ['general', 'bug', 'feature', 'rating'];
         if (!validTypes.includes(type)) {
@@ -33,7 +28,6 @@ router.post('/', authenticateToken, async (req, res) => {
                 error: `Invalid feedback type. Must be one of: ${validTypes.join(', ')}`
             });
         }
-
         // Create feedback entry
         const feedback = new Feedback({
             message: message.trim(),
@@ -44,9 +38,7 @@ router.post('/', authenticateToken, async (req, res) => {
             status: 'new',
             metadata
         });
-
         await feedback.save();
-
         res.status(201).json({
             success: true,
             message: 'Feedback submitted successfully',
@@ -65,7 +57,4 @@ router.post('/', authenticateToken, async (req, res) => {
         });
     }
 });
-
 module.exports = router;
-
-

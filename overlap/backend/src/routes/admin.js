@@ -12,9 +12,7 @@ const venueService = require('../services/venueService');
 const subscriptionService = require('../services/subscriptionService');
 const { authenticateToken } = require('../middleware/auth');
 const { teamSearchCache, matchesCache } = require('../utils/cache');
-
 const router = express.Router();
-
 // Ensure admin role
 const ensureAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'admin') {
@@ -23,27 +21,23 @@ const ensureAdmin = (req, res, next) => {
         res.status(403).json({ message: 'Admin access required' });
     }
 };
-
 // Clear application cache
 router.post('/clear-cache', authenticateToken, ensureAdmin, (req, res) => {
     try {
         teamSearchCache.clear();
         matchesCache.clear();
-
         res.json({ message: 'Cache cleared successfully' });
     } catch (error) {
         console.error('Error clearing cache:', error);
         res.status(500).json({ message: 'Error clearing cache' });
     }
 });
-
 // Track unmapped teams for admin dashboard
 const unmappedTeamsCache = {
     teams: new Map(),
     lastUpdated: null,
     cacheDuration: 30 * 60 * 1000 // 30 minutes
 };
-
 // Function to log unmapped teams
 function logUnmappedTeam(apiTeamName, competitionId = null) {
     if (!unmappedTeamsCache.teams.has(apiTeamName)) {
@@ -64,18 +58,14 @@ function logUnmappedTeam(apiTeamName, competitionId = null) {
     }
     unmappedTeamsCache.lastUpdated = new Date();
 }
-
 // Make logUnmappedTeam available to other modules
 router.logUnmappedTeam = logUnmappedTeam;
-
 // GET /api/admin/unmapped-teams
 // Get all unmapped teams that have been encountered
 router.get('/unmapped-teams', adminAuth, async (req, res) => {
     try {
         const { sortBy = 'occurrences', order = 'desc' } = req.query;
-        
         const teams = Array.from(unmappedTeamsCache.teams.values());
-        
         // Sort teams
         teams.sort((a, b) => {
             if (sortBy === 'occurrences') {
@@ -86,7 +76,6 @@ router.get('/unmapped-teams', adminAuth, async (req, res) => {
                 return order === 'desc' ? b.apiName.localeCompare(a.apiName) : a.apiName.localeCompare(b.apiName);
             }
         });
-        
         res.json({
             success: true,
             data: {
@@ -103,7 +92,6 @@ router.get('/unmapped-teams', adminAuth, async (req, res) => {
         });
     }
 });
-
 // POST /api/admin/map-team
 // Create a mapping for an unmapped team
 router.post('/map-team', adminAuth, async (req, res) => {
@@ -112,14 +100,12 @@ router.post('/map-team', adminAuth, async (req, res) => {
             apiName,
             teamData // { name, city, country, league, venue, founded, isActive, apiName }
         } = req.body;
-        
         if (!apiName || !teamData || !teamData.name) {
             return res.status(400).json({
                 success: false,
                 message: 'API name and team data with name are required'
             });
         }
-        
         // Check if team already exists
         const existingTeam = await Team.findOne({ 
             $or: [
@@ -127,14 +113,12 @@ router.post('/map-team', adminAuth, async (req, res) => {
                 { apiName: apiName }
             ]
         });
-        
         if (existingTeam) {
             return res.status(400).json({
                 success: false,
                 message: `Team already exists: ${existingTeam.name}`
             });
         }
-        
         // Create new team
         const newTeam = new Team({
             name: teamData.name,
@@ -146,19 +130,15 @@ router.post('/map-team', adminAuth, async (req, res) => {
             isActive: teamData.isActive !== false,
             apiName: apiName
         });
-        
         await newTeam.save();
-        
         // Remove from unmapped cache
         unmappedTeamsCache.teams.delete(apiName);
         unmappedTeamsCache.lastUpdated = new Date();
-        
         res.json({
             success: true,
             message: `Successfully mapped ${apiName} to ${teamData.name}`,
             team: newTeam
         });
-        
     } catch (error) {
         console.error('Error mapping team:', error);
         res.status(500).json({
@@ -167,36 +147,30 @@ router.post('/map-team', adminAuth, async (req, res) => {
         });
     }
 });
-
 // PUT /api/admin/teams/:teamId
 // Update team data
 router.put('/teams/:teamId', adminAuth, async (req, res) => {
     try {
         const { teamId } = req.params;
         const updates = req.body;
-        
         // Don't allow updating _id
         delete updates._id;
-        
         const team = await Team.findByIdAndUpdate(
             teamId,
             updates,
             { new: true, runValidators: true }
         );
-        
         if (!team) {
             return res.status(404).json({
                 success: false,
                 message: 'Team not found'
             });
         }
-        
         res.json({
             success: true,
             message: 'Team updated successfully',
             team
         });
-        
     } catch (error) {
         console.error('Error updating team:', error);
         res.status(500).json({
@@ -205,7 +179,6 @@ router.put('/teams/:teamId', adminAuth, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/venues
 // Get all venues with pagination and search
 router.get('/venues', adminAuth, async (req, res) => {
@@ -217,20 +190,16 @@ router.get('/venues', adminAuth, async (req, res) => {
             country = '',
             hasIssues = false
         } = req.query;
-        
         const query = {};
-        
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
                 { city: { $regex: search, $options: 'i' } }
             ];
         }
-        
         if (country) {
             query.country = country;
         }
-        
         // Filter venues with potential issues (missing coordinates, etc.)
         if (hasIssues === 'true') {
             query.$or = [
@@ -239,14 +208,11 @@ router.get('/venues', adminAuth, async (req, res) => {
                 { name: { $regex: /stadium|ground|arena/i } }, // Generic names that might need fixing
             ];
         }
-        
         const venues = await Venue.find(query)
             .skip((parseInt(page) - 1) * parseInt(limit))
             .limit(parseInt(limit))
             .sort({ name: 1 });
-            
         const total = await Venue.countDocuments(query);
-        
         res.json({
             success: true,
             data: {
@@ -259,7 +225,6 @@ router.get('/venues', adminAuth, async (req, res) => {
                 }
             }
         });
-        
     } catch (error) {
         console.error('Error fetching venues:', error);
         res.status(500).json({
@@ -268,17 +233,14 @@ router.get('/venues', adminAuth, async (req, res) => {
         });
     }
 });
-
 // PUT /api/admin/venues/:venueId
 // Update venue data
 router.put('/venues/:venueId', adminAuth, async (req, res) => {
     try {
         const { venueId } = req.params;
         const updates = req.body;
-        
         // Don't allow updating _id
         delete updates._id;
-        
         // Validate coordinates if provided
         if (updates.location && updates.location.coordinates) {
             const [lng, lat] = updates.location.coordinates;
@@ -290,26 +252,22 @@ router.put('/venues/:venueId', adminAuth, async (req, res) => {
                 });
             }
         }
-        
         const venue = await Venue.findByIdAndUpdate(
             venueId,
             updates,
             { new: true, runValidators: true }
         );
-        
         if (!venue) {
             return res.status(404).json({
                 success: false,
                 message: 'Venue not found'
             });
         }
-        
         res.json({
             success: true,
             message: 'Venue updated successfully',
             venue
         });
-        
     } catch (error) {
         console.error('Error updating venue:', error);
         res.status(500).json({
@@ -318,7 +276,6 @@ router.put('/venues/:venueId', adminAuth, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/stats
 // Get admin dashboard statistics
 router.get('/stats', adminAuth, async (req, res) => {
@@ -336,7 +293,6 @@ router.get('/stats', adminAuth, async (req, res) => {
             Venue.countDocuments({ 'location.coordinates': { $exists: true, $ne: [] } }),
             Promise.resolve(unmappedTeamsCache.teams.size)
         ]);
-        
         res.json({
             success: true,
             data: {
@@ -356,7 +312,6 @@ router.get('/stats', adminAuth, async (req, res) => {
                 }
             }
         });
-        
     } catch (error) {
         console.error('Error fetching admin stats:', error);
         res.status(500).json({
@@ -365,19 +320,16 @@ router.get('/stats', adminAuth, async (req, res) => {
         });
     }
 });
-
 // POST /api/admin/clear-unmapped-cache
 // Clear the unmapped teams cache
 router.post('/clear-unmapped-cache', adminAuth, async (req, res) => {
     try {
         unmappedTeamsCache.teams.clear();
         unmappedTeamsCache.lastUpdated = new Date();
-        
         res.json({
             success: true,
             message: 'Unmapped teams cache cleared successfully'
         });
-        
     } catch (error) {
         console.error('Error clearing cache:', error);
         res.status(500).json({
@@ -386,13 +338,11 @@ router.post('/clear-unmapped-cache', adminAuth, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/data-freshness
 // Monitor API data freshness and detect new seasons
 router.get('/data-freshness', adminAuth, async (req, res) => {
     try {
         const leagueService = require('../services/leagueService');
-        
         // Check major leagues for season updates
         const majorLeagues = [
             { id: '39', name: 'Premier League', country: 'England' },
@@ -401,16 +351,13 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
             { id: '135', name: 'Serie A', country: 'Italy' },
             { id: '61', name: 'Ligue 1', country: 'France' }
         ];
-        
         const seasonStatus = [];
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1; // 1-12
-        
         for (const league of majorLeagues) {
             try {
                 // Get current season from database
                 const dbLeague = await leagueService.getLeagueById(league.id);
-                
                 // Determine expected season based on current date
                 let expectedSeason;
                 if (currentMonth >= 8) {
@@ -420,13 +367,11 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
                     // Jan-July = previous season still active
                     expectedSeason = `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
                 }
-                
                 // Check if we have fixture data for this league recently
                 const recentMatches = await Match.find({
                     league: league.id,
                     date: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
                 }).limit(1);
-                
                 const status = {
                     leagueId: league.id,
                     leagueName: league.name,
@@ -440,28 +385,22 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
                     recentMatchesFound: recentMatches.length > 0,
                     issues: []
                 };
-                
                 // Check for issues
                 if (status.currentSeasonInDB !== expectedSeason) {
                     status.isUpToDate = false;
                     status.issues.push(`Season mismatch: DB has ${status.currentSeasonInDB}, expected ${expectedSeason}`);
                 }
-                
                 if (!status.recentMatchesFound && currentMonth >= 8 && currentMonth <= 5) {
                     status.issues.push('No recent matches found - possible API or data sync issue');
                 }
-                
                 const daysSinceUpdate = dbLeague?.updatedAt ? 
                     Math.floor((Date.now() - new Date(dbLeague.updatedAt)) / (1000 * 60 * 60 * 24)) : 
                     999;
-                
                 if (daysSinceUpdate > 30) {
                     status.isUpToDate = false;
                     status.issues.push(`League data not updated for ${daysSinceUpdate} days`);
                 }
-                
                 seasonStatus.push(status);
-                
             } catch (error) {
                 console.error(`Error checking ${league.name}:`, error);
                 seasonStatus.push({
@@ -473,12 +412,10 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
                 });
             }
         }
-        
         // Overall system health
         const totalLeagues = seasonStatus.length;
         const upToDateLeagues = seasonStatus.filter(s => s.isUpToDate).length;
         const healthPercentage = Math.round((upToDateLeagues / totalLeagues) * 100);
-        
         res.json({
             success: true,
             data: {
@@ -494,7 +431,6 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
                 recommendations: generateRecommendations(seasonStatus)
             }
         });
-        
     } catch (error) {
         console.error('Error checking data freshness:', error);
         res.status(500).json({
@@ -503,12 +439,10 @@ router.get('/data-freshness', adminAuth, async (req, res) => {
         });
     }
 });
-
 // Helper function to generate recommendations
 function generateRecommendations(seasonStatus) {
     const recommendations = [];
     const currentMonth = new Date().getMonth() + 1;
-    
     // Season-specific recommendations
     if (currentMonth >= 7 && currentMonth <= 8) {
         recommendations.push({
@@ -518,7 +452,6 @@ function generateRecommendations(seasonStatus) {
             action: 'Verify API data for upcoming season'
         });
     }
-    
     // Issue-based recommendations
     const outdatedLeagues = seasonStatus.filter(s => !s.isUpToDate);
     if (outdatedLeagues.length > 0) {
@@ -529,7 +462,6 @@ function generateRecommendations(seasonStatus) {
             action: 'Update league data and check API responses'
         });
     }
-    
     const noRecentMatches = seasonStatus.filter(s => !s.recentMatchesFound && currentMonth >= 8);
     if (noRecentMatches.length > 0) {
         recommendations.push({
@@ -539,17 +471,14 @@ function generateRecommendations(seasonStatus) {
             action: 'Check API-Sports connection and data sync'
         });
     }
-    
     return recommendations;
 }
-
 // POST /api/admin/refresh-league-data
 // Manually trigger a league data refresh
 router.post('/refresh-league-data/:leagueId', adminAuth, async (req, res) => {
     try {
         const { leagueId } = req.params;
         const leagueService = require('../services/leagueService');
-        
         // This would trigger an API call to refresh league data
         // For now, just update the timestamp
         const league = await leagueService.getLeagueById(leagueId);
@@ -559,16 +488,13 @@ router.post('/refresh-league-data/:leagueId', adminAuth, async (req, res) => {
                 message: 'League not found'
             });
         }
-        
         // In a real implementation, you'd call the external API here
         // await fetchLatestLeagueData(leagueId);
-        
         res.json({
             success: true,
             message: `Refresh triggered for ${league.name}`,
             timestamp: new Date()
         });
-        
     } catch (error) {
         console.error('Error refreshing league data:', error);
         res.status(500).json({
@@ -577,7 +503,6 @@ router.post('/refresh-league-data/:leagueId', adminAuth, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/users
 // Get all users with pagination and subscription info
 router.get('/users', adminAuth, async (req, res) => {
@@ -588,9 +513,7 @@ router.get('/users', adminAuth, async (req, res) => {
             search = '',
             tier = ''
         } = req.query;
-        
         const query = {};
-        
         if (search) {
             query.$or = [
                 { email: { $regex: search, $options: 'i' } },
@@ -598,19 +521,15 @@ router.get('/users', adminAuth, async (req, res) => {
                 { 'profile.lastName': { $regex: search, $options: 'i' } }
             ];
         }
-        
         if (tier) {
             query['subscription.tier'] = tier;
         }
-        
         const users = await User.find(query)
             .select('-password')
             .sort({ createdAt: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit);
-        
         const total = await User.countDocuments(query);
-        
         // Add subscription stats to the response
         const subscriptionStats = await User.aggregate([
             {
@@ -620,19 +539,16 @@ router.get('/users', adminAuth, async (req, res) => {
                 }
             }
         ]);
-
         // Format subscription stats
         const tierStats = {
             freemium: 0,
             pro: 0,
             planner: 0
         };
-        
         subscriptionStats.forEach(stat => {
             const tier = stat._id || 'freemium';
             tierStats[tier] = stat.count;
         });
-        
         res.json({
             success: true,
             data: {
@@ -650,7 +566,6 @@ router.get('/users', adminAuth, async (req, res) => {
                 }
             }
         });
-        
     } catch (error) {
         console.error('Error fetching users:', error);
         res.status(500).json({
@@ -659,21 +574,18 @@ router.get('/users', adminAuth, async (req, res) => {
         });
     }
 });
-
 // PUT /api/admin/users/:userId/subscription
 // Update user subscription tier
 router.put('/users/:userId/subscription', adminAuth, async (req, res) => {
     try {
         const { userId } = req.params;
         const { tier } = req.body;
-        
         if (!tier || !['freemium', 'pro', 'planner'].includes(tier)) {
             return res.status(400).json({
                 success: false,
                 message: 'Valid subscription tier is required (freemium, pro, planner)'
             });
         }
-        
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -681,11 +593,9 @@ router.put('/users/:userId/subscription', adminAuth, async (req, res) => {
                 message: 'User not found'
             });
         }
-        
         // Update subscription using service
         await subscriptionService.updateUserTier(user, tier);
         await user.save();
-        
         res.json({
             success: true,
             message: `Successfully updated ${user.email} to ${tier} tier`,
@@ -695,7 +605,6 @@ router.put('/users/:userId/subscription', adminAuth, async (req, res) => {
                 subscription: user.subscription
             }
         });
-        
     } catch (error) {
         console.error('Error updating user subscription:', error);
         res.status(500).json({
@@ -704,7 +613,6 @@ router.put('/users/:userId/subscription', adminAuth, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/subscription-stats
 // Get subscription statistics
 router.get('/subscription-stats', adminAuth, async (req, res) => {
@@ -717,25 +625,20 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
                 }
             }
         ]);
-        
         // Get total users
         const totalUsers = await User.countDocuments();
-        
         // Format stats
         const tierStats = {
             freemium: 0,
             pro: 0,
             planner: 0
         };
-        
         stats.forEach(stat => {
             const tier = stat._id || 'freemium';
             tierStats[tier] = stat.count;
         });
-        
         // Get tier access info
         const tierAccess = await subscriptionService.getAllTiers();
-        
         res.json({
             success: true,
             data: {
@@ -744,7 +647,6 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
                 tierAccess
             }
         });
-        
     } catch (error) {
         console.error('Error fetching subscription stats:', error);
         res.status(500).json({
@@ -753,19 +655,15 @@ router.get('/subscription-stats', adminAuth, async (req, res) => {
         });
     }
 });
-
 // Tier Access Management Endpoints
-
 // GET /api/admin/tier-access
 // Get tier access configuration
 router.get('/tier-access', adminAuth, async (req, res) => {
     try {
         const tierAccess = await subscriptionService.getTierAccessConfig();
-        
         // Also get all leagues for the UI
         const leagueService = require('../services/leagueService');
         const allLeagues = await leagueService.getAllLeagues();
-        
         // Ensure tierAccess includes allowedLeagues for each tier
         const tierAccessWithAllowed = {};
         for (const tier of ['freemium', 'pro', 'planner']) {
@@ -776,7 +674,6 @@ router.get('/tier-access', adminAuth, async (req, res) => {
                 description: tierConfig.description || ''
             };
         }
-        
         res.json({
             success: true,
             data: {
@@ -797,21 +694,18 @@ router.get('/tier-access', adminAuth, async (req, res) => {
         });
     }
 });
-
 // PUT /api/admin/tier-access/:tier
 // Update tier access configuration
 router.put('/tier-access/:tier', adminAuth, async (req, res) => {
     try {
         const { tier } = req.params;
         const { allowedLeagues, restrictedLeagues, description } = req.body;
-        
         if (!['freemium', 'pro', 'planner'].includes(tier)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid tier. Must be freemium, pro, or planner'
             });
         }
-        
         // Validate allowedLeagues is an array if provided
         if (allowedLeagues !== undefined && !Array.isArray(allowedLeagues)) {
             return res.status(400).json({
@@ -819,7 +713,6 @@ router.put('/tier-access/:tier', adminAuth, async (req, res) => {
                 message: 'allowedLeagues must be an array'
             });
         }
-        
         // Validate restrictedLeagues is an array if provided (legacy support)
         if (restrictedLeagues !== undefined && !Array.isArray(restrictedLeagues)) {
             return res.status(400).json({
@@ -827,22 +720,17 @@ router.put('/tier-access/:tier', adminAuth, async (req, res) => {
                 message: 'restrictedLeagues must be an array'
             });
         }
-        
         const updatedTierAccess = await subscriptionService.updateTierAccess(
             tier,
             allowedLeagues,
             description,
             restrictedLeagues
         );
-        
         // Refresh tier access cache to reflect changes immediately
         await subscriptionService.refreshTierAccess();
-        
         // Clear matches cache since league access restrictions have changed
         // This ensures users see updated results immediately
         matchesCache.clear();
-        console.log('🗑️ Cleared matches cache after tier access update');
-        
         res.json({
             success: true,
             message: `Successfully updated ${tier} tier access`,
@@ -857,15 +745,12 @@ router.put('/tier-access/:tier', adminAuth, async (req, res) => {
         });
     }
 });
-
 // Venue Coordinate Management Endpoints
-
 // GET /api/admin/venues/validate-coordinates
 // Detect venues with incorrect coordinates
 router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
     try {
         const geocodingService = require('../services/geocodingService');
-        
         // Country bounds for validation
         const COUNTRY_BOUNDS = {
             'England': { minLat: 50.0, maxLat: 55.8, minLng: -6.0, maxLng: 2.0 },
@@ -874,7 +759,6 @@ router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
             'Spain': { minLat: 36.0, maxLat: 44.0, minLng: -10.0, maxLng: 4.0 },
             'Italy': { minLat: 36.0, maxLat: 47.0, minLng: 6.0, maxLng: 19.0 }
         };
-
         function isWithinCountryBounds(coordinates, country) {
             if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) return false;
             const [lon, lat] = coordinates;
@@ -883,12 +767,10 @@ router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
             return lat >= bounds.minLat && lat <= bounds.maxLat &&
                    lon >= bounds.minLng && lon <= bounds.maxLng;
         }
-
         const venues = await Venue.find({
             coordinates: { $exists: true, $ne: null },
             isActive: true
         }).lean();
-
         const issues = [];
         for (const venue of venues) {
             if (!isWithinCountryBounds(venue.coordinates, venue.country)) {
@@ -903,7 +785,6 @@ router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
                 });
             }
         }
-
         res.json({
             success: true,
             data: {
@@ -920,7 +801,6 @@ router.get('/venues/validate-coordinates', adminAuth, async (req, res) => {
         });
     }
 });
-
 // POST /api/admin/venues/:venueId/fix-coordinates
 // Re-geocode and fix a specific venue's coordinates
 router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
@@ -928,7 +808,6 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
         const { venueId } = req.params;
         const { dryRun = false } = req.body;
         const geocodingService = require('../services/geocodingService');
-
         const venue = await Venue.findById(venueId);
         if (!venue) {
             return res.status(404).json({
@@ -936,23 +815,19 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
                 message: 'Venue not found'
             });
         }
-
         const oldCoordinates = venue.coordinates;
-
         // Re-geocode
         const newCoordinates = await geocodingService.geocodeVenueCoordinates(
             venue.name,
             venue.city,
             venue.country
         );
-
         if (!newCoordinates) {
             return res.status(400).json({
                 success: false,
                 message: 'Failed to geocode venue'
             });
         }
-
         if (dryRun) {
             return res.json({
                 success: true,
@@ -968,7 +843,6 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
                 message: 'Dry run - no changes made'
             });
         }
-
         // Update venue
         venue.coordinates = newCoordinates;
         venue.location = {
@@ -977,13 +851,11 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
         };
         venue.lastUpdated = new Date();
         await venue.save();
-
         // Update teams that reference this venue
         const teams = await Team.find({
             'venue.name': venue.name,
             city: venue.city
         });
-
         let teamsUpdated = 0;
         for (const team of teams) {
             if (team.venue && (!team.venue.coordinates || JSON.stringify(team.venue.coordinates) !== JSON.stringify(newCoordinates))) {
@@ -992,7 +864,6 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
                 teamsUpdated++;
             }
         }
-
         res.json({
             success: true,
             venue: {
@@ -1014,25 +885,21 @@ router.post('/venues/:venueId/fix-coordinates', adminAuth, async (req, res) => {
         });
     }
 });
-
 // POST /api/admin/venues/bulk-fix-coordinates
 // Fix coordinates for multiple venues
 router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
     try {
         const { venueIds, dryRun = false } = req.body;
         const geocodingService = require('../services/geocodingService');
-
         if (!venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: 'venueIds array is required'
             });
         }
-
         const results = [];
         let successCount = 0;
         let failCount = 0;
-
         for (const venueId of venueIds) {
             try {
                 const venue = await Venue.findById(venueId);
@@ -1041,20 +908,17 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
                     failCount++;
                     continue;
                 }
-
                 const oldCoordinates = venue.coordinates;
                 const newCoordinates = await geocodingService.geocodeVenueCoordinates(
                     venue.name,
                     venue.city,
                     venue.country
                 );
-
                 if (!newCoordinates) {
                     results.push({ venueId, status: 'geocode_failed', venue: venue.name });
                     failCount++;
                     continue;
                 }
-
                 if (!dryRun) {
                     venue.coordinates = newCoordinates;
                     venue.location = {
@@ -1064,7 +928,6 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
                     venue.lastUpdated = new Date();
                     await venue.save();
                 }
-
                 results.push({
                     venueId,
                     status: 'success',
@@ -1073,7 +936,6 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
                     newCoordinates
                 });
                 successCount++;
-
                 // Rate limiting
                 await new Promise(resolve => setTimeout(resolve, 200));
             } catch (error) {
@@ -1081,7 +943,6 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
                 failCount++;
             }
         }
-
         res.json({
             success: true,
             dryRun,
@@ -1100,15 +961,12 @@ router.post('/venues/bulk-fix-coordinates', adminAuth, async (req, res) => {
         });
     }
 });
-
 // League Onboarding
 const leagueOnboardingService = require('../services/leagueOnboardingService');
-
 // Onboard a new league
 router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res) => {
     try {
         const { id, name, country, countryCode, tier, shortName } = req.body;
-
         // Validation
         if (!id || !name || !country) {
             return res.status(400).json({
@@ -1116,7 +974,6 @@ router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res)
                 message: 'Missing required fields: id, name, country'
             });
         }
-
         const leagueData = {
             id: parseInt(id),
             name,
@@ -1124,7 +981,6 @@ router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res)
             countryCode: countryCode || null,
             tier: tier || 1
         };
-
         // Create progress callback for real-time updates
         const progressUpdates = [];
         const progressCallback = (update) => {
@@ -1133,10 +989,8 @@ router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res)
                 timestamp: new Date().toISOString()
             });
         };
-
         // Onboard the league
         const result = await leagueOnboardingService.onboardLeague(leagueData, progressCallback);
-
         if (result.success) {
             res.json({
                 success: true,
@@ -1162,21 +1016,17 @@ router.post('/leagues/onboard', authenticateToken, ensureAdmin, async (req, res)
         });
     }
 });
-
 // Get suggested short name for a league
 router.get('/leagues/suggest-short-name', authenticateToken, ensureAdmin, (req, res) => {
     try {
         const { name } = req.query;
-        
         if (!name) {
             return res.status(400).json({
                 success: false,
                 message: 'League name is required'
             });
         }
-
         const shortName = leagueOnboardingService.getShortName(name);
-        
         res.json({
             success: true,
             shortName
@@ -1189,7 +1039,6 @@ router.get('/leagues/suggest-short-name', authenticateToken, ensureAdmin, (req, 
         });
     }
 });
-
 // Get all onboarded leagues with pagination and search
 router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
     try {
@@ -1197,10 +1046,8 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const search = req.query.search || '';
         const country = req.query.country || '';
-        
         // Build query
         const query = { isActive: { $ne: false } };
-        
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
@@ -1208,26 +1055,21 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
                 { apiId: { $regex: search, $options: 'i' } }
             ];
         }
-        
         if (country) {
             query.country = { $regex: country, $options: 'i' };
         }
-        
         // Get total count
         const total = await League.countDocuments(query);
-        
         // Get leagues sorted alphabetically by name
         const leagues = await League.find(query)
             .sort({ name: 1 }) // Alphabetical order
             .skip((page - 1) * limit)
             .limit(limit)
             .lean();
-        
         // Format response
         const formattedLeagues = leagues.map(league => {
             // Extract season year from season.start (e.g., "2024-08-01" -> 2024)
             const seasonYear = league.season?.start ? new Date(league.season.start).getFullYear() : null;
-            
             return {
                 id: league.apiId,
                 name: league.name,
@@ -1243,7 +1085,6 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
                 updatedAt: league.updatedAt
             };
         });
-        
         res.json({
             success: true,
             data: formattedLeagues,
@@ -1263,15 +1104,12 @@ router.get('/leagues', authenticateToken, ensureAdmin, async (req, res) => {
         });
     }
 });
-
 // GET /api/admin/leagues/:leagueId/teams
 // Get teams for a specific league
 router.get('/leagues/:leagueId/teams', authenticateToken, ensureAdmin, async (req, res) => {
     try {
         const { leagueId } = req.params;
-        
         const teams = await teamService.getTeamsByLeague(leagueId);
-        
         // Format teams for frontend
         // Teams have embedded venue data in team.venue, not a venueId reference
         const formattedTeams = teams.map(team => ({
@@ -1287,7 +1125,6 @@ router.get('/leagues/:leagueId/teams', authenticateToken, ensureAdmin, async (re
                 country: team.country || null
             } : null
         }));
-        
         res.json({
             success: true,
             data: formattedTeams
@@ -1301,23 +1138,19 @@ router.get('/leagues/:leagueId/teams', authenticateToken, ensureAdmin, async (re
         });
     }
 });
-
 // PUT /api/admin/leagues/:leagueId/season-year
 // Update league season year
 router.put('/leagues/:leagueId/season-year', authenticateToken, ensureAdmin, async (req, res) => {
     try {
         const { leagueId } = req.params;
         const { seasonYear } = req.body;
-        
         if (!seasonYear || !Number.isInteger(parseInt(seasonYear)) || parseInt(seasonYear) < 2000 || parseInt(seasonYear) > 2100) {
             return res.status(400).json({
                 success: false,
                 message: 'Valid season year is required (2000-2100)'
             });
         }
-        
         const year = parseInt(seasonYear);
-        
         // Find league by apiId
         const league = await League.findOne({ apiId: leagueId.toString() });
         if (!league) {
@@ -1326,20 +1159,16 @@ router.put('/leagues/:leagueId/season-year', authenticateToken, ensureAdmin, asy
                 message: 'League not found'
             });
         }
-        
         // Update season dates based on the new year
         // Typical season: August of year to May of next year
         const seasonStart = `${year}-08-01`;
         const seasonEnd = `${year + 1}-05-31`;
-        
         league.season = {
             start: seasonStart,
             end: seasonEnd,
             current: league.season?.current !== false
         };
-        
         await league.save();
-        
         res.json({
             success: true,
             message: `Successfully updated season year to ${year}`,
@@ -1359,7 +1188,6 @@ router.put('/leagues/:leagueId/season-year', authenticateToken, ensureAdmin, asy
         });
     }
 });
-
 // GET /api/admin/feedback
 // Get user feedback from MongoDB
 router.get('/feedback', adminAuth, async (req, res) => {
@@ -1372,15 +1200,12 @@ router.get('/feedback', adminAuth, async (req, res) => {
             sortBy = 'createdAt',
             order = 'desc'
         } = req.query;
-        
         // Build MongoDB query
         const query = {};
-        
         // Filter by type if provided
         if (type && ['general', 'bug', 'feature', 'rating'].includes(type)) {
             query.type = type;
         }
-        
         // Build search query if provided
         if (search) {
             query.$or = [
@@ -1389,27 +1214,22 @@ router.get('/feedback', adminAuth, async (req, res) => {
                 { userName: { $regex: search, $options: 'i' } }
             ];
         }
-        
         // Build sort object
         const sortField = sortBy === 'created_at' ? 'createdAt' : sortBy;
         const sortOrder = order === 'desc' ? -1 : 1;
         const sort = { [sortField]: sortOrder };
-        
         // Calculate pagination
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
-        
         // Get total count for pagination
         const total = await Feedback.countDocuments(query);
-        
         // Fetch feedback with pagination
         const feedback = await Feedback.find(query)
             .sort(sort)
             .skip(skip)
             .limit(limitNum)
             .lean(); // Use lean() for better performance
-        
         // Transform to match expected format
         const transformedFeedback = feedback.map(item => ({
             id: item._id.toString(),
@@ -1422,7 +1242,6 @@ router.get('/feedback', adminAuth, async (req, res) => {
             attachments: [],
             metadata: item.metadata || {}
         }));
-        
         res.json({
             success: true,
             data: {
@@ -1435,7 +1254,6 @@ router.get('/feedback', adminAuth, async (req, res) => {
                 }
             }
         });
-        
     } catch (error) {
         console.error('Error fetching feedback:', error);
         res.status(500).json({
@@ -1445,6 +1263,4 @@ router.get('/feedback', adminAuth, async (req, res) => {
         });
     }
 });
-
 module.exports = router; 
-

@@ -677,8 +677,9 @@ class ApiService {
       
       if (!response.ok) {
         const errorMessage = data.message || data.error || `Failed to fetch trip (${response.status})`;
-        // Only log non-429 errors to avoid noise from rate limiting
-        if (response.status !== 429 && __DEV__) {
+        // Don't log 404 errors (trip deleted) or 429 errors (rate limiting) to avoid noise
+        // 404s are expected when trips are deleted, so we suppress them
+        if (response.status !== 429 && response.status !== 404 && __DEV__) {
           console.error('❌ API Error fetching trip:', {
             status: response.status,
             statusText: response.statusText,

@@ -2,10 +2,8 @@
  * Environment Configuration
  * Helps differentiate between development and production
  */
-
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const isProduction = process.env.NODE_ENV === 'production';
-
 // Environment-specific configurations
 const config = {
   development: {
@@ -35,17 +33,14 @@ const config = {
     showResetTokenInResponse: false, // Never show tokens in production
   }
 };
-
 // Get current environment config
 const getConfig = () => {
   return isDevelopment ? config.development : config.production;
 };
-
 // Helper functions
 const getEnvVar = (key, defaultValue = null) => {
   return process.env[key] || defaultValue;
 };
-
 module.exports = {
   isDevelopment,
   isProduction,
@@ -54,4 +49,3 @@ module.exports = {
   getEnvVar,
   current: getConfig()
 };
-

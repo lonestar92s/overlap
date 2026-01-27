@@ -1,6 +1,5 @@
 const Amadeus = require('amadeus');
 const axios = require('axios');
-
 /**
  * Amadeus Flight API Provider
  * Implements the flight search adapter pattern
@@ -10,18 +9,15 @@ class AmadeusProvider {
     const clientId = process.env.AMADEUS_CLIENT_ID;
     const clientSecret = process.env.AMADEUS_CLIENT_SECRET;
     const environment = process.env.AMADEUS_ENVIRONMENT || 'test';
-
     if (!clientId || !clientSecret) {
       throw new Error('Amadeus credentials not configured. Set AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET');
     }
-
     this.amadeus = new Amadeus({
       clientId,
       clientSecret,
       hostname: environment === 'production' ? 'production' : 'test'
     });
   }
-
   /**
    * Search for flights
    * @param {Object} params - Search parameters
@@ -47,12 +43,10 @@ class AmadeusProvider {
         currency = 'USD',
         nonStop = false
       } = params;
-
       // Validate required parameters
       if (!origin || !destination || !departureDate) {
         throw new Error('Missing required parameters: origin, destination, departureDate');
       }
-
       // Build search parameters
       const searchParams = {
         originLocationCode: origin,
@@ -62,25 +56,20 @@ class AmadeusProvider {
         max: Number(max),
         currencyCode: currency
       };
-
       // Add return date if provided (round trip)
       if (returnDate) {
         searchParams.returnDate = returnDate;
       }
-
       // Add nonstop filter if requested
       if (nonStop === true || nonStop === 'true') {
         searchParams.nonStop = true;
       }
-
       // Make API call
       const response = await this.amadeus.shopping.flightOffersSearch.get(searchParams);
-
       // Handle empty results
       if (!response.data || response.data.length === 0) {
         return [];
       }
-
       // Normalize and return results
       return this.normalizeFlightOffers(response.data);
     } catch (error) {
@@ -89,12 +78,10 @@ class AmadeusProvider {
         code: error.code,
         description: error.description
       });
-
       // Re-throw with more context
       throw new Error(`Amadeus API error: ${error.description || error.message}`);
     }
   }
-
   /**
    * Normalize Amadeus flight offers to our standard format
    * @param {Array} offers - Raw Amadeus flight offers
@@ -106,7 +93,6 @@ class AmadeusProvider {
       const segments = itinerary.segments;
       const firstSegment = segments[0];
       const lastSegment = segments[segments.length - 1];
-
       // Use Amadeus-provided duration directly
       // Duration is in ISO 8601 format (e.g., "PT8H5M") - parse to minutes
       let duration = 0;
@@ -119,12 +105,10 @@ class AmadeusProvider {
           duration = itinerary.duration;
         }
       }
-      
       // Fallback to calculation if duration not available
       if (!duration || duration === 0) {
         duration = this.calculateDuration(firstSegment.departure.at, lastSegment.arrival.at);
       }
-
       return {
         id: offer.id,
         price: {
@@ -167,12 +151,10 @@ class AmadeusProvider {
           const segDuration = seg.duration 
             ? this.parseISODuration(seg.duration)
             : this.calculateDuration(seg.departure.at, seg.arrival.at);
-          
           // Construct full flight number: carrierCode + number (e.g., "UA387")
           const flightNumber = seg.number 
             ? `${seg.carrierCode}${seg.number}` 
             : seg.carrierCode; // Fallback to just carrier code if number not available
-          
           return {
             departure: {
               airport: seg.departure.iataCode,
@@ -193,7 +175,6 @@ class AmadeusProvider {
       };
     });
   }
-
   /**
    * Parse ISO 8601 duration string to minutes
    * @param {string} duration - ISO 8601 duration (e.g., "PT8H5M" for 8 hours 5 minutes)
@@ -201,7 +182,6 @@ class AmadeusProvider {
    */
   parseISODuration(duration) {
     if (!duration) return 0;
-    
     // ISO 8601 format: PT8H5M (Period Time: 8 Hours 5 Minutes)
     // Also handles formats like: PT14H5M, PT8H, PT45M, etc.
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -209,16 +189,12 @@ class AmadeusProvider {
       console.warn('Failed to parse ISO duration:', duration);
       return 0;
     }
-    
     const hours = parseInt(match[1] || '0', 10);
     const minutes = parseInt(match[2] || '0', 10);
     const seconds = parseInt(match[3] || '0', 10);
-    
     const totalMinutes = hours * 60 + minutes + Math.round(seconds / 60);
-    
     // Debug logging
     if (process.env.NODE_ENV !== 'production') {
-      console.log('Parsed duration:', {
         input: duration,
         hours,
         minutes,
@@ -226,10 +202,8 @@ class AmadeusProvider {
         totalMinutes
       });
     }
-    
     return totalMinutes;
   }
-
   /**
    * Calculate duration in minutes between two ISO datetime strings
    * Note: This method is less accurate due to timezone issues. Prefer using parseISODuration
@@ -242,7 +216,6 @@ class AmadeusProvider {
     const arr = new Date(arrival);
     return Math.round((arr - dep) / (1000 * 60)); // minutes
   }
-
   /**
    * Search for airports by keyword (for autocomplete)
    * @param {string} query - Search query
@@ -256,11 +229,9 @@ class AmadeusProvider {
         subType: 'AIRPORT',
         'page[limit]': limit
       });
-
       if (!response.data) {
         return [];
       }
-
       return response.data.map(airport => ({
         code: airport.iataCode,
         name: airport.name,
@@ -276,7 +247,6 @@ class AmadeusProvider {
       return [];
     }
   }
-
   /**
    * Get flight status by flight number and date
    * @param {string} airlineCode - Airline IATA code (e.g., "AA", "DL", "UA")
@@ -291,37 +261,29 @@ class AmadeusProvider {
       const baseUrl = this.amadeus.client.hostname === 'production' 
         ? 'https://api.amadeus.com' 
         : 'https://test.api.amadeus.com';
-      
       const params = {
         carrierCode: airlineCode,
         flightNumber: flightNumber,
         scheduledDepartureDate
       };
-      
-      console.log('Calling Amadeus Flight Status REST API:', {
         url: `${baseUrl}/v2/schedule/flights`,
         params
       });
-      
       // Get access token via OAuth2
       const tokenUrl = `${baseUrl}/v1/security/oauth2/token`;
       const tokenParams = new URLSearchParams();
       tokenParams.append('grant_type', 'client_credentials');
       tokenParams.append('client_id', process.env.AMADEUS_CLIENT_ID);
       tokenParams.append('client_secret', process.env.AMADEUS_CLIENT_SECRET);
-      
       const tokenResponse = await axios.post(tokenUrl, tokenParams.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
       });
-      
       const accessToken = tokenResponse.data.access_token;
-      
       if (!accessToken) {
         throw new Error('Failed to obtain Amadeus access token');
       }
-      
       // Make direct REST API call
       const response = await axios.get(`${baseUrl}/v2/schedule/flights`, {
         params: params,
@@ -330,13 +292,9 @@ class AmadeusProvider {
           'Content-Type': 'application/json'
         }
       });
-
       // Log full response for debugging
       const responseData = response.data;
       const responseStr = JSON.stringify(responseData, null, 2);
-      console.log('Amadeus Flight Status API full response:', responseStr.substring(0, 2000));
-      
-      console.log('Amadeus Flight Status API response summary:', {
         status: response.status,
         hasData: !!responseData.data,
         dataType: typeof responseData.data,
@@ -345,17 +303,14 @@ class AmadeusProvider {
         responseKeys: responseData ? Object.keys(responseData) : 'no response',
         meta: responseData.meta || 'no meta'
       });
-
       // Handle empty or invalid response
       if (!responseData.data) {
         const errorMsg = `Flight ${airlineCode}${flightNumber} not found for date ${scheduledDepartureDate}. Amadeus returned no data. This could mean: 1) Flight doesn't exist for this date, 2) Date is too far in the future, 3) Flight not in Amadeus database.`;
         console.error(errorMsg);
         throw new Error(errorMsg);
       }
-
       // Response can be an array or single object
       const flight = Array.isArray(responseData.data) ? responseData.data[0] : responseData.data;
-      
       if (!flight) {
         // Check if it's an empty array
         if (Array.isArray(responseData.data) && responseData.data.length === 0) {
@@ -367,7 +322,6 @@ class AmadeusProvider {
         console.error(errorMsg, { responseData: responseData.data });
         throw new Error(errorMsg);
       }
-
       // Normalize the response to our standard format
       // Amadeus Flight Status API structure: { type, id, flightNumber, carrierCode, departure: { iataCode, at }, arrival: { iataCode, at }, duration, status }
       return {
@@ -413,7 +367,6 @@ class AmadeusProvider {
         responseData: error.response?.data,
         fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
       });
-
       // Better error message handling
       let errorMessage = 'Failed to get flight status';
       if (error.response?.data) {
@@ -431,11 +384,9 @@ class AmadeusProvider {
       } else if (error.message) {
         errorMessage += `: ${error.message}`;
       }
-
       throw new Error(errorMessage);
     }
   }
-
   /**
    * Parse flight number into airline code and flight number
    * @param {string} flightNumber - Full flight number (e.g., "AA100", "DL1234")
@@ -444,20 +395,16 @@ class AmadeusProvider {
   parseFlightNumber(fullFlightNumber) {
     // Remove any spaces or dashes
     const cleaned = fullFlightNumber.replace(/[\s-]/g, '').toUpperCase();
-    
     // Match airline code (2-3 letters) followed by flight number (1-4 digits)
     const match = cleaned.match(/^([A-Z]{2,3})(\d{1,4})$/);
-    
     if (!match) {
       throw new Error(`Invalid flight number format: ${fullFlightNumber}. Expected format: AA100 or DL1234`);
     }
-    
     return {
       airlineCode: match[1],
       flightNumber: match[2]
     };
   }
-
   /**
    * Get nearest airports by coordinates
    * @param {number} latitude - Latitude
@@ -475,11 +422,9 @@ class AmadeusProvider {
         'page[limit]': Number(limit),
         sort: 'distance'
       });
-
       if (!response.data) {
         return [];
       }
-
       return response.data.map(airport => ({
         code: airport.iataCode,
         name: airport.name,
@@ -497,6 +442,4 @@ class AmadeusProvider {
     }
   }
 }
-
 module.exports = AmadeusProvider;
-

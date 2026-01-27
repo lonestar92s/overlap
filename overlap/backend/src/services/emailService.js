@@ -16,7 +16,6 @@
  * - SMTP_PASS: SMTP password (required for nodemailer)
  * - SMTP_FROM: Sender email address (required for nodemailer)
  */
-
 class EmailService {
     constructor() {
         this.provider = process.env.EMAIL_PROVIDER || 'console';
@@ -24,7 +23,6 @@ class EmailService {
         this.nodemailerTransporter = null;
         this.initialized = false;
     }
-
     /**
      * Initialize the email service based on provider
      */
@@ -32,7 +30,6 @@ class EmailService {
         if (this.initialized) {
             return;
         }
-
         try {
             switch (this.provider.toLowerCase()) {
                 case 'sendgrid':
@@ -57,26 +54,20 @@ class EmailService {
             this.initialized = true;
         }
     }
-
     /**
      * Initialize SendGrid client
      */
     async _initializeSendGrid() {
         try {
             const sgMail = require('@sendgrid/mail');
-            
             if (!process.env.SENDGRID_API_KEY) {
                 throw new Error('SENDGRID_API_KEY environment variable is required for SendGrid');
             }
-            
             if (!process.env.SENDGRID_FROM_EMAIL) {
                 throw new Error('SENDGRID_FROM_EMAIL environment variable is required for SendGrid');
             }
-
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
             this.sendgridClient = sgMail;
-            
-            console.log('✅ SendGrid email service initialized');
         } catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {
                 throw new Error('@sendgrid/mail package not installed. Run: npm install @sendgrid/mail');
@@ -84,21 +75,17 @@ class EmailService {
             throw error;
         }
     }
-
     /**
      * Initialize Nodemailer transporter
      */
     async _initializeNodemailer() {
         try {
             const nodemailer = require('nodemailer');
-            
             const requiredVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
             const missingVars = requiredVars.filter(varName => !process.env[varName]);
-            
             if (missingVars.length > 0) {
                 throw new Error(`Missing required environment variables for nodemailer: ${missingVars.join(', ')}`);
             }
-
             this.nodemailerTransporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST,
                 port: parseInt(process.env.SMTP_PORT, 10),
@@ -108,11 +95,8 @@ class EmailService {
                     pass: process.env.SMTP_PASS,
                 },
             });
-
             // Verify connection
             await this.nodemailerTransporter.verify();
-            
-            console.log('✅ Nodemailer email service initialized');
         } catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {
                 throw new Error('nodemailer package not installed. Run: npm install nodemailer');
@@ -120,7 +104,6 @@ class EmailService {
             throw error;
         }
     }
-
     /**
      * Send password reset email
      * @param {string} to - Recipient email address
@@ -129,7 +112,6 @@ class EmailService {
      */
     async sendPasswordResetEmail(to, resetUrl) {
         await this.initialize();
-
         const subject = 'Reset Your Password - Flight Match Finder';
         const html = `
             <!DOCTYPE html>
@@ -170,28 +152,20 @@ class EmailService {
         `;
         const text = `
 Reset Your Password - Flight Match Finder
-
 We received a request to reset your password. Click the link below to create a new password:
-
 ${resetUrl}
-
 This link will expire in 10 minutes.
-
 If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
-
 © ${new Date().getFullYear()} Flight Match Finder. All rights reserved.
         `.trim();
-
         return await this._sendEmail(to, subject, html, text);
     }
-
     /**
      * Internal method to send email using the configured provider
      * @private
      */
     async _sendEmail(to, subject, html, text) {
         await this.initialize();
-
         try {
             switch (this.provider.toLowerCase()) {
                 case 'sendgrid':
@@ -209,7 +183,6 @@ If you didn't request a password reset, please ignore this email. Your password 
             return false;
         }
     }
-
     /**
      * Send email via SendGrid
      * @private
@@ -218,9 +191,7 @@ If you didn't request a password reset, please ignore this email. Your password 
         if (!this.sendgridClient) {
             throw new Error('SendGrid client not initialized');
         }
-
         const fromEmail = process.env.SENDGRID_FROM_EMAIL;
-        
         const msg = {
             to,
             from: fromEmail,
@@ -228,12 +199,9 @@ If you didn't request a password reset, please ignore this email. Your password 
             text,
             html,
         };
-
         await this.sendgridClient.send(msg);
-        console.log(`✅ Password reset email sent to ${to} via SendGrid`);
         return true;
     }
-
     /**
      * Send email via Nodemailer
      * @private
@@ -242,9 +210,7 @@ If you didn't request a password reset, please ignore this email. Your password 
         if (!this.nodemailerTransporter) {
             throw new Error('Nodemailer transporter not initialized');
         }
-
         const fromEmail = process.env.SMTP_FROM;
-        
         const mailOptions = {
             from: fromEmail,
             to,
@@ -252,35 +218,19 @@ If you didn't request a password reset, please ignore this email. Your password 
             text,
             html,
         };
-
         await this.nodemailerTransporter.sendMail(mailOptions);
-        console.log(`✅ Password reset email sent to ${to} via Nodemailer`);
         return true;
     }
-
     /**
      * Log email to console (development mode)
      * @private
      */
     async _sendViaConsole(to, subject, html, text) {
-        console.log('\n📧 ===== EMAIL (Console Mode) =====');
-        console.log(`To: ${to}`);
-        console.log(`Subject: ${subject}`);
-        console.log('\n--- Text Version ---');
-        console.log(text);
-        console.log('\n--- HTML Version ---');
-        console.log(html);
-        console.log('=====================================\n');
-        
         if (process.env.NODE_ENV === 'production') {
             console.warn('⚠️  WARNING: Email service is in console mode in production!');
         }
-        
         return true;
     }
 }
-
 // Export singleton instance
 module.exports = new EmailService();
-
-

@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Venue = require('../models/Venue');
-
 // Helper function to get country code
 function getCountryCode(country) {
     const countryMap = {
@@ -22,7 +21,6 @@ function getCountryCode(country) {
     };
     return countryMap[country] || 'XX';
 }
-
 /**
  * Manually add a venue to the database
  * 
@@ -40,12 +38,10 @@ function getCountryCode(country) {
 async function addVenueManually() {
     try {
         const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL;
-        
         if (!MONGODB_URI) {
             console.error('❌ MONGODB_URI not found in environment variables');
             process.exit(1);
         }
-
         // Get venue data from environment variables or use defaults for testing
         const venueData = {
             venueId: process.env.VENUE_ID ? parseInt(process.env.VENUE_ID) : null,
@@ -57,42 +53,25 @@ async function addVenueManually() {
             address: process.env.VENUE_ADDRESS || null,
             capacity: process.env.VENUE_CAPACITY ? parseInt(process.env.VENUE_CAPACITY) : null
         };
-
         // Validate required fields
         if (!venueData.name || venueData.name === 'Example Venue') {
             console.error('❌ VENUE_NAME is required');
-            console.log('\nUsage:');
-            console.log('  VENUE_NAME="Brick Community Stadium" \\');
-            console.log('  VENUE_CITY="Wigan" \\');
-            console.log('  VENUE_COUNTRY="England" \\');
-            console.log('  VENUE_LAT=53.5454 \\');
-            console.log('  VENUE_LON=-2.6319 \\');
-            console.log('  VENUE_ID=12345 \\');
-            console.log('  node src/scripts/addVenueManually.js');
             process.exit(1);
         }
-
         if (venueData.lat === 0 || venueData.lon === 0) {
             console.error('❌ VENUE_LAT and VENUE_LON are required');
             process.exit(1);
         }
-
         // Connect to MongoDB
         const safeUri = MONGODB_URI.replace(/mongodb:\/\/([^:]+):([^@]+)@/, 'mongodb://***:***@');
         const isRailway = MONGODB_URI.includes('railway') || MONGODB_URI.includes('rlwy.net');
-        console.log(`🔌 Connecting to MongoDB: ${isRailway ? '✅ Railway' : '⚠️ LOCAL'} - ${safeUri}`);
-        
         await mongoose.connect(MONGODB_URI);
-        console.log('✅ Connected to MongoDB\n');
-
         // Generate venueId if not provided (use a high number to avoid conflicts)
         if (!venueData.venueId) {
             // Find the highest venueId and add 1
             const maxVenue = await Venue.findOne().sort({ venueId: -1 }).select('venueId').lean();
             venueData.venueId = (maxVenue?.venueId || 50000) + 1;
-            console.log(`📝 Generated venueId: ${venueData.venueId}`);
         }
-
         // Check if venue already exists
         const existingVenue = await Venue.findOne({
             $or: [
@@ -103,24 +82,14 @@ async function addVenueManually() {
                 }
             ]
         });
-
         if (existingVenue) {
-            console.log(`⚠️  Venue already exists:`);
-            console.log(`   Name: ${existingVenue.name}`);
-            console.log(`   City: ${existingVenue.city}`);
-            console.log(`   ID: ${existingVenue.venueId}`);
-            console.log(`   Coordinates: ${existingVenue.coordinates ? JSON.stringify(existingVenue.coordinates) : 'None'}`);
-            
             // Ask if user wants to update
-            console.log('\n💡 To update this venue, use the updateVenueManually script or update via MongoDB directly');
             await mongoose.disconnect();
             return;
         }
-
         // Create coordinates array [longitude, latitude]
         const coordinates = [venueData.lon, venueData.lat];
         const countryCode = getCountryCode(venueData.country);
-
         // Create venue document
         const newVenue = new Venue({
             venueId: venueData.venueId,
@@ -138,17 +107,7 @@ async function addVenueManually() {
             isActive: true,
             lastUpdated: new Date()
         });
-
         await newVenue.save();
-
-        console.log('✅ Successfully added venue:');
-        console.log(`   Name: ${newVenue.name}`);
-        console.log(`   City: ${newVenue.city}`);
-        console.log(`   Country: ${newVenue.country}`);
-        console.log(`   Venue ID: ${newVenue.venueId}`);
-        console.log(`   Coordinates: [${coordinates[0]}, ${coordinates[1]}]`);
-        console.log(`   Country Code: ${countryCode}`);
-
     } catch (error) {
         console.error('❌ Error:', error.message);
         if (error.code === 11000) {
@@ -156,10 +115,7 @@ async function addVenueManually() {
         }
     } finally {
         await mongoose.disconnect();
-        console.log('\n🔌 Disconnected from MongoDB');
     }
 }
-
 // Run the script
 addVenueManually();
-

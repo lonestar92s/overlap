@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const venueSchema = new mongoose.Schema({
     venueId: {
         type: Number,
@@ -91,15 +90,12 @@ const venueSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
-
 // Create a 2dsphere index on location for geospatial queries (only for venues with coordinates)
 venueSchema.index({ location: '2dsphere' }, { sparse: true });
-
 // Other useful indexes
 venueSchema.index({ city: 1 });
 venueSchema.index({ country: 1 });
 venueSchema.index({ name: 1 });
-
 // Method to find venues near a location
 venueSchema.statics.findNear = function(longitude, latitude, maxDistance = 50000) {
     return this.find({
@@ -114,14 +110,11 @@ venueSchema.statics.findNear = function(longitude, latitude, maxDistance = 50000
         }
     });
 };
-
 // Virtual getters for backward compatibility
 venueSchema.virtual('longitude').get(function() {
     return this.location?.coordinates?.[0];
 });
-
 venueSchema.virtual('latitude').get(function() {
     return this.location?.coordinates?.[1];
 });
-
 module.exports = mongoose.model('Venue', venueSchema); 

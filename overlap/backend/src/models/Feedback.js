@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const feedbackSchema = new mongoose.Schema({
     message: {
         type: String,
@@ -41,15 +40,10 @@ const feedbackSchema = new mongoose.Schema({
 }, {
     timestamps: true // Adds createdAt and updatedAt
 });
-
 // Index for efficient queries
 feedbackSchema.index({ createdAt: -1 });
 feedbackSchema.index({ type: 1, createdAt: -1 });
 feedbackSchema.index({ status: 1, createdAt: -1 });
 feedbackSchema.index({ userEmail: 1, createdAt: -1 });
-
 const Feedback = mongoose.model('Feedback', feedbackSchema);
-
 module.exports = Feedback;
-
-

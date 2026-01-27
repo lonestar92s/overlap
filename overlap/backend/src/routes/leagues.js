@@ -5,7 +5,6 @@ const User = require('../models/User');
 const League = require('../models/League');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
-
 // Helper function to calculate distance between two points in kilometers
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in kilometers
@@ -17,7 +16,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c; // Distance in kilometers
 }
-
 // Country coordinate mapping (approximate country centers for geographic filtering)
 const COUNTRY_COORDS = {
     'England': { lat: 52.3555, lng: -1.1743 },
@@ -39,7 +37,6 @@ const COUNTRY_COORDS = {
     'Switzerland': { lat: 46.8182, lng: 8.2275 },
     'Finland': { lat: 64.0, lng: 26.0 }
 };
-
 /**
  * GET /api/leagues
  * Get all active leagues (filtered by subscription)
@@ -51,15 +48,12 @@ router.get('/', authenticateToken, async (req, res) => {
         if (req.user) {
             user = await User.findById(req.user.id);
         }
-        
         const leagues = await leagueService.getAllLeagues();
-        
         // Filter leagues based on subscription
         const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
         const filteredLeagues = leagues.filter(league => 
             accessibleLeagueIds.includes(league.apiId)
         );
-        
         // Format for frontend consumption
         const formattedLeagues = await Promise.all(filteredLeagues.map(async (league) => ({
             id: league.apiId,
@@ -69,13 +63,11 @@ router.get('/', authenticateToken, async (req, res) => {
             countryCode: league.countryCode,
             subscriptionRequired: !(await subscriptionService.hasLeagueAccess(user, league.apiId))
         })));
-
         // Get restricted leagues for the user's tier
         const userTier = user?.subscription?.tier || 'freemium';
         const tierConfig = await subscriptionService.getTierAccessConfig();
         const userTierConfig = tierConfig[userTier] || tierConfig.freemium;
         const restrictedLeagues = userTierConfig.restrictedLeagues || [];
-
         res.json({
             success: true,
             data: formattedLeagues,
@@ -91,11 +83,9 @@ router.get('/', authenticateToken, async (req, res) => {
         });
     }
 });
-
 // Cache for relevant leagues (5 minute TTL)
 const relevantLeaguesCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
-
 /**
  * GET /api/leagues/relevant
  * Get relevant leagues based on geographic bounds (for location-based searches)
@@ -105,19 +95,15 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 router.get('/relevant', async (req, res) => {
     try {
         const { neLat, neLng, swLat, swLng } = req.query;
-        
         // Create cache key from bounds
         const cacheKey = (neLat && neLng && swLat && swLng) 
             ? `relevant_${neLat}_${neLng}_${swLat}_${swLng}` 
             : 'relevant_all';
-        
         // Check cache
         const cached = relevantLeaguesCache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            console.log('📦 Returning cached relevant leagues');
             return res.json(cached.data);
         }
-        
         if (!neLat || !neLng || !swLat || !swLng) {
             // If no bounds provided, return all active leagues
             const allLeagues = await League.find({ isActive: true }).lean();
@@ -130,38 +116,29 @@ router.get('/relevant', async (req, res) => {
                     apiId: l.apiId
                 }))
             };
-            
             // Cache the response
             relevantLeaguesCache.set(cacheKey, {
                 data: response,
                 timestamp: Date.now()
             });
-            
             return res.json(response);
         }
-
         const bounds = {
             northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
             southwest: { lat: parseFloat(swLat), lng: parseFloat(swLng) }
         };
-
         // Calculate center point of search bounds
         const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
         const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-
         // Get all active leagues from MongoDB
         const allLeagues = await League.find({ isActive: true }).lean();
-
         // Define regional groupings
         const isInEurope = centerLat > 35 && centerLat < 71 && centerLng > -10 && centerLng < 40;
         const isInNorthAmerica = centerLat > 20 && centerLat < 75 && centerLng > -170 && centerLng < -50;
         const isInSouthAmerica = centerLat > -55 && centerLat < 15 && centerLng > -85 && centerLng < -30;
-
         const relevantLeagues = [];
-
         for (const league of allLeagues) {
             let shouldInclude = false;
-
             // Always include international competitions
             if (league.country === 'International' || league.country === 'Europe' || 
                 league.name.includes('Champions League') || league.name.includes('Europa') ||
@@ -171,14 +148,12 @@ router.get('/relevant', async (req, res) => {
             } else {
                 // Get country coordinates if available
                 const countryCoords = COUNTRY_COORDS[league.country];
-                
                 if (countryCoords) {
                     // Calculate distance from search center to country center
                     const distance = calculateDistance(
                         centerLat, centerLng,
                         countryCoords.lat, countryCoords.lng
                     );
-
                     // Smart distance thresholds based on region
                     let maxDistance;
                     if (isInEurope) {
@@ -188,7 +163,6 @@ router.get('/relevant', async (req, res) => {
                     } else {
                         maxDistance = 2000; // Default
                     }
-
                     if (distance <= maxDistance) {
                         shouldInclude = true;
                     }
@@ -205,13 +179,11 @@ router.get('/relevant', async (req, res) => {
                         'USA': isInNorthAmerica && centerLng > -130 && centerLng < -65,
                         'Saudi Arabia': centerLat > 15 && centerLat < 33 && centerLng > 34 && centerLng < 56,
                     };
-
                     if (countryMatches[league.country]) {
                         shouldInclude = true;
                     }
                 }
             }
-
             if (shouldInclude) {
                 relevantLeagues.push({
                     id: parseInt(league.apiId),
@@ -221,7 +193,6 @@ router.get('/relevant', async (req, res) => {
                 });
             }
         }
-
         // Fallback: if no relevant leagues found, include top European leagues plus international
         let response;
         if (relevantLeagues.length === 0) {
@@ -233,7 +204,6 @@ router.get('/relevant', async (req, res) => {
             .sort({ country: 1, name: 1 })
             .limit(8)
             .lean();
-            
             response = {
                 success: true,
                 leagues: fallbackLeagues.map(l => ({
@@ -249,15 +219,12 @@ router.get('/relevant', async (req, res) => {
                 leagues: relevantLeagues
             };
         }
-
         // Cache the response
         relevantLeaguesCache.set(cacheKey, {
             data: response,
             timestamp: Date.now()
         });
-
         res.json(response);
-
     } catch (error) {
         console.error('Error fetching relevant leagues:', error);
         res.status(500).json({
@@ -267,7 +234,6 @@ router.get('/relevant', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/leagues/search
  * Search leagues by name or country
@@ -276,17 +242,14 @@ router.get('/relevant', async (req, res) => {
 router.get('/search', async (req, res) => {
     try {
         const { query } = req.query;
-        
         if (!query || query.length < 2) {
             return res.status(400).json({
                 success: false,
                 message: 'Search query must be at least 2 characters'
             });
         }
-
         // Search in database using leagueService
         const leagues = await leagueService.searchLeagues(query, { limit: 20 });
-
         // Format results for response
         const formattedLeagues = leagues.map(league => ({
             id: league.apiId,
@@ -297,13 +260,11 @@ router.get('/search', async (req, res) => {
             emblem: league.emblem || null,
             isActive: league.isActive !== false
         }));
-
         res.json({
             success: true,
             results: formattedLeagues,
             count: formattedLeagues.length
         });
-
     } catch (error) {
         console.error('League search error:', error);
         res.status(500).json({
@@ -312,7 +273,6 @@ router.get('/search', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/leagues/stats/cache
  * Get league service cache statistics
@@ -334,7 +294,6 @@ router.get('/stats/cache', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/leagues/country/:countryCode
  * Get leagues for a specific country
@@ -343,7 +302,6 @@ router.get('/country/:countryCode', async (req, res) => {
     try {
         const { countryCode } = req.params;
         const leagues = await leagueService.getLeaguesForCountry(countryCode);
-        
         // Format for frontend consumption
         const formattedLeagues = leagues.map(league => ({
             id: league.apiId,
@@ -352,7 +310,6 @@ router.get('/country/:countryCode', async (req, res) => {
             country: league.country,
             countryCode: league.countryCode
         }));
-
         res.json({
             success: true,
             data: formattedLeagues
@@ -366,7 +323,6 @@ router.get('/country/:countryCode', async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/leagues/:leagueId
  * Get specific league information
@@ -375,14 +331,12 @@ router.get('/:leagueId', async (req, res) => {
     try {
         const { leagueId } = req.params;
         const league = await leagueService.getLeagueById(leagueId);
-        
         if (!league) {
             return res.status(404).json({
                 success: false,
                 message: 'League not found'
             });
         }
-
         // Format for frontend consumption
         const formattedLeague = {
             id: league.apiId,
@@ -392,7 +346,6 @@ router.get('/:leagueId', async (req, res) => {
             countryCode: league.countryCode,
             emblem: league.emblem
         };
-
         res.json({
             success: true,
             data: formattedLeague
@@ -406,5 +359,4 @@ router.get('/:leagueId', async (req, res) => {
         });
     }
 });
-
 module.exports = router; 

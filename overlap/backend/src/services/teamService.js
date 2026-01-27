@@ -1,6 +1,5 @@
 const Team = require('../models/Team');
 const League = require('../models/League');
-
 class TeamService {
     constructor() {
         this.cache = new Map();
@@ -9,61 +8,47 @@ class TeamService {
         this.apiKey = process.env.FOOTBALL_DATA_API_KEY;
         this.logUnmappedTeam = null; // Will be set by admin routes
     }
-
     // Set the logging function from admin routes
     setUnmappedLogger(logFunction) {
         this.logUnmappedTeam = logFunction;
     }
-
     /**
      * Map API-Sports team name to database team name
      */
     async mapApiNameToTeam(apiSportsName) {
         try {
             // console.log(`\n🔍 Mapping team: "${apiSportsName}"`);
-            
             // Check cache first
             const cacheKey = `map_${apiSportsName}`;
             const cached = this.cache.get(cacheKey);
             if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
-        
                 return cached.result;
             }
-    
-
             // Try direct match first
             let team = await Team.findOne({ apiName: apiSportsName });
             if (team) {
-
                 return team.name;
             }
             // console.log(`❌ No match by apiName`);
-
             // Try exact name match
             team = await Team.findOne({ name: apiSportsName });
             if (team) {
-
                 return team.name;
             }
             // console.log(`❌ No match by exact name`);
-
             // Try aliases
             team = await Team.findOne({ aliases: apiSportsName });
             if (team) {
-
                 return team.name;
             }
             // console.log(`❌ No match by alias`);
-
             // If still not found, return the original name
-    
             return apiSportsName;
         } catch (error) {
             console.error('❌ Error in mapApiNameToTeam:', error);
             return apiSportsName;
         }
     }
-
     /**
      * Get team by database name (existing functionality)
      */
@@ -78,16 +63,12 @@ class TeamService {
             return null;
         }
     }
-
     /**
      * Bulk update teams with API names from hardcoded mapping
      */
     async updateTeamsWithApiNames(teamNameMapping) {
         let updated = 0;
         let errors = 0;
-
-
-
         for (const [apiName, teamName] of Object.entries(teamNameMapping)) {
             try {
                 const result = await Team.updateOne(
@@ -97,26 +78,19 @@ class TeamService {
                         $addToSet: { aliases: apiName } // Also add to aliases for search
                     }
                 );
-
                 if (result.modifiedCount > 0) {
                     updated++;
                     if (updated % 50 === 0) {
-        
                     }
                 } else {
-
                 }
             } catch (error) {
                 console.error(`❌ Error updating ${teamName}:`, error.message);
                 errors++;
             }
         }
-
-
-        
         return { updated, errors };
     }
-
     /**
      * Search teams (existing functionality enhanced)
      */
@@ -124,7 +98,6 @@ class TeamService {
         const limit = options.limit || 20;
         const country = options.country;
         const league = options.league;
-
         try {
             let query = {
                 $or: [
@@ -134,11 +107,9 @@ class TeamService {
                     { code: { $regex: searchTerm, $options: 'i' } }
                 ]
             };
-
             if (country) {
                 query.country = country;
             }
-
             if (league) {
                 const leagueDoc = await League.findOne({ 
                     $or: [
@@ -150,24 +121,20 @@ class TeamService {
                     query.leagueId = leagueDoc._id;
                 }
             }
-
             const teams = await Team.find(query)
                 .populate('leagueId')
                 .populate('venueId')
                 .sort({ popularity: -1, searchCount: -1 })
                 .limit(limit);
-
             // Update search counts for found teams
             const updatePromises = teams.map(team => team.incrementSearch());
             await Promise.all(updatePromises);
-
             return teams;
         } catch (error) {
             console.error('Error searching teams:', error);
             return [];
         }
     }
-
     /**
      * Get popular teams (existing functionality)
      */
@@ -184,7 +151,6 @@ class TeamService {
             return [];
         }
     }
-
     /**
      * Get teams by league
      */
@@ -197,14 +163,12 @@ class TeamService {
                 'leagues.isActive': { $ne: false }
             })
             .sort({ name: 1 });
-            
             return teams;
         } catch (error) {
             console.error(`Error getting teams for league ${leagueApiId}:`, error);
             return [];
         }
     }
-
     /**
      * External API integration (existing functionality)
      */
@@ -213,19 +177,16 @@ class TeamService {
             console.warn('No external API key configured, skipping external search');
             return [];
         }
-
         try {
             const response = await fetch(`${this.apiBaseUrl}/teams?search=${encodeURIComponent(searchTerm)}`, {
                 headers: {
                     'X-Auth-Token': this.apiKey
                 }
             });
-
             if (!response.ok) {
                 console.error('External API request failed:', response.status, response.statusText);
                 return [];
             }
-
             const data = await response.json();
             return data.teams || [];
         } catch (error) {
@@ -233,15 +194,12 @@ class TeamService {
             return [];
         }
     }
-
     /**
      * Cache management
      */
     clearCache() {
         this.cache.clear();
-
     }
-
     getCacheStats() {
         return {
             cacheSize: this.cache.size,
@@ -249,5 +207,4 @@ class TeamService {
         };
     }
 }
-
 module.exports = new TeamService(); 

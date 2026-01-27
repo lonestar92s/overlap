@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const leagueSchema = new mongoose.Schema({
     apiId: {
         type: String,
@@ -54,10 +53,8 @@ const leagueSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
-
 // Indexes for common queries
 leagueSchema.index({ country: 1 });
 leagueSchema.index({ tier: 1 });
 leagueSchema.index({ 'season.current': 1 });
-
 module.exports = mongoose.model('League', leagueSchema); 

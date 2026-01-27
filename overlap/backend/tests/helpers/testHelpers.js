@@ -1,9 +1,7 @@
 /**
  * Test helper utilities for backend tests
  */
-
 const jwt = require('jsonwebtoken');
-
 /**
  * Generate a test JWT token for a user
  */
@@ -14,7 +12,6 @@ const generateTestToken = (userId = '507f1f77bcf86cd799439011') => {
     { expiresIn: '1h' }
   );
 };
-
 /**
  * Create a mock request object with authentication
  */
@@ -26,7 +23,6 @@ const createAuthenticatedRequest = (userId = '507f1f77bcf86cd799439011', user = 
     role: 'user',
     subscription: { tier: 'freemium' }
   };
-
   return {
     header: (headerName) => {
       if (headerName === 'Authorization') {
@@ -38,7 +34,6 @@ const createAuthenticatedRequest = (userId = '507f1f77bcf86cd799439011', user = 
     token: token
   };
 };
-
 /**
  * Create a mock Express response object
  */
@@ -51,21 +46,18 @@ const createMockResponse = () => {
   res.redirect = jest.fn().mockReturnValue(res);
   return res;
 };
-
 /**
  * Create a mock Express next function
  */
 const createMockNext = () => {
   return jest.fn();
 };
-
 /**
  * Wait for async operations
  */
 const waitFor = (ms = 100) => {
   return new Promise(resolve => setTimeout(resolve, ms));
 };
-
 module.exports = {
   generateTestToken,
   createAuthenticatedRequest,
@@ -73,4 +65,3 @@ module.exports = {
   createMockNext,
   waitFor
 };
-

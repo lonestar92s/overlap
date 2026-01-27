@@ -8,7 +8,6 @@
  * 1. Add entry: "Team Name": "https://ticketing-url.com"
  * 2. Run populateTicketingUrls.js script to sync to database
  */
-
 // Premier League
 const PREMIER_LEAGUE_TICKETING = {
     "Arsenal FC": "https://www.arsenal.com/tickets",
@@ -29,7 +28,6 @@ const PREMIER_LEAGUE_TICKETING = {
     "West Ham United FC": "https://www.whufc.com/tickets",
     "Wolverhampton Wanderers FC": "https://www.wolves.co.uk/tickets"
 };
-
 // La Liga
 const LA_LIGA_TICKETING = {
     "Real Madrid CF": "https://www.realmadrid.com/en/tickets",
@@ -43,7 +41,6 @@ const LA_LIGA_TICKETING = {
     "Real Sociedad": "https://www.realsociedad.eus/en/tickets",
     "RC Celta de Vigo": "https://www.rccelta.es/en/tickets"
 };
-
 // Bundesliga
 const BUNDESLIGA_TICKETING = {
     "FC Bayern München": "https://fcbayern.com/en/tickets",
@@ -62,7 +59,6 @@ const BUNDESLIGA_TICKETING = {
     "1. FSV Mainz 05": "https://www.mainz05.de/en/tickets",
     "FC Augsburg": "https://www.fcaugsburg.de/en/tickets"
 };
-
 // Serie A
 const SERIE_A_TICKETING = {
     "AC Milan": "https://www.acmilan.com/en/tickets",
@@ -74,7 +70,6 @@ const SERIE_A_TICKETING = {
     "Atalanta": "https://www.atalanta.it/en/tickets",
     "Fiorentina": "https://www.acffiorentina.com/en/tickets"
 };
-
 // Ligue 1
 const LIGUE_1_TICKETING = {
     "Paris Saint Germain": "https://billetterie.psg.fr/en/?utm_source=PSG_Site&utm_medium=referral&utm_campaign=Menu_Top_PSG",
@@ -84,7 +79,6 @@ const LIGUE_1_TICKETING = {
     "Lille OSC": "https://www.losc.fr/en/tickets",
     "OGC Nice": "https://www.ogcnice.com/en/tickets"
 };
-
 // MLS
 const MLS_TICKETING = {
     "Atlanta United FC": "https://www.atlutd.com/tickets",
@@ -116,7 +110,6 @@ const MLS_TICKETING = {
     "Toronto FC": "https://www.torontofc.ca/tickets",
     "Vancouver Whitecaps FC": "https://www.whitecapsfc.com/tickets"
 };
-
 // Combine all mappings
 const TEAM_TICKETING_URLS = {
     ...PREMIER_LEAGUE_TICKETING,
@@ -126,7 +119,6 @@ const TEAM_TICKETING_URLS = {
     ...LIGUE_1_TICKETING,
     ...MLS_TICKETING
 };
-
 module.exports = {
     PREMIER_LEAGUE_TICKETING,
     LA_LIGA_TICKETING,

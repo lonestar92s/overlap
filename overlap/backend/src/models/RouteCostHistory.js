@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 /**
  * Route Cost History Model
  * Tracks historical prices for flight and train routes
@@ -88,25 +87,21 @@ const routeCostHistorySchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
 // Compound index for efficient route lookups
 routeCostHistorySchema.index({ 
   'origin.code': 1, 
   'destination.code': 1, 
   type: 1 
 });
-
 // Index for date range queries
 routeCostHistorySchema.index({ 
   'priceHistory.date': 1 
 });
-
 /**
  * Update price history with new price data
  */
 routeCostHistorySchema.methods.addPricePoint = function(price, currency, source, metadata = {}) {
   const now = new Date();
-  
   // Add to priceHistory
   this.priceHistory.push({
     date: now,
@@ -115,25 +110,20 @@ routeCostHistorySchema.methods.addPricePoint = function(price, currency, source,
     source,
     metadata
   });
-
   // Update statistics
   this.updateStatistics();
-  
   // Update last searched
   this.lastSearched = now;
   this.searchCount += 1;
 };
-
 /**
  * Update aggregated statistics
  */
 routeCostHistorySchema.methods.updateStatistics = function() {
   if (this.priceHistory.length === 0) return;
-
   const prices = this.priceHistory
     .filter(p => p.currency === this.currency)
     .map(p => p.price);
-
   if (prices.length > 0) {
     this.statistics = {
       minPrice: Math.min(...prices),
@@ -144,7 +134,6 @@ routeCostHistorySchema.methods.updateStatistics = function() {
     };
   }
 };
-
 /**
  * Get average price for a date range
  */
@@ -155,12 +144,9 @@ routeCostHistorySchema.methods.getAveragePrice = function(startDate, endDate) {
       return priceDate >= startDate && priceDate <= endDate && p.currency === this.currency;
     })
     .map(p => p.price);
-
   if (prices.length === 0) return null;
-
   return prices.reduce((a, b) => a + b, 0) / prices.length;
 };
-
 /**
  * Static method to find or create route cost history
  */
@@ -171,11 +157,9 @@ routeCostHistorySchema.statics.findOrCreate = async function(origin, destination
     type,
     currency
   });
-
   if (route) {
     return route;
   }
-
   // Create new route
   return await this.create({
     origin: { code: origin },
@@ -189,8 +173,5 @@ routeCostHistorySchema.statics.findOrCreate = async function(origin, destination
     }
   });
 };
-
 const RouteCostHistory = mongoose.model('RouteCostHistory', routeCostHistorySchema);
-
 module.exports = RouteCostHistory;
-

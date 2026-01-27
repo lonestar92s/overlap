@@ -4,14 +4,12 @@
  * This file defines the scoring weights and multipliers for the recommendation system.
  * All weights are additive unless specified as multipliers.
  */
-
 module.exports = {
     // Base Scores (Applied to all matches)
     baseScore: {
         minThreshold: 30, // Minimum score to show a recommendation
         default: 10 // Base points every match starts with
     },
-
     // Preference-Based Scoring
     preferences: {
         // Favorite Teams
@@ -22,7 +20,6 @@ module.exports = {
             sameCountry: 5, // Minimal boost if match is in same country
             sameLeague: 15 // Medium boost if match involves teams from favorite team's league
         },
-
         // Favorite Leagues
         favoriteLeague: {
             // Match is in a favorite league
@@ -34,7 +31,6 @@ module.exports = {
                 tier3: 2   // Lower tiers
             }
         },
-
         // Favorite Venues
         favoriteVenue: {
             // Match is at a favorite venue
@@ -49,7 +45,6 @@ module.exports = {
             }
         }
     },
-
     // Context-Based Scoring (Trip Recommendations)
     context: {
         // Proximity to saved matches in trip (0-40 points)
@@ -61,7 +56,6 @@ module.exports = {
             within200miles: 20,
             beyond: 15
         },
-
         // Temporal alignment (0-30 points)
         temporal: {
             exactDate: 30,      // Match is exactly on target date
@@ -70,14 +64,12 @@ module.exports = {
             within3days: 15,    // ±3 days
             beyond: 10
         },
-
         // League quality (0-20 points)
         leagueQuality: {
             topTier: 20,        // Premier League, La Liga, Serie A, Bundesliga, Ligue 1
             secondTier: 15,     // Championship, La Liga 2, etc.
             other: 10           // All other leagues
         },
-
         // Venue characteristics (0-10 points)
         venue: {
             highCapacity: 10,   // Stadiums with >50k capacity
@@ -85,7 +77,6 @@ module.exports = {
             lowCapacity: 5      // <20k capacity
         }
     },
-
     // Penalties (Negative scores)
     penalties: {
         alreadySaved: -100,        // Match already saved by user
@@ -94,7 +85,6 @@ module.exports = {
         timeConflict: -50,         // Time conflict with existing trip match
         outsideRadius: 0           // Not within user's recommendation radius (filtered, not penalized)
     },
-
     // Bonuses (Additional positive scores)
     bonuses: {
         weekendMatch: 15,          // Match on Saturday or Sunday
@@ -103,7 +93,6 @@ module.exports = {
         cupFinal: 35,              // Cup final or championship match
         nearDefaultLocation: 40    // Close to user's default location (if set)
     },
-
     // Preference Strength Multipliers
     // Users can adjust how strongly preferences influence recommendations
     preferenceStrength: {
@@ -123,7 +112,6 @@ module.exports = {
             favoriteVenue: 1.5
         }
     },
-
     // Top Leagues by ID (for quality scoring)
     topLeagues: {
         tier1: ['39', '140', '135', '61', '78'], // Premier League, La Liga, Serie A, Ligue 1, Bundesliga
@@ -131,4 +119,3 @@ module.exports = {
         tier3: ['203', '144', '113', '218']      // Süper Lig, Jupiler Pro League, Belgian Pro League, etc.
     }
 };
-

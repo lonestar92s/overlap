@@ -5,16 +5,13 @@ const venueService = require('./venueService');
 const teamService = require('./teamService');
 const weights = require('../config/recommendationWeights');
 const { shouldFilterMatch } = require('../utils/matchStatus');
-
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
-
 // Create HTTPS agent
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-
 class RecommendationService {
     constructor() {
         this.defaultRadius = 400; // miles
@@ -22,7 +19,6 @@ class RecommendationService {
         this.cache = new Map(); // In-memory cache
         this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
     }
-
     /**
      * Get recommendations for a specific trip
      * @param {string} tripId - The trip ID
@@ -33,11 +29,8 @@ class RecommendationService {
      */
     async getRecommendationsForTrip(tripId, user, trip, forceRefresh = false) {
         try {
-            console.log(`🎯 Generating recommendations for trip: ${tripId}${forceRefresh ? ' (force refresh)' : ''}`);
-            
             // Validate trip exists (prevent generating recommendations for deleted trips)
             if (!trip) {
-                console.log(`❌ Trip not found or deleted: ${tripId}`);
                 // Clear any cached recommendations for this trip
                 this.invalidateTripCache(tripId);
                 return {
@@ -49,18 +42,13 @@ class RecommendationService {
                     }
                 };
             }
-
             // Ensure tripId is a string for consistent comparison
             const tripIdStr = String(tripId);
-            console.log(`🔍 Using tripId: ${tripIdStr} for filtering dismissed recommendations`);
-            
             // Note: Cache checking removed - recommendations are now stored in database
             // Cache methods kept for backward compatibility during migration
-            
             // Get trip date range
             const tripDates = this.getTripDateRange(trip);
             if (!tripDates.start || !tripDates.end) {
-                console.log('❌ Invalid trip dates - trip has no matches to determine date range');
                 const diagnostics = {
                     reason: 'invalid_trip_dates',
                     message: 'Trip has no matches to determine date range',
@@ -76,11 +64,9 @@ class RecommendationService {
                     diagnostics
                 };
             }
-
             // Get days without matches
             const daysWithoutMatches = this.getDaysWithoutMatches(trip, tripDates);
             if (daysWithoutMatches.length === 0) {
-                console.log('✅ Trip already has matches for all days - no recommendations needed');
                 const diagnostics = {
                     reason: 'all_days_have_matches',
                     message: 'All days in trip already have matches',
@@ -100,11 +86,9 @@ class RecommendationService {
                     diagnostics
                 };
             }
-
             // Get saved match venues for proximity search
             const savedMatchVenues = await this.extractVenuesFromTrip(trip);
             if (savedMatchVenues.length === 0) {
-                console.log('❌ No saved matches with coordinates to base recommendations on');
                 const diagnostics = {
                     reason: 'no_venues_with_coordinates',
                     message: 'Trip matches do not have venue coordinates for proximity search',
@@ -125,17 +109,13 @@ class RecommendationService {
                     diagnostics
                 };
             }
-
             // Get user's subscription tier for league filtering
             const subscriptionTier = user.subscription?.tier || 'freemium';
             const restrictedLeagues = await subscriptionService.getRestrictedLeagues(subscriptionTier);
-            
             // Get user's recommendation radius preference
             const userRadius = user.preferences?.recommendationRadius || this.defaultRadius;
-
             // Get list of dismissed match IDs for this trip (for diagnostics)
             const dismissedMatchIds = this.getDismissedMatchIdsForTrip(user, tripId);
-
             // Generate recommendations for each day without matches
             // Return 2-3 top recommendations per day
             const recommendations = [];
@@ -148,7 +128,6 @@ class RecommendationService {
                 totalMatchesFiltered: 0,
                 dismissedMatches: Array.from(dismissedMatchIds)
             };
-            
             for (const day of daysWithoutMatches) {
                 debugInfo.daysProcessed++;
                 const dayRecommendations = await this.generateRecommendationsForDay(
@@ -162,27 +141,22 @@ class RecommendationService {
                     tripId,
                     maxRecommendationsPerDay
                 );
-                
                 if (dayRecommendations.length > 0) {
                     debugInfo.daysWithRecommendations++;
                 }
-                
                 // Add all recommendations for this day (deduplication happens in generateRecommendationsForDay)
                 for (const recommendation of dayRecommendations) {
                     const matchId = String(recommendation.matchId || recommendation.match?.fixture?.id || recommendation.match?.id);
-                    
                     // Only add if we haven't seen this matchId before (across all days)
                     if (!seenMatchIds.has(matchId)) {
                         seenMatchIds.add(matchId);
                         recommendations.push(recommendation);
                         debugInfo.totalMatchesFound++;
                     } else {
-                        console.log(`⚠️ Skipping duplicate recommendation for matchId: ${matchId}`);
                         debugInfo.totalMatchesFiltered++;
                     }
                 }
             }
-
             // Build diagnostics
             const diagnostics = {
                 reason: recommendations.length === 0 ? 'no_matches_found' : null,
@@ -202,15 +176,12 @@ class RecommendationService {
                 debugInfo,
                 dismissedMatches: Array.from(dismissedMatchIds)
             };
-
             // Note: Caching removed - recommendations are now stored in database via regenerateTripRecommendations()
-            console.log(`✅ Generated ${recommendations.length} unique recommendations`);
             return {
                 recommendations,
                 cached: false,
                 diagnostics
             };
-
         } catch (error) {
             console.error('❌ Error generating recommendations:', error);
             return {
@@ -224,7 +195,6 @@ class RecommendationService {
             };
         }
     }
-
     /**
      * Generate multiple recommendations for a specific day (2-3 top matches)
      */
@@ -233,48 +203,33 @@ class RecommendationService {
             // Search for matches on this day and nearby dates
             const searchDates = this.getSearchDates(day, tripDates);
             const allMatches = [];
-
             // Search for matches on each date
             for (const searchDate of searchDates) {
                 const matches = await this.searchMatchesForDate(searchDate, restrictedLeagues);
                 allMatches.push(...matches);
             }
-
             if (allMatches.length === 0) {
                 return [];
             }
-
             // Filter matches by proximity to saved venues
             const nearbyMatches = await this.filterMatchesByProximity(
                 allMatches, 
                 savedMatchVenues, 
                 userRadius
             );
-
             if (nearbyMatches.length === 0) {
                 return [];
             }
-
             // Remove conflicts with existing trip matches
             const conflictFreeMatches = this.removeConflicts(nearbyMatches, trip);
-
             if (conflictFreeMatches.length === 0) {
                 return [];
             }
-
             // Filter out dismissed recommendations for this trip (permanent filter)
-            console.log(`🔍 Filtering dismissed recommendations for trip ${tripId}, ${conflictFreeMatches.length} matches before filter`);
             const nonDismissedMatches = this.filterDismissedRecommendations(conflictFreeMatches, user, tripId);
-            console.log(`🔍 After filtering dismissed: ${nonDismissedMatches.length} matches remaining (had ${conflictFreeMatches.length} before filter)`);
-
             if (nonDismissedMatches.length === 0) {
-                console.log(`⚠️ No non-dismissed matches remaining after filtering for day ${day}. This could mean:`);
-                console.log(`   - All matches were dismissed for this trip`);
-                console.log(`   - No matches passed the conflict filter`);
-                console.log(`   - Filter logic issue`);
                 return [];
             }
-
             // Extract user preferences for scoring
             const userPreferences = {
                 favoriteTeams: user.preferences?.favoriteTeams || [],
@@ -282,38 +237,29 @@ class RecommendationService {
                 favoriteVenues: user.preferences?.favoriteVenues || [],
                 preferenceStrength: user.preferences?.preferenceStrength || 'standard'
             };
-
             // Score and rank matches
             const scoredMatches = nonDismissedMatches.map(match => ({
                 match,
                 score: this.scoreMatch(match, savedMatchVenues, day, trip, userPreferences)
             }));
-
             // Sort by score (highest first)
             scoredMatches.sort((a, b) => b.score - a.score);
-            
             // Filter out negative scores (penalized matches)
             const positiveMatches = scoredMatches.filter(m => m.score > 0);
-            
             if (positiveMatches.length === 0) {
-                console.log(`No positive-scoring matches found for ${day}`);
                 return [];
             }
-
             // Log scoring info for debugging
-            console.log(`📊 Recommendations for ${day}: Found ${positiveMatches.length} positive matches, top scores:`, 
                 positiveMatches.slice(0, 5).map(m => ({ 
                     matchId: m.match.id, 
                     score: m.score,
                     teams: `${m.match.teams?.home?.name} vs ${m.match.teams?.away?.name}`
                 }))
             );
-
             // Take top N matches (up to maxRecommendations)
             // Prioritize matches above threshold, but include lower-scoring ones if needed to fill slots
             const aboveThreshold = positiveMatches.filter(m => m.score >= weights.baseScore.minThreshold);
             const belowThreshold = positiveMatches.filter(m => m.score < weights.baseScore.minThreshold && m.score > 0);
-            
             // If we have enough above threshold, use those. Otherwise, supplement with below-threshold matches
             let selectedMatches = [];
             if (aboveThreshold.length >= maxRecommendations) {
@@ -325,15 +271,11 @@ class RecommendationService {
                     ...belowThreshold.slice(0, maxRecommendations - aboveThreshold.length)
                 ];
             }
-
-            console.log(`✅ Selected ${selectedMatches.length} recommendations for ${day} (${aboveThreshold.length} above threshold, ${selectedMatches.length - aboveThreshold.length} below threshold)`);
-
             // Generate recommendations for each selected match
             const recommendations = [];
             for (const scoredMatch of selectedMatches) {
                 // Generate alternative dates
                 const alternativeDates = this.generateAlternativeDates(scoredMatch.match, day, tripDates);
-
                 recommendations.push({
                     matchId: scoredMatch.match.id,
                     recommendedForDate: day,
@@ -344,14 +286,12 @@ class RecommendationService {
                     alternativeDates: alternativeDates
                 });
             }
-
             return recommendations;
         } catch (error) {
             console.error(`❌ Error generating recommendations for ${day}:`, error);
             return [];
         }
     }
-
     /**
      * Search for matches on a specific date
      */
@@ -359,11 +299,9 @@ class RecommendationService {
         try {
             // Get all accessible leagues (not restricted)
             const allLeagues = await this.getAllAccessibleLeagues(restrictedLeagues);
-            
             if (allLeagues.length === 0) {
                 return [];
             }
-
             // Search for matches in accessible leagues
             const requests = allLeagues.map(leagueId => 
                 axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
@@ -378,10 +316,8 @@ class RecommendationService {
                 }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
                   .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
             );
-
             const settled = await Promise.allSettled(requests);
             const fixtures = [];
-
             for (const s of settled) {
                 if (s.status === 'fulfilled') {
                     const payload = s.value;
@@ -390,30 +326,24 @@ class RecommendationService {
                     }
                 }
             }
-
             // Transform matches to our format
             const transformed = await this.transformMatches(fixtures);
-            
             // Filter out matches that are in progress or completed
             return transformed.filter(match => !shouldFilterMatch(match));
-
         } catch (error) {
             console.error(`❌ Error searching matches for ${date}:`, error);
             return [];
         }
     }
-
     /**
      * Transform API matches to our format
      */
     async transformMatches(fixtures) {
         const transformedMatches = [];
-
         for (const match of fixtures) {
             try {
                 const venue = match.fixture?.venue;
                 let venueInfo = null;
-                
                 if (venue?.id) {
                     // Try to get venue coordinates from local database
                     const localVenue = await venueService.getVenueByApiId(venue.id);
@@ -435,7 +365,6 @@ class RecommendationService {
                         };
                     }
                 }
-
                 if (!venueInfo) {
                     venueInfo = {
                         id: venue?.id || null,
@@ -445,7 +374,6 @@ class RecommendationService {
                         coordinates: null
                     };
                 }
-
                 const transformed = {
                     id: match.fixture.id,
                     fixture: {
@@ -473,44 +401,35 @@ class RecommendationService {
                         }
                     }
                 };
-
                 transformedMatches.push(transformed);
-
             } catch (error) {
                 console.error('❌ Error transforming match:', error);
                 continue;
             }
         }
-
         return transformedMatches;
     }
-
     /**
      * Filter matches by proximity to saved venues
      */
     async filterMatchesByProximity(matches, savedVenues, radiusMiles) {
         const nearbyMatches = [];
-
         for (const match of matches) {
             if (!match.fixture.venue.coordinates) {
                 continue; // Skip matches without coordinates
             }
-
             const matchCoords = match.fixture.venue.coordinates;
             let isNearby = false;
             let closestVenue = null;
             let closestDistance = Infinity;
-
             for (const savedVenue of savedVenues) {
                 if (!savedVenue.coordinates) {
                     continue;
                 }
-
                 const distance = this.calculateDistance(
                     matchCoords[1], matchCoords[0], // lat, lng
                     savedVenue.coordinates[1], savedVenue.coordinates[0]
                 );
-
                 if (distance <= radiusMiles) {
                     isNearby = true;
                     if (distance < closestDistance) {
@@ -519,7 +438,6 @@ class RecommendationService {
                     }
                 }
             }
-
             if (isNearby) {
                 match._proximityData = {
                     closestVenue,
@@ -528,10 +446,8 @@ class RecommendationService {
                 nearbyMatches.push(match);
             }
         }
-
         return nearbyMatches;
     }
-
     /**
      * Remove matches that conflict with existing trip matches
      */
@@ -539,41 +455,32 @@ class RecommendationService {
         return matches.filter(match => {
             const matchDate = new Date(match.fixture.date);
             const matchTime = matchDate.getTime();
-
             // Check against existing trip matches
             for (const existingMatch of trip.matches) {
                 const existingDate = new Date(existingMatch.date);
                 const existingTime = existingDate.getTime();
-
                 // Same date and time (within 3 hours) = conflict
                 const timeDiff = Math.abs(matchTime - existingTime);
                 const threeHours = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
-
                 if (timeDiff < threeHours) {
                     return false; // Conflict found
                 }
             }
-
             return true; // No conflict
         });
     }
-
     /**
      * Get list of dismissed match IDs for a specific trip (for diagnostics)
      */
     getDismissedMatchIdsForTrip(user, tripId) {
         const dismissedMatchIds = new Set();
-        
         if (!user || !user.recommendationHistory || user.recommendationHistory.length === 0) {
             return dismissedMatchIds;
         }
-
         if (!tripId || tripId === 'undefined' || tripId === 'null') {
             return dismissedMatchIds;
         }
-
         const tripIdStr = String(tripId).trim();
-        
         for (const entry of user.recommendationHistory) {
             if (
                 entry.action === 'dismissed' &&
@@ -586,10 +493,8 @@ class RecommendationService {
                 }
             }
         }
-
         return dismissedMatchIds;
     }
-
     /**
      * Filter out matches that have been dismissed for a specific trip
      * Dismissals are permanent per trip (not time-limited, not global)
@@ -597,27 +502,19 @@ class RecommendationService {
     filterDismissedRecommendations(matches, user, tripId) {
         // Early return if no matches to filter
         if (!matches || matches.length === 0) {
-            console.log('⚠️ filterDismissedRecommendations: No matches provided, returning empty array');
             return matches || [];
         }
-
         // Early return if no user or no recommendation history
         if (!user || !user.recommendationHistory || user.recommendationHistory.length === 0) {
-            console.log(`✅ filterDismissedRecommendations: No recommendation history, returning all ${matches.length} matches`);
             return matches; // No history, return all matches
         }
-
         // Early return if no tripId
         if (!tripId || tripId === 'undefined' || tripId === 'null') {
-            console.log(`⚠️ filterDismissedRecommendations: Invalid tripId (${tripId}), returning all ${matches.length} matches`);
             return matches; // No tripId, can't filter
         }
-
         // Get dismissed matchIds for this specific trip
         const dismissedMatchIds = new Set();
         const tripIdStr = String(tripId).trim();
-        console.log(`🔍 Checking recommendation history for tripId: ${tripIdStr} (${user.recommendationHistory.length} total history entries)`);
-        
         for (const entry of user.recommendationHistory) {
             if (
                 entry.action === 'dismissed' &&
@@ -628,40 +525,27 @@ class RecommendationService {
                 // Compare tripIds (handle both ObjectId and string formats)
                 if (entryTripIdStr === tripIdStr) {
                     dismissedMatchIds.add(String(entry.matchId));
-                    console.log(`  → Found dismissed match ${entry.matchId} for trip ${tripIdStr}`);
                 }
             }
         }
-
         if (dismissedMatchIds.size === 0) {
-            console.log(`✅ No dismissed matches found for trip ${tripIdStr}, returning all ${matches.length} matches`);
             return matches; // No dismissals for this trip
         }
-
-        console.log(`🚫 Found ${dismissedMatchIds.size} dismissed matchIds for trip ${tripIdStr}:`, Array.from(dismissedMatchIds));
-
         // Filter out dismissed matches
         const filtered = matches.filter(match => {
             const matchId = String(match.id || match.fixture?.id);
             const isDismissed = dismissedMatchIds.has(matchId);
-            
             if (isDismissed) {
-                console.log(`🚫 Filtering out dismissed match ${matchId} for trip ${tripIdStr}`);
             }
-            
             return !isDismissed;
         });
-
-        console.log(`🚫 Filtered ${matches.length - filtered.length} dismissed matches for trip ${tripIdStr} (${filtered.length} remaining out of ${matches.length} original)`);
         return filtered;
     }
-
     /**
      * Score a match based on various factors including user preferences
      */
     scoreMatch(match, savedVenues, targetDate, trip, userPreferences = {}) {
         let score = weights.baseScore.default;
-
         // Proximity score (0-40 points)
         if (match._proximityData) {
             const distance = match._proximityData.closestDistance;
@@ -672,17 +556,14 @@ class RecommendationService {
             else if (distance <= 200) score += weights.context.proximity.within200miles;
             else score += weights.context.proximity.beyond;
         }
-
         // Temporal score (0-30 points)
         const matchDate = new Date(match.fixture.date);
         const targetDateObj = new Date(targetDate);
         const dayDiff = Math.abs((matchDate - targetDateObj) / (1000 * 60 * 60 * 24));
-        
         if (dayDiff === 0) score += weights.context.temporal.exactDate;
         else if (dayDiff === 1) score += weights.context.temporal.within1day;
         else if (dayDiff === 2) score += weights.context.temporal.within2days;
         else score += weights.context.temporal.beyond;
-
         // League quality score (0-20 points)
         const leagueId = String(match.league.id);
         if (weights.topLeagues.tier1.includes(leagueId)) {
@@ -692,15 +573,12 @@ class RecommendationService {
         } else {
             score += weights.context.leagueQuality.other;
         }
-
         // Preference-based scoring
         const strengthMult = weights.preferenceStrength[userPreferences.preferenceStrength || 'standard'];
-
         // Favorite Teams scoring
         if (userPreferences.favoriteTeams && userPreferences.favoriteTeams.length > 0) {
             const homeTeamId = String(match.teams?.home?.id);
             const awayTeamId = String(match.teams?.away?.id);
-            
             for (const favTeam of userPreferences.favoriteTeams) {
                 // Handle both populated and unpopulated team references
                 const favTeamId = favTeam.teamId?.apiId || favTeam.apiId || String(favTeam.teamId);
@@ -710,7 +588,6 @@ class RecommendationService {
                 }
             }
         }
-
         // Favorite Leagues scoring
         if (userPreferences.favoriteLeagues && userPreferences.favoriteLeagues.length > 0) {
             const matchLeagueId = String(match.league?.id);
@@ -723,7 +600,6 @@ class RecommendationService {
                 score += leagueBoost;
             }
         }
-
         // Favorite Venues scoring
         if (userPreferences.favoriteVenues && userPreferences.favoriteVenues.length > 0 && match.fixture?.venue?.id) {
             const matchVenueId = String(match.fixture.venue.id);
@@ -735,10 +611,8 @@ class RecommendationService {
                 }
             }
         }
-
         return score;
     }
-
     /**
      * Generate alternative dates for a match
      */
@@ -746,23 +620,18 @@ class RecommendationService {
         const alternatives = [];
         const matchDate = new Date(match.fixture.date);
         const targetDateObj = new Date(targetDate);
-
         // Find matches on nearby dates (±1, ±2 days)
         for (let i = -2; i <= 2; i++) {
             if (i === 0) continue; // Skip the original date
-
             const altDate = new Date(targetDateObj);
             altDate.setDate(altDate.getDate() + i);
-
             // Check if alternative date is within trip range
             if (altDate >= tripDates.start && altDate <= tripDates.end) {
                 alternatives.push(altDate.toISOString().split('T')[0]);
             }
         }
-
         return alternatives.slice(0, 2); // Return max 2 alternatives
     }
-
     /**
      * Generate recommendation reason text
      */
@@ -774,7 +643,6 @@ class RecommendationService {
         }
         return 'Recommended match in your trip area';
     }
-
     /**
      * Calculate proximity text
      */
@@ -785,56 +653,41 @@ class RecommendationService {
         }
         return 'In your trip area';
     }
-
     // Helper methods
-
     getTripDateRange(trip) {
         // First, check if trip has explicit startDate and endDate
         if (trip.startDate && trip.endDate) {
             const start = new Date(trip.startDate);
             const end = new Date(trip.endDate);
-            
             // Validate dates
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
-                console.log(`📅 Using trip startDate/endDate: ${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`);
                 return { start, end };
             }
         }
-
         // Fall back to calculating from matches if no explicit dates
         if (!trip.matches || trip.matches.length === 0) {
-            console.log('⚠️ No trip dates and no matches - cannot determine date range');
             return { start: null, end: null };
         }
-
         const dates = trip.matches.map(match => new Date(match.date)).filter(d => !isNaN(d.getTime()));
         if (dates.length === 0) {
-            console.log('⚠️ No valid match dates found');
             return { start: null, end: null };
         }
-
         const calculatedStart = new Date(Math.min(...dates));
         const calculatedEnd = new Date(Math.max(...dates));
-        console.log(`📅 Calculated date range from matches: ${calculatedStart.toISOString().split('T')[0]} to ${calculatedEnd.toISOString().split('T')[0]}`);
-        
         return {
             start: calculatedStart,
             end: calculatedEnd
         };
     }
-
     getDaysWithoutMatches(trip, tripDates) {
         const daysWithMatches = new Set();
-        
         trip.matches.forEach(match => {
             const date = new Date(match.date).toISOString().split('T')[0];
             daysWithMatches.add(date);
         });
-
         const daysWithoutMatches = [];
         const current = new Date(tripDates.start);
         const end = new Date(tripDates.end);
-
         while (current <= end) {
             const dateStr = current.toISOString().split('T')[0];
             if (!daysWithMatches.has(dateStr)) {
@@ -842,13 +695,10 @@ class RecommendationService {
             }
             current.setDate(current.getDate() + 1);
         }
-
         return daysWithoutMatches;
     }
-
     async extractVenuesFromTrip(trip) {
         const venues = [];
-        
         for (const match of trip.matches) {
             if (match.venueData && match.venueData.coordinates) {
                 // Venue already has coordinates
@@ -867,7 +717,6 @@ class RecommendationService {
                         match.venueData.city,
                         match.venueData.country
                     );
-                    
                     if (coordinates) {
                         venues.push({
                             name: match.venue,
@@ -875,41 +724,31 @@ class RecommendationService {
                             city: match.venueData.city,
                             country: match.venueData.country
                         });
-                        console.log(`✅ Geocoded venue for recommendations: ${match.venue} at [${coordinates[0]}, ${coordinates[1]}]`);
                     } else {
-                        console.log(`⚠️ Could not geocode venue for recommendations: ${match.venue}`);
                     }
                 } catch (error) {
                     console.error(`❌ Error geocoding venue ${match.venue}:`, error);
                 }
             } else {
-                console.log(`⚠️ Match ${match.matchId} has insufficient venue data for recommendations`);
             }
         }
-
         return venues;
     }
-
     getSearchDates(day, tripDates) {
         const searchDates = [day];
         const dayObj = new Date(day);
-
         // Add ±1 day for flexibility
         for (let i = -1; i <= 1; i++) {
             if (i === 0) continue;
-            
             const altDate = new Date(dayObj);
             altDate.setDate(altDate.getDate() + i);
-            
             // Only include if within trip range
             if (altDate >= tripDates.start && altDate <= tripDates.end) {
                 searchDates.push(altDate.toISOString().split('T')[0]);
             }
         }
-
         return searchDates;
     }
-
     async getAllAccessibleLeagues(restrictedLeagues) {
         // This would typically come from a database or configuration
         // For now, return common league IDs, excluding restricted ones
@@ -928,10 +767,8 @@ class RecommendationService {
             '113', // Belgian Pro League
             '144', // Jupiler Pro League
         ];
-
         return allLeagues.filter(leagueId => !restrictedLeagues.includes(leagueId));
     }
-
     calculateDistance(lat1, lon1, lat2, lon2) {
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -941,7 +778,6 @@ class RecommendationService {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         return this.earthRadiusMiles * c;
     }
-
     // Cache methods
     generateCacheKey(tripId, user, trip) {
         // Create a cache key based on trip ID, user subscription, trip dates, and trip content
@@ -954,24 +790,19 @@ class RecommendationService {
         const tripKey = `${tripId}-${trip.matches?.length || 0}-${startDate}-${endDate}-${matchesHash}`;
         return `recommendations:${userKey}:${tripKey}`;
     }
-
     getFromCache(key) {
         const cached = this.cache.get(key);
         if (!cached) {
             return null;
         }
-
         // Check if cache has expired (use custom expiry if set, otherwise default)
         const expiry = cached.expiry || this.cacheExpiry;
         if (Date.now() - cached.timestamp > expiry) {
-            console.log(`⏰ Cache expired for key: ${key} (age: ${Math.round((Date.now() - cached.timestamp) / 1000 / 60)} minutes)`);
             this.cache.delete(key);
             return null;
         }
-
         return cached.data;
     }
-
     setCache(key, data, customExpiry = null) {
         const expiry = customExpiry || this.cacheExpiry;
         this.cache.set(key, {
@@ -979,11 +810,9 @@ class RecommendationService {
             timestamp: Date.now(),
             expiry: expiry
         });
-
         // Clean up old cache entries periodically
         this.cleanupCache();
     }
-
     cleanupCache() {
         const now = Date.now();
         for (const [key, value] of this.cache.entries()) {
@@ -993,7 +822,6 @@ class RecommendationService {
             }
         }
     }
-
     // Method to invalidate cache for a specific trip
     invalidateTripCache(tripId) {
         for (const key of this.cache.keys()) {
@@ -1002,7 +830,6 @@ class RecommendationService {
             }
         }
     }
-
     // Method to invalidate cache for a specific user
     invalidateUserCache(userId) {
         for (const key of this.cache.keys()) {
@@ -1011,7 +838,6 @@ class RecommendationService {
             }
         }
     }
-
     /**
      * Regenerate recommendations for a trip and store them directly on the trip document
      * @param {string} tripId - The trip ID
@@ -1022,21 +848,16 @@ class RecommendationService {
      */
     async regenerateTripRecommendations(tripId, user, trip, forceRefresh = false) {
         try {
-            console.log(`🔄 Regenerating recommendations for trip: ${tripId}${forceRefresh ? ' (force refresh)' : ''}`);
-            
             // Check if trip exists
             if (!trip) {
-                console.log(`❌ Trip not found: ${tripId}`);
                 return {
                     success: false,
                     error: 'Trip not found',
                     recommendationsCount: 0
                 };
             }
-
             // Generate recommendations using existing logic
             const result = await this.getRecommendationsForTrip(tripId, user, trip, forceRefresh);
-            
             if (result.diagnostics?.reason === 'trip_not_found' || 
                 result.diagnostics?.reason === 'invalid_trip_dates' ||
                 result.diagnostics?.reason === 'all_days_have_matches' ||
@@ -1046,38 +867,28 @@ class RecommendationService {
                 trip.recommendationsVersion = 'v2';
                 trip.recommendationsGeneratedAt = new Date();
                 trip.recommendationsError = null;
-                
                 await user.save();
-                
-                console.log(`✅ Stored empty recommendations for trip ${tripId} (${result.diagnostics.reason})`);
                 return {
                     success: true,
                     recommendationsCount: 0,
                     diagnostics: result.diagnostics
                 };
             }
-
             // Store recommendations on trip document
             trip.recommendations = result.recommendations || [];
             trip.recommendationsVersion = 'v2';
             trip.recommendationsGeneratedAt = new Date();
             trip.recommendationsError = null;
-
             // Save the user document (which contains the trip)
             await user.save();
-
-            console.log(`✅ Regenerated and stored ${result.recommendations.length} recommendations for trip ${tripId}`);
-            
             return {
                 success: true,
                 recommendationsCount: result.recommendations.length,
                 recommendations: result.recommendations,
                 diagnostics: result.diagnostics
             };
-
         } catch (error) {
             console.error(`❌ Error regenerating recommendations for trip ${tripId}:`, error);
-            
             // Store error in trip document
             try {
                 trip.recommendationsError = error.message || 'Unknown error during regeneration';
@@ -1086,7 +897,6 @@ class RecommendationService {
             } catch (saveError) {
                 console.error(`❌ Failed to save error state for trip ${tripId}:`, saveError);
             }
-            
             return {
                 success: false,
                 error: error.message || 'Unknown error',
@@ -1095,5 +905,4 @@ class RecommendationService {
         }
     }
 }
-
 module.exports = new RecommendationService();

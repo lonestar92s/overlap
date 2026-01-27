@@ -2,14 +2,11 @@
  * Logger utility
  * Provides environment-aware logging that doesn't leak sensitive information in production
  */
-
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const isProduction = process.env.NODE_ENV === 'production';
-
 // Sanitize sensitive data from logs
 const sanitizeForLogging = (data) => {
     if (!data) return data;
-    
     if (typeof data === 'string') {
         // Remove potential tokens/secrets
         return data
@@ -18,33 +15,26 @@ const sanitizeForLogging = (data) => {
             .replace(/token["\s:=]+[^,\s}]+/gi, 'token: [REDACTED]')
             .replace(/secret["\s:=]+[^,\s}]+/gi, 'secret: [REDACTED]');
     }
-    
     if (typeof data === 'object') {
         const sanitized = { ...data };
         const sensitiveKeys = ['password', 'token', 'secret', 'apiKey', 'authorization', 'authToken'];
-        
         for (const key of sensitiveKeys) {
             if (sanitized[key]) {
                 sanitized[key] = '[REDACTED]';
             }
         }
-        
         return sanitized;
     }
-    
     return data;
 };
-
 const logger = {
     /**
      * Log informational messages (only in development)
      */
     log: (...args) => {
         if (isDevelopment) {
-            console.log(...args);
         }
     },
-
     /**
      * Log warnings (always logged, but sanitized in production)
      */
@@ -55,7 +45,6 @@ const logger = {
             console.warn(...args);
         }
     },
-
     /**
      * Log errors (always logged, but sanitized in production)
      * In production, should also send to Sentry
@@ -65,7 +54,6 @@ const logger = {
             // In production, sanitize and send to error reporting
             const sanitized = args.map(arg => sanitizeForLogging(arg));
             console.error('[ERROR]', ...sanitized);
-            
             // Send to Sentry if available
             try {
                 const Sentry = require('@sentry/node');
@@ -81,7 +69,6 @@ const logger = {
             console.error(...args);
         }
     },
-
     /**
      * Log debug messages (only in development)
      */
@@ -90,7 +77,6 @@ const logger = {
             console.debug(...args);
         }
     },
-
     /**
      * Log info messages (always logged, sanitized in production)
      */
@@ -102,7 +88,4 @@ const logger = {
         }
     }
 };
-
 module.exports = logger;
-
-

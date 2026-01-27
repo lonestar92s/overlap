@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-match-finder')
   .then(async () => {
     const Venue = mongoose.model('Venue', new mongoose.Schema({
@@ -9,7 +8,6 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
       country: String,
       coordinates: [Number]
     }));
-
     // Premier League venues missing coordinates
     const missingCoordinates = [
       {
@@ -33,38 +31,26 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
         coordinates: [-2.9664, 53.4389] // [longitude, latitude]
       }
     ];
-
-    console.log('Adding missing coordinates...');
-    
     for (const venue of missingCoordinates) {
       const result = await Venue.updateOne(
         { venueId: venue.venueId },
         { $set: { coordinates: venue.coordinates } }
       );
-      
       if (result.modifiedCount > 0) {
-        console.log(`✅ Added coordinates for ${venue.name} (ID: ${venue.venueId})`);
       } else {
-        console.log(`⚠️ Could not find venue ${venue.name} (ID: ${venue.venueId})`);
       }
     }
-
     // Verify all Premier League venues now have coordinates
     const englishVenuesWithIds = await Venue.find({ 
       venueId: { $exists: true }, 
       country: 'England' 
     });
-    
-    console.log('\nVerification - All Premier League venues:');
     englishVenuesWithIds.forEach(v => {
-      console.log(`- ${v.name} (ID: ${v.venueId}, Coordinates: ${v.coordinates ? 'Yes' : 'No'})`);
     });
-
     await mongoose.disconnect();
   })
   .catch(console.error); 
 require('dotenv').config();
-
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-match-finder')
   .then(async () => {
     const Venue = mongoose.model('Venue', new mongoose.Schema({
@@ -73,7 +59,6 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
       country: String,
       coordinates: [Number]
     }));
-
     // Premier League venues missing coordinates
     const missingCoordinates = [
       {
@@ -97,34 +82,22 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flight-ma
         coordinates: [-2.9664, 53.4389] // [longitude, latitude]
       }
     ];
-
-    console.log('Adding missing coordinates...');
-    
     for (const venue of missingCoordinates) {
       const result = await Venue.updateOne(
         { venueId: venue.venueId },
         { $set: { coordinates: venue.coordinates } }
       );
-      
       if (result.modifiedCount > 0) {
-        console.log(`✅ Added coordinates for ${venue.name} (ID: ${venue.venueId})`);
       } else {
-        console.log(`⚠️ Could not find venue ${venue.name} (ID: ${venue.venueId})`);
       }
     }
-
     // Verify all Premier League venues now have coordinates
     const englishVenuesWithIds = await Venue.find({ 
       venueId: { $exists: true }, 
       country: 'England' 
     });
-    
-    console.log('\nVerification - All Premier League venues:');
     englishVenuesWithIds.forEach(v => {
-      console.log(`- ${v.name} (ID: ${v.venueId}, Coordinates: ${v.coordinates ? 'Yes' : 'No'})`);
     });
-
     await mongoose.disconnect();
   })
   .catch(console.error); 
- 

@@ -7,30 +7,24 @@ const { isTripCompleted } = require('../utils/tripUtils');
 const geocodingService = require('../services/geocodingService');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 const recommendationService = require('../services/recommendationService');
-
 const router = express.Router();
-
 // Helper function to invalidate trip recommendations cache
 // Centralizes cache invalidation pattern for all trip mutations
 function invalidateTripRecommendations(tripId) {
     try {
         recommendationService.invalidateTripCache(tripId);
-        console.log(`🗑️ Invalidated recommendation cache for trip: ${tripId}`);
     } catch (error) {
         console.warn(`⚠️ Failed to invalidate recommendation cache for trip ${tripId}:`, error.message);
         // Don't throw - cache invalidation failure shouldn't break the request
     }
 }
-
 // API-Sports configuration
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
-
 // HTTPS agent for Google API requests
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-
 // Google API configuration
 const googleApiConfig = {
     headers: {
@@ -38,7 +32,6 @@ const googleApiConfig = {
     },
     httpsAgent
 };
-
 // Get all trips for the authenticated user (or empty array if not authenticated)
 // Supports query parameter: ?status=active|completed (optional)
 router.get('/', authenticateToken, async (req, res) => {
@@ -50,13 +43,10 @@ router.get('/', authenticateToken, async (req, res) => {
                 trips: []
             });
         }
-        
         const user = await User.findById(req.user.id).select('trips');
         let trips = user.trips;
-        
         // Filter by completion status if requested
         const statusFilter = req.query.status; // 'active' | 'completed'
-        
         if (statusFilter === 'completed') {
             // Return only completed trips (all matches finished)
             trips = trips.filter(trip => isTripCompleted(trip));
@@ -65,10 +55,8 @@ router.get('/', authenticateToken, async (req, res) => {
             trips = trips.filter(trip => !isTripCompleted(trip));
         }
         // No filter = return all trips (backward compatible)
-        
         // Sort trips by creation date (most recent first)
         trips = trips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
         // Add computed isCompleted field for frontend convenience
         // Convert to plain objects to add the computed field
         trips = trips.map(trip => {
@@ -78,7 +66,6 @@ router.get('/', authenticateToken, async (req, res) => {
                 isCompleted: isTripCompleted(trip)
             };
         });
-        
         res.json({
             success: true,
             trips: trips
@@ -91,27 +78,23 @@ router.get('/', authenticateToken, async (req, res) => {
         });
     }
 });
-
 // Get a specific trip by ID
 router.get('/:id', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('trips');
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-        
         // Add computed isCompleted field for frontend convenience
         const tripObj = trip.toObject ? trip.toObject() : trip;
         const tripWithStatus = {
             ...tripObj,
             isCompleted: isTripCompleted(trip)
         };
-        
         res.json({
             success: true,
             trip: tripWithStatus
@@ -124,12 +107,10 @@ router.get('/:id', auth, async (req, res) => {
         });
     }
 });
-
 // Create a new trip (works without authentication)
 router.post('/', authenticateToken, async (req, res) => {
     try {
         const { name, description, notes, matches, flights, startDate, endDate } = req.body;
-        
         // Auto-generate trip name from flights if not provided
         let tripName = name?.trim();
         if (!tripName && flights && flights.length > 0) {
@@ -139,30 +120,25 @@ router.post('/', authenticateToken, async (req, res) => {
             const destination = lastFlight.arrival?.airport?.code || 'Destination';
             tripName = `${origin} to ${destination} Trip`;
         }
-        
         if (!tripName) {
             return res.status(400).json({
                 success: false,
                 message: 'Trip name is required'
             });
         }
-
         // Auto-calculate dates from matches if not provided
         let calculatedStartDate = startDate ? new Date(startDate) : null;
         let calculatedEndDate = endDate ? new Date(endDate) : null;
-        
         if (!calculatedStartDate && matches && matches.length > 0) {
             const matchDates = matches
                 .map(m => m.date ? new Date(m.date) : null)
                 .filter(d => d && !isNaN(d.getTime()))
                 .sort((a, b) => a - b);
-            
             if (matchDates.length > 0) {
                 calculatedStartDate = matchDates[0];
                 calculatedEndDate = matchDates[matchDates.length - 1];
             }
         }
-
         if (!req.user) {
             // No user authenticated - create a temporary trip response
             // In a real app, you might want to store this locally or create a guest session
@@ -179,17 +155,14 @@ router.post('/', authenticateToken, async (req, res) => {
                 updatedAt: new Date(),
                 isTemporary: true
             };
-
             return res.status(201).json({
                 success: true,
                 trip: tempTrip,
                 message: 'Trip created (temporary - not saved to database)'
             });
         }
-
         // User is authenticated - save to database
         const user = await User.findById(req.user.id);
-        
         const newTrip = {
             name: tripName,
             description: description || '',
@@ -201,13 +174,10 @@ router.post('/', authenticateToken, async (req, res) => {
             createdAt: new Date(),
             updatedAt: new Date()
         };
-
         user.trips.push(newTrip);
         await user.save();
-
         // Return the newly created trip
         const createdTrip = user.trips[user.trips.length - 1];
-
         res.status(201).json({
             success: true,
             trip: createdTrip,
@@ -221,26 +191,21 @@ router.post('/', authenticateToken, async (req, res) => {
         });
     }
 });
-
 // Update a trip
 router.put('/:id', auth, async (req, res) => {
     try {
         const { name, description, notes, startDate, endDate } = req.body;
-        
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-
         // Track if dates changed (affects recommendations)
         const datesChanged = (startDate !== undefined && trip.startDate?.toISOString() !== (startDate ? new Date(startDate).toISOString() : null)) ||
                             (endDate !== undefined && trip.endDate?.toISOString() !== (endDate ? new Date(endDate).toISOString() : null));
-
         // Update allowed fields
         if (name !== undefined) trip.name = name.trim();
         if (description !== undefined) trip.description = description;
@@ -248,26 +213,19 @@ router.put('/:id', auth, async (req, res) => {
         if (startDate !== undefined) trip.startDate = startDate ? new Date(startDate) : null;
         if (endDate !== undefined) trip.endDate = endDate ? new Date(endDate) : null;
         trip.updatedAt = new Date();
-
         await user.save();
-
         // Regenerate recommendations if dates changed (dates affect recommendations)
         if (datesChanged) {
             try {
                 await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
-                console.log(`✅ Regenerated recommendations for trip ${req.params.id} after date changes`);
-                
                 // Invalidate home page recommendations cache since trip recommendations changed
                 const deletedCount = invalidateRecommendedMatchesCache(user.id);
-                console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after trip date changes`);
             } catch (regenError) {
                 console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
                 // Still invalidate cache even if regeneration fails
                 const deletedCount = invalidateRecommendedMatchesCache(user.id);
-                console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
             }
         }
-
         res.json({
             success: true,
             trip: trip,
@@ -281,7 +239,6 @@ router.put('/:id', auth, async (req, res) => {
         });
     }
 });
-
 // Delete a trip
 router.delete('/:id', auth, async (req, res) => {
     try {
@@ -294,7 +251,6 @@ router.delete('/:id', auth, async (req, res) => {
                 message: 'User not authenticated'
             });
         }
-
         const user = await User.findById(userId);
         if (!user) {
             console.error('Delete trip: User not found in database:', userId);
@@ -303,13 +259,9 @@ router.delete('/:id', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const tripId = req.params.id;
-        console.log('Delete trip: Attempting to delete trip:', { tripId, userId, userTripsCount: user.trips.length });
-
         // Try to find the trip by ID (Mongoose subdocument lookup)
         let trip = user.trips.id(tripId);
-        
         // If not found, try finding by matching _id string (handles ID format mismatches)
         if (!trip) {
             const tripIdStr = String(tripId);
@@ -318,7 +270,6 @@ router.delete('/:id', auth, async (req, res) => {
                 return tId === tripIdStr || tId.toLowerCase() === tripIdStr.toLowerCase();
             });
         }
-
         if (!trip) {
             console.error('Delete trip: Trip not found:', {
                 requestedTripId: tripId,
@@ -338,34 +289,26 @@ router.delete('/:id', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
-        console.log('Delete trip: Trip found, removing:', {
             tripId: String(trip._id || trip.id),
             tripName: trip.name,
             tripsBeforeDelete: user.trips.length
         });
-
         // Use pull() to properly remove subdocument from array
         // This is the correct way to remove subdocuments in Mongoose
         const deletedTripId = String(trip._id || trip.id);
         user.trips.pull(trip._id || trip.id);
         await user.save();
-
         // Clear recommendation cache for deleted trip
         try {
             const recommendationService = require('../services/recommendationService');
             recommendationService.invalidateTripCache(deletedTripId);
-            console.log('Delete trip: Cleared recommendation cache for trip:', deletedTripId);
         } catch (cacheError) {
             console.warn('Delete trip: Failed to clear recommendation cache:', cacheError.message);
             // Don't fail the deletion if cache clearing fails
         }
-
-        console.log('Delete trip: Successfully deleted trip:', {
             tripId: deletedTripId,
             tripsAfterDelete: user.trips.length
         });
-
         res.json({
             success: true,
             message: 'Trip deleted successfully'
@@ -380,27 +323,18 @@ router.delete('/:id', auth, async (req, res) => {
         });
     }
 });
-
 // Add a match to a trip
 router.post('/:id/matches', auth, async (req, res) => {
     try {
         const { matchId, homeTeam, awayTeam, league, venue, venueData, date } = req.body;
-        
-        console.log('🏟️ BACKEND - Adding match to trip');
-        console.log('🏟️ BACKEND - Complete request body:', JSON.stringify(req.body, null, 2));
-        console.log('🏟️ BACKEND - Received venueData:', JSON.stringify(venueData, null, 2));
-        console.log('🏟️ BACKEND - Received venue string:', venue);
-        
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-
         // Check if match is already in the trip
         const existingMatch = trip.matches.find(match => match.matchId === matchId);
         if (existingMatch) {
@@ -409,7 +343,6 @@ router.post('/:id/matches', auth, async (req, res) => {
                 message: 'Match already in trip'
             });
         }
-
         // Try to geocode venue if coordinates are missing
         let finalVenueData = venueData;
         if (venueData && !venueData.coordinates && venueData.name && venueData.city) {
@@ -420,21 +353,17 @@ router.post('/:id/matches', auth, async (req, res) => {
                     venueData.city,
                     venueData.country
                 );
-                
                 if (coordinates) {
                     finalVenueData = {
                         ...venueData,
                         coordinates: coordinates
                     };
-                    console.log(`✅ Geocoded venue for trip: ${venueData.name} at [${coordinates[0]}, ${coordinates[1]}]`);
                 } else {
-                    console.log(`⚠️ Could not geocode venue for trip: ${venueData.name}`);
                 }
             } catch (error) {
                 console.error(`❌ Error geocoding venue ${venueData.name}:`, error);
             }
         }
-
         const matchToSave = {
             matchId,
             homeTeam,
@@ -451,34 +380,21 @@ router.post('/:id/matches', auth, async (req, res) => {
                 notes: ''
             }
         };
-        
-        console.log('🏟️ BACKEND - About to save match:', JSON.stringify(matchToSave, null, 2));
-        
         trip.matches.push(matchToSave);
-
         trip.updatedAt = new Date();
         await user.save();
-
         // Regenerate recommendations immediately (adding match affects recommendations)
         try {
             await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
-            console.log(`✅ Regenerated recommendations for trip ${req.params.id} after adding match`);
-            
             // Invalidate home page recommendations cache since trip recommendations changed
             const deletedCount = invalidateRecommendedMatchesCache(user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after adding match to trip`);
         } catch (regenError) {
             console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
             // Still invalidate cache even if regeneration fails
             const deletedCount = invalidateRecommendedMatchesCache(user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
         }
-        
         // Check what was actually saved
         const savedMatch = trip.matches[trip.matches.length - 1];
-        console.log('🏟️ BACKEND - Successfully saved match:', JSON.stringify(savedMatch, null, 2));
-        console.log('🏟️ BACKEND - Saved venueData specifically:', JSON.stringify(savedMatch.venueData, null, 2));
-
         res.json({
             success: true,
             trip: trip,
@@ -492,39 +408,30 @@ router.post('/:id/matches', auth, async (req, res) => {
         });
     }
 });
-
 // Remove a match from a trip
 router.delete('/:id/matches/:matchId', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-
         trip.matches = trip.matches.filter(match => match.matchId !== req.params.matchId);
         trip.updatedAt = new Date();
         await user.save();
-
         // Regenerate recommendations immediately (removing match affects recommendations)
         try {
             await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
-            console.log(`✅ Regenerated recommendations for trip ${req.params.id} after removing match`);
-            
             // Invalidate home page recommendations cache since trip recommendations changed
             const deletedCount = invalidateRecommendedMatchesCache(user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries for user ${user.id} after removing match from trip`);
         } catch (regenError) {
             console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
             // Still invalidate cache even if regeneration fails
             const deletedCount = invalidateRecommendedMatchesCache(user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} home page recommendation cache entries (regeneration failed but cache cleared)`);
         }
-
         res.json({
             success: true,
             trip: trip,
@@ -538,19 +445,16 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
         });
     }
 });
-
 // Add a flight to a trip
 router.post('/:id/flights', auth, async (req, res) => {
     try {
         const { flightNumber, airline, departure, arrival, duration, stops } = req.body;
-
         if (!flightNumber || !departure || !arrival) {
             return res.status(400).json({
                 success: false,
                 message: 'Flight number, departure, and arrival are required'
             });
         }
-
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -558,7 +462,6 @@ router.post('/:id/flights', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -566,7 +469,6 @@ router.post('/:id/flights', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         const flightToAdd = {
             flightNumber,
             airline: airline || {},
@@ -584,13 +486,10 @@ router.post('/:id/flights', auth, async (req, res) => {
             stops: stops || 0,
             addedAt: new Date()
         };
-
         trip.flights.push(flightToAdd);
         trip.updatedAt = new Date();
         await user.save();
-
         const savedFlight = trip.flights[trip.flights.length - 1];
-
         res.status(201).json({
             success: true,
             flight: savedFlight,
@@ -604,7 +503,6 @@ router.post('/:id/flights', auth, async (req, res) => {
         });
     }
 });
-
 // Delete a flight from a trip
 router.delete('/:id/flights/:flightId', auth, async (req, res) => {
     try {
@@ -615,7 +513,6 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -623,11 +520,9 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         // Try to find the flight by ID
         // Mongoose subdocuments can be accessed by _id string
         let flight = trip.flights.id(req.params.flightId);
-        
         // If not found, try finding by matching _id string (case-insensitive, handle ObjectId)
         if (!flight) {
             const flightIdStr = String(req.params.flightId);
@@ -639,7 +534,6 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
                        f.id?.toString() === flightIdStr;
             });
         }
-        
         if (!flight) {
             console.error('Flight not found:', {
                 requestedFlightId: req.params.flightId,
@@ -659,31 +553,21 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
                 message: 'Flight not found'
             });
         }
-        
-        console.log('Flight found for deletion:', {
             flightId: String(flight._id || flight.id),
             flightNumber: flight.flightNumber,
             tripFlightsCount: trip.flights.length
         });
-
-        console.log('Attempting to delete flight:', {
             flightId: req.params.flightId,
             flightFound: !!flight,
             flightIdType: typeof flight?._id,
             flightIdValue: String(flight?._id),
             tripFlightsCount: trip.flights.length
         });
-
         // Remove the flight from the array
         // For Mongoose subdocuments, we can use pull or filter
         trip.flights.pull(flight._id);
         trip.updatedAt = new Date();
-        
-        console.log('Flight removed from array, saving user...');
         await user.save();
-        
-        console.log('User saved successfully, flight deleted');
-
         res.json({
             success: true,
             message: 'Flight deleted from trip successfully'
@@ -705,27 +589,18 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
         });
     }
 });
-
 // Update match planning details
 router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
     try {
         const { ticketsAcquired, flight, accommodation, homeBaseId, notes } = req.body;
-        
-        console.log('📋 BACKEND - Updating match planning details');
-        console.log('📋 BACKEND - Trip ID:', req.params.id);
-        console.log('📋 BACKEND - Match ID:', req.params.matchId);
-        console.log('📋 BACKEND - Planning data:', { ticketsAcquired, flight, accommodation, homeBaseId, notes });
-        
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-
         const match = trip.matches.find(m => m.matchId === req.params.matchId);
         if (!match) {
             return res.status(404).json({
@@ -733,7 +608,6 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                 message: 'Match not found in trip'
             });
         }
-
         // Ensure planning object exists (for matches added before this fix)
         if (!match.planning) {
             match.planning = {
@@ -744,7 +618,6 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                 notes: ''
             };
         }
-
         // Update planning details
         if (ticketsAcquired !== undefined) {
             match.planning.ticketsAcquired = ticketsAcquired;
@@ -766,19 +639,16 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                            hb._id?.toString() === String(homeBaseId) ||
                            hb.id?.toString() === String(homeBaseId);
                 });
-                
                 if (!homeBase) {
                     return res.status(400).json({
                         success: false,
                         message: 'Home base not found in trip'
                     });
                 }
-                
                 // Validate that home base date range includes match date
                 const matchDate = new Date(match.date);
                 const homeBaseFrom = new Date(homeBase.dateRange.from);
                 const homeBaseTo = new Date(homeBase.dateRange.to);
-                
                 if (matchDate < homeBaseFrom || matchDate > homeBaseTo) {
                     return res.status(400).json({
                         success: false,
@@ -786,18 +656,13 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
                     });
                 }
             }
-            
             match.planning.homeBaseId = homeBaseId || null;
         }
         if (notes !== undefined) {
             match.planning.notes = notes;
         }
-
         trip.updatedAt = new Date();
         await user.save();
-        
-        console.log('📋 BACKEND - Successfully updated match planning:', match.planning);
-
         res.json({
             success: true,
             trip: trip,
@@ -812,20 +677,17 @@ router.put('/:id/matches/:matchId/planning', auth, async (req, res) => {
         });
     }
 });
-
 // Fetch scores for completed matches in a trip
 router.post('/:id/fetch-scores', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         const trip = user.trips.id(req.params.id);
-        
         if (!trip) {
             return res.status(404).json({
                 success: false,
                 message: 'Trip not found'
             });
         }
-
         // Find completed matches that don't have scores yet
         const completedMatches = trip.matches.filter(match => {
             const matchDate = new Date(match.date);
@@ -836,7 +698,6 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                               (match.finalScore.home === null && match.finalScore.away === null);
             return isPast && hasNoScore;
         });
-
         if (completedMatches.length === 0) {
             return res.json({
                 success: true,
@@ -844,10 +705,6 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                 updatedMatches: []
             });
         }
-
-        console.log(`🏆 Fetching scores for ${completedMatches.length} completed matches`);
-        console.log(`🏆 Match IDs to fetch:`, completedMatches.map(m => m.matchId));
-
         // Batch fetch scores from API-Sports
         const scorePromises = completedMatches.map(async (match) => {
             try {
@@ -857,23 +714,18 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                     headers: { 'x-apisports-key': API_SPORTS_KEY },
                     timeout: 10000
                 });
-
                 if (response.data && response.data.response && response.data.response.length > 0) {
                     const fixture = response.data.response[0];
                     const score = fixture.score;
                     const goals = fixture.goals;
-                    
-                    console.log(`🔍 Debug fixture ${match.matchId}:`, {
                         status: fixture.fixture.status,
                         goals: goals,
                         score: score
                     });
-                    
                     // Only store if match is finished and has valid scores
                     if (fixture.fixture.status.short === 'FT' && 
                         goals.home !== null && 
                         goals.away !== null) {
-                        
                         return {
                             matchId: match.matchId,
                             finalScore: {
@@ -895,10 +747,8 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                 return null;
             }
         });
-
         const scoreResults = await Promise.all(scorePromises);
         const validScores = scoreResults.filter(result => result !== null);
-
         // Update matches with scores
         let updatedCount = 0;
         validScores.forEach(scoreData => {
@@ -908,19 +758,14 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                 updatedCount++;
             }
         });
-
         trip.updatedAt = new Date();
         await user.save();
-
-        console.log(`✅ Updated ${updatedCount} matches with scores`);
-
         res.json({
             success: true,
             message: `Updated ${updatedCount} matches with scores`,
             updatedMatches: validScores,
             totalCompleted: completedMatches.length
         });
-
     } catch (error) {
         console.error('Error fetching match scores:', error);
         res.status(500).json({
@@ -930,19 +775,16 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
         });
     }
 });
-
 // Add a home base to a trip
 router.post('/:id/home-bases', auth, async (req, res) => {
     try {
         const { name, type, address, coordinates, dateRange, notes } = req.body;
-
         if (!name || !dateRange || !dateRange.from || !dateRange.to) {
             return res.status(400).json({
                 success: false,
                 message: 'Name and date range (from, to) are required'
             });
         }
-
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -950,7 +792,6 @@ router.post('/:id/home-bases', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -958,7 +799,6 @@ router.post('/:id/home-bases', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         // Validate date range overlaps with trip dates
         const tripStart = trip.matches.length > 0 
             ? new Date(Math.min(...trip.matches.map(m => new Date(m.date))))
@@ -966,17 +806,14 @@ router.post('/:id/home-bases', auth, async (req, res) => {
         const tripEnd = trip.matches.length > 0
             ? new Date(Math.max(...trip.matches.map(m => new Date(m.date))))
             : new Date();
-        
         const homeBaseFrom = new Date(dateRange.from);
         const homeBaseTo = new Date(dateRange.to);
-
         if (homeBaseFrom > homeBaseTo) {
             return res.status(400).json({
                 success: false,
                 message: 'Date range is invalid (from date must be before to date)'
             });
         }
-
         // Geocode if coordinates not provided but address is available
         let finalCoordinates = coordinates;
         if (!finalCoordinates || !finalCoordinates.lat || !finalCoordinates.lng) {
@@ -985,13 +822,11 @@ router.post('/:id/home-bases', auth, async (req, res) => {
                     const addressQuery = address.street 
                         ? `${address.street}, ${address.city}, ${address.country}`
                         : `${address.city}, ${address.country}`;
-                    
                     const geocoded = await geocodingService.geocodeVenue(
                         addressQuery,
                         address.city,
                         address.country
                     );
-                    
                     if (geocoded && geocoded.lat && geocoded.lng) {
                         finalCoordinates = {
                             lat: geocoded.lat,
@@ -1004,7 +839,6 @@ router.post('/:id/home-bases', auth, async (req, res) => {
                 }
             }
         }
-
         const homeBaseToAdd = {
             name: name.trim(),
             type: type || 'custom',
@@ -1023,13 +857,10 @@ router.post('/:id/home-bases', auth, async (req, res) => {
             createdAt: new Date(),
             updatedAt: new Date()
         };
-
         trip.homeBases.push(homeBaseToAdd);
         trip.updatedAt = new Date();
         await user.save();
-
         const savedHomeBase = trip.homeBases[trip.homeBases.length - 1];
-
         res.status(201).json({
             success: true,
             homeBase: savedHomeBase,
@@ -1044,12 +875,10 @@ router.post('/:id/home-bases', auth, async (req, res) => {
         });
     }
 });
-
 // Update a home base in a trip
 router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
     try {
         const { name, type, address, coordinates, dateRange, notes } = req.body;
-
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -1057,7 +886,6 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -1065,9 +893,7 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         let homeBase = trip.homeBases.id(req.params.homeBaseId);
-        
         // If not found, try finding by matching _id string
         if (!homeBase) {
             const homeBaseIdStr = String(req.params.homeBaseId);
@@ -1079,14 +905,12 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                        hb.id?.toString() === homeBaseIdStr;
             });
         }
-
         if (!homeBase) {
             return res.status(404).json({
                 success: false,
                 message: 'Home base not found'
             });
         }
-
         // Update fields if provided
         if (name !== undefined) {
             homeBase.name = name.trim();
@@ -1121,7 +945,6 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
         if (notes !== undefined) {
             homeBase.notes = notes;
         }
-
         // Geocode if coordinates not provided but address is available
         if ((!coordinates || !coordinates.lat || !coordinates.lng) && 
             (address?.city || homeBase.address?.city)) {
@@ -1129,13 +952,11 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 const addressQuery = (address?.street || homeBase.address?.street)
                     ? `${address?.street || homeBase.address.street}, ${address?.city || homeBase.address.city}, ${address?.country || homeBase.address.country}`
                     : `${address?.city || homeBase.address.city}, ${address?.country || homeBase.address.country}`;
-                
                 const geocoded = await geocodingService.geocodeVenue(
                     addressQuery,
                     address?.city || homeBase.address.city,
                     address?.country || homeBase.address.country
                 );
-                
                 if (geocoded && geocoded.lat && geocoded.lng) {
                     homeBase.coordinates = {
                         lat: geocoded.lat,
@@ -1152,11 +973,9 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 lng: coordinates.lng
             };
         }
-
         homeBase.updatedAt = new Date();
         trip.updatedAt = new Date();
         await user.save();
-
         res.json({
             success: true,
             homeBase: homeBase,
@@ -1171,7 +990,6 @@ router.put('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
         });
     }
 });
-
 // Delete a home base from a trip
 router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
     try {
@@ -1182,7 +1000,6 @@ router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -1190,9 +1007,7 @@ router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         let homeBase = trip.homeBases.id(req.params.homeBaseId);
-        
         // If not found, try finding by matching _id string
         if (!homeBase) {
             const homeBaseIdStr = String(req.params.homeBaseId);
@@ -1204,18 +1019,15 @@ router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
                        hb.id?.toString() === homeBaseIdStr;
             });
         }
-
         if (!homeBase) {
             return res.status(404).json({
                 success: false,
                 message: 'Home base not found'
             });
         }
-
         trip.homeBases.pull(homeBase._id);
         trip.updatedAt = new Date();
         await user.save();
-
         res.json({
             success: true,
             message: 'Home base deleted from trip successfully'
@@ -1229,12 +1041,10 @@ router.delete('/:id/home-bases/:homeBaseId', auth, async (req, res) => {
         });
     }
 });
-
 // Get travel times from home bases to match venues
 router.get('/:id/travel-times', auth, async (req, res) => {
     try {
         const { matchId, homeBaseId } = req.query;
-        
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({
@@ -1242,7 +1052,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 message: 'User not found'
             });
         }
-
         const trip = user.trips.id(req.params.id);
         if (!trip) {
             return res.status(404).json({
@@ -1250,7 +1059,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-
         // Filter matches if matchId is provided
         let matchesToProcess = trip.matches || [];
         if (matchId) {
@@ -1258,14 +1066,12 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 String(m.matchId) === String(matchId)
             );
         }
-
         if (matchesToProcess.length === 0) {
             return res.json({
                 success: true,
                 travelTimes: {}
             });
         }
-
         // Filter home bases if homeBaseId is provided
         let homeBasesToUse = trip.homeBases || [];
         if (homeBaseId) {
@@ -1273,7 +1079,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 String(hb._id) === String(homeBaseId)
             );
         }
-
         if (homeBasesToUse.length === 0) {
             return res.json({
                 success: true,
@@ -1281,10 +1086,8 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 message: 'No home bases found for this trip'
             });
         }
-
         const travelTimes = {};
         const googleApiKey = process.env.GOOGLE_API_KEY;
-
         if (!googleApiKey) {
             // Return empty travel times instead of error - feature is unavailable but not a failure
             console.warn('Google Maps API key not configured - travel times unavailable');
@@ -1294,7 +1097,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 message: 'Travel times unavailable (Google Maps API key not configured)'
             });
         }
-
         // Process each match
         for (const match of matchesToProcess) {
             // Only calculate travel times for matches with explicitly assigned home bases
@@ -1304,7 +1106,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 travelTimes[match.matchId] = null;
                 continue;
             }
-
             // Find the explicitly assigned home base
             const assignedHomeBaseId = String(match.planning.homeBaseId);
             const selectedHomeBase = homeBasesToUse.find(hb => {
@@ -1314,13 +1115,11 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                        hb._id?.toString() === assignedHomeBaseId ||
                        hb.id?.toString() === assignedHomeBaseId;
             });
-
             if (!selectedHomeBase) {
                 // Assigned home base not found - skip this match
                 travelTimes[match.matchId] = null;
                 continue;
             }
-
             // Validate that home base date range includes match date (safety check)
             const matchDate = new Date(match.date);
             if (selectedHomeBase.dateRange && selectedHomeBase.dateRange.from && selectedHomeBase.dateRange.to) {
@@ -1332,7 +1131,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     continue;
                 }
             }
-
             // Check if home base has coordinates
             if (!selectedHomeBase.coordinates || 
                 typeof selectedHomeBase.coordinates.lat !== 'number' || 
@@ -1340,7 +1138,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 travelTimes[match.matchId] = null;
                 continue;
             }
-
             // Get venue coordinates from match
             let venueCoords = null;
             if (match.venueData && match.venueData.coordinates) {
@@ -1354,24 +1151,20 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     venueCoords = { lat: coords.lat, lng: coords.lng };
                 }
             }
-
             if (!venueCoords) {
                 travelTimes[match.matchId] = null;
                 continue;
             }
-
             // Calculate travel time using Google Maps Directions API
             // Calculate both driving and transit in parallel
             try {
                 const origin = `${selectedHomeBase.coordinates.lat},${selectedHomeBase.coordinates.lng}`;
                 const destination = `${venueCoords.lat},${venueCoords.lng}`;
-
                 // Prepare departure time for transit (use match date/time, fallback to 9 AM if too far in future)
                 let departureTime = null;
                 const matchDateTime = new Date(match.date);
                 const now = new Date();
                 const sixMonthsFromNow = new Date(now.getTime() + (6 * 30 * 24 * 60 * 60 * 1000));
-                
                 if (matchDateTime <= sixMonthsFromNow && matchDateTime >= now) {
                     // Use match date/time if within 6 months
                     departureTime = Math.floor(matchDateTime.getTime() / 1000);
@@ -1381,7 +1174,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     defaultTime.setHours(9, 0, 0, 0);
                     departureTime = Math.floor(defaultTime.getTime() / 1000);
                 }
-
                 // Make parallel API calls for driving and transit
                 const [drivingResponse, transitResponse] = await Promise.allSettled([
                     // Driving request
@@ -1413,11 +1205,9 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                         }
                     )
                 ]);
-
                 const result = {
                     homeBaseId: String(selectedHomeBase._id)
                 };
-
                 // Process driving response
                 if (drivingResponse.status === 'fulfilled' && 
                     drivingResponse.value.data.status === 'OK' && 
@@ -1425,12 +1215,10 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     drivingResponse.value.data.routes.length > 0) {
                     const route = drivingResponse.value.data.routes[0];
                     const leg = route.legs[0];
-                    
                     // Convert duration from seconds to minutes
                     const durationMinutes = Math.round(leg.duration.value / 60);
                     // Convert distance from meters to miles
                     const distanceMiles = (leg.distance.value / 1609.34).toFixed(1);
-
                     result.driving = {
                         duration: durationMinutes, // minutes
                         distance: parseFloat(distanceMiles), // miles
@@ -1438,33 +1226,27 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                         distanceText: leg.distance.text
                     };
                 }
-
                 // Process transit response
                 const transitOptionsMap = new Map(); // Map to deduplicate by type and keep fastest
                 if (transitResponse.status === 'fulfilled' && 
                     transitResponse.value.data.status === 'OK' && 
                     transitResponse.value.data.routes && 
                     transitResponse.value.data.routes.length > 0) {
-                    
-                    console.log(`🚇 Transit API response for match ${match.matchId}:`, {
                         status: transitResponse.value.data.status,
                         routesCount: transitResponse.value.data.routes.length
                     });
-                    
                     // Process each route to extract transit types
                     for (let routeIndex = 0; routeIndex < transitResponse.value.data.routes.length; routeIndex++) {
                         const route = transitResponse.value.data.routes[routeIndex];
                         const leg = route.legs[0];
                         const transitTypes = new Set();
                         const vehicleTypesFound = [];
-                        
                         // Extract transit types from route steps
                         if (leg.steps) {
                             for (const step of leg.steps) {
                                 if (step.travel_mode === 'TRANSIT' && step.transit_details?.line?.vehicle?.type) {
                                     const vehicleType = step.transit_details.line.vehicle.type.toLowerCase();
                                     vehicleTypesFound.push(vehicleType);
-                                    
                                     // Map Google Maps vehicle types to our types
                                     if (vehicleType === 'train' || vehicleType === 'heavy_rail' || vehicleType === 'commuter_train') {
                                         transitTypes.add('train');
@@ -1478,26 +1260,20 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                                 }
                             }
                         }
-
                         // If no specific transit types found, check if it's a transit route
                         if (transitTypes.size === 0 && leg.steps && leg.steps.some(s => s.travel_mode === 'TRANSIT')) {
                             // Default to 'train' if transit route but no specific type
                             transitTypes.add('train');
-                            console.log(`🚇 Route ${routeIndex + 1}: No specific vehicle type found, defaulting to 'train'`);
                         }
-
-                        console.log(`🚇 Route ${routeIndex + 1} for match ${match.matchId}:`, {
                             duration: leg.duration.text,
                             distance: leg.distance.text,
                             vehicleTypesFound: vehicleTypesFound.length > 0 ? vehicleTypesFound : ['none'],
                             mappedTransitTypes: Array.from(transitTypes)
                         });
-
                         // Create transit option for each unique type
                         if (transitTypes.size > 0) {
                             const durationMinutes = Math.round(leg.duration.value / 60);
                             const distanceMiles = (leg.distance.value / 1609.34).toFixed(1);
-                            
                             // For routes with multiple transit types, create entry for each type
                             // but only keep the fastest option for each type
                             for (const transitType of transitTypes) {
@@ -1513,7 +1289,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                                         transitTypes: Array.from(transitTypes) // Store all types for reference
                                     };
                                     transitOptionsMap.set(transitType, transitOption);
-                                    console.log(`🚇 Added/Updated transit option for match ${match.matchId}:`, {
                                         type: transitType,
                                         duration: `${durationMinutes} min`,
                                         distance: `${distanceMiles} mi`,
@@ -1524,13 +1299,10 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                             }
                         }
                     }
-
                     // Convert map to array, sort by duration (fastest first), and limit to top 3
                     const transitOptions = Array.from(transitOptionsMap.values());
                     transitOptions.sort((a, b) => a.duration - b.duration);
                     result.transit = transitOptions.slice(0, 3);
-                    
-                    console.log(`🚇 Final transit options for match ${match.matchId}:`, {
                         totalFound: transitOptions.length,
                         returning: result.transit.length,
                         options: result.transit.map(opt => ({
@@ -1542,13 +1314,11 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 } else {
                     // No transit route available
                     result.transit = [];
-                    console.log(`🚇 No transit route available for match ${match.matchId}:`, {
                         responseStatus: transitResponse.status,
                         dataStatus: transitResponse.status === 'fulfilled' ? transitResponse.value.data.status : 'N/A',
                         errorMessage: transitResponse.status === 'rejected' ? transitResponse.reason?.message : null
                     });
                 }
-
                 // Only set result if we have at least driving data (for backward compatibility)
                 if (result.driving) {
                     travelTimes[match.matchId] = result;
@@ -1572,7 +1342,6 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 travelTimes[match.matchId] = null;
             }
         }
-
         res.json({
             success: true,
             travelTimes
@@ -1586,5 +1355,4 @@ router.get('/:id/travel-times', auth, async (req, res) => {
         });
     }
 });
-
 module.exports = router; 

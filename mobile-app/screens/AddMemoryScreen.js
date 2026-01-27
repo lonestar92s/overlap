@@ -517,9 +517,9 @@ const AddMemoryScreen = () => {
               accessibilityRole="button"
             >
               {loading ? (
-                <ActivityIndicator size="small" color={colors.onPrimary} style={styles.submitButtonIcon} />
+                <ActivityIndicator size="small" color={colors.text.primary} style={styles.submitButtonIcon} />
               ) : (
-                <MaterialIcons name="check" size={20} color={colors.onPrimary} style={styles.submitButtonIcon} />
+                <MaterialIcons name="check" size={20} color={colors.text.primary} style={styles.submitButtonIcon} />
               )}
               <Text style={styles.submitButtonTitle}>
                 {loading ? 'Creating Memory...' : 'Create Memory (Photos Only)'}
@@ -592,6 +592,7 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     ...components.button,
+    backgroundColor: '#E8F5E9',
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -603,7 +604,7 @@ const styles = StyleSheet.create({
   },
   photoButtonTitle: {
     ...typography.button,
-    color: colors.onPrimary,
+    color: colors.text.primary,
   },
   photoGrid: {
     marginTop: spacing.md,
@@ -704,6 +705,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     ...components.button,
+    backgroundColor: '#E8F5E9',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -717,7 +719,7 @@ const styles = StyleSheet.create({
   },
   submitButtonTitle: {
     ...typography.button,
-    color: colors.onPrimary,
+    color: colors.text.primary,
     fontWeight: '600',
   },
   keyboardSpacer: {

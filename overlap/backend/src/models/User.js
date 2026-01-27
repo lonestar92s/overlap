@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const validator = require('validator');
-
 const userSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -176,7 +175,6 @@ const userSchema = new mongoose.Schema({
             enum: ['api', 'manual'],
             required: true
         },
-        
         // Match details (common for both API and manual)
         homeTeam: {
             name: { type: String, required: true },
@@ -199,7 +197,6 @@ const userSchema = new mongoose.Schema({
             type: Date,
             required: false
         },
-        
         // User-specific data
         userScore: String, // "2-1" or "Arsenal 2-1 Chelsea"
         userNotes: String,
@@ -229,7 +226,6 @@ const userSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         },
-        
         // API match data (for matches found via search)
         apiMatchData: {
             fixtureId: String,
@@ -520,34 +516,28 @@ const userSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
-
 // Hash password before saving (only for local auth)
 userSchema.pre('save', async function(next) {
     // Skip password hashing if user is using WorkOS or password is not modified
     if (this.authProvider && this.authProvider !== 'local') {
         return next();
     }
-    
     // If password is not modified, skip
     if (!this.isModified('password')) return next();
-    
     // For local auth, password is required
     if (!this.password && (!this.authProvider || this.authProvider === 'local')) {
         const error = new Error('Password is required for local authentication');
         error.name = 'ValidationError';
         return next(error);
     }
-    
     // Only hash if password exists (should always exist for local auth at this point)
     if (!this.password) return next();
-    
     // Validate password length for local auth
     if (this.password.length < 8) {
         const error = new Error('Password must be at least 8 characters long');
         error.name = 'ValidationError';
         return next(error);
     }
-    
     try {
         const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
@@ -556,7 +546,6 @@ userSchema.pre('save', async function(next) {
         next(error);
     }
 });
-
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
     try {
@@ -565,14 +554,11 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
         throw new Error(error);
     }
 };
-
 // Get public profile (exclude sensitive data)
 userSchema.methods.getPublicProfile = function() {
     const userObject = this.toObject();
     delete userObject.password;
     return userObject;
 };
-
 const User = mongoose.model('User', userSchema);
-
 module.exports = User; 

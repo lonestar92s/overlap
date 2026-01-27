@@ -148,12 +148,26 @@ const TripOverviewScreen = ({ navigation, route }) => {
         // Recommendations are managed by useRecommendations hook - no need to set manually
       }
 
-      // Always fetch fresh data from API on mount to ensure we have latest flights
-      // Note: Past trips may not be in context (only active trips are loaded),
-      // so we always try the API first
+      // Check context first to avoid unnecessary API calls for deleted trips
+      // Only fetch from API if trip is not in context (e.g., past trips)
       const loadItinerary = async () => {
         try {
-          // Try to fetch from API first (this works for both active and past trips)
+          // First check if trip exists in context (prevents API calls for deleted trips)
+          const foundItinerary = getItineraryById(itineraryId);
+          if (foundItinerary) {
+            setItinerary(foundItinerary);
+            setDescriptionText(foundItinerary.description || '');
+            setNotesText(foundItinerary.notes || '');
+            // Recommendations are automatically fetched by useRecommendations hook
+            // Fetch scores only if there are completed matches (past dates)
+            if (foundItinerary.matches && hasCompletedMatches(foundItinerary.matches)) {
+              fetchScores(foundItinerary.id || foundItinerary._id);
+            }
+            setLoading(false);
+            return;
+          }
+
+          // Trip not in context - fetch from API (for past trips or if context is stale)
           const response = await apiService.getTripById(itineraryId);
           // Handle both response.trip and response.data formats
           const tripData = response.trip || response.data;
@@ -271,6 +285,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
       
       // If we don't have the itinerary in state or context, try to refresh it from API
       // This handles the case where it's a past trip not in context
+      // But skip API call if we already have it in context (prevents unnecessary calls)
       if (!hasItinerary) {
         isRefreshingRef.current = true;
         lastRefreshTimeRef.current = now;
@@ -283,7 +298,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
           if (updatedItinerary) {
             setItinerary(updatedItinerary);
             // After refreshing, continue with recommendation logic
-            const hasNonEmptyStoredRecommendations = updatedItinerary?.recommendationsVersion === 'v2' && 
+            const hasNonEmptyStoredRecommendations = updatedItinerary?.recommendationsVersion === 'v2' &&
                                                      Array.isArray(updatedItinerary?.recommendations) &&
                                                      updatedItinerary.recommendations.length > 0;
             if (!hasNonEmptyStoredRecommendations) {
@@ -304,7 +319,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
         });
         return;
       }
-      
+
+      // If we have the itinerary, we might still want to refresh recommendations
+      // But don't make unnecessary API calls to refresh the trip data itself
       const hasNonEmptyStoredRecommendations = currentItinerary?.recommendationsVersion === 'v2' && 
                                                Array.isArray(currentItinerary?.recommendations) &&
                                                currentItinerary.recommendations.length > 0;

@@ -3,11 +3,9 @@
  * 
  * Tests the full API endpoint with database and external API mocks
  */
-
 const request = require('supertest');
 const express = require('express');
 const mongoose = require('mongoose');
-
 // Mock OpenAI
 jest.mock('openai', () => {
   return {
@@ -48,22 +46,17 @@ jest.mock('openai', () => {
     }))
   };
 });
-
 // Mock external APIs
 jest.mock('axios');
 const axios = require('axios');
-
 // Use the actual app from app.js
 const app = require('../../../src/app');
-
 describe('Multi-Query Search API - Integration Tests', () => {
   beforeAll(async () => {
     // Skip tests if MongoDB is not available (e.g., in CI without service)
     if (!process.env.MONGODB_URI && !process.env.MONGO_URL) {
-      console.log('⚠️  MongoDB not configured, skipping integration tests');
       return;
     }
-    
     // Connect to test database
     try {
       if (mongoose.connection.readyState === 0) {
@@ -72,21 +65,17 @@ describe('Multi-Query Search API - Integration Tests', () => {
         });
       }
     } catch (error) {
-      console.log('⚠️  Could not connect to MongoDB, skipping integration tests:', error.message);
       return;
     }
   });
-
   afterAll(async () => {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.close();
     }
   });
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
-  
   describe('POST /api/search/natural-language', () => {
     describe('TC-EXEC-001: Successful Multi-Query', () => {
       it('should return multi-query response structure', async () => {
@@ -131,24 +120,20 @@ describe('Multi-Query Search API - Integration Tests', () => {
             league: { id: 79, name: "Bundesliga 2" }
           }
         ];
-        
         // Mock axios for API calls
         axios.get = jest.fn().mockResolvedValue({
           data: {
             response: mockMatches
           }
         });
-        
         const response = await request(app)
           .post('/api/search/natural-language')
           .send({
             query: "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period. The other matches can be bundesliga 2 or austrian bundesliga"
           });
-        
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('success');
         expect(response.body).toHaveProperty('isMultiQuery');
-        
         if (response.body.isMultiQuery) {
           expect(response.body.matches).toHaveProperty('primary');
           expect(response.body.matches).toHaveProperty('secondary');
@@ -156,7 +141,6 @@ describe('Multi-Query Search API - Integration Tests', () => {
         }
       });
     });
-    
     describe('TC-BACK-001: Single Query Backward Compatibility', () => {
       it('should return single-query response for non-multi queries', async () => {
         // Skip if MongoDB not available
@@ -193,20 +177,17 @@ describe('Multi-Query Search API - Integration Tests', () => {
             }
           }
         }));
-        
         const response = await request(app)
           .post('/api/search/natural-language')
           .send({
             query: "Arsenal matches in London next month"
           });
-        
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
         expect(response.body.isMultiQuery).toBe(false);
         expect(Array.isArray(response.body.matches)).toBe(true);
       });
     });
-    
     describe('TC-ERROR-001: Parsing Failure', () => {
       it('should return error response for invalid query', async () => {
         // Skip if MongoDB not available
@@ -235,30 +216,25 @@ describe('Multi-Query Search API - Integration Tests', () => {
             }
           }
         }));
-        
         const response = await request(app)
           .post('/api/search/natural-language')
           .send({
             query: "asdfghjkl random text"
           });
-        
         expect(response.status).toBe(200); // API returns 200 with error in body
         expect(response.body.success).toBe(false);
         expect(response.body).toHaveProperty('message');
         expect(response.body).toHaveProperty('suggestions');
       });
     });
-    
     describe('TC-ERROR-002: Missing Query', () => {
       it('should return 400 for missing query', async () => {
         const response = await request(app)
           .post('/api/search/natural-language')
           .send({});
-        
         expect(response.status).toBe(400);
         expect(response.body).toHaveProperty('error');
       });
     });
   });
 });
-

@@ -1,10 +1,8 @@
 const League = require('../models/League');
-
 class LeagueService {
     constructor() {
         this.cache = new Map(); // In-memory cache for frequently accessed leagues
         this.cacheExpiry = 60 * 60 * 1000; // 1 hour cache
-        
         // API-first fallback mappings for leagues not in database
         this.apiLeagueMappings = {
             '98': { name: 'J1 League', country: 'Japan' },
@@ -37,7 +35,6 @@ class LeagueService {
             '307': { name: 'Saudi Pro League', country: 'Saudi Arabia' },
             '188': { name: 'Scottish Premiership', country: 'Scotland' },
             '207': { name: 'Swiss Super League', country: 'Switzerland' },
-            
             // International Competitions (Real API IDs)
             '1': { name: 'FIFA World Cup', country: 'International' },
             '4': { name: 'European Championship', country: 'Europe' },
@@ -61,18 +58,15 @@ class LeagueService {
             '699': { name: 'Women\'s Championship', country: 'England' }
         };
     }
-
     /**
      * Get league name by API ID (API-first approach)
      */
     async getLeagueNameById(apiId) {
         const cacheKey = `name_${apiId}`;
         const cached = this.cache.get(cacheKey);
-        
         if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
             return cached.data;
         }
-
         try {
             // First try database lookup
             const league = await League.findOne({ apiId: apiId.toString() });
@@ -81,7 +75,6 @@ class LeagueService {
                 this.cache.set(cacheKey, { data: name, timestamp: Date.now() });
                 return name;
             }
-            
             // Fallback to API mapping
             const apiMapping = this.apiLeagueMappings[apiId.toString()];
             if (apiMapping) {
@@ -89,29 +82,24 @@ class LeagueService {
                 this.cache.set(cacheKey, { data: name, timestamp: Date.now() });
                 return name;
             }
-            
             // Final fallback
             return 'Unknown League';
         } catch (error) {
             console.error(`Error getting league name for ${apiId}:`, error);
-            
             // Try API mapping as error fallback
             const apiMapping = this.apiLeagueMappings[apiId.toString()];
             return apiMapping ? apiMapping.name : 'Unknown League';
         }
     }
-
     /**
      * Get country by league API ID (API-first approach)
      */
     async getCountryByLeagueId(apiId) {
         const cacheKey = `country_${apiId}`;
         const cached = this.cache.get(cacheKey);
-        
         if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
             return cached.data;
         }
-
         try {
             // First try database lookup
             const league = await League.findOne({ apiId: apiId.toString() });
@@ -120,7 +108,6 @@ class LeagueService {
                 this.cache.set(cacheKey, { data: country, timestamp: Date.now() });
                 return country;
             }
-            
             // Fallback to API mapping
             const apiMapping = this.apiLeagueMappings[apiId.toString()];
             if (apiMapping) {
@@ -128,45 +115,37 @@ class LeagueService {
                 this.cache.set(cacheKey, { data: country, timestamp: Date.now() });
                 return country;
             }
-            
             // Final fallback
             return 'Unknown Country';
         } catch (error) {
             console.error(`Error getting country for league ${apiId}:`, error);
-            
             // Try API mapping as error fallback
             const apiMapping = this.apiLeagueMappings[apiId.toString()];
             return apiMapping ? apiMapping.country : 'Unknown Country';
         }
     }
-
     /**
      * Get full league information by API ID
      */
     async getLeagueById(apiId) {
         const cacheKey = `league_${apiId}`;
         const cached = this.cache.get(cacheKey);
-        
         if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
             return cached.data;
         }
-
         try {
             const league = await League.findOne({ apiId: apiId.toString() });
-            
             // Cache the result
             this.cache.set(cacheKey, {
                 data: league,
                 timestamp: Date.now()
             });
-            
             return league;
         } catch (error) {
             console.error(`Error getting league ${apiId}:`, error);
             return null;
         }
     }
-
     /**
      * Get all leagues for a country
      */
@@ -176,14 +155,12 @@ class LeagueService {
                 countryCode: countryCode.toUpperCase(),
                 isActive: true 
             }).sort({ tier: 1, name: 1 });
-            
             return leagues;
         } catch (error) {
             console.error(`Error getting leagues for country ${countryCode}:`, error);
             return [];
         }
     }
-
     /**
      * Get all active leagues
      */
@@ -191,14 +168,12 @@ class LeagueService {
         try {
             const leagues = await League.find({ isActive: true })
                 .sort({ country: 1, tier: 1, name: 1 });
-            
             return leagues;
         } catch (error) {
             console.error('Error getting all leagues:', error);
             return [];
         }
     }
-
     /**
      * Get country code mapping (fallback for unknown countries)
      */
@@ -224,47 +199,38 @@ class LeagueService {
         };
         return countryMapping[countryName];
     }
-
     /**
      * Build league country map for API responses (cached)
      */
     async getLeagueCountryMap() {
         const cacheKey = 'league_country_map';
         const cached = this.cache.get(cacheKey);
-        
         if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
             return cached.data;
         }
-
         try {
             const leagues = await League.find({ isActive: true });
             const map = {};
-            
             leagues.forEach(league => {
                 map[league.apiId] = league.country;
             });
-            
             // Cache the map
             this.cache.set(cacheKey, {
                 data: map,
                 timestamp: Date.now()
             });
-            
             return map;
         } catch (error) {
             console.error('Error building league country map:', error);
             return {};
         }
     }
-
     /**
      * Clear cache (useful for testing or admin operations)
      */
     clearCache() {
         this.cache.clear();
-
     }
-
     /**
      * Get cache statistics
      */
@@ -275,20 +241,17 @@ class LeagueService {
         };
         return stats;
     }
-
     /**
      * Get API league mappings (for fallback when leagues not in database)
      */
     getApiLeagueMappings() {
         return this.apiLeagueMappings;
     }
-
     /**
      * Search leagues by name or aliases
      */
     async searchLeagues(searchTerm, options = {}) {
         const limit = options.limit || 10;
-        
         try {
             // Search in database first
             const query = {
@@ -299,19 +262,15 @@ class LeagueService {
                 ],
                 isActive: true
             };
-
             const leagues = await League.find(query)
                 .sort({ tier: 1, name: 1 })
                 .limit(limit);
-
             if (leagues.length > 0) {
                 return leagues;
             }
-
             // If no database results, search in API mappings
             const apiResults = [];
             const searchLower = searchTerm.toLowerCase();
-            
             Object.entries(this.apiLeagueMappings).forEach(([apiId, leagueData]) => {
                 if (leagueData.name.toLowerCase().includes(searchLower) ||
                     leagueData.country.toLowerCase().includes(searchLower)) {
@@ -323,7 +282,6 @@ class LeagueService {
                     });
                 }
             });
-
             return apiResults.slice(0, limit);
         } catch (error) {
             console.error('Error searching leagues:', error);
@@ -331,5 +289,4 @@ class LeagueService {
         }
     }
 }
-
 module.exports = new LeagueService(); 

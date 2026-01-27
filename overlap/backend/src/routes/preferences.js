@@ -6,9 +6,7 @@ const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 const recommendationService = require('../services/recommendationService');
-
 const router = express.Router();
-
 // Get user profile and preferences
 router.get('/', auth, async (req, res) => {
     try {
@@ -18,14 +16,11 @@ router.get('/', auth, async (req, res) => {
         const leagueIds = (req.user.preferences.favoriteLeagues || []).map(id => String(id));
         const leagues = await League.find({ apiId: { $in: leagueIds } }).select('apiId name country emblem').lean();
         const leagueMap = new Map(leagues.map(l => [l.apiId, l]));
-
         const venueIds = (req.user.preferences.favoriteVenues || []).map(v => String(v.venueId));
         const venues = await Venue.find({ venueId: { $in: venueIds } }).select('venueId name city country').lean();
         const venueMap = new Map(venues.map(v => [String(v.venueId), v]));
-
         const favoriteLeaguesExpanded = leagueIds.map(id => ({ id, name: leagueMap.get(id)?.name || null, country: leagueMap.get(id)?.country || null, emblem: leagueMap.get(id)?.emblem || null }));
         const favoriteVenuesExpanded = (req.user.preferences.favoriteVenues || []).map(v => ({ venueId: v.venueId, name: venueMap.get(String(v.venueId))?.name || null, city: venueMap.get(String(v.venueId))?.city || null, country: venueMap.get(String(v.venueId))?.country || null, addedAt: v.addedAt }));
-
         res.json({ 
             profile: req.user.profile,
             preferences: {
@@ -38,32 +33,26 @@ router.get('/', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Update user profile
 router.put('/profile', auth, async (req, res) => {
     const updates = Object.keys(req.body);
     const allowedUpdates = ['firstName', 'lastName', 'avatar', 'timezone'];
-
     const isValidOperation = updates.every(update => 
         allowedUpdates.includes(update)
     );
-
     if (!isValidOperation) {
         return res.status(400).json({ error: 'Invalid profile updates' });
     }
-
     try {
         updates.forEach(update => {
             req.user.profile[update] = req.body[update];
         });
-
         await req.user.save();
         res.json({ profile: req.user.profile });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Update user preferences
 router.put('/', auth, async (req, res) => {
     const updates = Object.keys(req.body);
@@ -75,21 +64,17 @@ router.put('/', auth, async (req, res) => {
         'currency',
         'notifications'
     ];
-
     // Validate update fields
     const isValidOperation = updates.every(update => 
         allowedUpdates.includes(update)
     );
-
     if (!isValidOperation) {
         return res.status(400).json({ error: 'Invalid updates' });
     }
-
     try {
         // Track if any recommendation-affecting preferences changed
         const recommendationAffectingFields = ['favoriteTeams', 'favoriteLeagues', 'defaultLocation', 'recommendationRadius'];
         const shouldInvalidateCache = updates.some(update => recommendationAffectingFields.includes(update));
-
         // Update each field in preferences
         updates.forEach(update => {
             if (update === 'notifications' && typeof req.body[update] === 'object') {
@@ -102,21 +87,16 @@ router.put('/', auth, async (req, res) => {
                 req.user.preferences[update] = req.body[update];
             }
         });
-
         await req.user.save();
-
         // Regenerate recommendations for all trips if recommendation-affecting preferences changed
         if (shouldInvalidateCache) {
             // Invalidate legacy cache
             const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id}`);
-            
             // Regenerate recommendations for all trips (async, non-blocking)
             if (req.user.trips && req.user.trips.length > 0) {
                 // Run in background - don't await to avoid blocking the response
                 (async () => {
                     try {
-                        console.log(`🔄 Regenerating recommendations for ${req.user.trips.length} trips due to preference changes`);
                         for (const trip of req.user.trips) {
                             try {
                                 await recommendationService.regenerateTripRecommendations(
@@ -130,26 +110,22 @@ router.put('/', auth, async (req, res) => {
                                 // Continue with other trips
                             }
                         }
-                        console.log(`✅ Completed regenerating recommendations for all trips`);
                     } catch (error) {
                         console.error(`❌ Error during background recommendation regeneration:`, error);
                     }
                 })();
             }
         }
-
         res.json({ preferences: req.user.preferences });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Add favorite team (accepts either Mongo _id as teamId or external API id as teamApiId)
 router.post('/teams', auth, async (req, res) => {
     try {
         let { teamId, teamApiId } = req.body;
         let team = null;
-
         if (teamId) {
             team = await Team.findById(teamId);
         } else if (teamApiId) {
@@ -161,21 +137,16 @@ router.post('/teams', auth, async (req, res) => {
         if (!team) {
             return res.status(404).json({ error: 'Team not found' });
         }
-        
         // Check if team is already in favorites
         const isAlreadyFavorite = req.user.preferences.favoriteTeams.some(
             fav => fav.teamId.toString() === teamId
         );
-        
         if (!isAlreadyFavorite) {
             req.user.preferences.favoriteTeams.push({ teamId });
             await req.user.save();
-
             // Invalidate recommended matches cache
             const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite team`);
         }
-        
         // Return populated favorite teams
         await req.user.populate('preferences.favoriteTeams.teamId');
         res.json({ favoriteTeams: req.user.preferences.favoriteTeams });
@@ -183,20 +154,15 @@ router.post('/teams', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Remove favorite team
 router.delete('/teams/:teamId', auth, async (req, res) => {
     try {
         const teamId = req.params.teamId;
         req.user.preferences.favoriteTeams = req.user.preferences.favoriteTeams
             .filter(fav => fav.teamId.toString() !== teamId);
-        
         await req.user.save();
-
         // Invalidate recommended matches cache
         const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite team`);
-        
         // Return populated favorite teams
         await req.user.populate('preferences.favoriteTeams.teamId');
         res.json({ favoriteTeams: req.user.preferences.favoriteTeams });
@@ -204,46 +170,35 @@ router.delete('/teams/:teamId', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Add favorite league
 router.post('/leagues', auth, async (req, res) => {
     try {
         const { leagueId } = req.body;
-        
         if (!req.user.preferences.favoriteLeagues.includes(leagueId)) {
             req.user.preferences.favoriteLeagues.push(leagueId);
             await req.user.save();
-
             // Invalidate recommended matches cache
             const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite league`);
         }
-        
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Remove favorite league
 router.delete('/leagues/:leagueId', auth, async (req, res) => {
     try {
         const leagueId = req.params.leagueId;
         req.user.preferences.favoriteLeagues = req.user.preferences.favoriteLeagues
             .filter(league => league !== leagueId);
-        
         await req.user.save();
-
         // Invalidate recommended matches cache
         const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite league`);
-        
         res.json({ favoriteLeagues: req.user.preferences.favoriteLeagues });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Add favorite venue
 router.post('/venues', auth, async (req, res) => {
     try {
@@ -251,40 +206,31 @@ router.post('/venues', auth, async (req, res) => {
         if (!venueId) {
             return res.status(400).json({ error: 'venueId is required' });
         }
-
         const exists = req.user.preferences.favoriteVenues.some(v => v.venueId === String(venueId));
         if (!exists) {
             req.user.preferences.favoriteVenues.push({ venueId: String(venueId) });
             await req.user.save();
-
             // Invalidate recommended matches cache
             const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-            console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after adding favorite venue`);
         }
-
         res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Remove favorite venue
 router.delete('/venues/:venueId', auth, async (req, res) => {
     try {
         const { venueId } = req.params;
         req.user.preferences.favoriteVenues = req.user.preferences.favoriteVenues.filter(v => v.venueId !== String(venueId));
         await req.user.save();
-
         // Invalidate recommended matches cache
         const deletedCount = invalidateRecommendedMatchesCache(req.user.id);
-        console.log(`🗑️ Invalidated ${deletedCount} recommended matches cache entries for user ${req.user.id} after removing favorite venue`);
-        
         res.json({ favoriteVenues: req.user.preferences.favoriteVenues });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Get saved matches
 router.get('/saved-matches', auth, async (req, res) => {
     try {
@@ -293,39 +239,31 @@ router.get('/saved-matches', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Save a match
 router.post('/saved-matches', auth, async (req, res) => {
     try {
         const { matchId, homeTeam, awayTeam, league, venue, date } = req.body;
-        
         // Validate required fields
         if (!matchId) {
             return res.status(400).json({ error: 'matchId is required' });
         }
-        
         if (!homeTeam || !awayTeam) {
             return res.status(400).json({ error: 'homeTeam and awayTeam are required' });
         }
-        
         if (!league) {
             return res.status(400).json({ error: 'league is required' });
         }
-        
         if (!venue) {
             return res.status(400).json({ error: 'venue is required' });
         }
-        
         if (!date) {
             return res.status(400).json({ error: 'date is required' });
         }
-        
         // Check if match is already saved
         const existingMatch = req.user.savedMatches.find(match => match.matchId === matchId);
         if (existingMatch) {
             return res.status(400).json({ error: 'Match already saved' });
         }
-        
         // Format the data according to the User model schema
         const matchData = {
             matchId,
@@ -341,7 +279,6 @@ router.post('/saved-matches', auth, async (req, res) => {
             venue: typeof venue === 'string' ? venue : (venue?.name || 'Unknown Venue'),
             date: new Date(date)
         };
-        
         // Validate the date
         if (isNaN(matchData.date.getTime())) {
             return res.status(400).json({ 
@@ -350,11 +287,7 @@ router.post('/saved-matches', auth, async (req, res) => {
                 parsedDate: matchData.date.toString()
             });
         }
-        
-        console.log('Saving match data:', matchData);
-        
         req.user.savedMatches.push(matchData);
-        
         await req.user.save();
         res.json({ savedMatches: req.user.savedMatches });
     } catch (error) {
@@ -362,20 +295,17 @@ router.post('/saved-matches', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Remove saved match
 router.delete('/saved-matches/:matchId', auth, async (req, res) => {
     try {
         const matchId = req.params.matchId;
         req.user.savedMatches = req.user.savedMatches.filter(match => match.matchId !== matchId);
-        
         await req.user.save();
         res.json({ savedMatches: req.user.savedMatches });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Get visited stadiums
 router.get('/visited-stadiums', auth, async (req, res) => {
     try {
@@ -384,26 +314,21 @@ router.get('/visited-stadiums', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Add visited stadium
 router.post('/visited-stadiums', auth, async (req, res) => {
     try {
         const { venueId, venueName, city, country, visitDate, notes } = req.body;
-        
         // Validate required fields
         if (!venueId || !venueName) {
             return res.status(400).json({ error: 'venueId and venueName are required' });
         }
-        
         // Check if stadium is already visited
         const existingStadium = req.user.visitedStadiums.find(
             stadium => stadium.venueId === venueId
         );
-        
         if (existingStadium) {
             return res.status(400).json({ error: 'Stadium already marked as visited' });
         }
-        
         // Add stadium to visited list
         const stadiumData = {
             venueId,
@@ -413,30 +338,24 @@ router.post('/visited-stadiums', auth, async (req, res) => {
             visitDate: visitDate ? new Date(visitDate) : null,
             notes: notes || ''
         };
-        
         req.user.visitedStadiums.push(stadiumData);
         await req.user.save();
-        
         res.json({ visitedStadiums: req.user.visitedStadiums });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Update visited stadium
 router.put('/visited-stadiums/:venueId', auth, async (req, res) => {
     try {
         const { venueId } = req.params;
         const { visitDate, notes } = req.body;
-        
         const stadium = req.user.visitedStadiums.find(
             stadium => stadium.venueId === venueId
         );
-        
         if (!stadium) {
             return res.status(404).json({ error: 'Stadium not found in visited list' });
         }
-        
         // Update allowed fields
         if (visitDate !== undefined) {
             stadium.visitDate = visitDate ? new Date(visitDate) : null;
@@ -444,28 +363,23 @@ router.put('/visited-stadiums/:venueId', auth, async (req, res) => {
         if (notes !== undefined) {
             stadium.notes = notes;
         }
-        
         await req.user.save();
         res.json({ visitedStadiums: req.user.visitedStadiums });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 // Remove visited stadium
 router.delete('/visited-stadiums/:venueId', auth, async (req, res) => {
     try {
         const { venueId } = req.params;
-        
         req.user.visitedStadiums = req.user.visitedStadiums.filter(
             stadium => stadium.venueId !== venueId
         );
-        
         await req.user.save();
         res.json({ visitedStadiums: req.user.visitedStadiums });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
-
 module.exports = router; 

@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const tierAccessSchema = new mongoose.Schema({
     tier: {
         type: String,
@@ -22,13 +21,6 @@ const tierAccessSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
-
 // Index for fast tier lookups
 tierAccessSchema.index({ tier: 1 });
-
 module.exports = mongoose.model('TierAccess', tierAccessSchema);
-
-
-
-
-

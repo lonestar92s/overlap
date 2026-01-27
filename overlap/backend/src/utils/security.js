@@ -2,7 +2,6 @@
  * Security utility functions
  * Provides input sanitization and validation for database queries
  */
-
 /**
  * Escape special regex characters to prevent ReDoS attacks
  * @param {string} string - Input string to escape
@@ -15,7 +14,6 @@ const escapeRegex = (string) => {
     // Escape special regex characters: . * + ? ^ $ { } ( ) | [ ] \
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
-
 /**
  * Sanitize and validate search query
  * @param {string} query - User input query
@@ -26,26 +24,20 @@ const sanitizeSearchQuery = (query, maxLength = 100) => {
     if (!query || typeof query !== 'string') {
         return { valid: false, sanitized: '', error: 'Query must be a non-empty string' };
     }
-
     // Trim whitespace
     const trimmed = query.trim();
-
     // Check minimum length
     if (trimmed.length < 2) {
         return { valid: false, sanitized: '', error: 'Query must be at least 2 characters' };
     }
-
     // Check maximum length
     if (trimmed.length > maxLength) {
         return { valid: false, sanitized: '', error: `Query must be no more than ${maxLength} characters` };
     }
-
     // Escape regex special characters
     const sanitized = escapeRegex(trimmed);
-
     return { valid: true, sanitized, error: null };
 };
-
 /**
  * Validate MongoDB ObjectId format
  * @param {string} id - ID to validate
@@ -58,7 +50,6 @@ const isValidObjectId = (id) => {
     // MongoDB ObjectId is 24 hex characters
     return /^[0-9a-fA-F]{24}$/.test(id);
 };
-
 /**
  * Sanitize object to prevent NoSQL injection
  * Removes MongoDB operators from object
@@ -69,16 +60,13 @@ const sanitizeObject = (obj) => {
     if (!obj || typeof obj !== 'object') {
         return {};
     }
-
     const sanitized = {};
     const dangerousKeys = ['$where', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin', '$exists', '$regex', '$text', '$search'];
-
     for (const [key, value] of Object.entries(obj)) {
         // Skip MongoDB operators
         if (dangerousKeys.includes(key)) {
             continue;
         }
-
         // Recursively sanitize nested objects
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
             sanitized[key] = sanitizeObject(value);
@@ -86,15 +74,11 @@ const sanitizeObject = (obj) => {
             sanitized[key] = value;
         }
     }
-
     return sanitized;
 };
-
 module.exports = {
     escapeRegex,
     sanitizeSearchQuery,
     isValidObjectId,
     sanitizeObject
 };
-
-

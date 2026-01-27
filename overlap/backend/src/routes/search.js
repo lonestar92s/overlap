@@ -10,20 +10,16 @@ const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
 const router = express.Router();
-
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
 const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
-
 // LocationIQ configuration for autocomplete
 const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
 const LOCATIONIQ_AUTOCOMPLETE_URL = 'https://api.locationiq.com/v1/autocomplete';
-
 // Create HTTPS agent for search
 const searchHttpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-
 // Function to generate ALL responses using OpenAI
 async function generateResponse(context) {
     if (!openai) {
@@ -35,47 +31,38 @@ async function generateResponse(context) {
         }
         return "I found some matches for you!";
     }
-
     try {
         let prompt = '';
-        
         if (context.type === 'error') {
             prompt = `
 A user searched for "${context.requestedLeague} matches in ${context.requestedLocation}" but this combination doesn't make sense because ${context.requestedLeague} is not played in ${context.requestedLocation}.
-
 Generate a helpful, conversational message suggesting alternatives:
 - ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}
 - ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}
-
 Be friendly and helpful, not technical. Keep it under 100 characters.
             `;
         } else if (context.type === 'success') {
             prompt = `
 A user searched for matches and found ${context.matchCount} results in ${context.location} from ${context.dateRange}.
-
 Generate a friendly, conversational response that:
 - Acknowledges the successful search
 - Mentions the number of matches found
 - Suggests ways to refine the search (specific teams, leagues, etc.)
 - Keeps it under 150 characters
 - Be encouraging and helpful
-
 Examples of good responses:
 - "Great! Found ${context.matchCount} matches in ${context.location}. Want to see a specific team or league?"
 - "Perfect! ${context.matchCount} matches found in ${context.location}. Any particular teams you're interested in?"
             `;
         }
-        
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.7,
             max_tokens: context.type === 'error' ? 100 : 150
         });
-        
         return response.choices[0].message.content.trim();
     } catch (error) {
-        console.log('OpenAI response generation failed:', error.message);
         // Fallback messages
         if (context.type === 'error') {
             return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
@@ -85,11 +72,9 @@ Examples of good responses:
         return "I found some matches for you!";
     }
 }
-
 // Function to perform search directly (extracted from matches route)
 async function performSearch({ competitions, dateFrom, dateTo, season, bounds, teams, leagues, matchTypes }) {
     const requests = [];
-    
     // League requests
     for (const leagueId of competitions) {
         requests.push(
@@ -102,7 +87,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
               .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
         );
     }
-
     const settled = await Promise.allSettled(requests);
     const fixtures = [];
     for (const s of settled) {
@@ -113,13 +97,11 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
             }
         }
     }
-
     // Transform and filter matches
     const transformedMatches = [];
     for (const match of fixtures) {
         const venue = match.fixture?.venue;
         let venueInfo = null;
-        
         if (venue?.id) {
             // Try to get venue coordinates from local database first
             const localVenue = await venueService.getVenueByApiId(venue.id);
@@ -149,7 +131,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                     let coordinates = venue.coordinates; // Usually null from API
                     if (!coordinates && venue.name && venue.city) {
                         try {
-                            console.log(`🔍 Attempting geocoding for: ${venue.name}, ${venue.city}, ${venue.country}`);
                             const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
                                 venue.name,
                                 venue.city,
@@ -157,8 +138,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                             );
                             if (geocodedCoords) {
                                 coordinates = geocodedCoords;
-                                console.log(`🎯 Geocoding successful for ${venue.name}:`, coordinates);
-                                
                                 // Save to database for future use
                                 await venueService.saveVenueWithCoordinates({
                                     venueId: venue.id,
@@ -169,10 +148,8 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                                 });
                             }
                         } catch (geocodeError) {
-                            console.log(`❌ Geocoding failed for ${venue.name}:`, geocodeError.message);
                         }
                     }
-                    
                     venueInfo = {
                         id: venue.id,
                         name: venue.name,
@@ -184,7 +161,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 }
             }
         }
-        
         if (!venueInfo) {
             // Try team venue fallback if no venue ID
             const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
@@ -196,7 +172,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                     { aliases: mappedHome }
                 ]
             });
-            
             // If team has venueId, try to lookup venue from Venue collection first
             if (team?.venue?.venueId) {
                 const Venue = require('../models/Venue');
@@ -214,7 +189,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                     }
                 }
             }
-            
             // Fallback to team.venue.coordinates if venueId lookup didn't work
             if (!venueInfo && team?.venue?.coordinates) {
                 venueInfo = {
@@ -225,7 +199,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                     coordinates: team.venue.coordinates
                 };
             }
-            
             if (!venueInfo) {
                 venueInfo = {
                     id: venue?.id || null,
@@ -236,7 +209,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 };
             }
         }
-
         const transformed = {
             id: match.fixture.id,
             fixture: {
@@ -265,7 +237,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
             }
         };
-
         // Apply team filtering if provided
         if (teams && teams.length > 0) {
             const homeTeamName = transformed.teams.home.name.toLowerCase();
@@ -278,7 +249,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 continue; // Skip this match if it doesn't match any of the specified teams
             }
         }
-
         // Apply league filtering if provided (additional to competitions)
         if (leagues && leagues.length > 0) {
             const leagueName = transformed.league.name.toLowerCase();
@@ -289,12 +259,10 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 continue; // Skip this match if it doesn't match any of the specified leagues
             }
         }
-
         // Apply match type filtering if provided
         if (matchTypes && matchTypes.length > 0) {
             const isHomeMatch = matchTypes.includes('home');
             const isAwayMatch = matchTypes.includes('away');
-            
             if (isHomeMatch && isAwayMatch) {
                 // Both home and away - include all matches
             } else if (isHomeMatch) {
@@ -321,7 +289,6 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 }
             }
         }
-
         // Apply bounds filtering if provided
         if (bounds) {
             if (transformed.fixture.venue.coordinates && isWithinBounds(transformed.fixture.venue.coordinates, bounds)) {
@@ -332,12 +299,10 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
             transformedMatches.push(transformed);
         }
     }
-
     // Sort by date
     transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
     return transformedMatches;
 }
-
 // Function to check if coordinates are within bounds
 function isWithinBounds(coordinates, bounds) {
     if (!coordinates || !bounds || coordinates.length !== 2) {
@@ -348,7 +313,6 @@ function isWithinBounds(coordinates, bounds) {
     return lat >= southwest.lat && lat <= northeast.lat &&
            lon >= southwest.lng && lon <= northeast.lng;
 }
-
 // Helper function to calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in kilometers
@@ -360,12 +324,10 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c * 0.621371; // Convert km to miles
 }
-
 // Create custom HTTPS agent that ignores SSL certificate issues (for development only)
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-
 // Initialize OpenAI only if API key is available
 let openai = null;
 if (process.env.OPENAI_API_KEY) {
@@ -374,22 +336,18 @@ if (process.env.OPENAI_API_KEY) {
         httpAgent: httpsAgent
     });
 }
-
 // Helper function to format date as YYYY-MM-DD
 const formatDate = (date) => {
     return date.toISOString().split('T')[0];
 };
-
 // Helper function to get date range for a month, with year adjustment
 const getMonthDateRange = (date, targetMonth = null) => {
     let year = date.getFullYear();
     let month = targetMonth !== null ? targetMonth - 1 : date.getMonth();
-    
     // If target month is specified and it's earlier than current month, assume next year
     if (targetMonth !== null && month < date.getMonth()) {
         year++;
     }
-    
     const firstOfMonth = new Date(year, month, 1);
     const lastOfMonth = new Date(year, month + 1, 0);
     return {
@@ -397,30 +355,24 @@ const getMonthDateRange = (date, targetMonth = null) => {
         end: formatDate(lastOfMonth)
     };
 };
-
 // Helper function to get date range for a weekend
 const getWeekendDateRange = (baseDate) => {
     const friday = new Date(baseDate);
-    
     // Explicitly set year to 2025
     friday.setFullYear(2025);
-    
     // Calculate next Friday if needed
     const dayOfWeek = friday.getDay();
     if (dayOfWeek !== 5) { // If not Friday
         const daysUntilFriday = (5 - dayOfWeek + 7) % 7;
         friday.setDate(friday.getDate() + daysUntilFriday);
     }
-    
     const sunday = new Date(friday);
     sunday.setDate(friday.getDate() + 2); // Add 2 days to get to Sunday
-    
     return {
         start: formatDate(friday),
         end: formatDate(sunday)
     };
 };
-
 // Helper function to get location with country
 const getLocationWithCountry = (city) => {
     const cityMapping = {
@@ -438,13 +390,11 @@ const getLocationWithCountry = (city) => {
     };
     return cityMapping[city.toLowerCase()] || null;
 };
-
 // Enhanced date parsing for complex queries
 const parseComplexDates = (query) => {
     const queryLower = query.toLowerCase();
     const now = new Date();
     const currentYear = now.getFullYear();
-    
     // Helper function to get next occurrence of a day
     const getNextDay = (dayOfWeek, fromDate = now) => {
         const date = new Date(fromDate);
@@ -452,7 +402,6 @@ const parseComplexDates = (query) => {
         date.setDate(date.getDate() + (days === 0 ? 7 : days));
         return date;
     };
-    
     // Helper function to get weekend dates (Friday-Sunday)
     const getWeekendDates = (startDate) => {
         const friday = new Date(startDate);
@@ -461,7 +410,6 @@ const parseComplexDates = (query) => {
         sunday.setDate(friday.getDate() + 2); // Sunday
         return { start: friday, end: sunday };
     };
-
     // Specific date range patterns
     const dateRangePatterns = [
         // "January 2026" or "january 2026" (single month with year)
@@ -471,7 +419,6 @@ const parseComplexDates = (query) => {
                 const [, monthName, year] = match;
                 const month = getMonthNumber(monthName);
                 const yearToUse = parseInt(year);
-                
                 if (month !== -1) {
                     const startOfMonth = new Date(yearToUse, month - 1, 1);
                     const endOfMonth = new Date(yearToUse, month, 0); // Last day of month
@@ -483,8 +430,6 @@ const parseComplexDates = (query) => {
                 return null;
             }
         },
-        
-        
         // "between March 15-30" or "March 15-30"
         {
             pattern: /(?:between\s+)?(\w+)\s+(\d{1,2})\s*[-–]\s*(\d{1,2})(?:\s*,?\s*(\d{4}))?/,
@@ -492,7 +437,6 @@ const parseComplexDates = (query) => {
                 const [, monthName, startDay, endDay, year] = match;
                 const month = getMonthNumber(monthName);
                 const yearToUse = year ? parseInt(year) : (month < now.getMonth() + 1 ? currentYear + 1 : currentYear);
-                
                 if (month !== -1) {
                     return {
                         start: formatDate(new Date(yearToUse, month - 1, parseInt(startDay))),
@@ -502,7 +446,6 @@ const parseComplexDates = (query) => {
                 return null;
             }
         },
-        
         // "first weekend of March"
         {
             pattern: /first\s+weekend\s+of\s+(\w+)(?:\s+(\d{4}))?/,
@@ -510,7 +453,6 @@ const parseComplexDates = (query) => {
                 const [, monthName, year] = match;
                 const month = getMonthNumber(monthName);
                 const yearToUse = year ? parseInt(year) : (month < now.getMonth() + 1 ? currentYear + 1 : currentYear);
-                
                 if (month !== -1) {
                     const firstOfMonth = new Date(yearToUse, month - 1, 1);
                     const firstFriday = getNextDay(5, firstOfMonth);
@@ -523,7 +465,6 @@ const parseComplexDates = (query) => {
                 return null;
             }
         },
-        
         // "last weekend of March"
         {
             pattern: /last\s+weekend\s+of\s+(\w+)(?:\s+(\d{4}))?/,
@@ -531,7 +472,6 @@ const parseComplexDates = (query) => {
                 const [, monthName, year] = match;
                 const month = getMonthNumber(monthName);
                 const yearToUse = year ? parseInt(year) : (month < now.getMonth() + 1 ? currentYear + 1 : currentYear);
-                
                 if (month !== -1) {
                     const lastOfMonth = new Date(yearToUse, month, 0); // Last day of month
                     const lastFriday = new Date(lastOfMonth);
@@ -545,18 +485,15 @@ const parseComplexDates = (query) => {
                 return null;
             }
         },
-        
         // "November" or "november" (single month without year) - must be last to avoid conflicts
         {
             pattern: /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i,
             handler: (match) => {
                 const [, monthName] = match;
                 const month = getMonthNumber(monthName);
-                
                 if (month !== -1) {
                     // Determine year: if month is in the past, use next year
                     const yearToUse = month < now.getMonth() + 1 ? currentYear + 1 : currentYear;
-                    
                     const startOfMonth = new Date(yearToUse, month - 1, 1);
                     const endOfMonth = new Date(yearToUse, month, 0); // Last day of month
                     return {
@@ -568,7 +505,6 @@ const parseComplexDates = (query) => {
             }
         }
     ];
-
     // Try specific patterns first
     for (const { pattern, handler } of dateRangePatterns) {
         const match = queryLower.match(pattern);
@@ -577,7 +513,6 @@ const parseComplexDates = (query) => {
             if (result) return result;
         }
     }
-
     // Fallback to existing simple patterns
     if (queryLower.includes('next weekend')) {
         const nextFriday = getNextDay(5);
@@ -587,7 +522,6 @@ const parseComplexDates = (query) => {
             end: formatDate(weekend.end)
         };
     }
-    
     if (queryLower.includes('this weekend')) {
         const thisFriday = new Date(now);
         thisFriday.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7));
@@ -597,7 +531,6 @@ const parseComplexDates = (query) => {
             end: formatDate(weekend.end)
         };
     }
-    
     if (queryLower.includes('next month')) {
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0);
@@ -606,7 +539,6 @@ const parseComplexDates = (query) => {
             end: formatDate(endOfNextMonth)
         };
     }
-    
     if (queryLower.includes('this month')) {
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -615,10 +547,8 @@ const parseComplexDates = (query) => {
             end: formatDate(endOfMonth)
         };
     }
-
     return null;
 };
-
 // Helper function to convert month names to numbers
 const getMonthNumber = (monthName) => {
     const months = {
@@ -637,7 +567,6 @@ const getMonthNumber = (monthName) => {
     };
     return months[monthName.toLowerCase()] || -1;
 };
-
 // Simple natural language parser as fallback
 const simpleParseQuery = (query) => {
     const queryLower = query.toLowerCase();
@@ -652,7 +581,6 @@ const simpleParseQuery = (query) => {
         teams: [],
         matchTypes: []
     };
-
     // Extract location with country information
     const cities = Object.keys(getLocationWithCountry('london')); // Use first city to get all keys
     for (const city of cities) {
@@ -661,7 +589,6 @@ const simpleParseQuery = (query) => {
             break;
         }
     }
-
     // Extract leagues
     const leagueMapping = {
         'premier league': 'PL',
@@ -673,13 +600,11 @@ const simpleParseQuery = (query) => {
         'primeira liga': 'PPL',
         'portuguese league': 'PPL'
     };
-    
     Object.entries(leagueMapping).forEach(([name, id]) => {
         if (queryLower.includes(name)) {
             result.leagues.push(id);
         }
     });
-
     // Handle date ranges
     if (queryLower.includes('next weekend')) {
         const nextFriday = new Date();
@@ -714,13 +639,11 @@ const simpleParseQuery = (query) => {
             end: formatDate(nextWeekEnd)
         };
     }
-
     // Extract distance
     const distanceMatch = queryLower.match(/within (\d+) miles/);
     if (distanceMatch) {
         result.maxDistance = parseInt(distanceMatch[1]);
     }
-
     // Extract match types
     if (queryLower.includes('derby')) {
         result.matchTypes.push('derby');
@@ -728,7 +651,6 @@ const simpleParseQuery = (query) => {
     if (queryLower.includes('rivalry')) {
         result.matchTypes.push('rivalry');
     }
-
     // Extract team names
     const teams = [
         'Arsenal', 'Chelsea', 'Tottenham', 'West Ham',
@@ -736,25 +658,20 @@ const simpleParseQuery = (query) => {
         'Barcelona', 'Real Madrid', 'Bayern Munich',
         'Paris Saint-Germain', 'Benfica', 'Porto', 'Sporting CP'
     ];
-    
     teams.forEach(team => {
         if (queryLower.includes(team.toLowerCase())) {
             result.teams.push(team);
         }
     });
-
     return result;
 };
-
 // Function to parse natural language query
 const parseQuery = async (query) => {
     try {
         // First try OpenAI
-
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
-        
         const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
@@ -762,15 +679,12 @@ const parseQuery = async (query) => {
                     role: "system",
                     content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
                     The current date is ${formatDate(now)}. 
-                    
                     For date parsing:
                     - If a specific year is mentioned (e.g., "January 2026"), use that exact year
                     - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
                     - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
                     - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
-                    
                     When handling weekends, always use Friday through Sunday (3 days).
-                    
                     Return only a JSON object with the following fields:
                     - location (object with city, country, and coordinates)
                     - dateRange (start and end dates in YYYY-MM-DD format)
@@ -778,7 +692,6 @@ const parseQuery = async (query) => {
                     - maxDistance (in miles)
                     - teams (array of team names)
                     - matchTypes (array of types like 'derby', 'rivalry', etc.)
-                    
                     Available leagues:
                     - PL (Premier League)
                     - ELC (Championship)
@@ -787,7 +700,6 @@ const parseQuery = async (query) => {
                     - FL1 (Ligue 1)
                     - DED (Eredivisie)
                     - PPL (Primeira Liga)
-                    
                     Available cities with their countries:
                     - London, United Kingdom
                     - Manchester, United Kingdom
@@ -800,7 +712,6 @@ const parseQuery = async (query) => {
                     - Paris, France
                     - Lisbon, Portugal
                     - Porto, Portugal
-                    
                     Example response format:
                     {
                         "location": {
@@ -826,17 +737,13 @@ const parseQuery = async (query) => {
             temperature: 0.7,
             max_tokens: 500
         });
-
         const parsedResponse = JSON.parse(completion.choices[0].message.content);
-
         return parsedResponse;
     } catch (error) {
         // If OpenAI fails, use simple parser
-
         return simpleParseQuery(query);
     }
 };
-
 // Enhanced team extraction using database
 const extractTeams = async (query) => {
     const queryLower = query.toLowerCase();
@@ -845,16 +752,13 @@ const extractTeams = async (query) => {
         away: null,
         any: []
     };
-
     // Look for "vs", "against", "v" patterns to identify home vs away
     const vsPatterns = [
         /(.+?)\s+(?:vs|v|against)\s+(.+?)(?:\s|$)/i,
         /(.+?)\s+(?:versus)\s+(.+?)(?:\s|$)/i
     ];
-
     let homeTeamQuery = null;
     let awayTeamQuery = null;
-
     // Try to extract specific matchup
     for (const pattern of vsPatterns) {
         const match = query.match(pattern);
@@ -864,14 +768,12 @@ const extractTeams = async (query) => {
             break;
         }
     }
-
     // Search for teams in database
     try {
         if (homeTeamQuery && awayTeamQuery) {
             // Specific matchup
             const homeTeams = await teamService.searchTeams(homeTeamQuery, { limit: 3 });
             const awayTeams = await teamService.searchTeams(awayTeamQuery, { limit: 3 });
-            
             if (homeTeams.length > 0) {
                 result.home = homeTeams[0];
                 result.any.push(homeTeams[0]);
@@ -884,7 +786,6 @@ const extractTeams = async (query) => {
             // General team search - look for any team mentions
             const words = query.split(/\s+/);
             const teamQueries = [];
-            
             // Try different combinations of words as team names
             for (let i = 0; i < words.length; i++) {
                 for (let j = i + 1; j <= Math.min(i + 3, words.length); j++) {
@@ -894,7 +795,6 @@ const extractTeams = async (query) => {
                     }
                 }
             }
-
             // Search for each potential team name
             for (const teamQuery of teamQueries) {
                 const teams = await teamService.searchTeams(teamQuery, { limit: 2 });
@@ -911,20 +811,16 @@ const extractTeams = async (query) => {
     } catch (error) {
         console.error('Error extracting teams:', error);
     }
-
     return result;
 };
-
 // Enhanced league extraction using database
 const extractLeagues = async (query) => {
     const queryLower = query.toLowerCase();
     const leagues = [];
-
     try {
         // Direct league name search
         const words = query.split(/\s+/);
         const leagueQueries = [];
-        
         // Try different combinations for league names
         for (let i = 0; i < words.length; i++) {
             for (let j = i + 1; j <= Math.min(i + 4, words.length); j++) {
@@ -934,7 +830,6 @@ const extractLeagues = async (query) => {
                 }
             }
         }
-
         // Search for leagues
         for (const leagueQuery of leagueQueries) {
             const foundLeagues = await leagueService.searchLeagues(leagueQuery);
@@ -946,7 +841,6 @@ const extractLeagues = async (query) => {
                 });
             }
         }
-
         // Fallback to common league mappings if database search fails
         const leagueMapping = {
             'premier league': { apiId: '39', name: 'Premier League', country: 'England' },
@@ -962,24 +856,19 @@ const extractLeagues = async (query) => {
             'europa league': { apiId: '3', name: 'Europa League', country: 'Europe' },
             'conference league': { apiId: '848', name: 'Conference League', country: 'Europe' }
         };
-
         Object.entries(leagueMapping).forEach(([name, leagueData]) => {
             if (queryLower.includes(name) && !leagues.find(l => l.apiId === leagueData.apiId)) {
                 leagues.push(leagueData);
             }
         });
-
     } catch (error) {
         console.error('Error extracting leagues:', error);
     }
-
     return leagues;
 };
-
 // Enhanced location extraction with better city coverage
 const extractLocation = (query) => {
     const queryLower = query.toLowerCase();
-    
     // Expanded city mapping
     const cityMapping = {
         // UK Cities
@@ -990,47 +879,39 @@ const extractLocation = (query) => {
         'leeds': { city: 'Leeds', country: 'United Kingdom', coordinates: [-1.549077, 53.801277] },
         'newcastle': { city: 'Newcastle', country: 'United Kingdom', coordinates: [-1.612404, 54.978252] },
         'brighton': { city: 'Brighton', country: 'United Kingdom', coordinates: [-0.137163, 50.822530] },
-        
         // Spanish Cities
         'barcelona': { city: 'Barcelona', country: 'Spain', coordinates: [2.170006, 41.387097] },
         'madrid': { city: 'Madrid', country: 'Spain', coordinates: [-3.703790, 40.416775] },
         'seville': { city: 'Seville', country: 'Spain', coordinates: [-5.984459, 37.389092] },
         'valencia': { city: 'Valencia', country: 'Spain', coordinates: [-0.375156, 39.469907] },
         'bilbao': { city: 'Bilbao', country: 'Spain', coordinates: [-2.935010, 43.263012] },
-        
         // German Cities
         'munich': { city: 'Munich', country: 'Germany', coordinates: [11.581981, 48.135125] },
         'berlin': { city: 'Berlin', country: 'Germany', coordinates: [13.404954, 52.520008] },
         'dortmund': { city: 'Dortmund', country: 'Germany', coordinates: [7.468554, 51.513400] },
         'hamburg': { city: 'Hamburg', country: 'Germany', coordinates: [9.993682, 53.551086] },
-        
         // French Cities
         'paris': { city: 'Paris', country: 'France', coordinates: [2.352222, 48.856614] },
         'marseille': { city: 'Marseille', country: 'France', coordinates: [5.369780, 43.296482] },
         'lyon': { city: 'Lyon', country: 'France', coordinates: [4.835659, 45.764043] },
-        
         // Italian Cities
         'milan': { city: 'Milan', country: 'Italy', coordinates: [9.185982, 45.465422] },
         'rome': { city: 'Rome', country: 'Italy', coordinates: [12.496366, 41.902782] },
         'turin': { city: 'Turin', country: 'Italy', coordinates: [7.686856, 45.070312] },
         'naples': { city: 'Naples', country: 'Italy', coordinates: [14.268124, 40.851775] },
-        
         // Portuguese Cities
         'lisbon': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
         'porto': { city: 'Porto', country: 'Portugal', coordinates: [-8.611837, 41.149968] },
-        
         // Dutch Cities
         'amsterdam': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] },
         'rotterdam': { city: 'Rotterdam', country: 'Netherlands', coordinates: [4.477733, 51.924420] }
     };
-
     // Look for city mentions
     for (const [cityKey, cityData] of Object.entries(cityMapping)) {
         if (queryLower.includes(cityKey)) {
             return cityData;
         }
     }
-
     // Look for country mentions
     const countryMapping = {
         'england': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
@@ -1041,16 +922,13 @@ const extractLocation = (query) => {
         'portugal': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
         'netherlands': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] }
     };
-
     for (const [countryKey, countryData] of Object.entries(countryMapping)) {
         if (queryLower.includes(countryKey)) {
             return countryData;
         }
     }
-
     return null;
 };
-
 // Enhanced distance extraction
 const extractDistance = (query) => {
     const distancePatterns = [
@@ -1059,7 +937,6 @@ const extractDistance = (query) => {
         /(\d+) (?:miles?|mi) (?:of|from)/i,
         /(\d+) (?:kilometers?|km) (?:of|from)/i
     ];
-
     for (const pattern of distancePatterns) {
         const match = query.match(pattern);
         if (match) {
@@ -1071,16 +948,13 @@ const extractDistance = (query) => {
             return distance;
         }
     }
-
     return null;
 };
-
 // Smart league inference based on teams
 const inferLeagueFromTeams = (teams) => {
     if (!teams || !teams.any || teams.any.length === 0) {
         return [];
     }
-
     // Team-to-league mapping
     const teamLeagueMapping = {
         // Premier League teams
@@ -1105,7 +979,6 @@ const inferLeagueFromTeams = (teams) => {
         'burnley': '39',
         'watford': '39',
         'norwich': '39',
-        
         // Championship teams (some examples)
         'birmingham': '40',
         'blackburn': '40',
@@ -1127,7 +1000,6 @@ const inferLeagueFromTeams = (teams) => {
         'stoke': '40',
         'swansea': '40',
         'west bromwich': '40',
-        
         // La Liga teams
         'barcelona': '140',
         'real madrid': '140',
@@ -1139,7 +1011,6 @@ const inferLeagueFromTeams = (teams) => {
         'villarreal': '140',
         'real betis': '140',
         'celta vigo': '140',
-        
         // Bundesliga teams
         'bayern munich': '78',
         'borussia dortmund': '78',
@@ -1151,7 +1022,6 @@ const inferLeagueFromTeams = (teams) => {
         'union berlin': '78',
         'freiburg': '78',
         'mainz': '78',
-        
         // Ligue 1 teams
         'paris saint-germain': '61',
         'olympique marseille': '61',
@@ -1163,7 +1033,6 @@ const inferLeagueFromTeams = (teams) => {
         'strasbourg': '61',
         'lens': '61',
         'nantes': '61',
-        
         // Serie A teams
         'juventus': '135',
         'ac milan': '135',
@@ -1176,13 +1045,10 @@ const inferLeagueFromTeams = (teams) => {
         'torino': '135',
         'bologna': '135'
     };
-
     const detectedLeagues = new Set();
-    
     for (const team of teams.any) {
         const teamName = team.name.toLowerCase();
         let leagueId = teamLeagueMapping[teamName];
-        
         // If exact match not found, try partial matching
         if (!leagueId) {
             for (const [mappedTeam, mappedLeague] of Object.entries(teamLeagueMapping)) {
@@ -1192,18 +1058,13 @@ const inferLeagueFromTeams = (teams) => {
                 }
             }
         }
-        
         if (leagueId) {
             detectedLeagues.add(leagueId);
-            console.log(`🏆 Detected team "${team.name}" → League ID ${leagueId}`);
         } else {
-            console.log(`❌ No league mapping found for team "${team.name}"`);
         }
     }
-    
     return Array.from(detectedLeagues);
 };
-
 // Country to default city mapping (for leagues not in hardcoded mapping)
 const countryToCityMapping = {
     'United Kingdom': { city: 'London', coordinates: [-0.118092, 51.509865] },
@@ -1217,7 +1078,6 @@ const countryToCityMapping = {
     'Netherlands': { city: 'Amsterdam', coordinates: [4.904139, 52.367573] },
     'Mexico': { city: 'Mexico City', coordinates: [-99.133178, 19.432608] }
 };
-
 // Smart location inference based on teams and leagues
 const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
     // Team-based country mapping
@@ -1234,7 +1094,6 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
         'birmingham': { city: 'Birmingham', country: 'United Kingdom', coordinates: [-1.898575, 52.489471] },
         'newcastle': { city: 'Newcastle', country: 'United Kingdom', coordinates: [-1.612404, 54.978252] },
         'brighton': { city: 'Brighton', country: 'United Kingdom', coordinates: [-0.137163, 50.822530] },
-        
         // Spanish teams
         'barcelona': { city: 'Barcelona', country: 'Spain', coordinates: [2.170006, 41.387097] },
         'real madrid': { city: 'Madrid', country: 'Spain', coordinates: [-3.703790, 40.416775] },
@@ -1242,36 +1101,30 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
         'sevilla': { city: 'Seville', country: 'Spain', coordinates: [-5.984459, 37.389092] },
         'valencia': { city: 'Valencia', country: 'Spain', coordinates: [-0.375156, 39.469907] },
         'athletic bilbao': { city: 'Bilbao', country: 'Spain', coordinates: [-2.935010, 43.263012] },
-        
         // German teams
         'bayern munich': { city: 'Munich', country: 'Germany', coordinates: [11.581981, 48.135125] },
         'borussia dortmund': { city: 'Dortmund', country: 'Germany', coordinates: [7.468554, 51.513400] },
         'rb leipzig': { city: 'Leipzig', country: 'Germany', coordinates: [12.387772, 51.343479] },
         'bayer leverkusen': { city: 'Leverkusen', country: 'Germany', coordinates: [7.0043, 51.0459] },
-        
         // French teams
         'paris saint-germain': { city: 'Paris', country: 'France', coordinates: [2.352222, 48.856614] },
         'olympique marseille': { city: 'Marseille', country: 'France', coordinates: [5.369780, 43.296482] },
         'olympique lyon': { city: 'Lyon', country: 'France', coordinates: [4.835659, 45.764043] },
-        
         // Italian teams
         'juventus': { city: 'Turin', country: 'Italy', coordinates: [7.686856, 45.070312] },
         'ac milan': { city: 'Milan', country: 'Italy', coordinates: [9.185982, 45.465422] },
         'inter milan': { city: 'Milan', country: 'Italy', coordinates: [9.185982, 45.465422] },
         'napoli': { city: 'Naples', country: 'Italy', coordinates: [14.268124, 40.851775] },
         'roma': { city: 'Rome', country: 'Italy', coordinates: [12.496366, 41.902782] },
-        
         // Portuguese teams
         'benfica': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
         'porto': { city: 'Porto', country: 'Portugal', coordinates: [-8.611837, 41.149968] },
         'sporting cp': { city: 'Lisbon', country: 'Portugal', coordinates: [-9.139337, 38.722252] },
-        
         // Dutch teams
         'ajax': { city: 'Amsterdam', country: 'Netherlands', coordinates: [4.904139, 52.367573] },
         'psv': { city: 'Eindhoven', country: 'Netherlands', coordinates: [5.469722, 51.441642] },
         'feyenoord': { city: 'Rotterdam', country: 'Netherlands', coordinates: [4.477733, 51.924420] }
     };
-
     // League-based country mapping (fallback for known leagues)
     const leagueCountryMapping = {
         'premier league': { city: 'London', country: 'United Kingdom', coordinates: [-0.118092, 51.509865] },
@@ -1286,7 +1139,6 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
         'mls': { city: 'Kansas City', country: 'United States', coordinates: [-94.578567, 39.099727] },
         'liga mx': { city: 'Mexico City', country: 'Mexico', coordinates: [-99.133178, 19.432608] }
     };
-
     // First, try to infer from teams
     if (teams && teams.any && teams.any.length > 0) {
         for (const team of teams.any) {
@@ -1296,17 +1148,14 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
             }
         }
     }
-
     // If no team match, try to infer from leagues
     if (leagues && leagues.length > 0) {
         for (const league of leagues) {
             const leagueName = league.name?.toLowerCase();
-            
             // First check hardcoded mapping
             if (leagueName && leagueCountryMapping[leagueName]) {
                 return leagueCountryMapping[leagueName];
             }
-            
             // If not in hardcoded mapping, try to get from database
             // Check if league has an apiId or id field
             const leagueId = league.apiId || league.id;
@@ -1333,15 +1182,12 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
             }
         }
     }
-
     // If no match found, return null (no default location)
     return null;
 };
-
 // Conversation State Manager - tracks current search context
 // Helper function to map league IDs to names
 const mapLeagueIdsToNames = (leagueIds) => {
-    console.log('🗺️ Mapping league IDs to names:', leagueIds);
     const leagueMap = {
         '39': 'Premier League',
         '40': 'Championship', 
@@ -1355,17 +1201,14 @@ const mapLeagueIdsToNames = (leagueIds) => {
         '141': 'Segunda División'
     };
     const result = leagueIds.map(id => ({ name: leagueMap[id] || `League ${id}`, id: id }));
-    console.log('🗺️ Mapped result:', result);
     return result;
 };
-
 const ConversationStateManager = {
     // Extract the current search context from conversation history
     getCurrentContext: (conversationHistory) => {
         if (!conversationHistory || conversationHistory.length === 0) {
             return null;
         }
-        
         // Find the most recent successful search
         for (let i = conversationHistory.length - 1; i >= 0; i--) {
             const msg = conversationHistory[i];
@@ -1373,72 +1216,51 @@ const ConversationStateManager = {
                 return msg.data.parsed;
             }
         }
-        
         return null;
     },
-    
     // Fill missing information in the current result using conversation context
     fillMissingContext: (result, conversationHistory) => {
         const context = ConversationStateManager.getCurrentContext(conversationHistory);
-        
         if (!context) {
-            console.log('🧠 No conversation context available');
             return result;
         }
-        
-        console.log('🧠 Found conversation context:', {
             location: context.location,
             dateRange: context.dateRange,
             leagues: context.leagues,
             teams: context.teams
         });
-        
         // Fill missing date range
         if (!result.dateRange && context.dateRange) {
             result.dateRange = context.dateRange;
-            console.log('📅 Filled missing date range from context:', result.dateRange);
         }
-        
         // Fill missing location
         if (!result.location && context.location) {
             result.location = context.location;
         }
-        
         // For follow-up queries like "just premier league", inherit leagues from context
         if (result.leagues.length === 0 && context.leagues && context.leagues.length > 0) {
             result.leagues = context.leagues;
-            console.log('🏆 Filled missing leagues from context:', result.leagues);
         }
-        
         // For follow-up queries like "only Arsenal", inherit teams from context
         if (result.teams.any.length === 0 && context.teams && context.teams.any && context.teams.any.length > 0) {
             result.teams = context.teams;
-            console.log('⚽ Filled missing teams from context:', result.teams);
         }
-        
         // Clear error message if we successfully filled missing information or have a valid broad query
         if (result.errorMessage && (result.dateRange || result.location)) {
             result.errorMessage = null;
             result.confidence = Math.max(result.confidence, 50); // Boost confidence after filling
-            console.log('✅ Cleared error message after filling missing context');
         }
-        
-        
         // Clear error message for any query that has both location and dates (even if not marked as broad)
         if (result.errorMessage && result.location && result.dateRange) {
             result.errorMessage = null;
             result.confidence = Math.max(result.confidence, 50); // Boost confidence
-            console.log('✅ Cleared error message for query with location and dates');
         }
-        
         return result;
     }
 };
-
 // Helper function to detect multi-query patterns
 function detectMultiQuery(query) {
     const lowerQuery = query.toLowerCase();
-    
     // Indicators of secondary criteria
     const secondaryIndicators = [
         'but would also like',
@@ -1451,7 +1273,6 @@ function detectMultiQuery(query) {
         'additional matches',
         'more matches'
     ];
-    
     // Indicators of count constraints
     const countIndicators = [
         /\d+\s+other\s+matches?/i,
@@ -1461,7 +1282,6 @@ function detectMultiQuery(query) {
         /several\s+matches?/i,
         /some\s+matches?/i
     ];
-    
     // Indicators of distance from primary
     const distanceFromPrimaryIndicators = [
         /within\s+\d+\s+miles/i,
@@ -1469,20 +1289,15 @@ function detectMultiQuery(query) {
         /\d+\s+miles\s+away/i,
         /\d+\s+km\s+away/i
     ];
-    
     const hasSecondary = secondaryIndicators.some(indicator => 
         lowerQuery.includes(indicator)
     );
-    
     const hasCount = countIndicators.some(pattern => pattern.test(query));
-    
     const hasDistanceFromPrimary = distanceFromPrimaryIndicators.some(pattern => 
         pattern.test(query)
     );
-    
     return hasSecondary || (hasCount && hasDistanceFromPrimary);
 }
-
 // Helper function to extract count constraint
 function extractCountConstraint(query) {
     const patterns = [
@@ -1494,64 +1309,52 @@ function extractCountConstraint(query) {
         { pattern: /some\s+matches?/i, extract: () => 3 },
         { pattern: /other\s+matches?/i, extract: () => 3 } // Default
     ];
-    
     for (const { pattern, extract } of patterns) {
         const match = query.match(pattern);
         if (match) {
             return extract(match);
         }
     }
-    
     return null;
 }
-
 // Helper function to extract distance constraint
 function extractDistanceConstraint(query) {
     // Pattern: "within X miles" or "within X km"
     const milePattern = /within\s+(\d+)\s+miles?/i;
     const kmPattern = /within\s+(\d+)\s+km/i;
     const awayPattern = /(\d+)\s+miles?\s+away/i;
-    
     const mileMatch = query.match(milePattern);
     if (mileMatch) {
         return parseInt(mileMatch[1]);
     }
-    
     const kmMatch = query.match(kmPattern);
     if (kmMatch) {
         return Math.round(parseInt(kmMatch[1]) * 0.621371); // Convert km to miles
     }
-    
     const awayMatch = query.match(awayPattern);
     if (awayMatch) {
         return parseInt(awayMatch[1]);
     }
-    
     return null;
 }
-
 // Helper function to calculate period date range
 function calculatePeriodDateRange(query, referenceDate = new Date()) {
     // Pattern: "over a X day period" or "over X days"
     const periodPattern = /over\s+(?:a\s+)?(\d+)\s+day\s+period/i;
     const daysPattern = /over\s+(\d+)\s+days?/i;
-    
     const periodMatch = query.match(periodPattern) || query.match(daysPattern);
     if (periodMatch) {
         const days = parseInt(periodMatch[1]);
         const start = new Date(referenceDate);
         const end = new Date(referenceDate);
         end.setDate(end.getDate() + days - 1);
-        
         return {
             start: formatDate(start),
             end: formatDate(end)
         };
     }
-    
     return null;
 }
-
 // Enhanced natural language parser with OpenAI and smart defaults
 const parseNaturalLanguage = async (query, conversationHistory = []) => {
     let result = {
@@ -1570,11 +1373,9 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         secondary: null,
         relationship: null
     };
-    
     // Detect if this is a multi-query
     const isMultiQuery = detectMultiQuery(query);
     result.isMultiQuery = isMultiQuery;
-
     try {
         // First try OpenAI for intelligent parsing (if available)
         if (openai) {
@@ -1582,7 +1383,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 const now = new Date();
                 const currentYear = now.getFullYear();
                 const currentMonth = now.getMonth() + 1;
-                
                 // Build conversation context
                 let conversationContext = "";
                 if (conversationHistory && conversationHistory.length > 0) {
@@ -1600,7 +1400,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                     });
                     conversationContext += "\nIMPORTANT: If the current query is a follow-up (like 'just premier league' or 'only Arsenal'), use the context from previous searches to fill in missing information (location, dates, etc.).\n";
                 }
-                
                 const completion = await openai.chat.completions.create({
                 model: "gpt-3.5-turbo",
                 messages: [
@@ -1608,47 +1407,39 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         role: "system",
                         content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
                         The current date is ${formatDate(now)}. 
-                        
                         MULTI-QUERY DETECTION:
                         - If query contains phrases like "but would also like", "but also", "plus", "other matches", "additional matches", parse as multi-query
                         - Multi-query structure: primary match + secondary matches with different criteria
                         - Set isMultiQuery: true when secondary criteria detected
-                        
                         PRIMARY MATCH CRITERIA:
                         - Extract team name(s) for primary match
                         - Extract match type: "at home" → matchType: "home", "away" → matchType: "away"
                         - Primary match leagues are optional (defaults to team's league)
-                        
                         SECONDARY MATCH CRITERIA:
                         - Extract count constraint: "2 other matches" → count: 2, "a few matches" → count: 3, "several matches" → count: 5
                         - Extract league filters: "bundesliga 2 or austrian bundesliga" → leagues: [79, 218]
                         - Extract distance constraint: "within 200 miles" → maxDistance: 200
                         - Always set excludePrimary: true for secondary matches
-                        
                         RELATIONSHIP CONSTRAINTS:
                         - Extract shared date range: "over a 10 day period" → calculate dateRange
                         - Distance is relative to primary match venue: distanceFrom: "primary"
                         - If no date range specified, infer from primary match date
-                        
                         COUNT CONSTRAINT PARSING:
                         - "2 other matches" → count: 2
                         - "a few matches" → count: 3 (default)
                         - "several matches" → count: 5 (default)
                         - "some matches" → count: 3 (default)
                         - "other matches" (no number) → count: 3 (default)
-                        
                         DISTANCE PARSING:
                         - "within 200 miles" → maxDistance: 200
                         - "within 200 km" → maxDistance: 124 (convert km to miles)
                         - "200 miles away" → maxDistance: 200
                         - If distance mentioned without "from" or "of", assume relative to primary venue
-                        
                         DATE RANGE PARSING:
                         - "over a 10 day period" → Calculate 10-day range from today or specified date
                         - "over 10 days" → Same as above
                         - If primary match date specified, use that as start date
                         - If no date specified, use current date as start
-                        
                         IMPORTANT RULES:
                         - ALWAYS require a date/timeframe - if none provided AND no conversation history, return error message
                         - If conversation history exists, inherit missing information (location, dates) from previous searches
@@ -1658,26 +1449,21 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - For broad queries (location + dates only), provide helpful suggestions for refinement
                         - Broad queries with location and dates are VALID
                         - Use conversation history to fill in missing context for follow-up queries${conversationContext}
-                        
                         CONTEXT INHERITANCE RULES:
                         - If the current query is incomplete (missing location, dates, or both) AND conversation history exists, inherit missing information
                         - For queries like "just premier league", "only Arsenal", "champions league", etc., inherit location and dates from conversation history
                         - For queries like "in Manchester", "next week", etc., inherit other missing information from conversation history
                         - Always include inherited information in your JSON response
-                        
                         CONTEXT INHERITANCE EXAMPLES:
                         - Query: "just premier league" + History: "London next month" → Inherit London location and November 2025 dates
                         - Query: "only Arsenal" + History: "London next month premier league" → Inherit London location, November 2025 dates, and Premier League
                         - Query: "in Manchester" + History: "next month premier league" → Inherit November 2025 dates and Premier League
-                        
                         For date parsing:
                         - If a specific year is mentioned (e.g., "January 2026"), use that exact year
                         - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
                         - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
                         - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
-                        
                         When handling weekends, always use Friday through Sunday (3 days).
-                        
                         Return only a JSON object. For multi-query, use this structure:
                         {
                             "isMultiQuery": true,
@@ -1702,7 +1488,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "errorMessage": null,
                             "suggestions": []
                         }
-                        
                         For single query, use this structure:
                         {
                             "isMultiQuery": false,
@@ -1715,14 +1500,12 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "errorMessage": null,
                             "suggestions": []
                         }
-                        
                         Fields:
                         - isMultiQuery (boolean) - REQUIRED: true if multi-query detected, false otherwise
                         - For multi-query: primary, secondary, relationship objects
                         - For single query: location, dateRange, leagues, maxDistance, teams, matchTypes
                         - errorMessage (string if there's an error, null otherwise)
                         - suggestions (array of helpful suggestions for refining the search)
-                        
                         Available leagues (use these exact IDs):
                         - 39 (Premier League)
                         - 40 (Championship)
@@ -1735,7 +1518,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - 62 (Ligue 2)
                         - 88 (Eredivisie)
                         - 94 (Primeira Liga)
-                        
                         Team/League to Country mapping:
                         - Manchester United, Arsenal, Chelsea, Liverpool, etc. → England
                         - Barcelona, Real Madrid, etc. → Spain
@@ -1744,7 +1526,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - Juventus, AC Milan, Inter Milan, etc. → Italy
                         - Benfica, Porto, etc. → Portugal
                         - Ajax, PSV, etc. → Netherlands
-                        
                         Example response format for specific query:
                         {
                             "location": {
@@ -1763,7 +1544,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "errorMessage": null,
                             "suggestions": []
                         }
-                        
                         Example response format for broad query:
                         {
                             "location": {
@@ -1786,7 +1566,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                                 "Try: Manchester United vs Chelsea in London next month"
                             ]
                         }
-                        
                         Example response format for follow-up query "just premier league" (with conversation history):
                         {
                             "isMultiQuery": false,
@@ -1806,7 +1585,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "errorMessage": null,
                             "suggestions": []
                         }
-                        
                         Example response format for multi-query:
                         Query: "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period. The other matches can be bundesliga 2 or austrian bundesliga"
                         Response:
@@ -1842,27 +1620,22 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 temperature: 0.3,
                 max_tokens: 800  // Increased for multi-query responses
             });
-
             const parsedResponse = JSON.parse(completion.choices[0].message.content);
-            
             // Convert OpenAI response to our format
             if (parsedResponse.errorMessage) {
                 result.errorMessage = parsedResponse.errorMessage;
                 result.confidence = 0;
                 // Don't return early - let context inheritance handle it
             }
-
             // Check if multi-query
             if (parsedResponse.isMultiQuery) {
                 result.isMultiQuery = true;
-                
                 // Map primary criteria
                 result.primary = {
                     teams: parsedResponse.primary?.teams || [],
                     matchType: parsedResponse.primary?.matchType || null,
                     leagues: parsedResponse.primary?.leagues || []
                 };
-                
                 // Map secondary criteria
                 result.secondary = {
                     count: parsedResponse.secondary?.count || null,
@@ -1870,19 +1643,16 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                     maxDistance: parsedResponse.secondary?.maxDistance || null,
                     excludePrimary: parsedResponse.secondary?.excludePrimary !== false
                 };
-                
                 // Map relationship
                 result.relationship = {
                     distanceFrom: parsedResponse.relationship?.distanceFrom || 'primary',
                     dateRange: parsedResponse.relationship?.dateRange || parsedResponse.dateRange
                 };
-                
                 // Populate legacy fields for backward compatibility
                 result.dateRange = result.relationship.dateRange;
                 result.teams.any = result.primary.teams.map(name => ({ name }));
                 result.matchType = result.primary.matchType;
                 result.leagues = result.primary.leagues.map(leagueId => ({ apiId: String(leagueId), name: String(leagueId) }));
-                
                 // Calculate confidence for multi-query
                 let confidence = 0;
                 if (result.primary.teams.length > 0) confidence += 30;
@@ -1891,7 +1661,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 if (result.secondary.maxDistance) confidence += 15;
                 if (result.relationship.dateRange) confidence += 15;
                 result.confidence = Math.min(confidence, 100);
-                
             } else {
                 // Single query mode (existing logic)
                 result.isMultiQuery = false;
@@ -1900,24 +1669,20 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 result.distance = parsedResponse.maxDistance;
                 result.matchType = parsedResponse.matchTypes?.[0] || null;
                 result.suggestions = parsedResponse.suggestions || [];
-                
                 // Convert team names to our team objects (simplified for now)
                 if (parsedResponse.teams && parsedResponse.teams.length > 0) {
                     result.teams.any = parsedResponse.teams.map(teamName => ({ name: teamName }));
                 }
-                
                 // Convert league IDs to our league objects (simplified for now)
                 if (parsedResponse.leagues && parsedResponse.leagues.length > 0) {
                     result.leagues = parsedResponse.leagues.map(leagueId => ({ apiId: String(leagueId), name: String(leagueId) }));
                 }
-
                 // Map to primary structure for consistency
                 result.primary = {
                     teams: parsedResponse.teams || [],
                     matchType: result.matchType,
                     leagues: parsedResponse.leagues || []
                 };
-
                 // Calculate confidence score
                 let confidence = 0;
                 if (result.teams.any.length > 0) confidence += 30;
@@ -1925,24 +1690,17 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 if (result.location) confidence += 25;
                 if (result.dateRange) confidence += 15;
                 if (result.distance) confidence += 10;
-                
                 result.confidence = Math.min(confidence, 100);
             }
-
             // Apply conversation state management after AI parsing
             const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
             Object.assign(result, updatedResult);
-
             return result;
-
             } catch (openaiError) {
-                console.log('OpenAI parsing failed, falling back to regex parser:', openaiError.message);
                 // Fall through to regex parser
             }
         } else {
-            console.log('OpenAI not available, using regex parser');
         }
-
         // Fallback to regex-based parsing
         const [teams, leagues, location, dateRange, distance] = await Promise.all([
             extractTeams(query),
@@ -1951,14 +1709,12 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
             parseComplexDates(query),
             extractDistance(query)
         ]);
-
         // Populate results
         result.teams = teams;
         result.leagues = leagues;
         result.location = location;
         result.dateRange = dateRange;
         result.distance = distance;
-
         // Determine match type from query context
         const queryLower = query.toLowerCase();
         if (queryLower.includes('home') || queryLower.includes('at home')) {
@@ -1966,23 +1722,19 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         } else if (queryLower.includes('away') || queryLower.includes('at away')) {
             result.matchType = 'away';
         }
-
         // Apply conversation state management after regex parsing
         const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
         Object.assign(result, updatedResult);
-
         // DATE VALIDATION - Always require dates
         if (!result.dateRange) {
             result.errorMessage = "Please specify when you want to see these matches";
             result.confidence = 0;
             return result;
         }
-
         // SMART LOCATION DEFAULTS - If no location specified, infer from teams/leagues
         if (!result.location) {
             result.location = await inferLocationFromTeamsAndLeagues(result.teams, result.leagues);
         }
-
         // Calculate confidence score based on extracted entities
         let confidence = 0;
         if (result.teams.any.length > 0) confidence += 30;
@@ -1990,11 +1742,8 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         if (result.location) confidence += 25;
         if (result.dateRange) confidence += 15;
         if (result.distance) confidence += 10;
-        
         result.confidence = Math.min(confidence, 100);
-
         return result;
-
     } catch (error) {
         console.error('Enhanced NL Parser error:', error);
         result.errorMessage = "I couldn't understand your query. Please try being more specific!";
@@ -2002,7 +1751,6 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         return result;
     }
 };
-
 // Convert parsed entities to search parameters
 const buildSearchParameters = (parsed) => {
     // If multi-query, return structure for multi-query execution
@@ -2027,10 +1775,8 @@ const buildSearchParameters = (parsed) => {
             }
         };
     }
-    
     // Existing single-query logic
     const params = {};
-
     // Team filtering
     if (parsed.teams.home && parsed.teams.away) {
         // Specific matchup
@@ -2040,18 +1786,15 @@ const buildSearchParameters = (parsed) => {
         // Any team involvement
         params.teams = parsed.teams.any.map(team => team._id);
     }
-
     // League filtering
     if (parsed.leagues.length > 0) {
         params.leagues = parsed.leagues.map(league => league.apiId);
     }
-
     // Date filtering
     if (parsed.dateRange) {
         params.startDate = parsed.dateRange.start;
         params.endDate = parsed.dateRange.end;
     }
-
     // Location + distance filtering
     if (parsed.location) {
         params.location = {
@@ -2059,20 +1802,16 @@ const buildSearchParameters = (parsed) => {
             country: parsed.location.country,
             coordinates: parsed.location.coordinates
         };
-        
         if (parsed.distance) {
             params.maxDistance = parsed.distance;
         }
     }
-
     // Match type (home/away)
     if (parsed.matchType) {
         params.matchType = parsed.matchType;
     }
-
     return params;
 };
-
 /**
  * GET /api/search/locations
  * Location autocomplete endpoint - proxies LocationIQ autocomplete API
@@ -2081,21 +1820,18 @@ const buildSearchParameters = (parsed) => {
 router.get('/locations', async (req, res) => {
     try {
         const { q, limit = 5 } = req.query;
-        
         if (!q || q.length < 2) {
             return res.status(400).json({
                 success: false,
                 message: 'Search query must be at least 2 characters'
             });
         }
-
         if (!LOCATIONIQ_API_KEY) {
             return res.status(503).json({
                 success: false,
                 message: 'LocationIQ API key not configured on server'
             });
         }
-
         try {
             const response = await axios.get(LOCATIONIQ_AUTOCOMPLETE_URL, {
                 params: {
@@ -2108,7 +1844,6 @@ router.get('/locations', async (req, res) => {
                 httpsAgent: searchHttpsAgent,
                 timeout: 10000
             });
-
             // Helper function to filter postal codes from region
             const filterPostalCodes = (region) => {
                 if (!region) return '';
@@ -2125,7 +1860,6 @@ router.get('/locations', async (req, res) => {
                 });
                 return parts.join(', ');
             };
-
             // Transform LocationIQ response to match mobile app expectations
             const suggestions = response.data.map(item => {
                 const nameParts = item.display_name.split(', ');
@@ -2134,7 +1868,6 @@ router.get('/locations', async (req, res) => {
                 const region = nameParts.slice(1, -1).join(', ');
                 const displayRegion = filterPostalCodes(region);
                 const uniqueId = `${item.place_id}-${item.lat}-${item.lon}-${city}-${region}-${country}`;
-                
                 return {
                     place_id: uniqueId,
                     lat: parseFloat(item.lat),
@@ -2145,7 +1878,6 @@ router.get('/locations', async (req, res) => {
                     country
                 };
             });
-
             // Deduplicate suggestions
             const uniqueSuggestions = suggestions.filter((suggestion, index, self) =>
                 index === self.findIndex((s) => (
@@ -2156,7 +1888,6 @@ router.get('/locations', async (req, res) => {
                     s.country === suggestion.country
                 ))
             );
-
             // Check for duplicate city names to determine if disambiguation is needed
             const cityNameCounts = {};
             uniqueSuggestions.forEach(suggestion => {
@@ -2166,12 +1897,10 @@ router.get('/locations', async (req, res) => {
                 }
                 cityNameCounts[cityKey].push(suggestion);
             });
-
             // Generate descriptions with disambiguation logic
             uniqueSuggestions.forEach(suggestion => {
                 const cityKey = suggestion.city.toLowerCase();
                 const citiesWithSameName = cityNameCounts[cityKey];
-                
                 // If multiple cities share the same name, include region for disambiguation
                 if (citiesWithSameName.length > 1) {
                     // Include displayRegion (without postal codes) for disambiguation
@@ -2183,36 +1912,30 @@ router.get('/locations', async (req, res) => {
                     suggestion.description = `${suggestion.city}, ${suggestion.country}`;
                 }
             });
-
             return res.json({
                 success: true,
                 suggestions: uniqueSuggestions
             });
-
         } catch (error) {
             console.error('LocationIQ autocomplete error:', error.message);
-            
             if (error.response?.status === 429) {
                 return res.status(429).json({
                     success: false,
                     message: 'Rate limit exceeded. Please try again later.'
                 });
             }
-            
             if (error.response?.status === 401) {
                 return res.status(500).json({
                     success: false,
                     message: 'Invalid LocationIQ API key on server'
                 });
             }
-
             return res.status(500).json({
                 success: false,
                 message: 'Failed to fetch location suggestions',
                 error: error.message
             });
         }
-
     } catch (error) {
         console.error('Location autocomplete endpoint error:', error);
         return res.status(500).json({
@@ -2222,7 +1945,6 @@ router.get('/locations', async (req, res) => {
         });
     }
 });
-
 // Debug endpoint to check database connection
 /**
  * GET /api/search/unified
@@ -2232,20 +1954,16 @@ router.get('/locations', async (req, res) => {
 router.get('/unified', async (req, res) => {
     try {
         const { query } = req.query;
-        
         // Sanitize and validate query input
         const { sanitizeSearchQuery } = require('../utils/security');
         const validation = sanitizeSearchQuery(query, 100);
-        
         if (!validation.valid) {
             return res.status(400).json({
                 success: false,
                 message: validation.error || 'Invalid search query'
             });
         }
-
         const sanitizedQuery = validation.sanitized;
-
         // Search all three collections in parallel for better performance
         const [leagues, teams, venues] = await Promise.all([
             // Search leagues
@@ -2259,7 +1977,6 @@ router.get('/unified', async (req, res) => {
             .select('apiId name country countryCode tier emblem')
             .limit(10)
             .lean(),
-            
             // Search teams
             Team.find({
                 $or: [
@@ -2270,7 +1987,6 @@ router.get('/unified', async (req, res) => {
             .select('apiId name country city logo code venue')
             .limit(10)
             .lean(),
-            
             // Search venues
             Venue.find({
                 $or: [
@@ -2284,7 +2000,6 @@ router.get('/unified', async (req, res) => {
             .limit(10)
             .lean()
         ]);
-
         // Format results with type identifiers and badges
         const formattedLeagues = leagues.map(league => ({
             type: 'league',
@@ -2295,7 +2010,6 @@ router.get('/unified', async (req, res) => {
             tier: league.tier || 1,
             badge: league.emblem || `https://media.api-sports.io/football/leagues/${league.apiId}.png`
         }));
-
         const formattedTeams = teams.map(team => ({
             type: 'team',
             id: team.apiId,
@@ -2310,7 +2024,6 @@ router.get('/unified', async (req, res) => {
                 country: team.country || null
             } : null
         }));
-
         const formattedVenues = venues.map(venue => ({
             type: 'venue',
             id: venue.venueId,
@@ -2321,7 +2034,6 @@ router.get('/unified', async (req, res) => {
             badge: venue.image || null,
             capacity: venue.capacity || null
         }));
-
         res.json({
             success: true,
             query,
@@ -2337,7 +2049,6 @@ router.get('/unified', async (req, res) => {
                 total: formattedLeagues.length + formattedTeams.length + formattedVenues.length
             }
         });
-
     } catch (error) {
         console.error('Unified search error:', error);
         res.status(500).json({
@@ -2346,13 +2057,11 @@ router.get('/unified', async (req, res) => {
         });
     }
 });
-
 router.get('/debug-db', async (req, res) => {
     try {
         const mongoose = require('mongoose');
         const dbName = mongoose.connection.db.databaseName;
         const collections = await mongoose.connection.db.listCollections().toArray();
-        
         res.json({
             databaseName: dbName,
             collections: collections.map(c => c.name),
@@ -2367,26 +2076,15 @@ router.get('/debug-db', async (req, res) => {
         });
     }
 });
-
 // Natural language search endpoint
 router.post('/natural-language', async (req, res) => {
     try {
         const { query, conversationHistory } = req.body;
-        
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
         }
-
-
-        
         const parsed = await parseNaturalLanguage(query, conversationHistory);
         const searchParams = buildSearchParameters(parsed);
-        
-        console.log('🔍 Parsed query:', parsed);
-        console.log('🔍 Search params:', searchParams);
-        
-
-        
         // Handle error messages from OpenAI parsing - ALWAYS respect them
         if (parsed.errorMessage) {
             return res.json({
@@ -2402,10 +2100,8 @@ router.post('/natural-language', async (req, res) => {
                 ]
             });
         }
-
         // Use existing search infrastructure instead of raw API calls
         const axios = require('axios');
-        
         // Determine season based on the date range
         let season = 2025; // Default season
         if (searchParams.startDate) {
@@ -2419,21 +2115,17 @@ router.post('/natural-language', async (req, res) => {
                 season = startYear - 1;
             }
         }
-        
         // Determine which leagues to search based on location and query type
         let leagueIds = [];
-        console.log('🔍 Search params for league selection:', {
             hasLeagues: !!(searchParams.leagues && searchParams.leagues.length > 0),
             leagues: searchParams.leagues,
             hasLocation: !!searchParams.location,
             location: searchParams.location
         });
-        
         if (searchParams.leagues && searchParams.leagues.length > 0) {
             // Check if the specified leagues match the location
             const country = searchParams.location?.country?.toLowerCase();
             const city = searchParams.location?.city?.toLowerCase();
-            
             // If we have a location, validate that the leagues match
             if (searchParams.location) {
                 const isLocationMatch = (
@@ -2443,13 +2135,9 @@ router.post('/natural-language', async (req, res) => {
                     (country === 'germany' && searchParams.leagues.includes('78')) ||
                     (country === 'italy' && searchParams.leagues.includes('135'))
                 );
-                
                 if (isLocationMatch) {
                     leagueIds = searchParams.leagues;
-                    console.log('🏆 Using location-matched leagues:', leagueIds);
                 } else {
-                    console.log('🚫 Leagues do not match location, will use location-based selection');
-                    
                     // Generate helpful error message for league/location mismatch
                     const requestedLeague = searchParams.leagues.map(id => {
                         const leagueMap = {
@@ -2461,12 +2149,9 @@ router.post('/natural-language', async (req, res) => {
                         };
                         return leagueMap[id] || `League ${id}`;
                     }).join(', ');
-                    
                     const requestedLocation = `${searchParams.location.city}, ${searchParams.location.country}`;
-                    
                     // Determine suggested alternatives based on location and league
                     let suggestedAlternatives = [];
-                    
                     // Map league IDs to their correct countries
                     const leagueCountries = {
                         '39': 'United Kingdom', '40': 'United Kingdom', // Premier League, Championship
@@ -2475,9 +2160,7 @@ router.post('/natural-language', async (req, res) => {
                         '135': 'Italy', '136': 'Italy', // Serie A, Serie B
                         '140': 'Spain', '141': 'Spain' // La Liga, Segunda División
                     };
-                    
                     const requestedLeagueCountry = leagueCountries[searchParams.leagues[0]];
-                    
                     if (country === 'france') {
                         // User is in France, suggest French leagues or move to the league's country
                         suggestedAlternatives = [
@@ -2515,14 +2198,12 @@ router.post('/natural-language', async (req, res) => {
                             { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
                         ];
                     }
-                    
                     const helpfulMessage = await generateResponse({
                         type: 'error',
                         requestedLeague,
                         requestedLocation,
                         suggestedAlternatives
                     });
-                    
                     // Return early with helpful message instead of proceeding with search
                     return res.json({
                         success: false,
@@ -2550,16 +2231,13 @@ router.post('/natural-language', async (req, res) => {
                 }
             } else {
                 leagueIds = searchParams.leagues;
-                console.log('🏆 Using explicitly specified leagues (no location):', leagueIds);
             }
         }
-        
         if (leagueIds.length === 0) {
             // First, try to infer leagues from teams
             const teamBasedLeagues = inferLeagueFromTeams(parsed.teams);
             if (teamBasedLeagues.length > 0) {
                 leagueIds = teamBasedLeagues;
-                console.log('🏆 Using team-based league inference:', leagueIds);
             } else if (searchParams.location) {
                 // Fall back to location-based selection if no teams detected
                 const country = searchParams.location.country?.toLowerCase();
@@ -2583,17 +2261,13 @@ router.post('/natural-language', async (req, res) => {
                     // Default to major European leagues plus international competitions
                     leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
                 }
-                console.log('🗺️ Using location-based league selection:', leagueIds);
             } else {
                 // Default to major European leagues plus international competitions
                 leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
-                console.log('🌍 Using default league selection:', leagueIds);
             }
         }
-        
         // For broad queries, still respect location-based league selection
         // This ensures Paris searches show French leagues, London shows English leagues, etc.
-        
         // Add geographic distance filtering for natural language search
         // Use default 50-mile radius around the specified city
         let bounds = null;
@@ -2601,42 +2275,31 @@ router.post('/natural-language', async (req, res) => {
             const [lng, lat] = searchParams.location.coordinates;
             const radiusMiles = 50; // Default radius
             const radiusKm = radiusMiles * 1.60934; // Convert to km
-            
             // Calculate bounds for the radius
             const latDelta = radiusKm / 111.32; // Approximate km per degree latitude
             const lngDelta = radiusKm / (111.32 * Math.cos(lat * Math.PI / 180)); // Adjust for longitude
-            
             bounds = {
                 northeast: { lat: lat + latDelta, lng: lng + lngDelta },
                 southwest: { lat: lat - latDelta, lng: lng - lngDelta }
             };
-            
-            console.log(`🗺️ Created bounds for ${searchParams.location.city}: NE[${bounds.northeast.lat.toFixed(6)}, ${bounds.northeast.lng.toFixed(6)}] SW[${bounds.southwest.lat.toFixed(6)}, ${bounds.southwest.lng.toFixed(6)}]`);
         }
-        
-        console.log('🔍 Natural language calling existing search with params:', {
             competitions: leagueIds.join(','),
             dateFrom: searchParams.startDate,
             dateTo: searchParams.endDate,
             season: season
         });
-        
         // Extract teams, leagues, and matchTypes from parsed query for filtering
         const teams = parsed.teams?.any?.map(team => team.name) || [];
         const leagues = parsed.leagues?.map(league => league.name) || [];
         const matchTypes = parsed.matchTypes || [];
-        
-        console.log('🔍 Extracted filtering parameters:', {
             teams: teams,
             leagues: leagues,
             matchTypes: matchTypes,
             parsedTeams: parsed.teams
         });
-
         // Call the search logic directly instead of making HTTP request
         let matches = [];
         try {
-
             matches = await performSearch({
                 competitions: leagueIds,
                 dateFrom: searchParams.startDate,
@@ -2647,21 +2310,17 @@ router.post('/natural-language', async (req, res) => {
                 leagues: leagues, // NEW: League filtering
                 matchTypes: matchTypes // NEW: Match type filtering
             });
-            console.log('🔍 Direct search result:', {
                 matches: matches.length
             });
         } catch (error) {
             console.error('🔍 Search Error:', error.message);
             matches = [];
         }
-
         // Format response for all successful queries (OpenAI handles the intelligence)
         const locationName = parsed.location ? `${parsed.location.city}, ${parsed.location.country}` : 'the specified location';
         const dateRange = parsed.dateRange ? `${parsed.dateRange.start} to ${parsed.dateRange.end}` : 'the specified dates';
-        
         // Build response structure - handle multi-query vs single query
         let response;
-        
         if (parsed.isMultiQuery) {
             // Multi-query response structure
             // Note: Full multi-query execution will be implemented in Phase 3
@@ -2726,10 +2385,7 @@ router.post('/natural-language', async (req, res) => {
                 count: matches.length
             };
         }
-
-
         res.json(response);
-
     } catch (error) {
         console.error('Natural language search error:', error);
         res.status(500).json({ 
@@ -2738,22 +2394,15 @@ router.post('/natural-language', async (req, res) => {
         });
     }
 });
-
 router.post('/parse', async (req, res) => {
     try {
         const { query } = req.body;
-
-
         // Use simple parser directly instead of trying OpenAI first
-
         const parsedResponse = parseQuery(query);
-
-
         res.json(parsedResponse);
     } catch (error) {
         console.error('Error parsing query:', error);
         res.status(500).json({ error: 'Error parsing query' });
     }
 });
-
 module.exports = router; 

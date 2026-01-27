@@ -2,9 +2,7 @@
  * Trip Utility Functions
  * Handles determining if trips are completed based on their matches
  */
-
 const { isMatchCompleted } = require('./matchStatus');
-
 /**
  * Check if a trip is completed (all matches are finished)
  * A trip is considered completed only if:
@@ -19,7 +17,6 @@ function isTripCompleted(trip) {
     if (!trip || !trip.matches || trip.matches.length === 0) {
         return false; // Empty trips are not considered completed
     }
-    
     // Check if all matches are completed
     // Note: Matches without date/status cannot be completed (as mentioned)
     return trip.matches.every(match => {
@@ -27,7 +24,6 @@ function isTripCompleted(trip) {
         if (!match.date) {
             return false; // Match without date = not completed, so trip is not completed
         }
-        
         // Convert trip match format to format expected by isMatchCompleted
         // Trip matches have: date, finalScore { home, away, status }
         const matchObj = {
@@ -42,11 +38,9 @@ function isTripCompleted(trip) {
             },
             date: match.date instanceof Date ? match.date.toISOString() : match.date
         };
-        
         return isMatchCompleted(matchObj);
     });
 }
-
 /**
  * Check if a trip is active (has at least one uncompleted match)
  * @param {Object} trip - Trip object with matches array
@@ -56,13 +50,10 @@ function isTripActive(trip) {
     if (!trip || !trip.matches || trip.matches.length === 0) {
         return false; // Empty trips are not considered active
     }
-    
     // Trip is active if it has matches and at least one is not completed
     return !isTripCompleted(trip);
 }
-
 module.exports = {
     isTripCompleted,
     isTripActive
 };
-
