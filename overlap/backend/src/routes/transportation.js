@@ -128,17 +128,18 @@ router.get('/directions/transit', async (req, res) => {
                     transitModes.add(step.transit_details.line.vehicle.type.toLowerCase());
                 }
             });
+            res.json({
                 distance: route.distance.text,
                 duration: route.duration.text,
                 steps: route.steps.length,
                 transitModes: Array.from(transitModes)
             });
         } else {
+            res.json({
                 status: response.data.status,
                 error: response.data.error_message
             });
         }
-        res.json(response.data);
     } catch (error) {
         console.error('Error fetching transit directions:', {
             error: error.message,
