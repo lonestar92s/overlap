@@ -32,6 +32,7 @@ async function analyzeVenueLookup() {
             // Test venue service lookup
             const venueResult = await venueService.getVenueByName(testCase.name, testCase.city);
             if (venueResult) {
+                console.log({
                     name: venueResult.name,
                     city: venueResult.city,
                     coordinates: venueResult.coordinates

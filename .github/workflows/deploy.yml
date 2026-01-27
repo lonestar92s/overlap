@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Check syntax
+        run: npm run check:syntax
+      
+      - name: Run tests
+        run: npm test -- --passWithNoTests
+      
       - name: Build (if needed)
         run: |
           if [ -f "package.json" ] && grep -q '"build"' package.json; then

@@ -216,6 +216,7 @@ router.get('/airports/nearest', async (req, res) => {
                 message: 'latitude and longitude are required'
             });
         }
+        console.log({
             latitude,
             longitude,
             radius,
@@ -229,6 +230,7 @@ router.get('/airports/nearest', async (req, res) => {
         );
         // Log found airports
         if (airports.length > 0) {
+            console.log('Found airports:', airports.map(airport => ({
                 code: airport.code,
                 name: airport.name,
                 distance: airport.distance
@@ -276,6 +278,7 @@ router.get('/flights/search', async (req, res) => {
                 message: 'Origin and destination airports must be different'
             });
         }
+        console.log({
             origin,
             destination,
             departureDate,
@@ -332,6 +335,7 @@ router.get('/flights/status', async (req, res) => {
                 message: 'Date must be in YYYY-MM-DD format'
             });
         }
+        console.log({
             flightNumber,
             date
         });
@@ -372,6 +376,7 @@ router.get('/flights/by-number', async (req, res) => {
                 message: 'Date must be in YYYY-MM-DD format'
             });
         }
+        console.log({
             flightNumber,
             origin,
             destination,
@@ -407,6 +412,7 @@ router.get('/flights/by-number', async (req, res) => {
         // BA0297 and BA297 should match
         const normalizedNumber = parseInt(number, 10).toString();
         const normalizedFlightNumber = `${airlineCode}${normalizedNumber}`;
+        console.log({
             original: flightNumberUpper,
             airlineCode,
             number,
@@ -481,6 +487,7 @@ router.get('/flights/by-number', async (req, res) => {
                 if (matchingFlight) break;
             }
         }
+        console.log({
             searchedFor: flightNumberUpper,
             normalizedSearch: normalizedFlightNumber,
             foundFlightNumbers: [...new Set(foundFlightNumbers)].slice(0, 10), // Show first 10 unique

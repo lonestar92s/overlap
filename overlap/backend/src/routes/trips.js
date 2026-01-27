@@ -289,6 +289,7 @@ router.delete('/:id', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
+        console.log({
             tripId: String(trip._id || trip.id),
             tripName: trip.name,
             tripsBeforeDelete: user.trips.length
@@ -306,6 +307,7 @@ router.delete('/:id', auth, async (req, res) => {
             console.warn('Delete trip: Failed to clear recommendation cache:', cacheError.message);
             // Don't fail the deletion if cache clearing fails
         }
+        console.log({
             tripId: deletedTripId,
             tripsAfterDelete: user.trips.length
         });
@@ -553,10 +555,12 @@ router.delete('/:id/flights/:flightId', auth, async (req, res) => {
                 message: 'Flight not found'
             });
         }
+        console.log({
             flightId: String(flight._id || flight.id),
             flightNumber: flight.flightNumber,
             tripFlightsCount: trip.flights.length
         });
+        console.log({
             flightId: req.params.flightId,
             flightFound: !!flight,
             flightIdType: typeof flight?._id,
@@ -718,6 +722,7 @@ router.post('/:id/fetch-scores', auth, async (req, res) => {
                     const fixture = response.data.response[0];
                     const score = fixture.score;
                     const goals = fixture.goals;
+                    console.log({
                         status: fixture.fixture.status,
                         goals: goals,
                         score: score
@@ -1232,6 +1237,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     transitResponse.value.data.status === 'OK' && 
                     transitResponse.value.data.routes && 
                     transitResponse.value.data.routes.length > 0) {
+                    console.log({
                         status: transitResponse.value.data.status,
                         routesCount: transitResponse.value.data.routes.length
                     });
@@ -1265,6 +1271,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                             // Default to 'train' if transit route but no specific type
                             transitTypes.add('train');
                         }
+                        console.log({
                             duration: leg.duration.text,
                             distance: leg.distance.text,
                             vehicleTypesFound: vehicleTypesFound.length > 0 ? vehicleTypesFound : ['none'],
@@ -1289,6 +1296,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                                         transitTypes: Array.from(transitTypes) // Store all types for reference
                                     };
                                     transitOptionsMap.set(transitType, transitOption);
+                                    console.log({
                                         type: transitType,
                                         duration: `${durationMinutes} min`,
                                         distance: `${distanceMiles} mi`,
@@ -1303,6 +1311,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                     const transitOptions = Array.from(transitOptionsMap.values());
                     transitOptions.sort((a, b) => a.duration - b.duration);
                     result.transit = transitOptions.slice(0, 3);
+                    console.log({
                         totalFound: transitOptions.length,
                         returning: result.transit.length,
                         options: result.transit.map(opt => ({
@@ -1314,6 +1323,7 @@ router.get('/:id/travel-times', auth, async (req, res) => {
                 } else {
                     // No transit route available
                     result.transit = [];
+                    console.log({
                         responseStatus: transitResponse.status,
                         dataStatus: transitResponse.status === 'fulfilled' ? transitResponse.value.data.status : 'N/A',
                         errorMessage: transitResponse.status === 'rejected' ? transitResponse.reason?.message : null

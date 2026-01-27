@@ -208,6 +208,7 @@ async function transformApiSportsData(apiResponse, competitionId, bounds = null,
     const fixtures = apiResponse.response || [];
     const leagueName = await leagueService.getLeagueNameById(competitionId);
     if (fixtures.length > 0) {
+        console.log({
             fixture: fixtures[0].fixture,
             teams: fixtures[0].teams,
             league: fixtures[0].league,
@@ -1005,6 +1006,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         });
         // Special logging for World Cup API response
         if (competitionId === '1' || competitionId === 1) {
+            console.log({
                 season: season,
                 totalResults: apiResponse.data.results || 0,
                 hasResponse: !!apiResponse.data.response,
@@ -1020,6 +1022,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         }
         // Special logging for Champions League API response
         if (competitionId === '2' || competitionId === 2) {
+            console.log({
                 totalResults: apiResponse.data.results || 0,
                 hasResponse: !!apiResponse.data.response,
                 responseLength: apiResponse.data.response?.length || 0,
@@ -1035,6 +1038,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds, searchSessionId);
         // Special logging for World Cup after transformation
         if (competitionId === '1' || competitionId === 1) {
+            console.log({
                 totalMatches: transformedData.response?.length || 0,
                 hasMatches: !!transformedData.response && transformedData.response.length > 0,
                 firstMatch: transformedData.response?.[0] ? {
@@ -1048,6 +1052,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         }
         // Special logging for Champions League after transformation
         if (competitionId === '2' || competitionId === 2) {
+            console.log({
                 totalMatches: transformedData.response?.length || 0,
                 hasMatches: !!transformedData.response && transformedData.response.length > 0,
                 firstMatch: transformedData.response?.[0] ? {
@@ -1334,6 +1339,7 @@ router.get('/search', async (req, res) => {
                         const fixtureCount = response.data?.response?.length || 0;
                         // Extra logging for FA Cup to compare with Premier League
                         if (isFACup) {
+                            console.log({
                                 results: response.data?.results || 0,
                                 responseLength: fixtureCount,
                                 params: params,
@@ -1352,6 +1358,7 @@ router.get('/search', async (req, res) => {
                         }
                         // Also log Premier League for comparison
                         if (leagueId === 39) {
+                            console.log({
                                 results: response.data?.results || 0,
                                 responseLength: fixtureCount,
                                 params: params
@@ -1835,6 +1842,7 @@ router.get('/search', async (req, res) => {
                 const venue = match.fixture?.venue;
                 // DEBUG: Log fixture venue structure to see what's included
                 if (transformedMatches.length === 0) { // Only log first match to avoid spam
+                    console.log({
                         hasVenue: !!venue,
                         venueId: venue?.id,
                         venueName: venue?.name,
@@ -1843,7 +1851,7 @@ router.get('/search', async (req, res) => {
                         venueImage: venue?.image,
                         venueKeys: venue ? Object.keys(venue) : [],
                         fullVenue: venue
-                    }, null, 2));
+                    });
                 }
                 let venueInfo = null;
                 if (venue?.id) {
@@ -2940,6 +2948,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             }
             // Final sort by score to maintain ranking
             sortedMatches.sort((a, b) => b.recommendationScore - a.recommendationScore);
+            console.log(`League distribution: ${targetLeagues.map(leagueId => {
                 const count = sortedMatches.filter(m => (m.league?.id?.toString() || 'unknown') === leagueId).length;
                 return `${leagueId}:${count}`;
             }).join(', ')}`);
@@ -2960,6 +2969,7 @@ router.get('/recommended', authenticateToken, async (req, res) => {
                     const hasLeagueName = match.league?.name;
                     const hasVenueName = match.fixture?.venue?.name || match.venue?.name;
                     if (!hasTeamNames || !hasLeagueName || !hasVenueName) {
+                        console.log({
                             hasTeamNames,
                             hasLeagueName,
                             hasVenueName,
@@ -3427,6 +3437,7 @@ router.get('/by-team/:id', async (req, res) => {
                 }
             })
         ]);
+        console.log({
             upcoming: {
                 results: upcomingResponse.data.results,
                 matches: upcomingResponse.data.response?.length

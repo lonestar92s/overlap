@@ -10,6 +10,8 @@
     "test:watch": "NODE_ENV=test jest --watch",
     "test:unit": "NODE_ENV=test jest --testPathPattern=tests/unit",
     "test:integration": "NODE_ENV=test jest --testPathPattern=tests/integration",
+    "check:syntax": "node scripts/check-syntax.js",
+    "prestart": "npm run check:syntax",
     "prepare": "husky install || true"
   },
   "dependencies": {

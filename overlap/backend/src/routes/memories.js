@@ -38,6 +38,7 @@ router.get('/', auth, async (req, res) => {
     // Debug: Log photo data being sent to frontend
     sortedMatches.forEach((memory, index) => {
       if (memory.photos && memory.photos.length > 0) {
+        console.log({
           memoryId: memory._id || memory.matchId,
           photoCount: memory.photos.length,
           firstPhoto: memory.photos[0],
@@ -162,6 +163,7 @@ router.post('/', auth, upload.array('photos', 10), handleUploadError, async (req
             tags: ['memory', 'football', 'match']
           });
           if (uploadResult.success) {
+            console.log({
               publicId: uploadResult.metadata.publicId,
               url: uploadResult.metadata.url,
               coordinates: uploadResult.metadata.coordinates,
@@ -188,6 +190,7 @@ router.post('/', auth, upload.array('photos', 10), handleUploadError, async (req
             } else {
               console.error('❌ Photo metadata incomplete, skipping:', uploadResult.metadata);
             }
+            console.log({
               publicId: uploadResult.metadata.publicId,
               url: uploadResult.metadata.url,
               thumbnailUrl: cloudinaryService.generateThumbnailUrl(uploadResult.metadata.publicId)

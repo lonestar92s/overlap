@@ -195,6 +195,7 @@ class AmadeusProvider {
     const totalMinutes = hours * 60 + minutes + Math.round(seconds / 60);
     // Debug logging
     if (process.env.NODE_ENV !== 'production') {
+      console.log({
         input: duration,
         hours,
         minutes,
@@ -266,6 +267,7 @@ class AmadeusProvider {
         flightNumber: flightNumber,
         scheduledDepartureDate
       };
+      console.log({
         url: `${baseUrl}/v2/schedule/flights`,
         params
       });
@@ -295,6 +297,7 @@ class AmadeusProvider {
       // Log full response for debugging
       const responseData = response.data;
       const responseStr = JSON.stringify(responseData, null, 2);
+      console.log({
         status: response.status,
         hasData: !!responseData.data,
         dataType: typeof responseData.data,

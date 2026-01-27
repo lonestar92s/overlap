@@ -250,6 +250,7 @@ class RecommendationService {
                 return [];
             }
             // Log scoring info for debugging
+            console.log(
                 positiveMatches.slice(0, 5).map(m => ({ 
                     matchId: m.match.id, 
                     score: m.score,

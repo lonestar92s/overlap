@@ -1224,6 +1224,7 @@ const ConversationStateManager = {
         if (!context) {
             return result;
         }
+        console.log({
             location: context.location,
             dateRange: context.dateRange,
             leagues: context.leagues,
@@ -2117,6 +2118,7 @@ router.post('/natural-language', async (req, res) => {
         }
         // Determine which leagues to search based on location and query type
         let leagueIds = [];
+        console.log({
             hasLeagues: !!(searchParams.leagues && searchParams.leagues.length > 0),
             leagues: searchParams.leagues,
             hasLocation: !!searchParams.location,
@@ -2283,6 +2285,7 @@ router.post('/natural-language', async (req, res) => {
                 southwest: { lat: lat - latDelta, lng: lng - lngDelta }
             };
         }
+        console.log({
             competitions: leagueIds.join(','),
             dateFrom: searchParams.startDate,
             dateTo: searchParams.endDate,
@@ -2292,6 +2295,7 @@ router.post('/natural-language', async (req, res) => {
         const teams = parsed.teams?.any?.map(team => team.name) || [];
         const leagues = parsed.leagues?.map(league => league.name) || [];
         const matchTypes = parsed.matchTypes || [];
+        console.log({
             teams: teams,
             leagues: leagues,
             matchTypes: matchTypes,
@@ -2310,6 +2314,7 @@ router.post('/natural-language', async (req, res) => {
                 leagues: leagues, // NEW: League filtering
                 matchTypes: matchTypes // NEW: Match type filtering
             });
+            console.log({
                 matches: matches.length
             });
         } catch (error) {

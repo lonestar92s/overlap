@@ -60,10 +60,12 @@ class CloudinaryService {
         } : null,
         dateTaken: result.exif?.DateTimeOriginal ? new Date(result.exif.DateTimeOriginal) : null
       };
+      console.log({
         hasGPS: !!(result.exif?.GPSLatitude && result.exif?.GPSLongitude),
         hasDateTime: !!result.exif?.DateTimeOriginal,
         exifKeys: result.exif ? Object.keys(result.exif) : 'No EXIF data'
       });
+      console.log({
         public_id: result.public_id,
         width: result.width,
         height: result.height,
