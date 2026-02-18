@@ -24,6 +24,9 @@ const adminRouter = require('./routes/admin');
 const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
 const app = express();
+// Trust proxy - required when running behind Railway/Heroku/etc
+// This allows express-rate-limit to correctly identify client IPs from X-Forwarded-For header
+app.set('trust proxy', true);
 // Security headers middleware (must be before other middleware)
 app.use(helmet({
     contentSecurityPolicy: {

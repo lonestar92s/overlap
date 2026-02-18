@@ -48,12 +48,14 @@ router.get('/', auth, async (req, res) => {
         });
       }
     });
-    // Calculate statistics
+    // Calculate statistics and visited stadiums (unique stadiums from memories with visit counts)
     const stats = calculateMemoryStats(user.attendedMatches);
+    const visitedStadiums = deriveVisitedStadiumsFromMemories(user.attendedMatches);
     res.json({
       success: true,
       data: sortedMatches,
-      stats
+      stats,
+      visitedStadiums
     });
   } catch (error) {
     console.error('Error fetching memories:', error);
@@ -400,6 +402,38 @@ router.delete('/:id', auth, async (req, res) => {
     });
   }
 });
+/**
+ * Derive unique visited stadiums from memories (no duplicates).
+ * Each stadium appears once with visitCount = number of memories at that venue.
+ * Stadium identity: venue name + city + country (normalized).
+ */
+function deriveVisitedStadiumsFromMemories(memories) {
+  const key = (m) => {
+    const name = (m.venue?.name || '').trim().toLowerCase();
+    const city = (m.venue?.city || '').trim().toLowerCase();
+    const country = (m.venue?.country || '').trim().toLowerCase();
+    return [name, city, country].join('|');
+  };
+  const byKey = new Map();
+  memories.forEach((memory) => {
+    if (!memory.venue?.name) return;
+    const k = key(memory);
+    if (!byKey.has(k)) {
+      byKey.set(k, {
+        venueName: memory.venue.name.trim(),
+        city: (memory.venue.city || '').trim(),
+        country: (memory.venue.country || '').trim(),
+        coordinates: memory.venue.coordinates && memory.venue.coordinates.length >= 2
+          ? memory.venue.coordinates
+          : null,
+        visitCount: 0
+      });
+    }
+    byKey.get(k).visitCount += 1;
+  });
+  return Array.from(byKey.values());
+}
+
 /**
  * Helper function to calculate memory statistics
  */

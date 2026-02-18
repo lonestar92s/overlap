@@ -30,6 +30,7 @@ const MemoriesScreen = () => {
   const { user } = useAuth();
   const [memories, setMemories] = useState([]);
   const [stats, setStats] = useState(null);
+  const [visitedStadiums, setVisitedStadiums] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState(null);
@@ -37,21 +38,16 @@ const MemoriesScreen = () => {
   const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
   const [selectedMemoryForViewer, setSelectedMemoryForViewer] = useState(null);
 
-  // Fetch memories and stats
+  // Fetch memories, stats, and visited stadiums (one call returns all)
   const fetchMemories = useCallback(async () => {
     try {
       setLoading(true);
-      const [memoriesResponse, statsResponse] = await Promise.all([
-        ApiService.getMemories(),
-        ApiService.getMemoryStats()
-      ]);
+      const memoriesResponse = await ApiService.getMemories();
 
       if (memoriesResponse.success) {
         setMemories(memoriesResponse.data || []);
-      }
-
-      if (statsResponse.success) {
-        setStats(statsResponse.data);
+        setStats(memoriesResponse.stats || null);
+        setVisitedStadiums(memoriesResponse.visitedStadiums || []);
       }
     } catch (error) {
       console.error('Error fetching memories:', error);
@@ -110,12 +106,12 @@ const MemoriesScreen = () => {
               
               if (response.success) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                // Remove from local state
-                setMemories(prev => prev.filter(m => (m._id || m.matchId) !== (memory._id || memory.matchId)));
-                // Refresh stats
-                const statsResponse = await ApiService.getMemoryStats();
-                if (statsResponse.success) {
-                  setStats(statsResponse.data);
+                // Refresh memories, stats, and visited stadiums
+                const refreshResponse = await ApiService.getMemories();
+                if (refreshResponse.success) {
+                  setMemories(refreshResponse.data || []);
+                  setStats(refreshResponse.stats || null);
+                  setVisitedStadiums(refreshResponse.visitedStadiums || []);
                 }
               }
             } catch (error) {
@@ -141,12 +137,12 @@ const MemoriesScreen = () => {
       
       if (response.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // Remove from local state
-        setMemories(prev => prev.filter(m => (m._id || m.matchId) !== (selectedMemoryForViewer._id || selectedMemoryForViewer.matchId)));
-        // Refresh stats
-        const statsResponse = await ApiService.getMemoryStats();
-        if (statsResponse.success) {
-          setStats(statsResponse.data);
+        // Refresh memories, stats, and visited stadiums
+        const refreshResponse = await ApiService.getMemories();
+        if (refreshResponse.success) {
+          setMemories(refreshResponse.data || []);
+          setStats(refreshResponse.stats || null);
+          setVisitedStadiums(refreshResponse.visitedStadiums || []);
         }
         // Close viewer
         setPhotoViewerVisible(false);
@@ -374,7 +370,7 @@ const MemoriesScreen = () => {
   const renderTabs = useCallback(() => {
     const tabs = [
       { id: 'memories', label: 'Memories' },
-      { id: 'savedStadiums', label: 'Saved Stadiums' },
+      { id: 'visitedStadiums', label: 'Visited Stadiums' },
       { id: 'previousMatches', label: 'Previous Matches' },
     ];
 
@@ -486,15 +482,44 @@ const MemoriesScreen = () => {
           </>
         )}
 
-        {/* Saved Stadiums Tab Content */}
-        {activeTab === 'savedStadiums' && (
-          <View style={styles.emptyState}>
-            <MaterialIcons name="stadium" size={80} color={colors.text.light} />
-            <Text style={styles.emptyTitle}>No Saved Stadiums</Text>
-            <Text style={styles.emptySubtitle}>
-              Save stadiums to see them here
-            </Text>
-          </View>
+        {/* Visited Stadiums Tab Content (derived from memories, no duplicates) */}
+        {activeTab === 'visitedStadiums' && (
+          visitedStadiums.length > 0 ? (
+            <View style={styles.visitedStadiumsList}>
+              {visitedStadiums.map((stadium, index) => (
+                <TouchableOpacity
+                  key={`${stadium.venueName}-${stadium.city}-${index}`}
+                  style={styles.visitedStadiumItem}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    Alert.alert(
+                      stadium.venueName,
+                      `${stadium.visitCount} visit${stadium.visitCount !== 1 ? 's' : ''}`
+                    );
+                  }}
+                  accessibilityLabel={`${stadium.venueName}, ${stadium.visitCount} visits`}
+                  accessibilityRole="button"
+                >
+                  <MaterialIcons name="stadium" size={24} color={colors.primary} style={styles.visitedStadiumIcon} />
+                  <View style={styles.visitedStadiumTextWrap}>
+                    <Text style={styles.visitedStadiumName} numberOfLines={1}>{stadium.venueName}</Text>
+                    <Text style={styles.visitedStadiumLocation} numberOfLines={1}>
+                      {[stadium.city, stadium.country].filter(Boolean).join(', ') || '—'}
+                    </Text>
+                  </View>
+                  <Text style={styles.visitedStadiumCount}>{stadium.visitCount}×</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <MaterialIcons name="stadium" size={80} color={colors.text.light} />
+              <Text style={styles.emptyTitle}>No Visited Stadiums</Text>
+              <Text style={styles.emptySubtitle}>
+                Stadiums you have memories at will appear here
+              </Text>
+            </View>
+          )
         )}
 
         {/* Previous Matches Tab Content */}
@@ -717,6 +742,40 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     ...typography.body,
     color: colors.text.secondary,
+  },
+  visitedStadiumsList: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  visitedStadiumItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  visitedStadiumIcon: {
+    marginRight: spacing.md,
+  },
+  visitedStadiumTextWrap: {
+    flex: 1,
+  },
+  visitedStadiumName: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  visitedStadiumLocation: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+  },
+  visitedStadiumCount: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });
 
