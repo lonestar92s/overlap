@@ -418,7 +418,7 @@ const AddMemoryScreen = () => {
                     onDayPress={onDayPress}
                     markingType={'period'}
                     markedDates={selectedDates}
-                    minDate={getTodayLocalString()}
+                    maxDate={getTodayLocalString()}
                     theme={{
                       selectedDayBackgroundColor: '#1976d2',
                       selectedDayTextColor: 'white',
