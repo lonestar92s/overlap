@@ -1,130 +1,167 @@
 # Flight Match Finder Mobile App
 
-A React Native mobile app for searching football matches by date range and team.
+A React Native (Expo) mobile app for discovering football matches, planning trips, and managing match-day experiences.
 
 ## Features
 
-- **Search Matches**: Find matches by specifying home/away teams and date range
-- **Match Results**: View detailed match information including:
-  - Team names and logos
-  - Match date and time
-  - Match status (Live, Full Time, etc.)
-  - Venue information
-  - League information
-  - Scores (when available)
+### Search & Discovery
+- **Match Search** — Search by team, date range, location, league, or map bounds
+- **Map View** — Map-based home screen with location-based matches; search results on map
+- **Popular Matches** — Discover popular matches by destination
+- **Natural Language Search** — Chat-style search (feature-flagged)
+- **Unified Search** — Search leagues, teams, and venues (feature-flagged)
+
+### Trips & Planning
+- **Trip Management** — Create trips, add matches, edit itinerary
+- **Trip Map** — View trip matches and home bases on map
+- **Flight Search** — Search flights, add to trips (Amadeus API)
+- **Home Bases** — Add accommodation locations; travel times to venues
+- **Match Planning** — Track tickets, accommodation, notes per match
+
+### Memories & Attendance
+- **Memories** — Save photos and notes for attended matches
+- **Attendance** — Mark matches as attended; view history
+- **Memories Map** — View memories on map
+
+### User & Profile
+- **Authentication** — Email/password, WorkOS SSO
+- **Preferences** — Favorite teams, leagues, venues; saved matches
+- **Profile** — Avatar, timezone, feedback
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
-- Expo CLI (`npm install -g expo-cli`)
-- Backend server running on `http://localhost:3001`
+- Node.js (v18 or higher recommended)
+- npm or yarn
+- Expo CLI (installed via `npx expo`)
+- Backend server (see [Backend](#backend) below)
 
 ## Setup
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+### 1. Install dependencies
 
-2. **Set up LocationIQ API Key (for location search)**:
-   - Get a free API key from [LocationIQ](https://locationiq.com/)
-     - Sign up at https://locationiq.com/
-     - Navigate to your dashboard to get your API key
-   - Create a `.env` file in the `mobile-app` directory:
-     ```bash
-     cp .env.example .env
-     ```
-   - Edit `.env` and add your LocationIQ API key:
-     ```
-     EXPO_PUBLIC_LOCATIONIQ_API_KEY=pk.your_actual_api_key_here
-     ```
-   - **Note**: Without this key, the app will use mock location data (limited to 5 cities)
+```bash
+cd mobile-app
+npm install
+```
 
-3. **Start the backend server**:
-   Make sure your backend is running on port 3001. From the backend directory:
-   ```bash
-   cd ../backend
-   npm start
-   ```
+### 2. Environment variables
 
-4. **Start the mobile app**:
-   ```bash
-   npm start
-   ```
-   - **Important**: Restart the Expo development server after adding the API key to `.env` for changes to take effect.
+Create a `.env` file (copy from `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+**Required variables:**
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `EXPO_PUBLIC_API_URL` | Backend API URL | `https://your-api.railway.app/api` |
+| `EXPO_PUBLIC_LOCATIONIQ_API_KEY` | Location search (optional) | `pk.your_key` |
+
+**Optional (for full functionality):**
+
+| Variable | Description |
+|----------|-------------|
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox maps (required for map views) |
+| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps (if used) |
+
+### 3. Backend
+
+The app connects to the backend at `overlap/backend/`. Start it from the project root:
+
+```bash
+cd overlap/backend
+npm install
+npm run dev
+```
+
+For production, use the deployed Railway URL (see `ENV_SETUP.md`).
+
+### 4. Start the app
+
+```bash
+npm start
+```
+
+Restart Expo after changing `.env` for changes to take effect.
 
 ## Running the App
 
-### On iOS Simulator
+### iOS Simulator
 ```bash
 npm run ios
 ```
 
-### On Android Emulator
+### Android Emulator
 ```bash
 npm run android
 ```
 
-### On Web Browser
+### Web Browser
 ```bash
 npm run web
 ```
 
-### On Physical Device
-1. Install the Expo Go app on your device
-2. Scan the QR code shown in the terminal or browser
+### Physical Device (Expo Go)
+1. Install Expo Go on your device
+2. Scan the QR code from the terminal
+
+**Note:** For physical devices, set `EXPO_PUBLIC_API_URL` to your machine's IP (e.g. `http://192.168.1.100:3001/api`) if using a local backend, or use the production Railway URL.
 
 ## API Configuration
 
-The app connects to your backend API at `http://localhost:3001/api`. 
+The app uses `EXPO_PUBLIC_API_URL` from `.env`. In development, it falls back to `http://localhost:3001/api` if not set.
 
-**For testing on a physical device**, you'll need to update the API base URL in `services/api.js`:
+- **Production:** Use your deployed backend URL (e.g. Railway)
+- **Local + Simulator:** `http://localhost:3001/api`
+- **Local + Physical Device:** `http://YOUR_IP:3001/api`
 
-```javascript
-// Replace localhost with your computer's IP address
-const API_BASE_URL = 'http://YOUR_IP_ADDRESS:3001/api';
+See `ENV_SETUP.md` for detailed setup.
+
+## Project Structure
+
+```
+mobile-app/
+├── screens/          # Screen components
+├── components/       # Reusable UI components
+├── contexts/         # Auth, Itinerary, Filter contexts
+├── services/         # API & natural language services
+├── hooks/            # Custom hooks (recommendations, etc.)
+├── utils/            # Helpers, design tokens
+└── styles/           # Design system
 ```
 
-To find your IP address:
-- **macOS/Linux**: `ifconfig | grep inet`
-- **Windows**: `ipconfig`
+## Key API Endpoints
 
-## Usage
-
-1. **Search for Matches**:
-   - Enter at least one team name (home or away)
-   - Select date range using the date pickers
-   - Tap "Search Matches"
-
-2. **View Results**:
-   - Browse through the list of matches
-   - See match details, teams, venues, and scores
-   - Use "Search Again" to modify your search
-
-## API Endpoints Used
-
-- `GET /api/matches/search` - Search matches by team and date range
-- `GET /api/matches/by-team` - Get matches for a specific team
-- `GET /api/teams` - Get available teams
-- `GET /api/leagues` - Get available leagues
+- `GET /api/matches/search` — Search matches
+- `GET /api/matches/popular` — Popular matches
+- `GET /api/trips` — User trips
+- `GET /api/recommendations/trips/:id/recommendations` — Trip recommendations
+- `GET /api/transportation/flights/search` — Flight search
+- `GET /api/transportation/airports/search` — Airport search
+- `GET /api/transportation/directions/*` — Driving, walking, transit
+- `GET /api/memories` — User memories
+- `GET /api/matches/attended` — Attended matches
 
 ## Troubleshooting
 
-### Connection Issues
-- Ensure backend is running on port 3001
-- Check that your device/emulator can reach the backend
-- For physical devices, use your computer's IP address instead of localhost
+### Connection issues
+- Ensure backend is running (default port 3001)
+- For physical devices, use your machine's IP instead of localhost
+- Check `EXPO_PUBLIC_API_URL` in `.env`
 
-### Build Issues
-- Clear Expo cache: `expo start -c`
-- Restart Metro bundler
-- Check that all dependencies are properly installed
+### Map not loading
+- Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in `.env`
+- Get a token at [Mapbox](https://account.mapbox.com/)
 
-## Next Steps
+### Build issues
+- Clear cache: `npx expo start -c`
+- Reinstall: `rm -rf node_modules && npm install`
 
-This MVP includes basic search functionality. Future enhancements could include:
-- Map integration for venue locations
-- User authentication
-- Save favorite matches
-- Push notifications for match updates
-- Offline support 
+## Additional Documentation
+
+- `ENV_SETUP.md` — Environment variable setup
+- `DEV_BUILD_INSTRUCTIONS.md` — Development builds (e.g. for WebView)
+- `MAPBOX_SETUP.md` — Mapbox configuration
+- `../REQUIREMENTS.md` — Full feature requirements
