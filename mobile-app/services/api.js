@@ -551,6 +551,51 @@ class ApiService {
     }
   }
 
+  /**
+   * Upload avatar image (JPEG/PNG/WebP, max 3 MB). Returns updated profile.
+   * @param {{ uri: string, type?: string, name?: string }} image - Asset from picker (uri required)
+   */
+  async uploadAvatar(image) {
+    const token = await getAuthToken();
+    const formData = new FormData();
+    formData.append('avatar', {
+      uri: image.uri,
+      type: image.type || 'image/jpeg',
+      name: image.name || 'avatar.jpg'
+    });
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/profile/avatar`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+        // Do not set Content-Type; FormData sets it with boundary
+      },
+      body: formData
+    }, 30000);
+    const data = await response.json();
+    if (response.status === 429) {
+      const err = new Error(data.error || 'Please wait before changing avatar again.');
+      err.status = 429;
+      err.retryAfterSeconds = data.retryAfterSeconds;
+      throw err;
+    }
+    if (!response.ok) throw new Error(data.error || 'Failed to update avatar');
+    return data.profile;
+  }
+
+  /**
+   * Remove profile avatar. Returns updated profile.
+   */
+  async removeAvatar() {
+    const token = await getAuthToken();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/profile/avatar`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    }, 15000);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to remove avatar');
+    return data.profile;
+  }
+
   // Favorite teams (accept teamApiId for convenience)
   async addFavoriteTeamByApiId(teamApiId) {
     const token = await getAuthToken();

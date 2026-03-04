@@ -105,6 +105,52 @@ class CloudinaryService {
     return decimal;
   }
   /**
+   * Upload avatar image to Cloudinary (folder: avatars, overwrite by user id)
+   * @param {Buffer} fileBuffer - File buffer
+   * @param {String} userId - User id for stable public_id (overwrite on re-upload)
+   * @returns {Promise<Object>} - { success, url?, avatarPublicId?, error? }
+   */
+  async uploadAvatar(fileBuffer, userId) {
+    try {
+      if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === 'demo') {
+        return {
+          success: false,
+          error: 'Cloudinary not configured.'
+        };
+      }
+      const publicId = `avatars/user_${userId}`;
+      const uploadOptions = {
+        resource_type: 'image',
+        folder: 'avatars',
+        public_id: publicId,
+        overwrite: true,
+        transformation: [
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' }
+        ]
+      };
+      const result = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          uploadOptions,
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        uploadStream.end(fileBuffer);
+      });
+      return {
+        success: true,
+        url: result.secure_url,
+        avatarPublicId: result.public_id
+      };
+    } catch (error) {
+      console.error('❌ Cloudinary avatar upload error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Delete a photo from Cloudinary
    * @param {String} publicId - Cloudinary public ID
    * @returns {Promise<Object>} - Deletion result

@@ -284,6 +284,17 @@ export const AuthProvider = ({ children }) => {
     return !!user && !!token;
   };
 
+  const refreshUser = async () => {
+    try {
+      const userData = await ApiService.getCurrentUser();
+      setUser(userData);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('refreshUser failed:', error?.message);
+      }
+    }
+  };
+
   const value = {
     user,
     token,
@@ -294,7 +305,8 @@ export const AuthProvider = ({ children }) => {
     loginWithWorkOS,
     logout,
     isAuthenticated,
-    setRememberMe
+    setRememberMe,
+    refreshUser
   };
 
   return (

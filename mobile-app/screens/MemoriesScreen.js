@@ -192,12 +192,7 @@ const MemoriesScreen = () => {
     navigation.navigate('MemoriesMap');
   }, [navigation]);
 
-  // Handle edit avatar
-  const handleEditAvatar = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Implement avatar editing functionality
-    Alert.alert('Edit Profile Picture', 'Avatar editing coming soon!');
-  }, []);
+  // Avatar on Memories is display-only; edit only on Account screen
 
 
   // Get display name
@@ -317,19 +312,15 @@ const MemoriesScreen = () => {
 
     return (
       <View style={styles.profileHeader}>
-        <TouchableOpacity 
-          style={styles.avatarContainer}
-          onPress={handleEditAvatar}
-          accessibilityLabel="Edit profile picture"
-          accessibilityRole="button"
-        >
+        <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <MaterialIcons name="account-circle" size={100} color={colors.text.light} />
+            {user?.profile?.avatar ? (
+              <Image source={{ uri: user.profile.avatar }} style={styles.avatarImage} resizeMode="cover" />
+            ) : (
+              <MaterialIcons name="account-circle" size={100} color={colors.text.light} />
+            )}
           </View>
-          <View style={styles.editIconContainer}>
-            <MaterialIcons name="edit" size={iconSizes.sm} color={colors.text.primary} />
-          </View>
-        </TouchableOpacity>
+        </View>
         <View style={styles.userInfo}>
           <Text style={styles.userName}>{displayName}</Text>
           <View style={{ height: spacing.xs }} />
@@ -337,7 +328,7 @@ const MemoriesScreen = () => {
         </View>
       </View>
     );
-  }, [getDisplayName, getUserSubtitle, handleEditAvatar]);
+  }, [getDisplayName, getUserSubtitle, user?.profile?.avatar]);
 
   // Render stats section
   const renderStats = useCallback(() => {
@@ -577,18 +568,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-  editIconContainer: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
+  avatarImage: {
+    width: 100,
+    height: 100,
   },
   userInfo: {
     alignItems: 'center',

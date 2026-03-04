@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, SafeAreaView, FlatList, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Button } from 'react-native-elements';
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,8 +9,9 @@ import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '.
 import { normalizeIds } from '../utils/idNormalizer';
 
 const AccountScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [prefs, setPrefs] = useState({ 
     favoriteLeagues: [], 
     favoriteTeams: [], 
@@ -267,9 +269,59 @@ const AccountScreen = ({ navigation }) => {
     );
   };
 
+  const handleChangePhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to your photos to change your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setUploadingAvatar(true);
+    try {
+      await ApiService.uploadAvatar({
+        uri: asset.uri,
+        type: asset.mimeType || 'image/jpeg',
+        name: asset.fileName || 'avatar.jpg'
+      });
+      await refreshUser();
+    } catch (err) {
+      const message = err.status === 429
+        ? (err.retryAfterSeconds ? `Please wait ${err.retryAfterSeconds} seconds before trying again.` : err.message)
+        : err.message || 'Failed to update avatar.';
+      Alert.alert('Error', message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setUploadingAvatar(true);
+    try {
+      await ApiService.removeAvatar();
+      await refreshUser();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to remove profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleEditAvatar = () => {
-    // TODO: Implement avatar editing
-    Alert.alert('Edit Avatar', 'Avatar editing coming soon');
+    const options = [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Change photo', onPress: handleChangePhoto },
+    ];
+    if (user?.profile?.avatar) {
+      options.splice(1, 0, { text: 'Remove photo', style: 'destructive', onPress: handleRemovePhoto });
+    }
+    Alert.alert('Profile picture', 'Choose an option', options);
   };
 
   const handleTripPress = (trip) => {
@@ -332,11 +384,21 @@ const AccountScreen = ({ navigation }) => {
         <TouchableOpacity 
           style={styles.avatarContainer}
           onPress={handleEditAvatar}
+          disabled={uploadingAvatar}
           accessibilityLabel="Edit profile picture"
           accessibilityRole="button"
         >
           <View style={styles.avatar}>
-            <MaterialIcons name="account-circle" size={80} color={colors.text.light} />
+            {user?.profile?.avatar ? (
+              <Image source={{ uri: user.profile.avatar }} style={styles.avatarImage} resizeMode="cover" />
+            ) : (
+              <MaterialIcons name="account-circle" size={80} color={colors.text.light} />
+            )}
+            {uploadingAvatar && (
+              <View style={styles.avatarLoadingOverlay}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            )}
           </View>
           <View style={styles.editIconContainer}>
             <MaterialIcons name="edit" size={iconSizes.sm} color={colors.text.primary} />
@@ -487,6 +549,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+  },
+  avatarLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   editIconContainer: {
     position: 'absolute',

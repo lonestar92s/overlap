@@ -67,11 +67,13 @@ const userSchema = new mongoose.Schema({
         firstName: String,
         lastName: String,
         avatar: String,
+        avatarPublicId: String, // Cloudinary public_id for avatar (for replace/delete)
         timezone: {
             type: String,
             default: 'UTC'
         }
     },
+    lastAvatarUploadAt: { type: Date, default: null },
     preferences: {
         defaultLocation: {
             city: String,

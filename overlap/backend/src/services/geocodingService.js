@@ -35,41 +35,61 @@ class GeocodingService {
         }
         this.cacheStats.misses++;
         this.cacheStats.totalRequests++;
-        try {
-            // Build search query
-            let query = venueName;
-            if (city) query += `, ${city}`;
-            if (country) query += `, ${country}`;
-            const response = await axios.get(`${this.baseURL}/search.php`, {
-                params: {
-                    key: this.apiKey,
-                    q: query,
-                    format: 'json',
-                    limit: 1,
-                    addressdetails: 1
-                },
-                timeout: 10000
-            });
-            if (response.data && response.data.length > 0) {
-                const result = response.data[0];
-                const coordinates = {
-                    lat: parseFloat(result.lat),
-                    lng: parseFloat(result.lon),
-                    display_name: result.display_name,
-                    confidence: result.importance || 0
-                };
-                // Cache the result
-                this.cache.set(cacheKey, coordinates);
-                return coordinates;
-            } else {
+        let query = venueName;
+        if (city) query += `, ${city}`;
+        if (country) query += `, ${country}`;
+        const maxRetries = 3;
+        let lastError;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                const response = await axios.get(`${this.baseURL}/search.php`, {
+                    params: {
+                        key: this.apiKey,
+                        q: query,
+                        format: 'json',
+                        limit: 1,
+                        addressdetails: 1
+                    },
+                    timeout: 10000,
+                    validateStatus: (status) => status < 500
+                });
+                if (response.status === 429) {
+                    const retryAfter = parseInt(response.headers['retry-after'], 10) || 60;
+                    if (attempt < maxRetries - 1) {
+                        console.warn(`⚠️ Rate limited (429), waiting ${retryAfter}s before retry ${attempt + 2}/${maxRetries}...`);
+                        await new Promise((r) => setTimeout(r, retryAfter * 1000));
+                        continue;
+                    }
+                    lastError = new Error(`Rate limited (429) after ${maxRetries} retries`);
+                    break;
+                }
+                if (response.data && response.data.length > 0) {
+                    const result = response.data[0];
+                    const coordinates = {
+                        lat: parseFloat(result.lat),
+                        lng: parseFloat(result.lon),
+                        display_name: result.display_name,
+                        confidence: result.importance || 0
+                    };
+                    this.cache.set(cacheKey, coordinates);
+                    return coordinates;
+                }
                 return null;
+            } catch (error) {
+                lastError = error;
+                const status = error.response?.status;
+                if (status === 429 && attempt < maxRetries - 1) {
+                    const retryAfter = parseInt(error.response?.headers?.['retry-after'], 10) || 60;
+                    console.warn(`⚠️ Rate limited (429), waiting ${retryAfter}s before retry ${attempt + 2}/${maxRetries}...`);
+                    await new Promise((r) => setTimeout(r, retryAfter * 1000));
+                } else {
+                    break;
+                }
             }
-        } catch (error) {
-            console.error(`❌ Geocoding failed for "${query}":`, error.message);
-            // Cache null result to avoid repeated failed attempts
-            this.cache.set(cacheKey, null);
-            return null;
         }
+        console.error(`❌ Geocoding failed for "${query}":`, lastError?.message || lastError);
+        this.cache.set(cacheKey, null);
+        return null;
     }
     /**
      * Geocode a venue and return coordinates in the format expected by the database

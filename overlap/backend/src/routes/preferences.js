@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
 const Team = require('../models/Team');
@@ -6,7 +7,24 @@ const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 const recommendationService = require('../services/recommendationService');
+const cloudinaryService = require('../services/cloudinaryService');
 const router = express.Router();
+
+const AVATAR_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes between avatar uploads
+const AVATAR_MAX_SIZE = 3 * 1024 * 1024;  // 3 MB
+const AVATAR_ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: AVATAR_MAX_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (AVATAR_ALLOWED_MIMES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, and WebP images are allowed.'));
+    }
+  }
+});
 // Get user profile and preferences
 router.get('/', auth, async (req, res) => {
     try {
@@ -33,6 +51,66 @@ router.get('/', auth, async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 });
+// Upload profile avatar (single image; rate-limited, replaces previous)
+router.post('/profile/avatar', auth, (req, res, next) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Image too large. Maximum size is 3 MB.' });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Invalid file' });
+    }
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'No image file provided.' });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const now = Date.now();
+    const last = req.user.lastAvatarUploadAt ? new Date(req.user.lastAvatarUploadAt).getTime() : 0;
+    if (last && (now - last) < AVATAR_COOLDOWN_MS) {
+      return res.status(429).json({
+        error: 'Please wait a moment before changing your avatar again.',
+        retryAfterSeconds: Math.ceil((AVATAR_COOLDOWN_MS - (now - last)) / 1000)
+      });
+    }
+    const userId = req.user._id.toString();
+    const result = await cloudinaryService.uploadAvatar(req.file.buffer, userId);
+    if (!result.success) {
+      return res.status(502).json({ error: result.error || 'Upload failed' });
+    }
+    req.user.profile.avatar = result.url;
+    req.user.profile.avatarPublicId = result.avatarPublicId || null;
+    req.user.lastAvatarUploadAt = new Date();
+    await req.user.save();
+    res.json({ profile: req.user.profile });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update avatar' });
+  }
+});
+
+// Remove profile avatar (clears avatar, deletes from Cloudinary if stored there)
+router.delete('/profile/avatar', auth, async (req, res) => {
+  try {
+    const publicId = req.user.profile?.avatarPublicId;
+    if (publicId) {
+      await cloudinaryService.deletePhoto(publicId);
+    }
+    req.user.profile.avatar = '';
+    req.user.profile.avatarPublicId = '';
+    await req.user.save();
+    res.json({ profile: req.user.profile });
+  } catch (error) {
+    console.error('Avatar remove error:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove avatar' });
+  }
+});
+
 // Update user profile
 router.put('/profile', auth, async (req, res) => {
     const updates = Object.keys(req.body);
