@@ -540,6 +540,37 @@ function createBoundsHash(bounds) {
     const swLng = Math.round(bounds.southwest.lng * 100) / 100;
     return `${neLat}-${neLng}-${swLat}-${swLng}`;
 }
+
+// Shared helper: filter matches by subscription access and valid coordinates only.
+// Bounds/viewport filtering is handled on the client (MapResultsScreen).
+function filterMatchesByAccessAndCoords(matches, accessibleLeagueIdsSet) {
+    if (!Array.isArray(matches)) {
+        return [];
+    }
+
+    return matches.filter(match => {
+        // Subscription access check
+        const leagueIdStr = match.league?.id?.toString() || match.fixture?.league?.id?.toString();
+        if (leagueIdStr && !accessibleLeagueIdsSet.has(leagueIdStr)) {
+            return false;
+        }
+
+        // Coordinates validation
+        const coords = match.fixture?.venue?.coordinates;
+        if (!coords || !Array.isArray(coords) || coords.length !== 2) {
+            return false;
+        }
+
+        const [lon, lat] = coords;
+        if (typeof lon !== 'number' || typeof lat !== 'number' ||
+            isNaN(lon) || isNaN(lat) ||
+            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+            return false;
+        }
+
+        return true;
+    });
+}
 // Country coordinate mapping (approximate country centers for geographic filtering)
 // Expanded to cover more countries and reduce "unknown" cache key issues
 // Regional International Competitions (UEFA, CAF, CONMEBOL, CONCACAF, AFC)
@@ -1265,39 +1296,20 @@ router.get('/search', async (req, res) => {
                     if (enrichedCount > 0) {
                         matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
                     }
-                    // Filter cached matches by original bounds and subscription tier
-                    // This ensures we only return matches within the user's requested viewport and accessible leagues
+                    // Filter cached matches by subscription tier and coordinates only.
+                    // Bounds/viewport filtering is handled on the client.
                     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
                     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
-                    const filteredByOriginalBounds = matchesWithCoords.filter(match => {
-                        // First check subscription access
-                        const leagueId = match.league?.id?.toString() || match.fixture?.league?.id?.toString();
-                        if (leagueId && !accessibleLeagueIdsSet.has(leagueId)) {
-                            return false; // User doesn't have access to this league
-                        }
-                        // Then check bounds
-                        const coords = match.fixture?.venue?.coordinates;
-                        if (!coords || !Array.isArray(coords) || coords.length !== 2) {
-                            return false;
-                        }
-                        const [lon, lat] = coords;
-                        if (typeof lon !== 'number' || typeof lat !== 'number' || 
-                            isNaN(lon) || isNaN(lat) ||
-                            lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-                            return false;
-                        }
-                        // Filter by original bounds (user's requested viewport)
-                        return isWithinBounds(coords, originalBounds);
-                    });
+                    const filteredMatches = filterMatchesByAccessAndCoords(matchesWithCoords, accessibleLeagueIdsSet);
                     return res.json({ 
                         success: true, 
-                        data: filteredByOriginalBounds, 
-                        count: filteredByOriginalBounds.length,
+                        data: filteredMatches, 
+                        count: filteredMatches.length,
                         fromCache: true,
                         bounds: originalBounds,
                         debug: {
                             withCoordinates: matchesWithCoords.length,
-                            filteredByBounds: filteredByOriginalBounds.length,
+                            filteredByAccessAndCoords: filteredMatches.length,
                             withoutCoordinates: matchesMissingCoords.length,
                             enrichedFromMongoDB: enrichedCount,
                             totalInCache: cachedData.data.length
@@ -1727,30 +1739,9 @@ router.get('/search', async (req, res) => {
                 count: transformedMatches.length
             };
             matchesCache.set(cacheKey, cacheData);
-            // PHASE 1: Return ALL matches with valid coordinates (buffer zone included)
-            // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern)
-            // This allows markers to appear smoothly as user pans without gaps
-            // Also filter by subscription tier to ensure only accessible leagues are returned
-            const filteredMatches = transformedMatches.filter(match => {
-                // Check subscription access
-                const matchLeagueId = match.league?.id?.toString() || match.fixture?.league?.id?.toString();
-                if (matchLeagueId && !accessibleLeagueIdsSet.has(matchLeagueId)) {
-                    return false; // User doesn't have access to this league
-                }
-                const coords = match.fixture?.venue?.coordinates;
-                // Only filter out matches WITHOUT valid coordinates
-                if (coords && Array.isArray(coords) && coords.length === 2) {
-                    const [lon, lat] = coords;
-                    // Validate coordinates are numbers and within world bounds
-                    if (typeof lon === 'number' && typeof lat === 'number' && 
-                        !isNaN(lon) && !isNaN(lat) &&
-                        lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        return true; // Include all matches with valid coordinates (buffer zone working!)
-                    }
-                }
-                // Exclude matches without valid coordinates
-                return false;
-            });
+            // PHASE 1: Return ALL matches that pass subscription + coordinate checks.
+            // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern).
+            const filteredMatches = filterMatchesByAccessAndCoords(transformedMatches, accessibleLeagueIdsSet);
             // Count matches with/without coordinates for debugging
             const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
             const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;

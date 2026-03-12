@@ -258,16 +258,20 @@ describe('Matches Routes Integration', () => {
         });
       expect(response1.status).toBe(200);
       expect(response2.status).toBe(200);
-      // Results should be identical
+      // Results should be identical in count and content
       expect(response1.body.count).toBe(response2.body.count);
       expect(response1.body.data.length).toBe(response2.body.data.length);
       // Second request should be a cache hit (batch processing should still work with cache)
       expect(response2.body.fromCache).toBe(true);
-      // Match IDs should be the same
+      // Match IDs and league IDs should be the same
       if (response1.body.data.length > 0) {
         const ids1 = response1.body.data.map(m => m.fixture.id).sort();
         const ids2 = response2.body.data.map(m => m.fixture.id).sort();
         expect(ids1).toEqual(ids2);
+
+        const leagues1 = response1.body.data.map(m => m.league?.id).sort();
+        const leagues2 = response2.body.data.map(m => m.league?.id).sort();
+        expect(leagues1).toEqual(leagues2);
       }
       // Verify batch processing didn't break response structure
       expect(Array.isArray(response1.body.data)).toBe(true);
