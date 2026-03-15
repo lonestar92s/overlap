@@ -24,26 +24,33 @@ class TeamService {
             if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
                 return cached.result;
             }
+            const cacheResult = (result) => {
+                this.cache.set(cacheKey, {
+                    result,
+                    timestamp: Date.now()
+                });
+                return result;
+            };
             // Try direct match first
             let team = await Team.findOne({ apiName: apiSportsName });
             if (team) {
-                return team.name;
+                return cacheResult(team.name);
             }
             // console.log(`❌ No match by apiName`);
             // Try exact name match
             team = await Team.findOne({ name: apiSportsName });
             if (team) {
-                return team.name;
+                return cacheResult(team.name);
             }
             // console.log(`❌ No match by exact name`);
             // Try aliases
             team = await Team.findOne({ aliases: apiSportsName });
             if (team) {
-                return team.name;
+                return cacheResult(team.name);
             }
             // console.log(`❌ No match by alias`);
             // If still not found, return the original name
-            return apiSportsName;
+            return cacheResult(apiSportsName);
         } catch (error) {
             console.error('❌ Error in mapApiNameToTeam:', error);
             return apiSportsName;

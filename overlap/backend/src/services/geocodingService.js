@@ -21,11 +21,14 @@ class GeocodingService {
      * @param {string} country - Country where venue is located
      * @returns {Object|null} - Coordinates object with lat/lng or null if failed
      */
-    async geocodeVenue(venueName, city = null, country = null) {
+    async geocodeVenue(venueName, city = null, country = null, options = {}) {
         if (!this.apiKey) {
             console.error('❌ LocationIQ API key not configured - set LOCATIONIQ_API_KEY environment variable');
             return null;
         }
+        const maxRetries = Number.isFinite(Number(options.maxRetries)) ? Number(options.maxRetries) : 3;
+        const failFastOnRateLimit = options.failFastOnRateLimit === true;
+        const logFailures = options.logFailures !== false;
         // Create cache key
         const cacheKey = `${venueName}|${city}|${country}`;
         // Check cache first
@@ -38,8 +41,8 @@ class GeocodingService {
         let query = venueName;
         if (city) query += `, ${city}`;
         if (country) query += `, ${country}`;
-        const maxRetries = 3;
         let lastError;
+        let rateLimited = false;
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
                 const response = await axios.get(`${this.baseURL}/search.php`, {
@@ -54,13 +57,15 @@ class GeocodingService {
                     validateStatus: (status) => status < 500
                 });
                 if (response.status === 429) {
+                    rateLimited = true;
                     const retryAfter = parseInt(response.headers['retry-after'], 10) || 60;
-                    if (attempt < maxRetries - 1) {
+                    if (!failFastOnRateLimit && attempt < maxRetries - 1) {
                         console.warn(`⚠️ Rate limited (429), waiting ${retryAfter}s before retry ${attempt + 2}/${maxRetries}...`);
                         await new Promise((r) => setTimeout(r, retryAfter * 1000));
                         continue;
                     }
                     lastError = new Error(`Rate limited (429) after ${maxRetries} retries`);
+                    lastError.code = 'RATE_LIMITED';
                     break;
                 }
                 if (response.data && response.data.length > 0) {
@@ -78,6 +83,13 @@ class GeocodingService {
             } catch (error) {
                 lastError = error;
                 const status = error.response?.status;
+                if (status === 429) {
+                    rateLimited = true;
+                    if (failFastOnRateLimit) {
+                        lastError.code = 'RATE_LIMITED';
+                        break;
+                    }
+                }
                 if (status === 429 && attempt < maxRetries - 1) {
                     const retryAfter = parseInt(error.response?.headers?.['retry-after'], 10) || 60;
                     console.warn(`⚠️ Rate limited (429), waiting ${retryAfter}s before retry ${attempt + 2}/${maxRetries}...`);
@@ -87,8 +99,12 @@ class GeocodingService {
                 }
             }
         }
-        console.error(`❌ Geocoding failed for "${query}":`, lastError?.message || lastError);
-        this.cache.set(cacheKey, null);
+        if (logFailures) {
+            console.error(`❌ Geocoding failed for "${query}":`, lastError?.message || lastError);
+        }
+        if (!rateLimited) {
+            this.cache.set(cacheKey, null);
+        }
         return null;
     }
     /**
@@ -98,8 +114,8 @@ class GeocodingService {
      * @param {string} country - Country where venue is located
      * @returns {Array|null} - [longitude, latitude] array or null if failed
      */
-    async geocodeVenueCoordinates(venueName, city = null, country = null) {
-        const result = await this.geocodeVenue(venueName, city, country);
+    async geocodeVenueCoordinates(venueName, city = null, country = null, options = {}) {
+        const result = await this.geocodeVenue(venueName, city, country, options);
         if (result && result.lat && result.lng) {
             // Return in [longitude, latitude] format as expected by the database
             return [result.lng, result.lat];
@@ -111,7 +127,7 @@ class GeocodingService {
      * @param {Array<{name: string, city: string, country: string}>} venues - Array of venue objects
      * @returns {Promise<Map<string, number[]>>} - Map of "name|city|country" -> [longitude, latitude]
      */
-    async batchGeocodeVenues(venues) {
+    async batchGeocodeVenues(venues, options = {}) {
         if (!venues || venues.length === 0) {
             return new Map();
         }
@@ -148,12 +164,32 @@ class GeocodingService {
             }
             return cachedResults;
         }
+        const minIntervalMs = Math.max(0, Number(options.minIntervalMs) || 0);
+        const runSequentially = options.concurrency === 1 || minIntervalMs > 0;
         // Process uncached venues in parallel
         if (process.env.NODE_ENV !== 'production') {
         }
+        if (runSequentially) {
+            const geocodeMap = new Map(cachedResults);
+            for (let index = 0; index < uncachedVenues.length; index++) {
+                const { venue, cacheKey } = uncachedVenues[index];
+                try {
+                    const result = await this.geocodeVenue(venue.name, venue.city, venue.country, options);
+                    if (result && result.lat && result.lng) {
+                        geocodeMap.set(cacheKey, [result.lng, result.lat]);
+                    }
+                } catch (error) {
+                    console.error(`❌ Batch geocoding failed for ${venue.name}:`, error.message);
+                }
+                if (minIntervalMs > 0 && index < uncachedVenues.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, minIntervalMs));
+                }
+            }
+            return geocodeMap;
+        }
         const geocodePromises = uncachedVenues.map(async ({ venue, cacheKey }) => {
             try {
-                const result = await this.geocodeVenue(venue.name, venue.city, venue.country);
+                const result = await this.geocodeVenue(venue.name, venue.city, venue.country, options);
                 if (result && result.lat && result.lng) {
                     return { cacheKey, coords: [result.lng, result.lat] };
                 }

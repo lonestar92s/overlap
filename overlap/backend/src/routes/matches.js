@@ -1,6 +1,4 @@
 const express = require('express');
-const axios = require('axios');
-const https = require('https');
 const { performance } = require('perf_hooks');
 const venueService = require('../services/venueService');
 const leagueService = require('../services/leagueService');
@@ -8,6 +6,7 @@ const teamService = require('../services/teamService');
 const subscriptionService = require('../services/subscriptionService');
 const geocodingService = require('../services/geocodingService');
 const recommendationService = require('../services/recommendationService');
+const apiSportsService = require('../services/apiSportsService');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
@@ -16,15 +15,38 @@ const League = require('../models/League');
 const { matchesCache, popularMatchesCache, recommendedMatchesCache } = require('../utils/cache');
 const { shouldFilterMatch } = require('../utils/matchStatus');
 const weights = require('../config/recommendationWeights');
-// Create HTTPS agent with SSL certificate check disabled (for development only)
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
-// API-Sports configuration
-const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
-const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
+const {
+    getIntersectingRegions,
+    getVisibleSearchContext,
+    getDomesticCountriesFromContext,
+    normalizeCountryName
+} = require('../utils/searchGeography');
+const DEBUG_MATCHES_SEARCH = process.env.DEBUG_MATCHES_SEARCH === 'true';
+const MATCHES_API_VENUE_IMAGE_LIMIT = Number(process.env.MATCHES_API_VENUE_IMAGE_LIMIT) || 0;
 // Cache for venue data to avoid repeated API calls
 const venueCache = new Map();
+function logMatchesDebug(message, details = {}) {
+    if (DEBUG_MATCHES_SEARCH) {
+        console.log(`[matches] ${message}`, details);
+    }
+}
+function getAxiosErrorSummary(error) {
+    const response = error?.response;
+    const headers = response?.headers || {};
+    const retryAfterHeader = headers['retry-after'];
+    const retryAfterSeconds = retryAfterHeader != null && !Number.isNaN(Number(retryAfterHeader))
+        ? Number(retryAfterHeader)
+        : null;
+    return {
+        status: response?.status || null,
+        code: error?.code || null,
+        message: error?.message || 'Unknown error',
+        retryAfterSeconds,
+        rateLimitRemaining: headers['x-ratelimit-remaining'] || headers['x-rate-limit-remaining'] || null,
+        rateLimitReset: headers['x-ratelimit-reset'] || headers['x-rate-limit-reset'] || null,
+        upstreamErrors: response?.data?.errors || null
+    };
+}
 // Function to fetch venue data from API-Football
 async function getVenueFromApiFootball(venueId) {
     if (!venueId) {
@@ -35,10 +57,8 @@ async function getVenueFromApiFootball(venueId) {
         return venueCache.get(venueId);
     }
     try {
-        const response = await axios.get(`${API_SPORTS_BASE_URL}/venues`, {
+        const response = await apiSportsService.get('/venues', {
             params: { id: venueId },
-            headers: { 'x-apisports-key': API_SPORTS_KEY },
-            httpsAgent,
             timeout: 3000
         });
         if (response.data && response.data.response && response.data.response.length > 0) {
@@ -91,10 +111,8 @@ async function batchGetVenuesFromApiFootball(venueIds) {
         // Process batch in parallel
         const batchPromises = batch.map(async (venueId) => {
             try {
-                const response = await axios.get(`${API_SPORTS_BASE_URL}/venues`, {
+                const response = await apiSportsService.get('/venues', {
                     params: { id: venueId },
-                    headers: { 'x-apisports-key': API_SPORTS_KEY },
-                    httpsAgent,
                     timeout: 3000
                 });
                 if (response.data && response.data.response && response.data.response.length > 0) {
@@ -518,19 +536,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
     return R * c;
 }
-// Function to calculate distance in kilometers (for geographic league filtering)
-function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    // Clamp a to [0, 1] to avoid NaN from floating point precision issues
-    const clampedA = Math.min(1, Math.max(0, a));
-    const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
-    return R * c; // Distance in kilometers
-}
 // Helper function to create a consistent bounds hash for caching
 function createBoundsHash(bounds) {
     // Round to 2 decimal places for cache efficiency (approximately 1km precision)
@@ -571,8 +576,6 @@ function filterMatchesByAccessAndCoords(matches, accessibleLeagueIdsSet) {
         return true;
     });
 }
-// Country coordinate mapping (approximate country centers for geographic filtering)
-// Expanded to cover more countries and reduce "unknown" cache key issues
 // Regional International Competitions (UEFA, CAF, CONMEBOL, CONCACAF, AFC)
 // This is used to filter "International" competitions to only those relevant to the search region
 const REGIONAL_INTERNATIONALS = {
@@ -584,222 +587,13 @@ const REGIONAL_INTERNATIONALS = {
 };
 // Global/Elite International Competitions that should be checked everywhere
 const GLOBAL_INTERNATIONAL_IDS = [1]; // World Cup
-/**
- * Detect which geographic regions intersect with the search bounds
- * @param {Object} bounds - Search bounds { northeast, southwest }
- * @returns {Set<string>} - Set of intersecting region names
- */
-function getIntersectingRegions(bounds) {
-    const regions = new Set();
-    // Define region bounding boxes (approximate)
-    const REGION_BOUNDS = {
-        'Europe': { ne: { lat: 71, lng: 40 }, sw: { lat: 35, lng: -10 } },
-        'Africa': { ne: { lat: 37, lng: 52 }, sw: { lat: -35, lng: -20 } },
-        'SouthAmerica': { ne: { lat: 15, lng: -30 }, sw: { lat: -55, lng: -85 } },
-        'NorthAmerica': { ne: { lat: 75, lng: -50 }, sw: { lat: 15, lng: -170 } },
-        'Asia': { ne: { lat: 75, lng: 180 }, sw: { lat: -10, lng: 60 } },
-        'AsiaPacific': { ne: { lat: 75, lng: 180 }, sw: { lat: -50, lng: 60 } }
-    };
-    for (const [region, regBounds] of Object.entries(REGION_BOUNDS)) {
-        // Check for intersection between search bounds and region bounds
-        const latIntersects = Math.max(bounds.southwest.lat, regBounds.sw.lat) <= Math.min(bounds.northeast.lat, regBounds.ne.lat);
-        const lngIntersects = Math.max(bounds.southwest.lng, regBounds.sw.lng) <= Math.min(bounds.northeast.lng, regBounds.ne.lat);
-        if (latIntersects && lngIntersects) {
-            regions.add(region);
-        }
-    }
-    return regions;
-}
-const COUNTRY_COORDS = {
-    // Western Europe
-    'England': { lat: 52.3555, lng: -1.1743 },
-    'Scotland': { lat: 56.4907, lng: -4.2026 },
-    'Wales': { lat: 52.1307, lng: -3.7837 },
-    'Northern-Ireland': { lat: 54.7877, lng: -6.4923 },
-    'Ireland': { lat: 53.1424, lng: -7.6921 },
-    'France': { lat: 46.6034, lng: 1.8883 },
-    'Spain': { lat: 40.4637, lng: -3.7492 },
-    'Portugal': { lat: 39.3999, lng: -8.2245 },
-    'Italy': { lat: 41.8719, lng: 12.5674 },
-    'Germany': { lat: 51.1657, lng: 10.4515 },
-    'Netherlands': { lat: 52.1326, lng: 5.2913 },
-    'Belgium': { lat: 50.5039, lng: 4.4699 },
-    'Switzerland': { lat: 46.8182, lng: 8.2275 },
-    'Austria': { lat: 47.5162, lng: 14.5501 },
-    // Nordic countries
-    'Denmark': { lat: 56.2639, lng: 9.5018 },
-    'Sweden': { lat: 60.1282, lng: 18.6435 },
-    'Norway': { lat: 60.4720, lng: 8.4689 },
-    'Finland': { lat: 61.9241, lng: 25.7482 },
-    'Iceland': { lat: 64.9631, lng: -19.0208 },
-    // Eastern Europe
-    'Poland': { lat: 51.9194, lng: 19.1451 },
-    'Czech-Republic': { lat: 49.8175, lng: 15.4730 },
-    'Czechia': { lat: 49.8175, lng: 15.4730 },
-    'Hungary': { lat: 47.1625, lng: 19.5033 },
-    'Romania': { lat: 45.9432, lng: 24.9668 },
-    'Bulgaria': { lat: 42.7339, lng: 25.4858 },
-    'Ukraine': { lat: 48.3794, lng: 31.1656 },
-    'Russia': { lat: 61.5240, lng: 105.3188 },
-    'Serbia': { lat: 44.0165, lng: 21.0059 },
-    'Croatia': { lat: 45.1000, lng: 15.2000 },
-    'Slovenia': { lat: 46.1512, lng: 14.9955 },
-    'Slovakia': { lat: 48.6690, lng: 19.6990 },
-    'Bosnia-Herzegovina': { lat: 43.9159, lng: 17.6791 },
-    'Montenegro': { lat: 42.7087, lng: 19.3744 },
-    'North-Macedonia': { lat: 41.5124, lng: 21.7453 },
-    'Albania': { lat: 41.1533, lng: 20.1683 },
-    'Kosovo': { lat: 42.6026, lng: 20.9030 },
-    // Southern Europe / Mediterranean
-    'Greece': { lat: 39.0742, lng: 21.8243 },
-    'Cyprus': { lat: 35.1264, lng: 33.4299 },
-    'Malta': { lat: 35.9375, lng: 14.3754 },
-    // Middle East
-    'Turkey': { lat: 38.9637, lng: 35.2433 },
-    'Saudi Arabia': { lat: 23.8859, lng: 45.0792 },
-    'Saudi-Arabia': { lat: 23.8859, lng: 45.0792 },
-    'UAE': { lat: 23.4241, lng: 53.8478 },
-    'United-Arab-Emirates': { lat: 23.4241, lng: 53.8478 },
-    'Qatar': { lat: 25.3548, lng: 51.1839 },
-    'Israel': { lat: 31.0461, lng: 34.8516 },
-    'Iran': { lat: 32.4279, lng: 53.6880 },
-    // Americas
-    'USA': { lat: 39.8283, lng: -98.5795 },
-    'Canada': { lat: 56.1304, lng: -106.3468 },
-    'Mexico': { lat: 23.6345, lng: -102.5528 },
-    'Brazil': { lat: -14.2350, lng: -51.9253 },
-    'Argentina': { lat: -38.4161, lng: -63.6167 },
-    'Colombia': { lat: 4.5709, lng: -74.2973 },
-    'Chile': { lat: -35.6751, lng: -71.5430 },
-    'Peru': { lat: -9.1900, lng: -75.0152 },
-    'Ecuador': { lat: -1.8312, lng: -78.1834 },
-    'Uruguay': { lat: -32.5228, lng: -55.7658 },
-    'Paraguay': { lat: -23.4425, lng: -58.4438 },
-    'Venezuela': { lat: 6.4238, lng: -66.5897 },
-    'Bolivia': { lat: -16.2902, lng: -63.5887 },
-    // Asia
-    'Japan': { lat: 36.2048, lng: 138.2529 },
-    'South-Korea': { lat: 35.9078, lng: 127.7669 },
-    'China': { lat: 35.8617, lng: 104.1954 },
-    'India': { lat: 20.5937, lng: 78.9629 },
-    'Australia': { lat: -25.2744, lng: 133.7751 },
-    'Indonesia': { lat: -0.7893, lng: 113.9213 },
-    'Thailand': { lat: 15.8700, lng: 100.9925 },
-    'Vietnam': { lat: 14.0583, lng: 108.2772 },
-    'Malaysia': { lat: 4.2105, lng: 101.9758 },
-    'Singapore': { lat: 1.3521, lng: 103.8198 },
-    // Africa
-    'Egypt': { lat: 26.8206, lng: 30.8025 },
-    'South-Africa': { lat: -30.5595, lng: 22.9375 },
-    'Morocco': { lat: 31.7917, lng: -7.0926 },
-    'Algeria': { lat: 28.0339, lng: 1.6596 },
-    'Tunisia': { lat: 33.8869, lng: 9.5375 },
-    'Nigeria': { lat: 9.0820, lng: 8.6753 },
-    'Ghana': { lat: 7.9465, lng: -1.0232 },
-    'Senegal': { lat: 14.4974, lng: -14.4524 },
-    'Cameroon': { lat: 7.3697, lng: 12.3547 },
-    'Ivory-Coast': { lat: 7.5400, lng: -5.5471 },
-    'Kenya': { lat: -0.0236, lng: 37.9062 }
-};
-// Helper function to detect country from bounds with improved fallback
-// Now also tracks nearby countries for border region handling (e.g., Munich near Austria/Germany border)
-function detectCountryFromBounds(bounds) {
-    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
-    // Find the closest country within threshold
-    let searchCountry = null;
-    let minDistance = Infinity;
-    // Increased threshold to 800km to catch more border regions
-    const DISTANCE_THRESHOLD = 750;
-    // NEW: Track ALL nearby countries within 400km for border region handling
-    // This fixes issues where border cities are closer to a neighboring country's center
-    // Examples:
-    //   - Munich (Germany) → Austria center: 240km, Germany center: 340km → includes both
-    //   - Lille (France) → Belgium center: 150km, France center: 200km → includes both
-    //   - Strasbourg (France) → Germany center: 200km → includes both
-    //   - Milan (Italy) → Switzerland center: 150km → includes both
-    //   - Detroit (USA) → Canada center: 300km → includes both
-    // 400km (~250 miles) covers most border regions while avoiding over-inclusion
-    const NEARBY_THRESHOLD = 400;
-    const nearbyCountries = [];
-    for (const [countryName, coords] of Object.entries(COUNTRY_COORDS)) {
-        const distance = calculateDistanceKm(centerLat, centerLng, coords.lat, coords.lng);
-        if (distance < minDistance && distance < DISTANCE_THRESHOLD) {
-            minDistance = distance;
-            searchCountry = countryName;
-        }
-        // Track all countries within nearby threshold for "domestic" league consideration
-        if (distance < NEARBY_THRESHOLD) {
-            nearbyCountries.push({ country: countryName, distance });
-        }
-    }
-    // Sort nearby countries by distance
-    nearbyCountries.sort((a, b) => a.distance - b.distance);
-    // If no country found, use regional fallback
-    if (!searchCountry) {
-        // Define broad regional groupings as fallback
-        if (centerLat > 35 && centerLat < 71 && centerLng > -25 && centerLng < 60) {
-            // Europe/Middle East region - use "Europe" as fallback
-            searchCountry = 'Europe-Region';
-        } else if (centerLat > -55 && centerLat < 75 && centerLng > -170 && centerLng < -30) {
-            // Americas region
-            searchCountry = 'Americas-Region';
-        } else if (centerLat > -50 && centerLat < 75 && centerLng > 60 && centerLng < 180) {
-            // Asia-Pacific region
-            searchCountry = 'AsiaPacific-Region';
-        } else if (centerLat > -40 && centerLat < 40 && centerLng > -25 && centerLng < 60) {
-            // Africa region
-            searchCountry = 'Africa-Region';
-        } else {
-            // Ocean or very remote area - use coordinates as unique identifier
-            // Round to nearest degree to still allow some caching
-            const roundedLat = Math.round(centerLat);
-            const roundedLng = Math.round(centerLng);
-            searchCountry = `Remote-${roundedLat}-${roundedLng}`;
-        }
-    }
-    return {
-        country: searchCountry,
-        centerLat,
-        centerLng,
-        distance: minDistance === Infinity ? null : minDistance,
-        nearbyCountries: nearbyCountries.map(c => c.country) // NEW: List of all nearby countries for domestic league check
-    };
-}
 // Helper function to filter leagues by geographic relevance and subscription tier
-async function getRelevantLeagueIds(bounds, user = null) {
-    // Calculate center point of search bounds
-    const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
-    const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+async function getRelevantLeagueIds(searchContext, user = null) {
     // Get accessible leagues based on subscription tier
     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
-    // Detect country and nearby countries for domestic league filtering
-    const countryDetection = detectCountryFromBounds(bounds);
-    // FIX: Empty array is truthy, so check length instead
-    let nearbyCountries = countryDetection.nearbyCountries && countryDetection.nearbyCountries.length > 0 
-        ? [...countryDetection.nearbyCountries] 
-        : [];
-    // ALWAYS include the primary detected country, even if it's far from center
-    // This fixes the "Chicago is 719km from USA center" problem
-    if (countryDetection.country && !nearbyCountries.includes(countryDetection.country)) {
-        // Only add real countries, not regional fallbacks
-        if (!countryDetection.country.endsWith('-Region') && !countryDetection.country.startsWith('Remote-')) {
-            nearbyCountries.push(countryDetection.country);
-        }
-    }
-    // If we got a regional fallback and still have no countries, expand the region
-    if (nearbyCountries.length === 0 && countryDetection.country) {
-        if (countryDetection.country === 'Americas-Region') {
-            nearbyCountries = ['USA', 'Canada', 'Mexico'];
-        } else if (countryDetection.country === 'Europe-Region') {
-            nearbyCountries = ['England', 'Spain', 'Germany', 'Italy', 'France'];
-        } else if (countryDetection.country === 'AsiaPacific-Region') {
-            nearbyCountries = ['Japan', 'Australia', 'South-Korea', 'China'];
-        } else if (countryDetection.country === 'Africa-Region') {
-            nearbyCountries = ['Egypt', 'South-Africa', 'Morocco', 'Nigeria'];
-        }
-    }
+    const domesticCountries = getDomesticCountriesFromContext(searchContext);
+    const domesticCountrySet = new Set(domesticCountries.map(normalizeCountryName));
     // Get all active leagues from MongoDB
     const dbLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
     // Get API mappings for leagues not in database
@@ -819,14 +613,14 @@ async function getRelevantLeagueIds(bounds, user = null) {
         }
     });
     // Get intersecting regions for international competition filtering
-    const activeRegions = getIntersectingRegions(bounds);
+    const activeRegions = searchContext.activeRegions || getIntersectingRegions(searchContext.bounds);
     const relevantLeagueIds = [];
     for (const league of allLeagues) {
         let shouldInclude = false;
         const leagueId = parseInt(league.apiId);
         const leagueIdStr = String(league.apiId);
         // A. DOMESTIC: If country is nearby, include ALL its leagues
-        if (nearbyCountries.includes(league.country)) {
+        if (domesticCountrySet.has(normalizeCountryName(league.country))) {
                     shouldInclude = true;
         }
         // B. INTERNATIONAL: Filter based on detected regions
@@ -1023,78 +817,46 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
                 }
             }
         }
-        // Special logging for Champions League
-        if (competitionId === '2' || competitionId === 2) {
-        }
+        logMatchesDebug('single competition search starting', {
+            competitionId,
+            season,
+            dateFrom,
+            dateTo,
+            hasBounds: !!bounds,
+            searchSessionId
+        });
         const cachedData = matchesCache.get(cacheKey);
         if (cachedData) {
             return res.json(cachedData);
         }
-        const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            params: { league: competitionId, season: season, from: dateFrom, to: dateTo },
-            headers: { 'x-apisports-key': API_SPORTS_KEY },
-            httpsAgent
+        const apiResponse = await apiSportsService.get('/fixtures', {
+            params: { league: competitionId, season: season, from: dateFrom, to: dateTo }
         });
-        // Special logging for World Cup API response
-        if (competitionId === '1' || competitionId === 1) {
-            console.log({
-                season: season,
-                totalResults: apiResponse.data.results || 0,
-                hasResponse: !!apiResponse.data.response,
-                responseLength: apiResponse.data.response?.length || 0,
-                firstMatch: apiResponse.data.response?.[0] ? {
-                    id: apiResponse.data.response[0].id,
-                    teams: `${apiResponse.data.response[0].teams?.home?.name} vs ${apiResponse.data.response[0].teams?.away?.name}`,
-                    date: apiResponse.data.response[0].fixture?.date,
-                    venue: apiResponse.data.response[0].fixture?.venue?.name,
-                    city: apiResponse.data.response[0].fixture?.venue?.city
-                } : 'No matches'
-            });
-        }
-        // Special logging for Champions League API response
-        if (competitionId === '2' || competitionId === 2) {
-            console.log({
-                totalResults: apiResponse.data.results || 0,
-                hasResponse: !!apiResponse.data.response,
-                responseLength: apiResponse.data.response?.length || 0,
-                firstMatch: apiResponse.data.response?.[0] ? {
-                    id: apiResponse.data.response[0].id,
-                    teams: `${apiResponse.data.response[0].teams?.home?.name} vs ${apiResponse.data.response[0].teams?.away?.name}`,
-                    date: apiResponse.data.response[0].fixture?.date,
-                    venue: apiResponse.data.response[0].fixture?.venue?.name,
-                    city: apiResponse.data.response[0].fixture?.venue?.city
-                } : 'No matches'
-            });
-        }
+        logMatchesDebug('single competition upstream response', {
+            competitionId,
+            season,
+            totalResults: apiResponse.data.results || 0,
+            responseLength: apiResponse.data.response?.length || 0,
+            firstMatch: apiResponse.data.response?.[0] ? {
+                id: apiResponse.data.response[0].id,
+                teams: `${apiResponse.data.response[0].teams?.home?.name} vs ${apiResponse.data.response[0].teams?.away?.name}`,
+                date: apiResponse.data.response[0].fixture?.date,
+                venue: apiResponse.data.response[0].fixture?.venue?.name,
+                city: apiResponse.data.response[0].fixture?.venue?.city
+            } : null
+        });
         const transformedData = await transformApiSportsData(apiResponse.data, competitionId, bounds, searchSessionId);
-        // Special logging for World Cup after transformation
-        if (competitionId === '1' || competitionId === 1) {
-            console.log({
-                totalMatches: transformedData.response?.length || 0,
-                hasMatches: !!transformedData.response && transformedData.response.length > 0,
-                firstMatch: transformedData.response?.[0] ? {
-                    id: transformedData.response[0].id,
-                    teams: `${transformedData.response[0].teams?.home?.name} vs ${transformedData.response[0].teams?.away?.name}`,
-                    venue: transformedData.response[0].fixture?.venue?.name,
-                    city: transformedData.response[0].fixture?.venue?.city,
-                    coordinates: transformedData.response[0].fixture?.venue?.coordinates
-                } : 'No matches'
-            });
-        }
-        // Special logging for Champions League after transformation
-        if (competitionId === '2' || competitionId === 2) {
-            console.log({
-                totalMatches: transformedData.response?.length || 0,
-                hasMatches: !!transformedData.response && transformedData.response.length > 0,
-                firstMatch: transformedData.response?.[0] ? {
-                    id: transformedData.response[0].id,
-                    teams: `${transformedData.response[0].teams?.home?.name} vs ${transformedData.response[0].teams?.away?.name}`,
-                    venue: transformedData.response[0].fixture?.venue?.name,
-                    city: transformedData.response[0].fixture?.venue?.city,
-                    coordinates: transformedData.response[0].fixture?.venue?.coordinates
-                } : 'No matches'
-            });
-        }
+        logMatchesDebug('single competition transformed response', {
+            competitionId,
+            totalMatches: transformedData.response?.length || 0,
+            firstMatch: transformedData.response?.[0] ? {
+                id: transformedData.response[0].id,
+                teams: `${transformedData.response[0].teams?.home?.name} vs ${transformedData.response[0].teams?.away?.name}`,
+                venue: transformedData.response[0].fixture?.venue?.name,
+                city: transformedData.response[0].fixture?.venue?.city,
+                coordinates: transformedData.response[0].fixture?.venue?.coordinates
+            } : null
+        });
         matchesCache.set(cacheKey, transformedData);
         res.json(transformedData);
     } catch (error) {
@@ -1126,6 +888,7 @@ router.get('/search', async (req, res) => {
             if (req.user) {
                 user = await User.findById(req.user.id);
             }
+            const searchSessionId = `location_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             // PHASE 1: Buffer Zones - Expand bounds by 30% to prevent gaps when panning
             const originalBounds = {
                 northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
@@ -1175,26 +938,23 @@ router.get('/search', async (req, res) => {
                     lng: Math.max(-180, Math.min(180, clampedOriginalBounds.southwest.lng - (clampedLngSpan * bufferPercent)))
                 }
             };
-            // PHASE 1: Country-Level Caching - Determine country from bounds center
-            // Uses improved detectCountryFromBounds with regional fallbacks AND nearby countries
-            const countryDetection = detectCountryFromBounds(bounds);
-            const searchCountry = countryDetection.country;
-            const searchCenterLat = countryDetection.centerLat;
-            const searchCenterLng = countryDetection.centerLng;
-            // NEW: Get all nearby countries for more inclusive domestic league matching
-            // This fixes the Munich/Bavaria issue where Austria is detected but we need Bundesliga too
-            const nearbyCountries = countryDetection.nearbyCountries || [searchCountry];
-            // Use country + date range for cache key (no bounds hash for better cache hit rate)
-            // This allows all searches in the same country/date range to share cache
-            // Frontend will filter by bounds, backend returns all country matches
-            const cacheKey = `location-search:${searchCountry}:${dateFrom}:${dateTo}:${season}`;
+            const searchContext = getVisibleSearchContext(clampedOriginalBounds);
+            const searchCountry = searchContext.primaryCountry;
+            const domesticCountries = getDomesticCountriesFromContext(searchContext);
+            const domesticCountrySet = new Set(domesticCountries.map(normalizeCountryName));
+            const visibleCountryKey = domesticCountries.length > 0
+                ? domesticCountries.slice().sort().join('|')
+                : searchCountry;
+            const activeRegionKey = Array.from(searchContext.activeRegions || []).sort().join('|') || 'none';
+            // Cache by visible countries/regions rather than a single inferred center country.
+            const cacheKey = `location-search:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${season}`;
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
                 // CACHE VALIDATION: Check if cache seems incomplete
                 // For major countries, we expect more than just 1-2 matches
                 const majorCountries = ['England', 'Spain', 'Italy', 'Germany', 'France', 'Netherlands', 'Portugal'];
-                const isMajorCountry = majorCountries.includes(searchCountry);
+                const isMajorCountry = domesticCountries.some(country => majorCountries.includes(country));
                 const cachedMatchCount = cachedData.data?.length || 0;
                 // If it's a major country and we only have 1-2 matches, cache might be incomplete
                 // This can happen if the first search had corrupted coordinates or API issues
@@ -1321,7 +1081,7 @@ router.get('/search', async (req, res) => {
             }
             // Cache miss or invalidated - fetch fresh data
             // Get relevant league IDs using geographic filtering and subscription tier (similar to /leagues/relevant)
-            const majorLeagueIds = await getRelevantLeagueIds(bounds, user);
+            const majorLeagueIds = await getRelevantLeagueIds(searchContext, user);
             if (majorLeagueIds.length === 0) {
                 // Fallback to essential leagues
                 majorLeagueIds.push(39, 140, 78, 135, 61, 62, 2, 3);
@@ -1329,86 +1089,131 @@ router.get('/search', async (req, res) => {
             // Get league names for detailed logging
             const leagueDocs = await League.find({ apiId: { $in: majorLeagueIds.map(id => id.toString()) } }).select('apiId name country').lean();
             const leagueInfo = leagueDocs.map(l => `${l.name} (${l.apiId}, ${l.country})`).join(', ');
-            // PHASE 1: Retry Logic with Exponential Backoff
-            async function fetchWithRetry(leagueId, maxRetries = 3) {
+            const leagueNameById = new Map(leagueDocs.map(l => [String(l.apiId), `${l.name} (${l.country})`]));
+            const relevantLeagueIdSet = new Set(majorLeagueIds.map(id => String(id)));
+            const rateLimitEvents = [];
+            const loggedRateLimitedDates = new Set();
+            const requestDates = [];
+            const currentDate = new Date(`${dateFrom}T00:00:00Z`);
+            const endDate = new Date(`${dateTo}T00:00:00Z`);
+            while (currentDate <= endDate) {
+                requestDates.push(currentDate.toISOString().slice(0, 10));
+                currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+            }
+            // PHASE 1: Fetch daily fixture slates, then filter locally.
+            async function fetchFixturesForDate(searchDate, maxRetries = 3) {
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
-                        const isFACup = leagueId === 45;
-                        // Calculate season for this specific league based on its calendar
-                        const leagueSeason = calculateSeasonForCompetition(leagueId.toString(), dateFrom);
-                        const params = { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo };
-                        // Log season calculation for all leagues, especially MLS
-                        if (leagueId === 253 || isFACup) {
-                        }
-                        if (isFACup) {
-                        }
-                        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                            params: params,
-                            headers: { 'x-apisports-key': API_SPORTS_KEY },
-                            httpsAgent,
+                        logMatchesDebug('location search upstream request', {
+                            searchDate,
+                            attempt: attempt + 1,
+                            maxRetries,
+                            params: { date: searchDate },
+                            searchSessionId
+                        });
+                        const response = await apiSportsService.get('/fixtures', {
+                            params: { date: searchDate },
                             timeout: 10000
                         });
                         const fixtureCount = response.data?.response?.length || 0;
-                        // Extra logging for FA Cup to compare with Premier League
-                        if (isFACup) {
-                            console.log({
-                                results: response.data?.results || 0,
-                                responseLength: fixtureCount,
-                                params: params,
-                                hasResponse: !!response.data?.response,
-                                responseType: Array.isArray(response.data?.response) ? 'array' : typeof response.data?.response,
-                                firstFixture: response.data?.response?.[0] ? {
-                                    id: response.data.response[0].fixture?.id,
-                                    leagueId: response.data.response[0].league?.id,
-                                    teams: `${response.data.response[0].teams?.home?.name} vs ${response.data.response[0].teams?.away?.name}`,
-                                    date: response.data.response[0].fixture?.date,
-                                    venue: response.data.response[0].fixture?.venue?.name,
-                                    city: response.data.response[0].fixture?.venue?.city
-                                } : null,
-                                rawResponseKeys: Object.keys(response.data || {})
-                            });
-                        }
-                        // Also log Premier League for comparison
-                        if (leagueId === 39) {
-                            console.log({
-                                results: response.data?.results || 0,
-                                responseLength: fixtureCount,
-                                params: params
-                            });
-                        }
-                        return { type: 'league', id: leagueId, data: response.data, success: true };
+                        logMatchesDebug('location search upstream response', {
+                            searchDate,
+                            results: response.data?.results || 0,
+                            responseLength: fixtureCount,
+                            firstFixture: response.data?.response?.[0] ? {
+                                id: response.data.response[0].fixture?.id,
+                                leagueId: response.data.response[0].league?.id,
+                                league: response.data.response[0].league?.name,
+                                teams: `${response.data.response[0].teams?.home?.name} vs ${response.data.response[0].teams?.away?.name}`,
+                                date: response.data.response[0].fixture?.date,
+                                venue: response.data.response[0].fixture?.venue?.name,
+                                city: response.data.response[0].fixture?.venue?.city
+                            } : null
+                        });
+                        return { type: 'date', id: searchDate, data: response.data, success: true };
                     } catch (error) {
                         const isLastAttempt = attempt === maxRetries - 1;
-                        const errorMsg = error.message || error.response?.status || 'Unknown error';
+                        const errorSummary = getAxiosErrorSummary(error);
+                        const isRateLimited = errorSummary.status === 429;
                         if (isLastAttempt) {
-                            console.error(`❌ League ${leagueId} API call failed after ${maxRetries} attempts: ${errorMsg}`);
-                            return { type: 'league', id: leagueId, data: { response: [] }, success: false };
+                            console.error('[matches/search] Upstream fixtures request failed', {
+                                searchDate,
+                                attempt: attempt + 1,
+                                maxRetries,
+                                params: { date: searchDate },
+                                status: errorSummary.status,
+                                code: errorSummary.code,
+                                message: errorSummary.message,
+                                retryAfterSeconds: errorSummary.retryAfterSeconds,
+                                upstreamErrors: errorSummary.upstreamErrors,
+                                searchSessionId
+                            });
+                            return { type: 'date', id: searchDate, data: { response: [] }, success: false };
                         } else {
-                            const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-                            console.warn(`⚠️ League ${leagueId} API call failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms: ${errorMsg}`);
+                            const delayMs = errorSummary.retryAfterSeconds != null
+                                ? errorSummary.retryAfterSeconds * 1000
+                                : Math.pow(2, attempt) * 1000;
+                            if (isRateLimited) {
+                                rateLimitEvents.push({
+                                    searchDate,
+                                    attempt: attempt + 1,
+                                    delayMs,
+                                    retryAfterSeconds: errorSummary.retryAfterSeconds
+                                });
+                                if (!loggedRateLimitedDates.has(searchDate)) {
+                                    loggedRateLimitedDates.add(searchDate);
+                                    console.warn('[matches/search] API-Sports rate limit encountered', {
+                                        searchDate,
+                                        attempt: attempt + 1,
+                                        maxRetries,
+                                        delayMs,
+                                        params: { date: searchDate },
+                                        retryAfterSeconds: errorSummary.retryAfterSeconds,
+                                        rateLimitRemaining: errorSummary.rateLimitRemaining,
+                                        rateLimitReset: errorSummary.rateLimitReset,
+                                        upstreamErrors: errorSummary.upstreamErrors,
+                                        searchSessionId
+                                    });
+                                }
+                            } else if (attempt === 0 || DEBUG_MATCHES_SEARCH) {
+                                console.warn('[matches/search] Upstream fixtures retry scheduled', {
+                                    searchDate,
+                                    attempt: attempt + 1,
+                                    maxRetries,
+                                    delayMs,
+                                    status: errorSummary.status,
+                                    code: errorSummary.code,
+                                    message: errorSummary.message,
+                                    searchSessionId
+                                });
+                            }
                             await new Promise(resolve => setTimeout(resolve, delayMs));
                         }
                     }
                 }
             }
-            const requests = [];
-            for (const leagueId of majorLeagueIds) {
-                requests.push(fetchWithRetry(leagueId));
-            }
-            const settled = await Promise.allSettled(requests);
+            const settled = await Promise.allSettled(requestDates.map(searchDate => fetchFixturesForDate(searchDate)));
             const fixtures = [];
-            const leagueStats = {};
             for (const s of settled) {
                 if (s.status === 'fulfilled') {
                     const payload = s.value;
-                    const fixtureCount = payload?.data?.response?.length || 0;
-                    leagueStats[payload.id] = fixtureCount;
-                    if (fixtureCount > 0) {
+                    if (payload?.data?.response?.length) {
                         fixtures.push(...payload.data.response);
                     }
                 } else {
-                    console.error(`❌ League request failed:`, s.reason);
+                    console.error('❌ Date request failed:', s.reason);
                 }
+            }
+            if (rateLimitEvents.length > 0) {
+                const uniqueRateLimitedDates = Array.from(new Set(rateLimitEvents.map(event => event.searchDate)));
+                const totalRetryDelayMs = rateLimitEvents.reduce((sum, event) => sum + event.delayMs, 0);
+                console.warn('[matches/search] API-Sports rate limit summary', {
+                    searchSessionId,
+                    uniqueDates: uniqueRateLimitedDates.length,
+                    retryEvents: rateLimitEvents.length,
+                    totalRetryDelayMs,
+                    dates: uniqueRateLimitedDates
+                });
             }
             // Dedupe by fixture id
             const seen = new Set();
@@ -1418,162 +1223,130 @@ router.get('/search', async (req, res) => {
                 seen.add(id);
                 return true;
             });
+            const relevantFixtures = uniqueFixtures.filter(match => {
+                const leagueIdStr = match.league?.id?.toString();
+                return !!leagueIdStr && relevantLeagueIdSet.has(leagueIdStr);
+            });
             // PHASE 2: Early Subscription Filtering - Filter BEFORE venue enrichment to avoid wasted lookups
             const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
             const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
-            const accessibleFixtures = uniqueFixtures.filter(match => {
+            const accessibleFixtures = relevantFixtures.filter(match => {
                 const leagueIdStr = match.league?.id?.toString();
                 return !leagueIdStr || accessibleLeagueIdsSet.has(leagueIdStr);
             });
             // Track matches filtered out (starts with subscription filtering, then adds bounds filtering)
-            let matchesFilteredOut = uniqueFixtures.length - accessibleFixtures.length;
+            let matchesFilteredOut = relevantFixtures.length - accessibleFixtures.length;
             if (process.env.NODE_ENV !== 'production' && matchesFilteredOut > 0) {
             }
-            // PHASE 3: Collect All Venue Data Upfront
+            // PHASE 3: Collect all venue and team data upfront
             const venueIds = [];
             const venueNameLookups = [];
+            const apiTeamNames = [];
             for (const match of accessibleFixtures) {
                 const venue = match.fixture?.venue;
                 if (venue?.id) {
                     venueIds.push(venue.id);
                 }
-                // Include venues with name, even if city is null/Unknown (for MLS 2026 fixtures)
                 if (venue?.name) {
                     const cityForLookup = (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city;
                     venueNameLookups.push({ name: venue.name, city: cityForLookup });
                 }
+                if (match.teams?.home?.name) {
+                    apiTeamNames.push(match.teams.home.name);
+                }
+                if (match.teams?.away?.name) {
+                    apiTeamNames.push(match.teams.away.name);
+                }
             }
-            // Remove duplicates
             const uniqueVenueIds = [...new Set(venueIds)];
             const uniqueVenueNames = [...new Map(
                 venueNameLookups.map(v => [`${v.name}|${v.city}`, v])
             ).values()];
+            const uniqueApiTeamNames = [...new Set(apiTeamNames)];
+            const mappedTeamEntries = await Promise.all(
+                uniqueApiTeamNames.map(async apiTeamName => ([
+                    apiTeamName,
+                    await teamService.mapApiNameToTeam(apiTeamName)
+                ]))
+            );
+            const mappedTeamNameMap = new Map(mappedTeamEntries);
+            const uniqueMappedTeamNames = [...new Set(
+                mappedTeamEntries.map(([, mappedName]) => mappedName).filter(Boolean)
+            )];
+            const teamDocs = uniqueMappedTeamNames.length > 0
+                ? await Team.find({ name: { $in: uniqueMappedTeamNames } })
+                    .select('name venue city country ticketingUrl')
+                    .lean()
+                : [];
+            const teamDocByName = new Map(teamDocs.map(team => [team.name, team]));
+            const linkedVenueIds = [...new Set(
+                teamDocs
+                    .map(team => team.venue?.venueId)
+                    .filter(venueId => venueId != null)
+            )];
             if (process.env.NODE_ENV !== 'production') {
             }
-            // PHASE 4: Batch Fetch All Venue Data
+            // PHASE 4: Batch fetch venue data in parallel
             const batchStartTime = performance.now();
-            // Batch fetch from MongoDB by ID
-            const venueMapById = await venueService.batchGetVenuesById(uniqueVenueIds);
-            // Batch fetch from MongoDB by name (for fallbacks)
-            const venueMapByName = await venueService.batchGetVenuesByName(uniqueVenueNames);
-            // Batch fetch from API-Sports for images
-            const apiVenuesMap = await batchGetVenuesFromApiFootball(uniqueVenueIds);
+            const combinedVenueIds = [...new Set([...uniqueVenueIds, ...linkedVenueIds])];
+            const apiVenueIdsToFetch = MATCHES_API_VENUE_IMAGE_LIMIT > 0
+                ? uniqueVenueIds.slice(0, MATCHES_API_VENUE_IMAGE_LIMIT)
+                : [];
+            const [venueMapById, venueMapByName, apiVenuesMap] = await Promise.all([
+                venueService.batchGetVenuesById(combinedVenueIds),
+                venueService.batchGetVenuesByName(uniqueVenueNames),
+                apiVenueIdsToFetch.length > 0
+                    ? batchGetVenuesFromApiFootball(apiVenueIdsToFetch)
+                    : Promise.resolve(new Map())
+            ]);
             const batchEndTime = performance.now();
             if (process.env.NODE_ENV !== 'production') {
             }
-            // Transform and filter by bounds
-            const transformedMatches = [];
-            let matchesWithoutCoords = 0;
-            let matchesByLeague = {}; // Track matches by league for logging
-            const venuesNeedingGeocode = []; // Collect venues needing geocoding for batch processing
-            for (const match of accessibleFixtures) {
+            // PHASE 5: Build candidate matches with bulk-loaded data
+            const candidateMatches = await Promise.all(accessibleFixtures.map(async match => {
                 const leagueId = match.league?.id;
-                if (!matchesByLeague[leagueId]) {
-                    matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
-                }
-                matchesByLeague[leagueId].total++;
                 const venue = match.fixture?.venue;
-                let venueInfo = null;
-                // Use the shared helper with batch maps for O(1) lookups
-                venueInfo = await resolveVenueWithCoordinates(venue, match.league?.name || 'Unknown', {
+                const mappedHome = mappedTeamNameMap.get(match.teams.home.name) || match.teams.home.name;
+                const mappedAway = mappedTeamNameMap.get(match.teams.away.name) || match.teams.away.name;
+                const homeTeam = teamDocByName.get(mappedHome) || null;
+                let venueInfo = await resolveVenueWithCoordinates(venue, match.league?.name || 'Unknown', {
                     venueMapById,
                     venueMapByName,
                     apiVenuesMap
                 });
-                // Collect venues needing geocoding (don't geocode yet - batch process after loop)
-                if (venueInfo && !venueInfo.coordinates && venueInfo.name && venueInfo.city) {
-                    venuesNeedingGeocode.push({
-                        match,
-                        venueInfo,
-                        country: venueInfo.country || match.league?.country,
-                        venueId: venue?.id || venueInfo.id || null
-                    });
+                if (!venueInfo && homeTeam?.venue?.venueId) {
+                    const linkedVenue = venueMapById.get(homeTeam.venue.venueId);
+                    const coords = linkedVenue?.coordinates || linkedVenue?.location?.coordinates;
+                    if (coords && Array.isArray(coords) && coords.length === 2) {
+                        venueInfo = {
+                            id: venue?.id || linkedVenue.venueId || null,
+                            name: linkedVenue.name || homeTeam.venue.name || 'Unknown Venue',
+                            city: linkedVenue.city || homeTeam.city || 'Unknown City',
+                            country: linkedVenue.country || homeTeam.country || match.league?.country || 'Unknown Country',
+                            coordinates: coords
+                        };
+                    }
+                }
+                if (!venueInfo && homeTeam?.venue?.coordinates) {
+                    venueInfo = {
+                        id: venue?.id || homeTeam.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                        name: homeTeam.venue.name || venue?.name || 'Unknown Venue',
+                        city: homeTeam.city || venue?.city || 'Unknown City',
+                        country: homeTeam.country || match.league?.country || 'Unknown Country',
+                        coordinates: homeTeam.venue.coordinates
+                    };
                 }
                 if (!venueInfo) {
-                    const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
-                    const team = await Team.findOne({
-                        $or: [
-                            { name: mappedHome },
-                            { name: { $regex: new RegExp(`^${mappedHome}$`, 'i') } },
-                            { apiName: mappedHome },
-                            { aliases: mappedHome }
-                        ]
-                    });
-                    // If team has venueId, try to lookup venue from Venue collection first
-                    if (team?.venue?.venueId) {
-                        const Venue = require('../models/Venue');
-                        const linkedVenue = await Venue.findOne({ venueId: team.venue.venueId });
-                        if (linkedVenue) {
-                            const coords = linkedVenue.coordinates || linkedVenue.location?.coordinates;
-                            if (coords && Array.isArray(coords) && coords.length === 2) {
-                                venueInfo = {
-                                    id: venue?.id || linkedVenue.venueId || null,
-                                    name: linkedVenue.name || team.venue.name || 'Unknown Venue',
-                                    city: linkedVenue.city || team.city || 'Unknown City',
-                                    country: linkedVenue.country || team.country || match.league?.country || 'Unknown Country',
-                                    coordinates: coords
-                                };
-                            }
-                        }
-                    }
-                    // Fallback to team.venue.coordinates if venueId lookup didn't work
-                    if (!venueInfo && team?.venue?.coordinates) {
-                        venueInfo = {
-                            id: venue?.id || team.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
-                            name: team.venue.name || venue?.name || 'Unknown Venue',
-                            city: team.city || venue?.city || 'Unknown City',
-                            country: team.country || match.league?.country || 'Unknown Country',
-                            coordinates: team.venue.coordinates
-                        };
-                    }
-                    if (!venueInfo) {
-                        // Create venueInfo from available data
-                        const venueName = venue?.name || team?.venue?.name || 'Unknown Venue';
-                        const venueCity = venue?.city || team?.city || 'Unknown City';
-                        const venueCountry = match.league?.country || team?.country || 'Unknown Country';
-                        venueInfo = {
-                            id: venue?.id || null,
-                            name: venueName,
-                            city: venueCity,
-                            country: venueCountry,
-                            coordinates: venue?.coordinates || null
-                        };
-                        // CRITICAL: If still no coordinates but we have name/city, geocode it
-                        if (!venueInfo.coordinates && venueName !== 'Unknown Venue' && venueCity !== 'Unknown City') {
-                            try {
-                                const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
-                                    venueName,
-                                    venueCity,
-                                    venueCountry
-                                );
-                                if (geocodedCoords) {
-                                    // Save to MongoDB
-                                    const savedVenue = await venueService.saveVenueWithCoordinates({
-                                        venueId: venue?.id || null,
-                                        name: venueName,
-                                        city: venueCity,
-                                        country: venueCountry,
-                                        coordinates: geocodedCoords
-                                    });
-                                    // Also update team if it exists
-                                    if (team && !team.venue?.coordinates) {
-                                        if (!team.venue) team.venue = {};
-                                        // If we saved a venue, link it by venueId
-                                        if (savedVenue && savedVenue.venueId) {
-                                            team.venue.venueId = savedVenue.venueId;
-                                        }
-                                        team.venue.name = venueName;
-                                        team.venue.coordinates = geocodedCoords;
-                                        team.city = venueCity;
-                                        await team.save();
-                                    }
-                                    venueInfo.coordinates = geocodedCoords;
-                                }
-                            } catch (geocodeError) {
-                                console.error(`❌ Geocoding error for ${venueName}:`, geocodeError.message);
-                            }
-                        }
-                    }
+                    const venueName = venue?.name || homeTeam?.venue?.name || 'Unknown Venue';
+                    const venueCity = venue?.city || homeTeam?.city || 'Unknown City';
+                    const venueCountry = match.league?.country || homeTeam?.country || 'Unknown Country';
+                    venueInfo = {
+                        id: venue?.id || homeTeam?.venue?.venueId || null,
+                        name: venueName,
+                        city: venueCity,
+                        country: venueCountry,
+                        coordinates: venue?.coordinates || homeTeam?.venue?.coordinates || null
+                    };
                 }
                 const transformed = {
                     id: match.fixture.id,
@@ -1590,71 +1363,128 @@ router.get('/search', async (req, res) => {
                         logo: match.league.logo
                     },
                     teams: {
-                        home: { 
-                            id: match.teams.home.id, 
-                            name: await (async () => {
-                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
-                                return mappedName;
-                            })(), 
+                        home: {
+                            id: match.teams.home.id,
+                            name: mappedHome,
                             logo: match.teams.home.logo,
-                            ticketingUrl: await (async () => {
-                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
-                                const team = await Team.findOne({ name: mappedName });
-                                return team?.ticketingUrl || undefined;
-                            })()
+                            ticketingUrl: homeTeam?.ticketingUrl || undefined
                         },
-                        away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
+                        away: {
+                            id: match.teams.away.id,
+                            name: mappedAway,
+                            logo: match.teams.away.logo
+                        }
                     }
                 };
-                // Filter by bounds - For domestic leagues, include all matches from that country
-                // For international leagues or foreign leagues, use strict bounds filtering
+                const matchLeagueCountry = normalizeCountryName(match.league?.country);
+                const isDomesticLeague = matchLeagueCountry && domesticCountrySet.has(matchLeagueCountry);
+                const shouldGeocode = !venueInfo.coordinates &&
+                    venueInfo.name &&
+                    venueInfo.city &&
+                    venueInfo.name !== 'Unknown Venue' &&
+                    venueInfo.city !== 'Unknown City';
+                return {
+                    leagueId,
+                    isDomesticLeague,
+                    transformed,
+                    geocodeLookup: shouldGeocode ? {
+                        key: `${venueInfo.name}|${venueInfo.city}|${venueInfo.country || match.league?.country || 'Unknown Country'}`,
+                        venueId: venue?.id || venueInfo.id || null,
+                        venueInfo,
+                        fixtureDate: match.fixture?.date || null
+                    } : null
+                };
+            }));
+            const filteredBoundsLatSpan = bounds.northeast.lat - bounds.southwest.lat;
+            const filteredBoundsLngSpan = bounds.northeast.lng - bounds.southwest.lng;
+            const isCityLevelSearch = filteredBoundsLatSpan < 1.0 && filteredBoundsLngSpan < 1.0;
+            // PHASE 6: Batch geocode unresolved venues once per unique venue
+            const uniqueGeocodeLookups = new Map();
+            for (const candidate of candidateMatches) {
+                if (candidate.geocodeLookup && !uniqueGeocodeLookups.has(candidate.geocodeLookup.key)) {
+                    uniqueGeocodeLookups.set(candidate.geocodeLookup.key, candidate.geocodeLookup);
+                }
+            }
+            const syncGeocodeLimit = Number(process.env.MATCHES_SYNC_GEOCODE_LIMIT) || (isCityLevelSearch ? 8 : 20);
+            const prioritizedGeocodeLookups = Array.from(uniqueGeocodeLookups.values())
+                .sort((a, b) => {
+                    const aHasVenueId = a.venueId != null ? 1 : 0;
+                    const bHasVenueId = b.venueId != null ? 1 : 0;
+                    if (aHasVenueId !== bHasVenueId) {
+                        return bHasVenueId - aHasVenueId;
+                    }
+                    return new Date(a.fixtureDate || 0) - new Date(b.fixtureDate || 0);
+                });
+            const synchronousGeocodeLookups = prioritizedGeocodeLookups.slice(0, syncGeocodeLimit);
+            const skippedGeocodeLookups = Math.max(0, prioritizedGeocodeLookups.length - synchronousGeocodeLookups.length);
+            if (uniqueGeocodeLookups.size > 0) {
+                const geocodeStartTime = performance.now();
+                if (process.env.NODE_ENV !== 'production') {
+                }
+                const geocodeInputs = synchronousGeocodeLookups.map(({ venueInfo }) => ({
+                    name: venueInfo.name,
+                    city: venueInfo.city,
+                    country: venueInfo.country
+                }));
+                const geocodeResults = await geocodingService.batchGeocodeVenues(geocodeInputs, {
+                    concurrency: 1,
+                    minIntervalMs: 1000,
+                    maxRetries: 1,
+                    failFastOnRateLimit: true,
+                    logFailures: false
+                });
+                for (const lookup of synchronousGeocodeLookups) {
+                    const coords = geocodeResults.get(lookup.key);
+                    if (coords) {
+                        lookup.venueInfo.coordinates = coords;
+                        venueService.saveVenueWithCoordinates({
+                            venueId: lookup.venueId,
+                            name: lookup.venueInfo.name,
+                            city: lookup.venueInfo.city,
+                            country: lookup.venueInfo.country,
+                            coordinates: coords
+                        }).catch(error => {
+                            console.error(`❌ Error saving geocoded venue ${lookup.venueInfo.name}:`, error.message);
+                        });
+                    }
+                }
+                const geocodeEndTime = performance.now();
+                if (process.env.NODE_ENV !== 'production') {
+                }
+                if (skippedGeocodeLookups > 0) {
+                    logMatchesDebug('location search geocoding capped', {
+                        attempted: synchronousGeocodeLookups.length,
+                        skipped: skippedGeocodeLookups,
+                        searchSessionId
+                    });
+                }
+            }
+            // PHASE 7: Filter by bounds using the final coordinate set
+            const transformedMatches = [];
+            let matchesWithoutCoords = 0;
+            let matchesByLeague = {};
+            for (const candidate of candidateMatches) {
+                const { leagueId, isDomesticLeague, transformed } = candidate;
+                const venueInfo = transformed.fixture.venue;
+                if (!matchesByLeague[leagueId]) {
+                    matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
+                }
+                matchesByLeague[leagueId].total++;
                 let shouldInclude = false;
-                // Calculate bounds size to determine if this is a city-level or country-level search
-                const boundsLatSpan = bounds.northeast.lat - bounds.southwest.lat;
-                const boundsLngSpan = bounds.northeast.lng - bounds.southwest.lng;
-                const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0; // Less than ~111km span
-                // Use the country detection that was done at the start of this search
-                // searchCountry and nearbyCountries are defined from detectCountryFromBounds call above
-                // For city-level searches: include all matches from domestic leagues in the same country
-                // This ensures Ligue 1 and Ligue 2 matches appear when searching in France
-                // NEW: Also check nearbyCountries for ALL border regions (not just Austria/Germany)
-                // This fixes issues where border cities are closer to a neighboring country's center:
-                //   - Munich (Germany) near Austria border
-                //   - Lille (France) near Belgium border  
-                //   - Strasbourg (France) near Germany border
-                //   - Milan (Italy) near Switzerland border
-                //   - Any other border region within 400km
-                const matchLeagueCountry = match.league?.country?.toLowerCase();
-                const isDomesticLeague = matchLeagueCountry && (
-                    // Check if match is from the closest detected country
-                    (searchCountry && searchCountry.toLowerCase() === matchLeagueCountry) ||
-                    // OR check if match is from any nearby country (within 400km)
-                    nearbyCountries.some(c => c.toLowerCase() === matchLeagueCountry)
-                );
-                if (venueInfo.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
-                    // Validate coordinates are numbers
+                if (venueInfo?.coordinates && Array.isArray(venueInfo.coordinates) && venueInfo.coordinates.length === 2) {
                     const [lon, lat] = venueInfo.coordinates;
-                    if (typeof lon === 'number' && typeof lat === 'number' && 
+                    if (typeof lon === 'number' && typeof lat === 'number' &&
                         !isNaN(lon) && !isNaN(lat) &&
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        // PHASE 1: For caching, include ALL matches (we'll filter by original bounds when returning)
-                        // This ensures cache contains all country matches for instant zoom-out
                         if (isCityLevelSearch && isDomesticLeague) {
-                            // Include all domestic league matches for city searches (for caching)
                             shouldInclude = true;
                         } else if (isWithinBounds(venueInfo.coordinates, bounds)) {
-                            // Include matches within buffered bounds (for caching)
+                            shouldInclude = true;
+                        } else if (isDomesticLeague) {
                             shouldInclude = true;
                         } else {
-                            // Still include matches outside buffered bounds if they're in the country
-                            // We'll filter by original bounds when returning to client
-                            // This ensures cache has all country matches
-                            if (isDomesticLeague) {
-                                shouldInclude = true;
-                            } else {
-                                matchesFilteredOut++;
-                                matchesByLeague[leagueId].filteredOut++;
-                            }
+                            matchesFilteredOut++;
+                            matchesByLeague[leagueId].filteredOut++;
                         }
                     } else {
                         matchesWithoutCoords++;
@@ -1663,68 +1493,20 @@ router.get('/search', async (req, res) => {
                 } else {
                     matchesWithoutCoords++;
                     matchesByLeague[leagueId].noCoords++;
-                    // DEBUG MODE: Include matches without coordinates if they're from relevant leagues
-                    // This helps us understand what matches are being filtered out
                     const isRelevantLeague = majorLeagueIds.includes(leagueId);
                     if (isRelevantLeague) {
-                        // Include match but mark it as missing coordinates
                         transformed.fixture.venue = {
                             ...venueInfo,
                             coordinates: null,
                             missingCoordinates: true,
                             debugNote: 'Match included for debugging - missing coordinates'
                         };
-                        shouldInclude = true; // Mark for inclusion
-                    } else {
-                        // Exclude non-relevant league matches without coordinates
+                        shouldInclude = true;
                     }
                 }
                 if (shouldInclude) {
                     transformedMatches.push(transformed);
                     matchesByLeague[leagueId].transformed++;
-                }
-            }
-            // PHASE 5: Batch Geocode Venues Needing Coordinates
-            if (venuesNeedingGeocode.length > 0) {
-                const geocodeStartTime = performance.now();
-                if (process.env.NODE_ENV !== 'production') {
-                }
-                const geocodeInputs = venuesNeedingGeocode.map(v => ({
-                    name: v.venueInfo.name,
-                    city: v.venueInfo.city,
-                    country: v.country
-                }));
-                const geocodeResults = await geocodingService.batchGeocodeVenues(geocodeInputs);
-                // Apply geocoded coordinates back to matches
-                let geocodedCount = 0;
-                for (const { match, venueInfo, country, venueId } of venuesNeedingGeocode) {
-                    const key = `${venueInfo.name}|${venueInfo.city}|${country}`;
-                    const coords = geocodeResults.get(key);
-                    if (coords) {
-                        venueInfo.coordinates = coords;
-                        geocodedCount++;
-                        // Save to MongoDB (async, non-blocking)
-                        venueService.saveVenueWithCoordinates({
-                            venueId: venueId,
-                            name: venueInfo.name,
-                            city: venueInfo.city,
-                            country: country,
-                            coordinates: coords
-                        }).then(savedVenue => {
-                            if (savedVenue && process.env.NODE_ENV !== 'production') {
-                            }
-                        }).catch(error => {
-                            console.error(`❌ Error saving geocoded venue ${venueInfo.name}:`, error.message);
-                        });
-                        // Update the transformed match if it was already added
-                        const transformedMatch = transformedMatches.find(m => m.id === match.fixture.id);
-                        if (transformedMatch && transformedMatch.fixture.venue) {
-                            transformedMatch.fixture.venue.coordinates = coords;
-                        }
-                    }
-                }
-                const geocodeEndTime = performance.now();
-                if (process.env.NODE_ENV !== 'production') {
                 }
             }
             const leagueStatsString = Object.entries(matchesByLeague).slice(0, 10).map(([id, stats]) => 
@@ -1755,7 +1537,9 @@ router.get('/search', async (req, res) => {
                 debug: {
                     withCoordinates: withCoords,
                     withoutCoordinates: withoutCoords,
-                    totalInCache: transformedMatches.length
+                    totalInCache: transformedMatches.length,
+                    attemptedGeocodes: synchronousGeocodeLookups.length,
+                    skippedGeocodes: skippedGeocodeLookups
                 }
             });
         }
@@ -1776,10 +1560,8 @@ router.get('/search', async (req, res) => {
                 // Calculate season for this specific league based on its calendar
                 const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
                 requests.push(
-                    axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                    apiSportsService.get('/fixtures', {
                         params: { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo },
-                        headers: { 'x-apisports-key': API_SPORTS_KEY },
-                        httpsAgent,
                         timeout: 10000
                     }).then(r => {
                         const matchCount = r.data?.response?.length || 0;
@@ -1794,10 +1576,8 @@ router.get('/search', async (req, res) => {
             // Team requests
             for (const teamId of teamIds) {
                 requests.push(
-                    axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                    apiSportsService.get('/fixtures', {
                         params: { team: teamId, season: season, from: dateFrom, to: dateTo },
-                        headers: { 'x-apisports-key': API_SPORTS_KEY },
-                        httpsAgent,
                         timeout: 10000
                     }).then(r => ({ type: 'team', id: teamId, data: r.data }))
                       .catch(() => ({ type: 'team', id: teamId, data: { response: [] } }))
@@ -1984,10 +1764,8 @@ router.get('/search', async (req, res) => {
         }
         if (dateFrom) params.from = dateFrom;
         if (dateTo) params.to = dateTo;
-        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-            headers: { 'x-apisports-key': API_SPORTS_KEY },
+        const response = await apiSportsService.get('/fixtures', {
             params,
-            httpsAgent
         });
         if (!response.data || !response.data.response) {
             return res.json({ success: true, data: { matches: [], count: 0 } });
@@ -2076,9 +1854,8 @@ router.get('/by-team', async (req, res) => {
         const params = { team: teamId, season: new Date().getFullYear() };
         if (dateFrom) params.from = dateFrom;
         if (dateTo) params.to = dateTo;
-        const response = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+        const response = await apiSportsService.get('/fixtures', {
             params,
-            headers: { 'x-apisports-key': API_SPORTS_KEY }
         });
         const matches = await transformApiSportsData(response.data, null, null, 'team-matches');
         matchesCache.set(cacheKey, matches.response);
@@ -2149,10 +1926,8 @@ router.get('/popular', async (req, res) => {
             try {
                 // Calculate season for this specific league based on its calendar
                 const leagueSeason = calculateSeasonForCompetition(leagueId.toString(), dateFrom);
-                const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                const apiResponse = await apiSportsService.get('/fixtures', {
                     params: { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo },
-                    headers: { 'x-apisports-key': API_SPORTS_KEY },
-                    httpsAgent,
                     timeout: 10000
                 });
                 if (apiResponse.data && apiResponse.data.response && apiResponse.data.response.length > 0) {
@@ -2532,15 +2307,13 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             allMatches = [];
             const apiPromises = targetLeagues.map(async (leagueId) => {
             try {
-                const apiResponse = await axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+                const apiResponse = await apiSportsService.get('/fixtures', {
                     params: { 
                         league: leagueId, 
                         season: '2025', 
                         from: dateFrom, 
                         to: dateTo 
                     },
-                    headers: { 'x-apisports-key': API_SPORTS_KEY },
-                    httpsAgent,
                     timeout: 10000
                 });
                 if (apiResponse.data && apiResponse.data.response && apiResponse.data.response.length > 0) {
@@ -3404,27 +3177,21 @@ router.get('/by-team/:id', async (req, res) => {
         }
         // Fetch both upcoming and past matches from API-Sports
         const [upcomingResponse, pastResponse] = await Promise.all([
-            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+            apiSportsService.get('/fixtures', {
                 params: {
                     team: teamId,
                     season: 2025,
                     from: '2025-07-01', // Start of 2025-2026 season
                     to: '2026-06-30'    // End of 2025-2026 season
-                },
-                headers: {
-                    'x-apisports-key': API_SPORTS_KEY
                 }
             }),
-            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
+            apiSportsService.get('/fixtures', {
                 params: {
                     team: teamId,
                     season: 2025,
                     from: '2025-07-01', // Start of 2025-2026 season
                     to: '2026-06-30',   // End of 2025-2026 season
                     status: 'FT-AET-PEN' // Finished matches
-                },
-                headers: {
-                    'x-apisports-key': API_SPORTS_KEY
                 }
             })
         ]);
