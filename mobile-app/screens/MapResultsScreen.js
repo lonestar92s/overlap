@@ -43,6 +43,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [location, setLocation] = useState(searchParams?.location || null);
   const [dateFrom, setDateFrom] = useState(searchParams?.dateFrom || null);
   const [dateTo, setDateTo] = useState(searchParams?.dateTo || null);
+  const [dateFlexibility, setDateFlexibility] = useState(searchParams?.dateFlexibility ?? 0);
   
   // Map and matches state
   const [matches, setMatches] = useState(() => {
@@ -577,6 +578,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         bounds,
         dateFrom,
         dateTo,
+        dateFlexibility,
         competitions: [], // Explicitly no filters - search all matches
         teams: [],        // Explicitly no filters - search all matches
         signal: abortController.signal, // Pass AbortSignal for cancellation
@@ -1228,7 +1230,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       const response = await ApiService.searchMatchesByBounds({
         bounds,
         dateFrom: newSearchParams.dateFrom,
-        dateTo: newSearchParams.dateTo
+        dateTo: newSearchParams.dateTo,
+        dateFlexibility: newSearchParams.dateFlexibility ?? dateFlexibility,
       });
       
       const newMatches = response.data || [];
@@ -1275,6 +1278,11 @@ const MapResultsScreen = ({ navigation, route }) => {
         longitudeDelta: 0.5,
       };
       setMapRegion(newRegion);
+      
+      // Sync date and flexibility state so "Search this area" and filter search use them
+      setDateFrom(newSearchParams.dateFrom ?? null);
+      setDateTo(newSearchParams.dateTo ?? null);
+      if (newSearchParams.dateFlexibility != null) setDateFlexibility(newSearchParams.dateFlexibility);
       
       // Update search parameters
       route.params.searchParams = newSearchParams;
@@ -1835,6 +1843,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           teams: teamIds,
           dateFrom,
           dateTo,
+          dateFlexibility,
           bounds: bounds,
         };
 
@@ -1850,6 +1859,7 @@ const MapResultsScreen = ({ navigation, route }) => {
             bounds,
             dateFrom,
             dateTo,
+            dateFlexibility,
             competitions: [],
             teams: []
           });
@@ -1859,6 +1869,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           bounds,
           dateFrom,
           dateTo,
+          dateFlexibility,
           competitions: [],
           teams: [],
         });
@@ -2056,7 +2067,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           📍 {location?.city}, {location?.country}
         </Text>
         <Text style={styles.searchDates}>
-          📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
+          📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility === 1 ? ' (±1)' : ''}
         </Text>
       </View>
       <Text style={styles.editIcon}>✏️</Text>
@@ -2534,7 +2545,7 @@ const MapResultsScreen = ({ navigation, route }) => {
             Matches in {location?.city}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
+            {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility === 1 ? ' (±1)' : ''}
           </Text>
           {selectedDateHeader && (
             <View style={styles.dateFilterIndicator}>

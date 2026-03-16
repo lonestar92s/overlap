@@ -82,6 +82,23 @@ describe('Matches Routes Integration', () => {
       expect(response.body).toHaveProperty('count');
       expect(Array.isArray(response.body.data)).toBe(true);
     });
+    it('should accept dateFlexibility and return matches for location-only search', async () => {
+      const response = await request(app)
+        .get('/api/matches/search')
+        .query({
+          neLat: 51.9074,
+          neLng: 0.3722,
+          swLat: 51.1074,
+          swLng: -0.6278,
+          dateFrom: '2026-01-09',
+          dateTo: '2026-01-12',
+          dateFlexibility: 1
+        });
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('data');
+      expect(Array.isArray(response.body.data)).toBe(true);
+    });
     it('should require dateFrom and dateTo for location-only search', async () => {
       const response = await request(app)
         .get('/api/matches/search')

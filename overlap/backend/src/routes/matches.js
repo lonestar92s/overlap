@@ -876,11 +876,12 @@ router.get('/venues/stats', async (req, res) => {
 // Search for matches between specific teams
 router.get('/search', async (req, res) => {
     try {
-        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025, competitions, teams, neLat, neLng, swLat, swLng } = req.query;
+        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025, competitions, teams, neLat, neLng, swLat, swLng, dateFlexibility: dateFlexibilityParam } = req.query;
         // Location-only search: if bounds and date range are provided without competitions/teams/teams
         const hasBounds = neLat && neLng && swLat && swLng;
         const hasCompetitionsOrTeams = (competitions && competitions.trim() !== '') || (teams && teams.trim() !== '');
         const hasTeamMatchup = homeTeam || awayTeam;
+        const dateFlexibility = Math.min(1, Math.max(0, parseInt(dateFlexibilityParam, 10) || 0));
         if (hasBounds && dateFrom && dateTo && !hasCompetitionsOrTeams && !hasTeamMatchup) {
             // Location-only search: use geographic filtering to find relevant leagues
             // Get user for subscription filtering (optional authentication)
@@ -946,8 +947,18 @@ router.get('/search', async (req, res) => {
                 ? domesticCountries.slice().sort().join('|')
                 : searchCountry;
             const activeRegionKey = Array.from(searchContext.activeRegions || []).sort().join('|') || 'none';
+            // Expand date range by dateFlexibility (0 = exact, 1 = ±1 day) for fetching; cache key includes it
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const addDays = (dateStr, days) => {
+                const d = new Date(dateStr + 'T00:00:00Z');
+                d.setUTCDate(d.getUTCDate() + days);
+                return d.toISOString().slice(0, 10);
+            };
+            const effectiveFrom = addDays(dateFrom, -dateFlexibility);
+            const effectiveTo = addDays(dateTo, dateFlexibility);
+            const clampedFrom = effectiveFrom < todayStr ? todayStr : effectiveFrom;
             // Cache by visible countries/regions rather than a single inferred center country.
-            const cacheKey = `location-search:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${season}`;
+            const cacheKey = `location-search:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
@@ -1094,8 +1105,8 @@ router.get('/search', async (req, res) => {
             const rateLimitEvents = [];
             const loggedRateLimitedDates = new Set();
             const requestDates = [];
-            const currentDate = new Date(`${dateFrom}T00:00:00Z`);
-            const endDate = new Date(`${dateTo}T00:00:00Z`);
+            const currentDate = new Date(`${clampedFrom}T00:00:00Z`);
+            const endDate = new Date(`${effectiveTo}T00:00:00Z`);
             while (currentDate <= endDate) {
                 requestDates.push(currentDate.toISOString().slice(0, 10));
                 currentDate.setUTCDate(currentDate.getUTCDate() + 1);
@@ -1548,6 +1559,15 @@ router.get('/search', async (req, res) => {
             if (!dateFrom || !dateTo) {
                 return res.status(400).json({ success: false, message: 'dateFrom and dateTo are required when searching by competitions/teams' });
             }
+            const todayStrAgg = new Date().toISOString().slice(0, 10);
+            const addDaysAgg = (dateStr, days) => {
+                const d = new Date(dateStr + 'T00:00:00Z');
+                d.setUTCDate(d.getUTCDate() + days);
+                return d.toISOString().slice(0, 10);
+            };
+            const effectiveFromAgg = addDaysAgg(dateFrom, -dateFlexibility);
+            const effectiveToAgg = addDaysAgg(dateTo, dateFlexibility);
+            const clampedFromAgg = effectiveFromAgg < todayStrAgg ? todayStrAgg : effectiveFromAgg;
             const leagueIds = (competitions ? competitions.split(',') : []).map(v => v.trim()).filter(Boolean);
             const teamIds = (teams ? teams.split(',') : []).map(v => v.trim()).filter(Boolean);
             const bounds = (neLat && neLng && swLat && swLng) ? {
@@ -1561,7 +1581,7 @@ router.get('/search', async (req, res) => {
                 const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
                 requests.push(
                     apiSportsService.get('/fixtures', {
-                        params: { league: leagueId, season: leagueSeason, from: dateFrom, to: dateTo },
+                        params: { league: leagueId, season: leagueSeason, from: clampedFromAgg, to: effectiveToAgg },
                         timeout: 10000
                     }).then(r => {
                         const matchCount = r.data?.response?.length || 0;
@@ -1577,7 +1597,7 @@ router.get('/search', async (req, res) => {
             for (const teamId of teamIds) {
                 requests.push(
                     apiSportsService.get('/fixtures', {
-                        params: { team: teamId, season: season, from: dateFrom, to: dateTo },
+                        params: { team: teamId, season: season, from: clampedFromAgg, to: effectiveToAgg },
                         timeout: 10000
                     }).then(r => ({ type: 'team', id: teamId, data: r.data }))
                       .catch(() => ({ type: 'team', id: teamId, data: { response: [] } }))

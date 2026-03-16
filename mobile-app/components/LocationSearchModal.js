@@ -33,6 +33,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState(null);
   const [dateTo, setDateTo] = useState(null);
+  const [dateFlexibility, setDateFlexibility] = useState(0); // 0 = exact, 1 = ±1 day
   const [selectedDates, setSelectedDates] = useState({});
   const [loading, setLoading] = useState(false);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
@@ -713,6 +714,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     setLocationSearchQuery('');
     setDateFrom(null);
     setDateTo(null);
+    setDateFlexibility(0);
     setSelectedDates({});
     setCurrentMonth(new Date().toISOString().split('T')[0]);
     // Clear Who section
@@ -764,6 +766,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           teams: selectedTeams.map(t => String(t.id)),
           dateFrom,
           dateTo,
+          dateFlexibility,
         };
 
         // Add optional location bounds if location is provided
@@ -850,6 +853,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           bounds,
           dateFrom,
           dateTo,
+          dateFlexibility,
         });
         matches = response?.data || [];
         initialRegion = {
@@ -872,6 +876,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             location: hasLocation ? location : null,
             dateFrom,
             dateTo,
+            dateFlexibility,
           },
           matches,
           initialRegion,
@@ -1107,39 +1112,67 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
             </TouchableOpacity>
 
             {whenExpanded && showCalendar && (
-              <View style={styles.calendarContainer}>
-                <Calendar
-                  onDayPress={onDayPress}
-                  onMonthChange={(month) => {
-                    // Update currentMonth state when user navigates months
-                    const monthString = `${month.year}-${String(month.month).padStart(2, '0')}-01`;
-                    setCurrentMonth(monthString);
-                  }}
-                  markedDates={selectedDates}
-                  minDate={new Date().toISOString().split('T')[0]}
-                  current={currentMonth}
-                  theme={{
-                    backgroundColor: colors.card,
-                    calendarBackground: colors.card,
-                    textSectionTitleColor: colors.text.secondary,
-                    selectedDayBackgroundColor: colors.primary,
-                    selectedDayTextColor: colors.onPrimary,
-                    todayTextColor: colors.primary,
-                    dayTextColor: colors.text.primary,
-                    textDisabledColor: colors.text.light,
-                    dotColor: colors.primary,
-                    selectedDotColor: colors.onPrimary,
-                    arrowColor: colors.primary,
-                    monthTextColor: colors.text.primary,
-                    textDayFontFamily: typography.fontFamily,
-                    textMonthFontFamily: typography.fontFamily,
-                    textDayHeaderFontFamily: typography.fontFamily,
-                    textDayFontSize: 14,
-                    textMonthFontSize: 16,
-                    textDayHeaderFontSize: 12,
-                  }}
-                />
-              </View>
+              <>
+                <View style={styles.calendarContainer}>
+                  <Calendar
+                    onDayPress={onDayPress}
+                    onMonthChange={(month) => {
+                      // Update currentMonth state when user navigates months
+                      const monthString = `${month.year}-${String(month.month).padStart(2, '0')}-01`;
+                      setCurrentMonth(monthString);
+                    }}
+                    markedDates={selectedDates}
+                    minDate={new Date().toISOString().split('T')[0]}
+                    current={currentMonth}
+                    theme={{
+                      backgroundColor: colors.card,
+                      calendarBackground: colors.card,
+                      textSectionTitleColor: colors.text.secondary,
+                      selectedDayBackgroundColor: colors.primary,
+                      selectedDayTextColor: colors.onPrimary,
+                      todayTextColor: colors.primary,
+                      dayTextColor: colors.text.primary,
+                      textDisabledColor: colors.text.light,
+                      dotColor: colors.primary,
+                      selectedDotColor: colors.onPrimary,
+                      arrowColor: colors.primary,
+                      monthTextColor: colors.text.primary,
+                      textDayFontFamily: typography.fontFamily,
+                      textMonthFontFamily: typography.fontFamily,
+                      textDayHeaderFontFamily: typography.fontFamily,
+                      textDayFontSize: 14,
+                      textMonthFontSize: 16,
+                      textDayHeaderFontSize: 12,
+                    }}
+                  />
+                </View>
+                <View style={styles.dateFlexibilityRow}>
+                  <TouchableOpacity
+                    style={[styles.dateFlexibilityPill, dateFlexibility === 0 && styles.dateFlexibilityPillSelected]}
+                    onPress={() => setDateFlexibility(0)}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Exact dates"
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateFlexibility === 0 }}
+                  >
+                    <Text style={[styles.dateFlexibilityPillText, dateFlexibility === 0 && styles.dateFlexibilityPillTextSelected]}>
+                      Exact dates
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dateFlexibilityPill, dateFlexibility === 1 && styles.dateFlexibilityPillSelected]}
+                    onPress={() => setDateFlexibility(1)}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Plus or minus 1 day"
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateFlexibility === 1 }}
+                  >
+                    <Text style={[styles.dateFlexibilityPillText, dateFlexibility === 1 && styles.dateFlexibilityPillTextSelected]}>
+                      ±1 day
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </View>
 
@@ -1619,6 +1652,33 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: borderRadius.sm,
+  },
+  dateFlexibilityRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  dateFlexibilityPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.25)',
+    backgroundColor: colors.card,
+  },
+  dateFlexibilityPillSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '20',
+  },
+  dateFlexibilityPillText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  dateFlexibilityPillTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
 

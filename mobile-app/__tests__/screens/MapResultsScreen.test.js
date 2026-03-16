@@ -72,8 +72,10 @@ jest.mock('../../utils/performanceTracker', () => ({
     startPhase: jest.fn(() => jest.fn()),
     stop: jest.fn(),
   })),
+  trackSyncPerformance: jest.fn((_metricType, fn) => (typeof fn === 'function' ? fn() : fn)),
   MetricType: {
     SEARCH_THIS_AREA: 'SEARCH_THIS_AREA',
+    FILTER_COMPUTATION: 'FILTER_COMPUTATION',
   },
 }));
 jest.mock('../../components/FilterModal', () => {
@@ -360,6 +362,41 @@ describe('MapResultsScreen - Filter Behavior', () => {
       await waitFor(() => {
         expect(ApiService.searchMatchesByBounds).toHaveBeenCalled();
         expect(ApiService.searchAggregatedMatches).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should pass dateFlexibility from searchParams to searchMatchesByBounds', async () => {
+      const route = createMockRoute({
+        preSelectedFilters: null,
+        hasWho: false,
+        searchParams: {
+          dateFrom: '2025-01-01',
+          dateTo: '2025-01-31',
+          dateFlexibility: 1,
+        },
+      });
+      ApiService.searchMatchesByBounds.mockResolvedValue({
+        success: true,
+        data: [],
+        bounds: {
+          northeast: { lat: 51.7574, lng: -0.0278 },
+          southwest: { lat: 51.2574, lng: -0.2278 },
+        },
+      });
+
+      const { getByText } = renderWithProvider(route);
+
+      const searchButton = getByText('Search this area');
+      fireEvent.press(searchButton);
+
+      await waitFor(() => {
+        expect(ApiService.searchMatchesByBounds).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dateFrom: '2025-01-01',
+            dateTo: '2025-01-31',
+            dateFlexibility: 1,
+          })
+        );
       });
     });
 

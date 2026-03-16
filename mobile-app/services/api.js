@@ -424,12 +424,13 @@ class ApiService {
   }
 
   // Aggregated global search by leagues/teams with optional bounds
-  async searchAggregatedMatches({ dateFrom, dateTo, competitions = [], teams = [], bounds = null, season = 2025 }) {
+  async searchAggregatedMatches({ dateFrom, dateTo, competitions = [], teams = [], bounds = null, season = 2025, dateFlexibility = 0 }) {
     try {
       const params = new URLSearchParams();
       if (dateFrom) params.append('dateFrom', dateFrom);
       if (dateTo) params.append('dateTo', dateTo);
       if (season) params.append('season', season);
+      if (dateFlexibility != null && dateFlexibility > 0) params.append('dateFlexibility', String(dateFlexibility));
       if (competitions && competitions.length > 0) params.append('competitions', competitions.join(','));
       if (teams && teams.length > 0) params.append('teams', teams.join(','));
       if (bounds?.northeast && bounds?.southwest) {
@@ -1580,7 +1581,7 @@ class ApiService {
   }
 
   // NEW: Bounds-based search for map integration
-  async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [], signal = null }) {
+  async searchMatchesByBounds({ bounds, dateFrom, dateTo, competitions = [], teams = [], dateFlexibility = 0, signal = null }) {
     const apiStartTime = performance.now();
     
     try {
@@ -1612,6 +1613,7 @@ class ApiService {
         const params = new URLSearchParams();
         params.append('dateFrom', dateFrom);
         params.append('dateTo', dateTo);
+        if (dateFlexibility != null && dateFlexibility > 0) params.append('dateFlexibility', String(dateFlexibility));
         if (bounds?.northeast && bounds?.southwest) {
           params.append('neLat', bounds.northeast.lat);
           params.append('neLng', bounds.northeast.lng);

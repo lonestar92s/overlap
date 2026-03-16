@@ -129,6 +129,22 @@ describe('API Service', () => {
         })
       );
     });
+
+    it('should include dateFlexibility in URL when dateFlexibility is 1', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: [] })
+      });
+
+      await ApiService.searchAggregatedMatches({
+        dateFrom: '2025-02-15',
+        dateTo: '2025-02-20',
+        dateFlexibility: 1
+      });
+
+      const callUrl = fetch.mock.calls[0][0];
+      expect(callUrl).toContain('dateFlexibility=1');
+    });
   });
 
   describe('setAuthToken', () => {
@@ -283,6 +299,26 @@ describe('API Service', () => {
       );
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(1);
+    });
+
+    it('should include dateFlexibility in URL when dateFlexibility is 1', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: [] })
+      });
+
+      await ApiService.searchMatchesByBounds({
+        bounds: {
+          northeast: { lat: 51.5, lng: -0.1 },
+          southwest: { lat: 51.4, lng: -0.2 }
+        },
+        dateFrom: '2025-01-01',
+        dateTo: '2025-01-31',
+        dateFlexibility: 1
+      });
+
+      const callUrl = fetch.mock.calls[0][0];
+      expect(callUrl).toContain('dateFlexibility=1');
     });
 
     it('should use backend leagues when using legacy path without location-only endpoint', async () => {
