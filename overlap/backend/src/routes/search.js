@@ -1199,22 +1199,11 @@ const inferLocationFromTeamsAndLeagues = async (teams, leagues) => {
     return null;
 };
 // Conversation State Manager - tracks current search context
-// Helper function to map league IDs to names
-const mapLeagueIdsToNames = (leagueIds) => {
-    const leagueMap = {
-        '39': 'Premier League',
-        '40': 'Championship', 
-        '61': 'Ligue 1',
-        '62': 'Ligue 2',
-        '78': 'Bundesliga',
-        '79': 'Bundesliga 2',
-        '135': 'Serie A',
-        '136': 'Serie B',
-        '140': 'La Liga',
-        '141': 'Segunda División'
-    };
-    const result = leagueIds.map(id => ({ name: leagueMap[id] || `League ${id}`, id: id }));
-    return result;
+// Map league IDs to names via backend (no hardcoded league map)
+const mapLeagueIdsToNamesAsync = async (leagueIds) => {
+    if (!leagueIds || leagueIds.length === 0) return [];
+    const names = await Promise.all(leagueIds.map(id => leagueService.getLeagueNameById(id)));
+    return leagueIds.map((id, i) => ({ name: names[i] || `League ${id}`, id }));
 };
 const ConversationStateManager = {
     // Extract the current search context from conversation history
@@ -2149,102 +2138,48 @@ router.post('/natural-language', async (req, res) => {
             location: searchParams.location
         });
         if (searchParams.leagues && searchParams.leagues.length > 0) {
-            // Check if the specified leagues match the location
-            const country = searchParams.location?.country?.toLowerCase();
-            const city = searchParams.location?.city?.toLowerCase();
-            // If we have a location, validate that the leagues match
             if (searchParams.location) {
-                const isLocationMatch = (
-                    (country === 'france' && searchParams.leagues.includes('61')) ||
-                    (country === 'england' && searchParams.leagues.includes('39')) ||
-                    (country === 'spain' && searchParams.leagues.includes('140')) ||
-                    (country === 'germany' && searchParams.leagues.includes('78')) ||
-                    (country === 'italy' && searchParams.leagues.includes('135'))
-                );
+                // Resolve location country to code via backend (no hardcoded country→league mapping)
+                const countryName = searchParams.location.country;
+                const titleCased = countryName && countryName.split(' ').map(w => w.charAt(0).toUpperCase() + (w.slice(1) || '').toLowerCase()).join(' ');
+                const locationCountryCode = leagueService.getCountryCodeMapping(countryName) || leagueService.getCountryCodeMapping(titleCased);
+                const locationLeagues = locationCountryCode ? await leagueService.getLeaguesForCountry(locationCountryCode) : [];
+                const locationLeagueApiIds = new Set((locationLeagues || []).map(l => String(l.apiId)));
+                const isLocationMatch = locationLeagueApiIds.size > 0 && searchParams.leagues.some(id => locationLeagueApiIds.has(String(id)));
+
                 if (isLocationMatch) {
                     leagueIds = searchParams.leagues;
                 } else {
-                    // Generate helpful error message for league/location mismatch
-                    const requestedLeague = searchParams.leagues.map(id => {
-                        const leagueMap = {
-                            '39': 'Premier League', '40': 'Championship',
-                            '61': 'Ligue 1', '62': 'Ligue 2',
-                            '78': 'Bundesliga', '79': 'Bundesliga 2',
-                            '135': 'Serie A', '136': 'Serie B',
-                            '140': 'La Liga', '141': 'Segunda División'
-                        };
-                        return leagueMap[id] || `League ${id}`;
-                    }).join(', ');
-                    const requestedLocation = `${searchParams.location.city}, ${searchParams.location.country}`;
-                    // Determine suggested alternatives based on location and league
-                    let suggestedAlternatives = [];
-                    // Map league IDs to their correct countries
-                    const leagueCountries = {
-                        '39': 'United Kingdom', '40': 'United Kingdom', // Premier League, Championship
-                        '61': 'France', '62': 'France', // Ligue 1, Ligue 2
-                        '78': 'Germany', '79': 'Germany', // Bundesliga, Bundesliga 2
-                        '135': 'Italy', '136': 'Italy', // Serie A, Serie B
-                        '140': 'Spain', '141': 'Spain' // La Liga, Segunda División
-                    };
-                    const requestedLeagueCountry = leagueCountries[searchParams.leagues[0]];
-                    if (country === 'france') {
-                        // User is in France, suggest French leagues or move to the league's country
-                        suggestedAlternatives = [
-                            { league: 'Ligue 1', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
-                        ];
-                    } else if (country === 'england' || country === 'united kingdom') {
-                        // User is in UK, suggest English leagues or move to the league's country
-                        suggestedAlternatives = [
-                            { league: 'Premier League', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'Paris'}, ${requestedLeagueCountry}` }
-                        ];
-                    } else if (country === 'germany') {
-                        // User is in Germany, suggest German leagues or move to the league's country
-                        suggestedAlternatives = [
-                            { league: 'Bundesliga', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
-                        ];
-                    } else if (country === 'italy') {
-                        // User is in Italy, suggest Italian leagues or move to the league's country
-                        suggestedAlternatives = [
-                            { league: 'Serie A', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
-                        ];
-                    } else if (country === 'spain') {
-                        // User is in Spain, suggest Spanish leagues or move to the league's country
-                        suggestedAlternatives = [
-                            { league: 'La Liga', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : 'London'}, ${requestedLeagueCountry}` }
-                        ];
-                    } else {
-                        // Generic fallback
-                        suggestedAlternatives = [
-                            { league: 'Local leagues', location: requestedLocation },
-                            { league: requestedLeague, location: `${requestedLeagueCountry === 'United Kingdom' ? 'London' : requestedLeagueCountry === 'France' ? 'Paris' : requestedLeagueCountry === 'Germany' ? 'Munich' : requestedLeagueCountry === 'Italy' ? 'Milan' : requestedLeagueCountry === 'Spain' ? 'Madrid' : 'London'}, ${requestedLeagueCountry}` }
-                        ];
-                    }
+                    // League/location mismatch: use leagueService for names and country (no hardcoded maps)
+                    const requestedLeagueNames = await Promise.all(searchParams.leagues.map(id => leagueService.getLeagueNameById(id)));
+                    const requestedLeague = requestedLeagueNames.slice(0, 3).join(', ') + (requestedLeagueNames.length > 3 ? ` and ${requestedLeagueNames.length - 3} more` : '');
+                    const requestedLeagueCountry = await leagueService.getCountryByLeagueId(searchParams.leagues[0]);
+                    const requestedLocation = [searchParams.location.city, searchParams.location.country].filter(Boolean).join(', ');
+                    const localLeagueName = (locationLeagues && locationLeagues[0]?.name) ? locationLeagues[0].name : 'Local leagues';
+                    const suggestedAlternatives = [
+                        { league: localLeagueName, location: requestedLocation },
+                        { league: requestedLeague, location: requestedLeagueCountry }
+                    ];
                     const helpfulMessage = await generateResponse({
                         type: 'error',
                         requestedLeague,
                         requestedLocation,
                         suggestedAlternatives
                     });
-                    // Return early with helpful message instead of proceeding with search
                     return res.json({
                         success: false,
                         query: query,
                         message: helpfulMessage,
                         parsed: {
                             teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
-                            leagues: searchParams.leagues.map(id => ({ name: requestedLeague, id: id })),
+                            leagues: searchParams.leagues.map((id, i) => ({ name: requestedLeagueNames[i] || `League ${id}`, id })),
                             location: parsed.location,
                             dateRange: parsed.dateRange,
                             distance: parsed.distance
                         },
                         preSelectedFilters: {
                             country: parsed.location?.country || null,
-                            leagues: [requestedLeague],
+                            leagues: requestedLeagueNames,
                             teams: parsed.teams.any.map(t => t.name)
                         },
                         matches: [],
@@ -2260,36 +2195,25 @@ router.post('/natural-language', async (req, res) => {
             }
         }
         if (leagueIds.length === 0) {
-            // First, try to infer leagues from teams
             const teamBasedLeagues = inferLeagueFromTeams(parsed.teams);
             if (teamBasedLeagues.length > 0) {
                 leagueIds = teamBasedLeagues;
-            } else if (searchParams.location) {
-                // Fall back to location-based selection if no teams detected
-                const country = searchParams.location.country?.toLowerCase();
-                if (country === 'france' || searchParams.location.city?.toLowerCase().includes('paris')) {
-                    leagueIds = ['61', '62', '10']; // Ligue 1, Ligue 2, and Friendlies
-                } else if (country === 'england' || country === 'united kingdom') {
-                    leagueIds = ['39', '40', '10']; // Premier League, Championship, and Friendlies
-                } else if (country === 'spain') {
-                    leagueIds = ['140', '141', '10']; // La Liga, Segunda División, and Friendlies
-                } else if (country === 'germany') {
-                    leagueIds = ['78', '79', '10']; // Bundesliga, 2. Bundesliga, and Friendlies
-                } else if (country === 'italy') {
-                    leagueIds = ['135', '136', '10']; // Serie A, Serie B, and Friendlies
-                } else if (country === 'portugal') {
-                    leagueIds = ['94', '97', '10']; // Primeira Liga, Taca da Liga, and Friendlies
-                } else if (country === 'united states' || country === 'usa') {
-                    leagueIds = ['253', '10', '31']; // MLS, Friendlies, and CONCACAF World Cup Qualifiers
-                } else if (country === 'mexico') {
-                    leagueIds = ['262', '10', '31']; // Liga MX, Friendlies, and CONCACAF World Cup Qualifiers
-                } else {
-                    // Default to major European leagues plus international competitions
-                    leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
+            } else if (searchParams.location?.country) {
+                const countryName = searchParams.location.country;
+                const titleCased = countryName.split(' ').map(w => w.charAt(0).toUpperCase() + (w.slice(1) || '').toLowerCase()).join(' ');
+                const countryCode = leagueService.getCountryCodeMapping(countryName) || leagueService.getCountryCodeMapping(titleCased);
+                const leaguesForCountry = countryCode ? await leagueService.getLeaguesForCountry(countryCode) : [];
+                leagueIds = (leaguesForCountry || []).map(l => String(l.apiId));
+                if (leagueIds.length > 0 && !leagueIds.includes('10')) {
+                    leagueIds.push('10'); // Friendlies
+                }
+                if (leagueIds.length === 0) {
+                    const allLeagues = await leagueService.getAllLeagues();
+                    leagueIds = allLeagues.slice(0, 15).map(l => String(l.apiId));
                 }
             } else {
-                // Default to major European leagues plus international competitions
-                leagueIds = ['39', '140', '135', '78', '61', '62', '94', '97', '88', '262', '10', '1', '2']; // PL, La Liga, Serie A, Bundesliga, Ligue 1, Ligue 2, Primeira Liga, Taca da Liga, Eredivisie, Liga MX, Friendlies, World Cup, Champions League
+                const allLeagues = await leagueService.getAllLeagues();
+                leagueIds = allLeagues.slice(0, 15).map(l => String(l.apiId));
             }
         }
         // For broad queries, still respect location-based league selection
@@ -2348,12 +2272,9 @@ router.post('/natural-language', async (req, res) => {
         // Format response for all successful queries (OpenAI handles the intelligence)
         const locationName = parsed.location ? `${parsed.location.city}, ${parsed.location.country}` : 'the specified location';
         const dateRange = parsed.dateRange ? `${parsed.dateRange.start} to ${parsed.dateRange.end}` : 'the specified dates';
-        // Build response structure - handle multi-query vs single query
+        const leaguesWithNames = await mapLeagueIdsToNamesAsync(leagueIds);
         let response;
         if (parsed.isMultiQuery) {
-            // Multi-query response structure
-            // Note: Full multi-query execution will be implemented in Phase 3
-            // For now, return parsed structure indicating multi-query was detected
             response = {
                 success: true,
                 query: query,
@@ -2379,14 +2300,13 @@ router.post('/natural-language', async (req, res) => {
                 },
                 preSelectedFilters: {
                     country: parsed.location?.country || null,
-                    leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name),
+                    leagues: leaguesWithNames.map(l => l.name),
                     teams: parsed.primary?.teams || []
                 },
-                matches: matches, // For now, return primary matches only
+                matches: matches,
                 count: matches.length
             };
         } else {
-            // Single query response (backward compatible)
             const messageType = matches.length === 0 ? 'empty' : 'success';
             response = {
                 success: true,
@@ -2401,17 +2321,17 @@ router.post('/natural-language', async (req, res) => {
                 }),
                 parsed: {
                     teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
-                    leagues: mapLeagueIdsToNames(leagueIds),
+                    leagues: leaguesWithNames,
                     location: parsed.location,
                     dateRange: parsed.dateRange,
                     distance: parsed.distance
                 },
                 preSelectedFilters: {
-                    country: parsed.location?.country || null, // Country-level filter
-                    leagues: mapLeagueIdsToNames(leagueIds).map(l => l.name), // League-level filters
-                    teams: parsed.teams.any.map(t => t.name) // Team-level filters
+                    country: parsed.location?.country || null,
+                    leagues: leaguesWithNames.map(l => l.name),
+                    teams: parsed.teams.any.map(t => t.name)
                 },
-                matches: matches, // No distance calculation needed for messages screen
+                matches: matches,
                 count: matches.length
             };
         }
