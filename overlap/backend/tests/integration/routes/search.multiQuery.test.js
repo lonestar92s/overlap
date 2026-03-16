@@ -236,5 +236,58 @@ describe('Multi-Query Search API - Integration Tests', () => {
         expect(response.body).toHaveProperty('error');
       });
     });
+    describe('Match Planning Agent MVP', () => {
+      it('should return conversational response for greeting (e.g. hello)', async () => {
+        if (mongoose.connection.readyState === 0) return;
+        const { OpenAI } = require('openai');
+        OpenAI.mockImplementation(() => ({
+          chat: {
+            completions: {
+              create: jest.fn().mockResolvedValue({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      isMultiQuery: false,
+                      location: null,
+                      dateRange: null,
+                      teams: [],
+                      leagues: [],
+                      errorMessage: "Hi! I'm here to help you find football matches. Try something like 'Premier League matches in London next month' or tell me a team, city, and dates.",
+                      suggestions: ['Premier League matches in London next month', 'Arsenal home games in March']
+                    })
+                  }
+                }]
+              })
+            }
+          }
+        }));
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'hello' });
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(false);
+        expect(response.body).toHaveProperty('message');
+        expect(response.body.message.length).toBeGreaterThan(0);
+        expect(response.body).toHaveProperty('suggestions');
+      });
+      it('should return 200 with success false when parsing fails (no 500)', async () => {
+        if (mongoose.connection.readyState === 0) return;
+        const { OpenAI } = require('openai');
+        OpenAI.mockImplementation(() => ({
+          chat: {
+            completions: {
+              create: jest.fn().mockRejectedValue(new Error('OpenAI service unavailable'))
+            }
+          }
+        }));
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'Arsenal in London next month' });
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(false);
+        expect(response.body).toHaveProperty('message');
+        expect(response.body.message.length).toBeGreaterThan(0);
+      });
+    });
   });
 });

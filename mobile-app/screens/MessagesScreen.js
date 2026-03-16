@@ -492,6 +492,7 @@ const MessagesScreen = ({ navigation }) => {
             accessibilityLabel="Message input"
             accessibilityRole="textbox"
             accessibilityHint="Type your question about football matches here"
+            testID="message-input"
           />
         </View>
       </KeyboardAvoidingView>

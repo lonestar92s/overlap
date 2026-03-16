@@ -28,6 +28,8 @@ async function generateResponse(context) {
             return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
         } else if (context.type === 'success') {
             return `Found ${context.matchCount} matches in ${context.location} from ${context.dateRange}. Is there a certain league or team you'd like to see?`;
+        } else if (context.type === 'empty') {
+            return `No matches found for ${context.location} from ${context.dateRange}. Try a wider date range, different location, or other leagues.`;
         }
         return "I found some matches for you!";
     }
@@ -54,6 +56,15 @@ Examples of good responses:
 - "Great! Found ${context.matchCount} matches in ${context.location}. Want to see a specific team or league?"
 - "Perfect! ${context.matchCount} matches found in ${context.location}. Any particular teams you're interested in?"
             `;
+        } else if (context.type === 'empty') {
+            prompt = `
+No matches were found for the user's search (${context.location} from ${context.dateRange}).
+Generate a friendly, conversational message that:
+- Acknowledges no matches were found
+- Suggests trying a wider date range, different city, or other leagues
+- Keeps it under 120 characters
+- Is helpful, not technical
+            `;
         }
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
@@ -68,6 +79,8 @@ Examples of good responses:
             return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
         } else if (context.type === 'success') {
             return `Found ${context.matchCount} matches in ${context.location} from ${context.dateRange}. Is there a certain league or team you'd like to see?`;
+        } else if (context.type === 'empty') {
+            return `No matches found for ${context.location} from ${context.dateRange}. Try a wider date range, different location, or other leagues.`;
         }
         return "I found some matches for you!";
     }
@@ -1388,6 +1401,16 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 let conversationContext = "";
                 if (conversationHistory && conversationHistory.length > 0) {
                     conversationContext = "\n\nCONVERSATION HISTORY:\n";
+                    let clarificationCount = 0;
+                    const recent = conversationHistory.slice(-6);
+                    recent.forEach((msg) => {
+                        if (msg.isBot && (msg.data?.success === false || (!msg.data && msg.text))) {
+                            clarificationCount += 1;
+                        }
+                    });
+                    if (clarificationCount >= 2) {
+                        conversationContext += "The user has already had 2 or more clarification rounds without a successful search. Provide a friendly fallback in errorMessage: suggest popular leagues or example queries (e.g. 'Premier League matches in London next month'). Set suggestions to 2-3 concrete example queries. Do not ask for more clarification.\n";
+                    }
                     conversationHistory.forEach((msg, index) => {
                         if (msg.isBot && msg.data && msg.data.parsed) {
                             const parsed = msg.data.parsed;
@@ -1442,6 +1465,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - If primary match date specified, use that as start date
                         - If no date specified, use current date as start
                         IMPORTANT RULES:
+                        - GREETINGS AND SMALL TALK: If the user message is only a greeting (e.g. hello, hi, hey), thanks, or similar with no search intent, return a short friendly conversational message in errorMessage (e.g. greet them back and suggest they ask for matches by team, league, city, or dates). Do not return location, dateRange, teams, or leagues. Set suggestions to example queries if helpful.
                         - ALWAYS require a date/timeframe - if none provided AND no conversation history, return error message
                         - If conversation history exists, inherit missing information (location, dates) from previous searches
                         - For follow-up queries like "just premier league" or "only Arsenal", inherit location and dates from conversation history
@@ -2363,13 +2387,14 @@ router.post('/natural-language', async (req, res) => {
             };
         } else {
             // Single query response (backward compatible)
+            const messageType = matches.length === 0 ? 'empty' : 'success';
             response = {
                 success: true,
                 query: query,
                 confidence: parsed.confidence,
                 isMultiQuery: false,
                 message: await generateResponse({
-                    type: 'success',
+                    type: messageType,
                     matchCount: matches.length,
                     location: locationName,
                     dateRange: dateRange
@@ -2393,9 +2418,15 @@ router.post('/natural-language', async (req, res) => {
         res.json(response);
     } catch (error) {
         console.error('Natural language search error:', error);
-        res.status(500).json({ 
-            error: 'Search failed',
-            details: error.message 
+        // Return 200 with success: false so the client can show a friendly message (MVP: agent gives NL recommendation based on error)
+        res.status(200).json({
+            success: false,
+            message: `Something went wrong while searching. ${error.message || 'Please try again in a moment.'}`,
+            suggestions: [
+                'Try a simpler query (e.g. "Premier League matches in London next month")',
+                'Check your date range and location',
+                'Try again in a few seconds'
+            ]
         });
     }
 });

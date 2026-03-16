@@ -85,6 +85,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // Ref for ScrollView to enable programmatic scrolling
   const scrollViewRef = useRef(null);
   
+  // Ref to track if current form was filled by selecting a recent search (so MapResults can preserve filters)
+  const isFromRecentSearchRef = useRef(false);
+  
   // State to track Who section position for scrolling
   const [whoSectionY, setWhoSectionY] = useState(0);
 
@@ -392,6 +395,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     
     // IMPORTANT: Set location FIRST, then isSearchingLocation to false, to prevent race conditions
     // This ensures the UI knows a location is selected before we hide the search results
+    isFromRecentSearchRef.current = false;
     setLocation(selectedLocation);
     
     // Set isSearchingLocation to false to hide search results UI
@@ -437,6 +441,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   };
 
   const handleRecentSearchSelect = (search) => {
+    isFromRecentSearchRef.current = true;
     const locationData = {
       city: search.city,
       country: search.country,
@@ -661,6 +666,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   };
 
   const onDayPress = (day) => {
+    isFromRecentSearchRef.current = false;
     const dateString = day.dateString;
     
     if (!dateFrom || (dateFrom && dateTo)) {
@@ -710,6 +716,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   };
 
   const clearAll = () => {
+    isFromRecentSearchRef.current = false;
     setLocation(null);
     setLocationSearchQuery('');
     setDateFrom(null);
@@ -871,6 +878,8 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
         }
         
         onClose(); // Close modal before navigating
+        const fromRecentSearch = isFromRecentSearchRef.current;
+        isFromRecentSearchRef.current = false;
         navigation.navigate('MapResults', {
           searchParams: {
             location: hasLocation ? location : null,
@@ -882,6 +891,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           initialRegion,
           hasWho,
           preSelectedFilters,
+          isFromRecentSearch: fromRecentSearch,
           _performanceStartTime: searchStartTime,
         });
       } else {
@@ -1017,6 +1027,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                   {locationSearchQuery.length > 0 && (
                     <TouchableOpacity
                       onPress={() => {
+                        isFromRecentSearchRef.current = false;
                         setLocationSearchQuery('');
                         setIsSearchingLocation(false);
                         setLocationResults([]);
@@ -1146,7 +1157,12 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                     }}
                   />
                 </View>
-                <View style={styles.dateFlexibilityRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dateFlexibilityRow}
+                  style={styles.dateFlexibilityScrollView}
+                >
                   <TouchableOpacity
                     style={[styles.dateFlexibilityPill, dateFlexibility === 0 && styles.dateFlexibilityPillSelected]}
                     onPress={() => setDateFlexibility(0)}
@@ -1195,7 +1211,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                       ±3 days
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </ScrollView>
               </>
             )}
           </View>
@@ -1676,6 +1692,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: borderRadius.sm,
+  },
+  dateFlexibilityScrollView: {
+    flexGrow: 0,
   },
   dateFlexibilityRow: {
     flexDirection: 'row',

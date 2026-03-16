@@ -34,7 +34,7 @@ import { colors, spacing, typography, borderRadius } from '../styles/designToken
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
-  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters, _performanceStartTime } = route.params || {};
+  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters, _performanceStartTime, isFromRecentSearch } = route.params || {};
   
   // Track initial search end-to-end performance (if coming from LocationSearchModal)
   const initialSearchTimerRef = useRef(null);
@@ -473,20 +473,17 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, [filterData, selectedFilters, updateSelectedFilters]);
 
-  // Clear filters when starting a new search (route params change)
+  // Clear filters when starting a new search (including on initial mount).
+  // Keep filters only when user selected a recent search (isFromRecentSearch).
   useEffect(() => {
-    // Skip on initial mount
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
-      return;
     }
-    
-    // If searchParams exist, this is a new search - clear filters
-    if (route.params?.searchParams) {
-      clearAllFilters();
-      hasAppliedPreSelectedFiltersRef.current = false;
-    }
-  }, [route.params?.searchParams?.location?.city, route.params?.searchParams?.dateFrom, clearAllFilters]);
+    if (!route.params?.searchParams) return;
+    if (route.params?.isFromRecentSearch) return;
+    clearAllFilters();
+    hasAppliedPreSelectedFiltersRef.current = false;
+  }, [route.params?.searchParams?.location?.city, route.params?.searchParams?.dateFrom, route.params?.isFromRecentSearch, clearAllFilters]);
 
   // Calculate available height for FlatList
   const calculateFlatListHeight = useCallback(() => {
