@@ -137,16 +137,32 @@
 ### 9. 🟡 Multi-Currency Support Missing
 **Location**: RouteCostHistory Schema (Line 218-253)
 
-**Issue**: Cost tracking stores prices but no currency field:
+**Status (2026-03)**: **Partially resolved in code**
+
+The current `RouteCostHistory` Mongoose model already includes:
+- A top-level `currency` field
+- A `currency` field on each `priceHistory` entry
+- A `priceHistoryMultiCurrency` array with a `prices` `Map<currencyCode, price>`
+
+This means the original issue ("no currency field") has been addressed in implementation. The remaining questions are now mostly about **how we want to use and expose this data**, not schema gaps.
+
+**Remaining Design Questions**:
 - Route London → Madrid: €450 vs. £380
 - How do we compare/aggregate?
 - Currency conversion over time?
 
-**Solution**: 
-- Add `currency` field to price history
-- Store prices in multiple currencies or convert to base currency
-- Track currency conversion rates over time
-- Display prices in user's preferred currency
+**Updated Recommendations**: 
+- **Keep schema as-is** (top-level `currency`, per-entry `currency`, and `priceHistoryMultiCurrency`)
+- Define a **base display currency** (e.g. `user.preferredCurrency` with sensible default)
+- When reading:
+  - Prefer prices in the base currency if present in `priceHistoryMultiCurrency.prices`
+  - Otherwise, fall back to route’s default `currency` and indicate that conversion is approximate or unavailable
+- Add a lightweight **conversion service/interface** decision:
+  - Are we storing historical FX rates or using “near-real-time” rates?
+  - For now, document that we treat stored prices as **“native currency snapshots”**, and only convert for display
+- Update API/DTO docs so that consumers know:
+  - What currency aggregates are in
+  - How to request or interpret prices in different currencies
 
 ---
 
@@ -345,7 +361,7 @@ flightSearch: {
 6. Fix TravelTimeCache schema to include time-of-day
 7. Add comprehensive error handling strategy
 8. Document inter-match travel time constraint logic
-9. Add multi-currency support to cost tracking
+9. **Clarify multi-currency usage semantics** (schema implemented)
 10. Clarify home base suggestions date range logic
 
 ### Medium Priority:

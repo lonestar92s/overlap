@@ -16,6 +16,7 @@ import TravelTimeDisplay from './TravelTimeDisplay';
 import { getMatchStatus, getMatchResult, formatMatchDate, isMatchPast } from '../utils/matchStatus';
 import { formatMatchTimeInVenueTimezone, getRelativeMatchTime } from '../utils/timezoneUtils';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { getNationalTeamBadgeSource, isInternationalMatch } from '../utils/nationalTeamBadges';
 
 const MatchCard = ({ 
   match, 
@@ -144,6 +145,8 @@ const MatchCard = ({
     return 'TBD';
   }, [teams.away]);
 
+  const isInternational = useMemo(() => isInternationalMatch(match), [match]);
+
   const homeTeamLogo = useMemo(() => {
     const homeTeam = teams.home;
     if (homeTeam?.logo && typeof homeTeam.logo === 'string' && homeTeam.logo.trim() !== '') {
@@ -159,6 +162,25 @@ const MatchCard = ({
     }
     return null;
   }, [teams.away]);
+
+  // For international matches, prefer local national team badge over remote logo
+  const homeTeamImageSource = useMemo(() => {
+    if (isInternational && homeTeamName && homeTeamName !== 'TBD') {
+      const local = getNationalTeamBadgeSource(homeTeamName);
+      if (local) return local;
+    }
+    if (homeTeamLogo) return { uri: homeTeamLogo };
+    return null;
+  }, [isInternational, homeTeamName, homeTeamLogo]);
+
+  const awayTeamImageSource = useMemo(() => {
+    if (isInternational && awayTeamName && awayTeamName !== 'TBD') {
+      const local = getNationalTeamBadgeSource(awayTeamName);
+      if (local) return local;
+    }
+    if (awayTeamLogo) return { uri: awayTeamLogo };
+    return null;
+  }, [isInternational, awayTeamName, awayTeamLogo]);
 
   const venueText = useMemo(() => {
     if (typeof venue === 'string') {
@@ -289,9 +311,9 @@ const MatchCard = ({
             <Text style={[styles.teamName, isOverlay && styles.overlayTeamName]} numberOfLines={1}>
               {homeTeamName}
             </Text>
-            {homeTeamLogo && (
+            {homeTeamImageSource && (
               <Image 
-                source={{ uri: homeTeamLogo }} 
+                source={homeTeamImageSource} 
                 style={styles.teamLogo}
                 resizeMode="contain"
                 onError={handleHomeLogoError}
@@ -343,9 +365,9 @@ const MatchCard = ({
             <Text style={styles.teamName} numberOfLines={1}>
               {awayTeamName}
             </Text>
-            {awayTeamLogo && (
+            {awayTeamImageSource && (
               <Image 
-                source={{ uri: awayTeamLogo }} 
+                source={awayTeamImageSource} 
                 style={styles.teamLogo}
                 resizeMode="contain"
                 onError={handleAwayLogoError}

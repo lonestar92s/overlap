@@ -102,6 +102,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Overlay card state (Airbnb-like) - selection is by venue group
   const [selectedVenueIndex, setSelectedVenueIndex] = useState(null);
+  const [overlayMatchFallback, setOverlayMatchFallback] = useState(null);
   
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
@@ -1024,31 +1025,35 @@ const MapResultsScreen = ({ navigation, route }) => {
       // Map marker selects the venue group containing this match
       const key = getVenueGroupKey(match);
       
-      // CRITICAL: Check if venueGroups is ready and has data
-      if (!venueGroups || venueGroups.length === 0) {
-        if (__DEV__) {
-          console.warn('MapResultsScreen: No venue groups available - markers may not be ready yet');
-        }
-        clearTimeout(suppressTimeout);
-        suppressNextMapPressRef.current = false;
-        return;
-      }
-      
-      if (!key) {
-        if (__DEV__) {
+      // Fallback: if venue groups not ready or lookup fails, show single-match overlay so tap still opens
+      const useFallback = !venueGroups || venueGroups.length === 0 || !key;
+      const venueGroup = key && venueGroups?.length ? venueGroups.find(g => g.key === key) : null;
+      const useFallbackNoGroup = !useFallback && !venueGroup;
+
+      if (useFallback || useFallbackNoGroup) {
+        if (__DEV__ && !key) {
           console.warn('MapResultsScreen: Could not generate venue group key for match', match.fixture.id);
         }
-        clearTimeout(suppressTimeout);
-        suppressNextMapPressRef.current = false;
-        return;
-      }
-      
-      // Find the venue group by key
-      const venueGroup = venueGroups.find(g => g.key === key);
-      
-      if (!venueGroup) {
-        if (__DEV__) {
+        if (__DEV__ && venueGroups?.length && !venueGroup) {
           console.warn('MapResultsScreen: Venue group not found for key', key, 'match ID:', match.fixture.id);
+        }
+        setOverlayMatchFallback(match);
+        setSelectedVenueIndex(null);
+        if (bottomSheetRef.current && typeof bottomSheetRef.current.close === 'function') {
+          bottomSheetRef.current.close();
+        }
+        const venue = match.fixture?.venue;
+        if (venue?.coordinates && venue.coordinates.length === 2 && mapRef.current) {
+          setTimeout(() => {
+            if (mapRef.current) {
+              mapRef.current.animateToRegion({
+                latitude: venue.coordinates[1],
+                longitude: venue.coordinates[0],
+                latitudeDelta: mapRegion?.latitudeDelta || 0.1,
+                longitudeDelta: mapRegion?.longitudeDelta || 0.1,
+              }, 1000);
+            }
+          }, 50);
         }
         clearTimeout(suppressTimeout);
         suppressNextMapPressRef.current = false;
@@ -1086,8 +1091,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       }
       
       // Set the selected venue index - the overlay will show the matches for this venue group
-      // Since venueGroups is sorted chronologically, the first match in the group will be shown
-      // But we've validated that the clicked match exists in this group
+      setOverlayMatchFallback(null);
       setSelectedVenueIndex(index);
       
       // Close bottom sheet if open
@@ -1143,6 +1147,7 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   const handleOverlayClose = useCallback(() => {
     setSelectedVenueIndex(null);
+    setOverlayMatchFallback(null);
     if (bottomSheetRef.current && typeof bottomSheetRef.current.snapToIndex === 'function') {
       bottomSheetRef.current.snapToIndex(0);
     }
@@ -1662,15 +1667,16 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   // Clamp or reset selected index if filtered results change
   useEffect(() => {
-    if (selectedVenueIndex === null) return;
     const count = venueGroups?.length || 0;
     if (count === 0) {
       setSelectedVenueIndex(null);
+      setOverlayMatchFallback(null);
       if (bottomSheetRef.current && typeof bottomSheetRef.current.snapToIndex === 'function') {
         bottomSheetRef.current.snapToIndex(0);
       }
       return;
     }
+    if (selectedVenueIndex === null) return;
     if (selectedVenueIndex >= count) {
       const newIndex = Math.max(0, count - 1);
       setSelectedVenueIndex(newIndex);
@@ -2673,61 +2679,61 @@ const MapResultsScreen = ({ navigation, route }) => {
       </BottomSheet>
 
       {/* Overlay Match Card (compact) with navigation */}
-      {selectedVenueIndex !== null && venueGroups?.[selectedVenueIndex] && (
-        <View style={styles.overlayCardContainer}>
-          {/* Venue header */}
-          <View style={styles.venueHeader}>
-            <Text style={styles.venueHeaderTitle}>{venueGroups[selectedVenueIndex]?.venue?.name || 'Venue'}</Text>
-            {venueGroups[selectedVenueIndex]?.venue?.city && (
-              <Text style={styles.venueHeaderSubtitle}>{venueGroups[selectedVenueIndex]?.venue?.city}</Text>
-            )}
+      {((selectedVenueIndex !== null && venueGroups?.[selectedVenueIndex]) || overlayMatchFallback) && (() => {
+        const overlayGroup = overlayMatchFallback
+          ? { venue: overlayMatchFallback.fixture?.venue || {}, matches: [overlayMatchFallback] }
+          : venueGroups[selectedVenueIndex];
+        const isFallback = !!overlayMatchFallback;
+        return (
+          <View style={styles.overlayCardContainer}>
+            <View style={styles.venueHeader}>
+              <Text style={styles.venueHeaderTitle}>{overlayGroup?.venue?.name || 'Venue'}</Text>
+              {overlayGroup?.venue?.city && (
+                <Text style={styles.venueHeaderSubtitle}>{overlayGroup?.venue?.city}</Text>
+              )}
+            </View>
+            <ScrollView style={styles.venueMatchesList} showsVerticalScrollIndicator={false}>
+              {(overlayGroup?.matches || []).map((m, idx) => (
+                <MatchCard
+                  key={`venue-match-${m.fixture?.id || idx}`}
+                  match={{
+                    ...m,
+                    league: (() => {
+                      const baseLeague = m.league || m.competition || { name: 'Unknown League' };
+                      if (m.competition?.emblem && baseLeague) {
+                        return { ...baseLeague, emblem: m.competition.emblem };
+                      }
+                      return baseLeague;
+                    })()
+                  }}
+                  onPress={() => handleMatchPress(m)}
+                  variant="overlay"
+                  showHeart={true}
+                />
+              ))}
+            </ScrollView>
+            <View style={styles.overlayControls}>
+              <TouchableOpacity
+                onPress={handleOverlayPrev}
+                disabled={isFallback || selectedVenueIndex <= 0}
+                style={[styles.navButton, (isFallback || selectedVenueIndex <= 0) && styles.navButtonDisabled]}
+              >
+                <Text style={[styles.navButtonText, (isFallback || selectedVenueIndex <= 0) && styles.navButtonTextDisabled]}>Previous</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleOverlayClose} style={styles.closeOverlayButton}>
+                <Text style={styles.closeOverlayText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleOverlayNext}
+                disabled={isFallback || selectedVenueIndex >= (venueGroups?.length ?? 1) - 1}
+                style={[styles.navButton, (isFallback || selectedVenueIndex >= (venueGroups?.length ?? 1) - 1) && styles.navButtonDisabled]}
+              >
+                <Text style={[styles.navButtonText, (isFallback || selectedVenueIndex >= (venueGroups?.length ?? 1) - 1) && styles.navButtonTextDisabled]}>Next</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          {/* Stacked upcoming matches at this venue */}
-          <ScrollView style={styles.venueMatchesList} showsVerticalScrollIndicator={false}>
-            {venueGroups[selectedVenueIndex].matches.map((m, idx) => (
-              <MatchCard
-                key={`venue-match-${m.fixture?.id || idx}`}
-                match={{
-                  ...m,
-                  league: (() => {
-                    const baseLeague = m.league || m.competition || { name: 'Unknown League' };
-                    // If we have competition data with emblem, merge it into league
-                    if (m.competition?.emblem && baseLeague) {
-                      return {
-                        ...baseLeague,
-                        emblem: m.competition.emblem
-                      };
-                    }
-                    return baseLeague;
-                  })()
-                }}
-                onPress={() => handleMatchPress(m)}
-                variant="overlay"
-                showHeart={true}
-              />
-            ))}
-          </ScrollView>
-          <View style={styles.overlayControls}>
-            <TouchableOpacity
-              onPress={handleOverlayPrev}
-              disabled={selectedVenueIndex <= 0}
-              style={[styles.navButton, selectedVenueIndex <= 0 && styles.navButtonDisabled]}
-            >
-              <Text style={[styles.navButtonText, selectedVenueIndex <= 0 && styles.navButtonTextDisabled]}>Previous</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleOverlayClose} style={styles.closeOverlayButton}>
-              <Text style={styles.closeOverlayText}>Close</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleOverlayNext}
-              disabled={selectedVenueIndex >= (venueGroups.length - 1)}
-              style={[styles.navButton, selectedVenueIndex >= (venueGroups.length - 1) && styles.navButtonDisabled]}
-            >
-              <Text style={[styles.navButtonText, selectedVenueIndex >= (venueGroups.length - 1) && styles.navButtonTextDisabled]}>Next</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        );
+      })()}
 
       {/* Search Modal */}
       <SearchModal

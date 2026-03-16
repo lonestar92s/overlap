@@ -42,6 +42,21 @@ const MatchMapView = forwardRef(({
     }
   }, [initialRegion]);
 
+  // Force native map to re-layout markers when matches change (e.g. after "Search this area").
+  // react-native-maps often doesn't redraw markers until the region changes; re-applying the
+  // current region triggers a layout pass so new markers appear without the user moving the map.
+  const regionRef = useRef(region);
+  regionRef.current = region;
+  useEffect(() => {
+    if (!matches || matches.length === 0) return;
+    const t = setTimeout(() => {
+      if (mapRef.current && regionRef.current && typeof mapRef.current.setRegion === 'function') {
+        mapRef.current.setRegion(regionRef.current);
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [matches]);
+
   // Request location permission and get user location
   useEffect(() => {
     (async () => {
