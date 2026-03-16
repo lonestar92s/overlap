@@ -881,7 +881,7 @@ router.get('/search', async (req, res) => {
         const hasBounds = neLat && neLng && swLat && swLng;
         const hasCompetitionsOrTeams = (competitions && competitions.trim() !== '') || (teams && teams.trim() !== '');
         const hasTeamMatchup = homeTeam || awayTeam;
-        const dateFlexibility = Math.min(1, Math.max(0, parseInt(dateFlexibilityParam, 10) || 0));
+        const dateFlexibility = Math.min(3, Math.max(0, parseInt(dateFlexibilityParam, 10) || 0));
         if (hasBounds && dateFrom && dateTo && !hasCompetitionsOrTeams && !hasTeamMatchup) {
             // Location-only search: use geographic filtering to find relevant leagues
             // Get user for subscription filtering (optional authentication)

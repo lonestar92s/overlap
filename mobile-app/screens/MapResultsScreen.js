@@ -2067,7 +2067,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           📍 {location?.city}, {location?.country}
         </Text>
         <Text style={styles.searchDates}>
-          📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility === 1 ? ' (±1)' : ''}
+          📅 {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility > 0 ? ` (±${dateFlexibility})` : ''}
         </Text>
       </View>
       <Text style={styles.editIcon}>✏️</Text>
@@ -2545,7 +2545,7 @@ const MapResultsScreen = ({ navigation, route }) => {
             Matches in {location?.city}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility === 1 ? ' (±1)' : ''}
+            {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}{dateFlexibility > 0 ? ` (±${dateFlexibility})` : ''}
           </Text>
           {selectedDateHeader && (
             <View style={styles.dateFilterIndicator}>

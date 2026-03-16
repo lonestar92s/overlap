@@ -33,7 +33,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState(null);
   const [dateTo, setDateTo] = useState(null);
-  const [dateFlexibility, setDateFlexibility] = useState(0); // 0 = exact, 1 = ±1 day
+  const [dateFlexibility, setDateFlexibility] = useState(0); // 0 = exact, 1 = ±1, 2 = ±2, 3 = ±3 days
   const [selectedDates, setSelectedDates] = useState({});
   const [loading, setLoading] = useState(false);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
@@ -1169,6 +1169,30 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                   >
                     <Text style={[styles.dateFlexibilityPillText, dateFlexibility === 1 && styles.dateFlexibilityPillTextSelected]}>
                       ±1 day
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dateFlexibilityPill, dateFlexibility === 2 && styles.dateFlexibilityPillSelected]}
+                    onPress={() => setDateFlexibility(2)}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Plus or minus 2 days"
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateFlexibility === 2 }}
+                  >
+                    <Text style={[styles.dateFlexibilityPillText, dateFlexibility === 2 && styles.dateFlexibilityPillTextSelected]}>
+                      ±2 days
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dateFlexibilityPill, dateFlexibility === 3 && styles.dateFlexibilityPillSelected]}
+                    onPress={() => setDateFlexibility(3)}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Plus or minus 3 days"
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: dateFlexibility === 3 }}
+                  >
+                    <Text style={[styles.dateFlexibilityPillText, dateFlexibility === 3 && styles.dateFlexibilityPillTextSelected]}>
+                      ±3 days
                     </Text>
                   </TouchableOpacity>
                 </View>
