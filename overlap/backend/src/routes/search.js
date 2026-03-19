@@ -22,7 +22,8 @@ const searchHttpsAgent = new https.Agent({
 });
 // Function to generate ALL responses using OpenAI
 async function generateResponse(context) {
-    if (!openai) {
+    const client = createOpenAIClient();
+    if (!client) {
         // Fallback messages if OpenAI is not available
         if (context.type === 'error') {
             return `I found no ${context.requestedLeague} matches in ${context.requestedLocation}. Did you mean ${context.suggestedAlternatives[0].league} matches in ${context.suggestedAlternatives[0].location}, or ${context.suggestedAlternatives[1].league} matches in ${context.suggestedAlternatives[1].location}?`;
@@ -66,7 +67,7 @@ Generate a friendly, conversational message that:
 - Is helpful, not technical
             `;
         }
-        const response = await openai.chat.completions.create({
+        const response = await client.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.7,
@@ -341,10 +342,12 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
-// Initialize OpenAI only if API key is available
-let openai = null;
-if (process.env.OPENAI_API_KEY) {
-    openai = new OpenAI({
+/** New client each call so tests can swap OpenAI mock implementation per test. */
+function createOpenAIClient() {
+    if (!process.env.OPENAI_API_KEY) {
+        return null;
+    }
+    return new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
         httpAgent: httpsAgent
     });
@@ -498,6 +501,24 @@ const parseComplexDates = (query) => {
                 return null;
             }
         },
+        // "March 21st", "on March 21", "March 21, 2026" (single day)
+        {
+            pattern: /(?:on\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i,
+            handler: (match) => {
+                const [, monthName, day, year] = match;
+                const month = getMonthNumber(monthName);
+                const dayNum = parseInt(day, 10);
+                const yearToUse = year ? parseInt(year, 10) : (month < now.getMonth() + 1 ? currentYear + 1 : currentYear);
+                if (month !== -1 && dayNum >= 1 && dayNum <= 31) {
+                    const singleDay = new Date(yearToUse, month - 1, dayNum);
+                    if (singleDay.getMonth() === month - 1 && singleDay.getDate() === dayNum) {
+                        const date = formatDate(singleDay);
+                        return { start: date, end: date };
+                    }
+                }
+                return null;
+            }
+        },
         // "November" or "november" (single month without year) - must be last to avoid conflicts
         {
             pattern: /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i,
@@ -561,6 +582,24 @@ const parseComplexDates = (query) => {
         };
     }
     return null;
+};
+// Deterministic override for explicit single-day queries (e.g. "March 21st")
+const extractSingleDayRangeFromQuery = (query) => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const queryLower = (query || '').toLowerCase();
+    const singleDayPattern = /(?:on\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i;
+    const match = queryLower.match(singleDayPattern);
+    if (!match) return null;
+    const [, monthName, day, year] = match;
+    const month = getMonthNumber(monthName);
+    const dayNum = parseInt(day, 10);
+    if (month === -1 || dayNum < 1 || dayNum > 31) return null;
+    const yearToUse = year ? parseInt(year, 10) : (month < now.getMonth() + 1 ? currentYear + 1 : currentYear);
+    const singleDay = new Date(yearToUse, month - 1, dayNum);
+    if (singleDay.getMonth() !== month - 1 || singleDay.getDate() !== dayNum) return null;
+    const date = formatDate(singleDay);
+    return { start: date, end: date };
 };
 // Helper function to convert month names to numbers
 const getMonthNumber = (monthName) => {
@@ -682,6 +721,10 @@ const simpleParseQuery = (query) => {
 const parseQuery = async (query) => {
     try {
         // First try OpenAI
+        const openai = createOpenAIClient();
+        if (!openai) {
+            return simpleParseQuery(query);
+        }
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
@@ -696,6 +739,7 @@ const parseQuery = async (query) => {
                     - If a specific year is mentioned (e.g., "January 2026"), use that exact year
                     - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
                     - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
+                    - If a specific day is provided (e.g., "March 21st" or "on March 21, 2026"), set dateRange.start and dateRange.end to that exact same day
                     - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
                     When handling weekends, always use Friday through Sunday (3 days).
                     Return only a JSON object with the following fields:
@@ -1381,6 +1425,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
     result.isMultiQuery = isMultiQuery;
     try {
         // First try OpenAI for intelligent parsing (if available)
+        const openai = createOpenAIClient();
         if (openai) {
             try {
                 const now = new Date();
@@ -1454,13 +1499,14 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - If primary match date specified, use that as start date
                         - If no date specified, use current date as start
                         IMPORTANT RULES:
+                        - LEAGUE EXTRACTION: When the user mentions a league by name (e.g. "Premier league", "Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1"), you MUST include the corresponding league ID in the leagues array (e.g. Premier League → 39, La Liga → 140, Bundesliga → 78, Serie A → 135, Ligue 1 → 61). Do not return empty leagues when a league name is clearly stated in the query.
                         - GREETINGS AND SMALL TALK: If the user message is only a greeting (e.g. hello, hi, hey), thanks, or similar with no search intent, return a short friendly conversational message in errorMessage (e.g. greet them back and suggest they ask for matches by team, league, city, or dates). Do not return location, dateRange, teams, or leagues. Set suggestions to example queries if helpful.
                         - ALWAYS require a date/timeframe - if none provided AND no conversation history, return error message
                         - If conversation history exists, inherit missing information (location, dates) from previous searches
                         - For follow-up queries like "just premier league" or "only Arsenal", inherit location and dates from conversation history
                         - Use smart defaults for location based on teams/leagues
                         - Be conversational in error messages
-                        - For broad queries (location + dates only), provide helpful suggestions for refinement
+                        - For broad queries (location + dates only, no league mentioned), provide helpful suggestions for refinement and leagues may be empty
                         - Broad queries with location and dates are VALID
                         - Use conversation history to fill in missing context for follow-up queries${conversationContext}
                         CONTEXT INHERITANCE RULES:
@@ -1476,6 +1522,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         - If a specific year is mentioned (e.g., "January 2026"), use that exact year
                         - If only a month is mentioned without a year, and it's earlier than the current month (${currentMonth}), assume it's for next year (${currentYear + 1})
                         - If only a month is mentioned without a year, and it's the current month or later, use the current year (${currentYear})
+                        - If a specific day is provided (e.g., "March 21st" or "on March 21, 2026"), set dateRange.start and dateRange.end to that exact same day
                         - For a single month (e.g., "January 2026"), create a date range covering the entire month (e.g., "2026-01-01" to "2026-01-31")
                         When handling weekends, always use Friday through Sunday (3 days).
                         Return only a JSON object. For multi-query, use this structure:
@@ -2098,8 +2145,93 @@ router.post('/natural-language', async (req, res) => {
             return res.status(400).json({ error: 'Query is required' });
         }
         const parsed = await parseNaturalLanguage(query, conversationHistory);
-        const searchParams = buildSearchParameters(parsed);
-        // Handle error messages from OpenAI parsing - ALWAYS respect them
+        // Enforce exact single-day date range when user explicitly gives a day (works for both OpenAI and fallback parser)
+        const explicitSingleDayRange = extractSingleDayRangeFromQuery(query);
+        if (explicitSingleDayRange) {
+            parsed.dateRange = explicitSingleDayRange;
+        }
+        let searchParams = buildSearchParameters(parsed);
+        const queryLower = (query || '').toLowerCase();
+        // Canonical explicit league phrases: when user names a league, keep intent precise.
+        const explicitLeagueMappings = [
+            { phrase: 'premier league', apiId: '39', name: 'Premier League' },
+            { phrase: 'championship', apiId: '40', name: 'Championship' },
+            { phrase: 'la liga', apiId: '140', name: 'La Liga' },
+            { phrase: 'bundesliga 2', apiId: '79', name: 'Bundesliga 2' },
+            { phrase: 'bundesliga', apiId: '78', name: 'Bundesliga' },
+            { phrase: 'serie b', apiId: '136', name: 'Serie B' },
+            { phrase: 'serie a', apiId: '135', name: 'Serie A' },
+            { phrase: 'ligue 2', apiId: '62', name: 'Ligue 2' },
+            { phrase: 'ligue 1', apiId: '61', name: 'Ligue 1' },
+            { phrase: 'eredivisie', apiId: '88', name: 'Eredivisie' },
+            { phrase: 'primeira liga', apiId: '94', name: 'Primeira Liga' },
+            { phrase: 'champions league', apiId: '2', name: 'Champions League' },
+            { phrase: 'europa league', apiId: '3', name: 'Europa League' },
+            { phrase: 'segunda división', apiId: '141', name: 'La Liga 2' }
+        ];
+        const explicitLeague = explicitLeagueMappings.find(({ phrase }) => queryLower.includes(phrase));
+        if (explicitLeague) {
+            searchParams = { ...searchParams, leagues: [explicitLeague.apiId] };
+            parsed.leagues = [{ apiId: explicitLeague.apiId, name: explicitLeague.name }];
+        } else if (!searchParams.leagues || searchParams.leagues.length === 0) {
+            // Backend fallback: if parser returned no leagues, resolve a likely league phrase.
+            for (const { phrase } of explicitLeagueMappings) {
+                if (queryLower.includes(phrase)) {
+                    const found = await leagueService.searchLeagues(phrase, { limit: 1 });
+                    if (found && found.length > 0) {
+                        const apiId = String(found[0].apiId);
+                        searchParams = { ...searchParams, leagues: [apiId] };
+                        parsed.leagues = [{ apiId, name: found[0].name || phrase }];
+                        break;
+                    }
+                }
+            }
+        }
+        // Guardrails for MVP: location and date are required.
+        const missingFields = [];
+        if (!searchParams.startDate || !searchParams.endDate) missingFields.push('date');
+        if (!searchParams.location?.country || !searchParams.location?.city) missingFields.push('location');
+        if (missingFields.length > 0) {
+            const likelyGreetingOrSmallTalk =
+                !!parsed.errorMessage &&
+                !(searchParams.leagues && searchParams.leagues.length > 0) &&
+                !(parsed.teams?.any && parsed.teams.any.length > 0) &&
+                !searchParams.location &&
+                !searchParams.startDate &&
+                !searchParams.endDate;
+            if (likelyGreetingOrSmallTalk) {
+                return res.json({
+                    success: false,
+                    message: parsed.errorMessage,
+                    confidence: parsed.confidence,
+                    parsed: parsed,
+                    suggestions: parsed.suggestions || [
+                        'Premier League matches in London this weekend',
+                        'Arsenal matches in London on March 21st'
+                    ]
+                });
+            }
+            const missingDate = missingFields.includes('date');
+            const missingLocation = missingFields.includes('location');
+            const message = missingDate && missingLocation
+                ? 'Please tell me when and where you want to see matches.'
+                : missingDate
+                    ? 'Please tell me when you want to see matches (for example, this weekend or March 21st).'
+                    : 'Please tell me where you want to see matches (for example, in London or in Manchester).';
+            return res.json({
+                success: false,
+                missingFields,
+                message,
+                confidence: parsed.confidence,
+                parsed,
+                suggestions: [
+                    'Premier League matches in London this weekend',
+                    'Arsenal matches in London on March 21st',
+                    'Matches in Manchester next month'
+                ]
+            });
+        }
+        // Handle parser error messages after required-field validation
         if (parsed.errorMessage) {
             return res.json({
                 success: false,
@@ -2203,7 +2335,9 @@ router.post('/natural-language', async (req, res) => {
                 const titleCased = countryName.split(' ').map(w => w.charAt(0).toUpperCase() + (w.slice(1) || '').toLowerCase()).join(' ');
                 const countryCode = leagueService.getCountryCodeMapping(countryName) || leagueService.getCountryCodeMapping(titleCased);
                 const leaguesForCountry = countryCode ? await leagueService.getLeaguesForCountry(countryCode) : [];
-                leagueIds = (leaguesForCountry || []).map(l => String(l.apiId));
+                // Cap to top 10 by tier so we don't overwhelm (e.g. 27+ UK leagues)
+                const topLeagues = (leaguesForCountry || []).slice(0, 10);
+                leagueIds = topLeagues.map(l => String(l.apiId));
                 if (leagueIds.length > 0 && !leagueIds.includes('10')) {
                     leagueIds.push('10'); // Friendlies
                 }

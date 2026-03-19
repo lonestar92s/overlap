@@ -4,17 +4,19 @@
  * Tests parsing functions in isolation without API calls
  */
 const { describe, it, expect, beforeEach } = require('@jest/globals');
-// Mock OpenAI before importing the route
+// Mock OpenAI before importing the route (must be a constructor like real openai package)
 jest.mock('openai', () => {
-  return {
-    OpenAI: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: jest.fn()
-        }
+  const MockOpenAI = jest.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: jest.fn()
       }
-    }))
-  };
+    }
+  }));
+  MockOpenAI.OpenAI = MockOpenAI;
+  MockOpenAI.default = MockOpenAI;
+  MockOpenAI.AzureOpenAI = MockOpenAI;
+  return MockOpenAI;
 });
 // Mock database models
 jest.mock('../../../src/models/Team');

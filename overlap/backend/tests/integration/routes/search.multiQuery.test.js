@@ -6,45 +6,47 @@
 const request = require('supertest');
 const express = require('express');
 const mongoose = require('mongoose');
-// Mock OpenAI
+// Mock OpenAI — real package uses module.exports = OpenAI (constructor), not { OpenAI }
 jest.mock('openai', () => {
-  return {
-    OpenAI: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: jest.fn().mockResolvedValue({
-            choices: [{
-              message: {
-                content: JSON.stringify({
-                  isMultiQuery: true,
-                  primary: {
-                    teams: ["Bayern Munich"],
-                    matchType: "home",
-                    leagues: []
-                  },
-                  secondary: {
-                    count: 2,
-                    leagues: [79, 218],
-                    maxDistance: 200,
-                    excludePrimary: true
-                  },
-                  relationship: {
-                    distanceFrom: "primary",
-                    dateRange: {
-                      start: "2025-03-01",
-                      end: "2025-03-10"
-                    }
-                  },
-                  errorMessage: null,
-                  suggestions: []
-                })
-              }
-            }]
-          })
-        }
+  const MockOpenAI = jest.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: jest.fn().mockResolvedValue({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                isMultiQuery: true,
+                primary: {
+                  teams: ["Bayern Munich"],
+                  matchType: "home",
+                  leagues: []
+                },
+                secondary: {
+                  count: 2,
+                  leagues: [79, 218],
+                  maxDistance: 200,
+                  excludePrimary: true
+                },
+                relationship: {
+                  distanceFrom: "primary",
+                  dateRange: {
+                    start: "2025-03-01",
+                    end: "2025-03-10"
+                  }
+                },
+                errorMessage: null,
+                suggestions: []
+              })
+            }
+          }]
+        })
       }
-    }))
-  };
+    }
+  }));
+  MockOpenAI.OpenAI = MockOpenAI;
+  MockOpenAI.default = MockOpenAI;
+  MockOpenAI.AzureOpenAI = MockOpenAI;
+  return MockOpenAI;
 });
 // Mock external APIs
 jest.mock('axios');
@@ -287,6 +289,66 @@ describe('Multi-Query Search API - Integration Tests', () => {
         expect(response.body.success).toBe(false);
         expect(response.body).toHaveProperty('message');
         expect(response.body.message.length).toBeGreaterThan(0);
+      });
+
+      it('should keep explicit league and single-day date for "Premier league ... on March 21st"', async () => {
+        if (mongoose.connection.readyState === 0) return;
+
+        axios.get = jest.fn().mockResolvedValue({
+          data: {
+            response: [
+              {
+                fixture: {
+                  id: 1,
+                  date: '2026-03-21T12:30:00+00:00',
+                  venue: { id: 508, name: 'American Express Stadium', city: 'Falmer, East Sussex', country: 'England' }
+                },
+                teams: { home: { id: 51, name: 'Brighton' }, away: { id: 40, name: 'Liverpool' } },
+                league: { id: 39, name: 'Premier League', country: 'England' }
+              }
+            ]
+          }
+        });
+
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'Premier league matches in London on March 21st' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.parsed).toHaveProperty('dateRange');
+        expect(response.body.parsed.dateRange.start).toBe('2026-03-21');
+        expect(response.body.parsed.dateRange.end).toBe('2026-03-21');
+        expect(response.body.parsed.leagues).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: '39' })])
+        );
+        expect(response.body.preSelectedFilters.leagues).toEqual(['Premier League']);
+      });
+
+      it('should require date when location and league are provided without timeframe', async () => {
+        if (mongoose.connection.readyState === 0) return;
+
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'Premier league matches in London' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(false);
+        expect(response.body).toHaveProperty('missingFields');
+        expect(response.body.missingFields).toContain('date');
+      });
+
+      it('should require location when date and league are provided without place', async () => {
+        if (mongoose.connection.readyState === 0) return;
+
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'Premier league matches on March 21st' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(false);
+        expect(response.body).toHaveProperty('missingFields');
+        expect(response.body.missingFields).toContain('location');
       });
     });
   });
