@@ -54,6 +54,11 @@ describe('search league and season inference', () => {
     expect(season).toBe(2026);
   });
 
+  it('uses calendar season year for FIFA World Cup', () => {
+    const season = determineSeasonForCompetitions('2026-06-01', ['1']);
+    expect(season).toBe(2026);
+  });
+
   it('uses split-season logic for Premier League in April', () => {
     const season = determineSeasonForCompetitions('2026-04-01', ['39']);
     expect(season).toBe(2025);

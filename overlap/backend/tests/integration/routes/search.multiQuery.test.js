@@ -338,6 +338,106 @@ describe('Multi-Query Search API - Integration Tests', () => {
         expect(response.body.missingFields).toContain('date');
       });
 
+      it('should allow world cup competition query without requiring location', async () => {
+        if (mongoose.connection.readyState === 0) return;
+
+        const { OpenAI } = require('openai');
+        OpenAI.mockImplementation(() => ({
+          chat: {
+            completions: {
+              create: jest.fn().mockResolvedValue({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      isMultiQuery: false,
+                      location: null,
+                      dateRange: {
+                        start: '2026-06-01',
+                        end: '2026-06-30'
+                      },
+                      teams: [],
+                      leagues: [1],
+                      maxDistance: 50,
+                      errorMessage: null
+                    })
+                  }
+                }]
+              })
+            }
+          }
+        }));
+
+        axios.get = jest.fn().mockResolvedValue({
+          data: {
+            response: [
+              {
+                fixture: {
+                  id: 990001,
+                  date: '2026-06-14T19:00:00+00:00',
+                  venue: { id: 1, name: 'Azteca', city: 'Mexico City', country: 'Mexico' }
+                },
+                teams: { home: { id: 1, name: 'Mexico' }, away: { id: 2, name: 'Canada' } },
+                league: { id: 1, name: 'FIFA World Cup', country: 'International' }
+              }
+            ]
+          }
+        });
+
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'World cup 2026 matches in June' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.missingFields).toBeUndefined();
+        expect(response.body.parsed.dateRange.start).toBe('2026-06-01');
+        expect(response.body.parsed.dateRange.end).toBe('2026-06-30');
+        expect(response.body.parsed.leagues).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: '1' })])
+        );
+      });
+
+      it('treats empty location object from parser as no location', async () => {
+        if (mongoose.connection.readyState === 0) return;
+
+        const { OpenAI } = require('openai');
+        OpenAI.mockImplementation(() => ({
+          chat: {
+            completions: {
+              create: jest.fn().mockResolvedValue({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      isMultiQuery: false,
+                      location: { city: null, country: null, coordinates: [] },
+                      dateRange: {
+                        start: '2026-06-01',
+                        end: '2026-06-30'
+                      },
+                      teams: [],
+                      leagues: [1],
+                      maxDistance: 50,
+                      errorMessage: null
+                    })
+                  }
+                }]
+              })
+            }
+          }
+        }));
+
+        axios.get = jest.fn().mockResolvedValue({ data: { response: [] } });
+
+        const response = await request(app)
+          .post('/api/search/natural-language')
+          .send({ query: 'World cup 2026 matches in June' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.missingFields).toBeUndefined();
+        expect(response.body.parsed.location).toBeNull();
+      });
+
       it('should require location when date and league are provided without place', async () => {
         if (mongoose.connection.readyState === 0) return;
 

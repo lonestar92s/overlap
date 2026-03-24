@@ -1,5 +1,7 @@
 const express = require('express');
 const OpenAI = require('openai');
+const { DateTime } = require('luxon');
+const { find: geoTzFind } = require('geo-tz');
 const https = require('https');
 const axios = require('axios');
 const teamService = require('../services/teamService');
@@ -11,6 +13,7 @@ const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/searchLeagueFilter');
 const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
+const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/matchItineraryPlanner');
 const router = express.Router();
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
@@ -996,6 +999,328 @@ function hasExplicitLocationPhrase(queryLower, token) {
     ];
     return explicitPatterns.some((pattern) => pattern.test(queryLower));
 }
+function normalizeLocation(location) {
+    if (!location || typeof location !== 'object') {
+        return null;
+    }
+    const city = typeof location.city === 'string' ? location.city.trim() : '';
+    const country = typeof location.country === 'string' ? location.country.trim() : '';
+    const coords = Array.isArray(location.coordinates) ? location.coordinates : [];
+    const hasCoords = coords.length === 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1]);
+    if (!city && !country && !hasCoords) {
+        return null;
+    }
+    return {
+        city: city || null,
+        country: country || null,
+        coordinates: hasCoords ? coords : []
+    };
+}
+function detectPlanItineraryFromQuery(query) {
+    const q = String(query || '').toLowerCase();
+    const patterns = [
+        /\bplan\s+(an?\s+)?itinerary\b/,
+        /\bplan\s+(my\s+)?(a\s+)?(football\s+)?(trip|weekend)\b/,
+        /\b(weekend|multi)[\s-]?(match|game)(es)?\b/,
+        /\bmultiple\s+matches\b/,
+        /\bsee\s+(\d+)\s+(different\s+)?(games|matches)\b/,
+        /\b(\d+)\s+(games|matches)\s+(in|around|near|over)\b/,
+        /\bfootball\s+weekend\b/,
+        /\bmatch\s+weekend\b/
+    ];
+    return patterns.some((p) => p.test(q));
+}
+function extractMinMatchesFromQuery(query) {
+    const q = String(query || '');
+    const m =
+        q.match(/\b(?:see|watch|catch|hit|do)\s+(\d+)\s+(?:different\s+)?(?:games|matches)\b/i) ||
+        q.match(/\b(\d+)\s+(?:games|matches)\s+(?:in|around|over|near)\b/i) ||
+        q.match(/\b(?:at least|minimum|min\.?)\s+(\d+)\s+(?:games|matches)\b/i);
+    if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= 2 && n <= 10) {
+            return n;
+        }
+    }
+    return null;
+}
+/** First calendar date in [start,end] that falls on Fri–Sun in `ianaTimeZone`, else start date. */
+function weekendAnchorLocalDateFromRange(startStr, endStr, ianaTimeZone) {
+    const start = DateTime.fromISO(String(startStr), { zone: ianaTimeZone });
+    const end = DateTime.fromISO(String(endStr), { zone: ianaTimeZone });
+    if (!start.isValid) {
+        return String(startStr).slice(0, 10);
+    }
+    if (!end.isValid) {
+        return start.toISODate();
+    }
+    let d = start.startOf('day');
+    const endDay = end.startOf('day');
+    while (d <= endDay) {
+        const wd = d.weekday;
+        if (wd >= 5) {
+            return d.toISODate();
+        }
+        d = d.plus({ days: 1 });
+    }
+    return start.toISODate();
+}
+/**
+ * Maps planner metrics to a stable reason code and user-facing message (English).
+ * @param {object} o
+ * @param {boolean} o.feasible
+ * @param {number} o.minMatches
+ * @param {number} o.windowEndMs - weekend window end (Luxon millis)
+ * @param {number} o.nowMs
+ * @param {number} o.fixturesFetched - after bounds, from performSearch
+ * @param {number} o.fixturesUpcoming - kickoff >= nowMs
+ * @param {number} o.candidateFixturesInWindow - normalized count inside findFeasibleItineraries
+ * @param {{ matchCount: number } | null} o.bestItinerary
+ * @param {string} o.city
+ * @param {string} o.country
+ */
+function describePlanItineraryOutcome(o) {
+    const {
+        feasible,
+        minMatches,
+        windowEndMs,
+        nowMs,
+        fixturesFetched,
+        fixturesUpcoming,
+        candidateFixturesInWindow,
+        bestItinerary,
+        city,
+        country
+    } = o;
+    const where = [city, country].filter(Boolean).join(', ');
+    const around = where ? ` around ${where}` : '';
+    if (feasible && bestItinerary && bestItinerary.matchCount >= minMatches) {
+        return {
+            reasonCode: 'FEASIBLE',
+            userMessage: `Found a feasible ${bestItinerary.matchCount}-match weekend plan${around}.`
+        };
+    }
+    if (windowEndMs < nowMs) {
+        return {
+            reasonCode: 'WEEKEND_WINDOW_PAST',
+            userMessage:
+                'That weekend has already passed. Pick a future Friday–Sunday window to plan matches you can still attend.'
+        };
+    }
+    if (fixturesFetched === 0) {
+        return {
+            reasonCode: 'NO_FIXTURES_IN_SEARCH',
+            userMessage:
+                'No matches showed up for that area and weekend. Try a wider search radius, more leagues, or different dates.'
+        };
+    }
+    if (fixturesUpcoming === 0 && fixturesFetched > 0) {
+        return {
+            reasonCode: 'ALL_FIXTURES_IN_PAST',
+            userMessage:
+                'All fixtures in that weekend have already kicked off. Choose a future weekend to build an itinerary.'
+        };
+    }
+    if (fixturesUpcoming > 0 && candidateFixturesInWindow === 0) {
+        return {
+            reasonCode: 'NO_PLANNABLE_FIXTURES',
+            userMessage:
+                'Some fixtures were found, but none could be scheduled on the map for this window (often missing venue coordinates). Try widening the search or different competitions.'
+        };
+    }
+    return {
+        reasonCode: 'NO_FEASIBLE_CHAIN',
+        userMessage: `No ${minMatches}-match weekend chain satisfied your travel and timing limits in that window. Try more leagues, a wider radius, or different dates.`
+    };
+}
+async function resolveIanaTimeZoneForLocation(city, country, coordinates) {
+    let lat;
+    let lng;
+    if (Array.isArray(coordinates) && coordinates.length === 2 && Number.isFinite(coordinates[0]) && Number.isFinite(coordinates[1])) {
+        lng = coordinates[0];
+        lat = coordinates[1];
+    } else {
+        const geo = await geocodingService.geocodeVenue(String(city || '').trim(), null, String(country || '').trim());
+        if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) {
+            return null;
+        }
+        lat = geo.lat;
+        lng = geo.lng;
+    }
+    try {
+        const zones = geoTzFind(lat, lng);
+        return Array.isArray(zones) && zones.length > 0 ? zones[0] : null;
+    } catch {
+        return null;
+    }
+}
+/**
+ * Core plan-itinerary implementation (shared by POST /plan-itinerary and NL bridge).
+ * @returns {Promise<object>} Result payload; includes _httpStatus for non-200 HTTP mapping when needed.
+ */
+async function runPlanItinerary(body = {}) {
+    const {
+        city,
+        country,
+        ianaTimeZone,
+        weekendAnchorLocalDate,
+        competitions,
+        minMatches = 3,
+        maxMatches = 6,
+        maxTravelMinutesBetweenMatches = 90,
+        fixedBufferMinutes = 25,
+        minutesPerKm = 3.5,
+        maxLegsPerDay = 2,
+        radiusMiles = 50
+    } = body;
+    if (!city || !country || !ianaTimeZone || !weekendAnchorLocalDate) {
+        return {
+            success: false,
+            error: 'city, country, ianaTimeZone, and weekendAnchorLocalDate are required',
+            _httpStatus: 400
+        };
+    }
+    if (!Array.isArray(competitions) || competitions.length === 0) {
+        return {
+            success: false,
+            error: 'competitions must be a non-empty array of league API ids (strings or numbers)',
+            _httpStatus: 400
+        };
+    }
+    try {
+        const { start, end, dateFrom, dateTo } = weekendRangeFromAnchor(ianaTimeZone, weekendAnchorLocalDate);
+        const windowStartMs = start.toMillis();
+        const windowEndMs = end.toMillis();
+
+        const geo = await geocodingService.geocodeVenue(String(city).trim(), null, String(country).trim());
+        if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) {
+            return {
+                success: false,
+                code: 'GEOCODE_FAILED',
+                message: 'Could not resolve that city. Check spelling or try a nearby major city.',
+                window: { dateFrom, dateTo, ianaTimeZone },
+                _httpStatus: 200
+            };
+        }
+
+        const radiusKm = Number(radiusMiles) * 1.60934;
+        const lat = geo.lat;
+        const lng = geo.lng;
+        const latDelta = radiusKm / 111.32;
+        const lngDelta = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+        const bounds = {
+            northeast: { lat: lat + latDelta, lng: lng + lngDelta },
+            southwest: { lat: lat - latDelta, lng: lng - lngDelta }
+        };
+
+        const leagueIds = competitions.map((c) => String(c).trim());
+        const seasonForApi = determineSeasonForCompetitions(dateFrom, leagueIds);
+
+        const matches = await performSearch({
+            competitions: leagueIds,
+            dateFrom,
+            dateTo,
+            season: seasonForApi,
+            bounds,
+            teams: [],
+            leagues: [],
+            matchTypes: []
+        });
+
+        const nowMs = Date.now();
+        const upcomingMatches = matches.filter((m) => {
+            const t = new Date(m?.fixture?.date).getTime();
+            return Number.isFinite(t) && t >= nowMs;
+        });
+
+        const minM = Math.max(1, parseInt(String(minMatches), 10) || 3);
+        const { itineraries, candidateFixturesInWindow } = findFeasibleItineraries(upcomingMatches, {
+            ianaTimeZone,
+            windowStartMs,
+            windowEndMs,
+            nowMs,
+            minMatches: minM,
+            maxMatches: Math.max(1, parseInt(String(maxMatches), 10) || 6),
+            maxTravelMinutesBetweenMatches: parseInt(String(maxTravelMinutesBetweenMatches), 10) || 90,
+            fixedBufferMinutes: parseInt(String(fixedBufferMinutes), 10) || 25,
+            minutesPerKm: Number(minutesPerKm) || 3.5,
+            maxLegsPerDay: parseInt(String(maxLegsPerDay), 10) || 2,
+            maxItineraries: 10
+        });
+
+        const best = itineraries[0] || null;
+        const feasible = !!(best && best.matchCount >= minM);
+
+        const { reasonCode, userMessage } = describePlanItineraryOutcome({
+            feasible,
+            minMatches: minM,
+            windowEndMs,
+            nowMs,
+            fixturesFetched: matches.length,
+            fixturesUpcoming: upcomingMatches.length,
+            candidateFixturesInWindow,
+            bestItinerary: best,
+            city: String(city).trim(),
+            country: String(country).trim()
+        });
+
+        return {
+            success: true,
+            feasible,
+            reasonCode,
+            userMessage,
+            window: {
+                dateFrom,
+                dateTo,
+                ianaTimeZone,
+                localStart: start.toISO(),
+                localEnd: end.toISO()
+            },
+            constraints: {
+                minMatches: minM,
+                maxMatches: Math.max(1, parseInt(String(maxMatches), 10) || 6),
+                maxTravelMinutesBetweenMatches: parseInt(String(maxTravelMinutesBetweenMatches), 10) || 90,
+                fixedBufferMinutes: parseInt(String(fixedBufferMinutes), 10) || 25,
+                minutesPerKm: Number(minutesPerKm) || 3.5,
+                maxLegsPerDay: parseInt(String(maxLegsPerDay), 10) || 2,
+                radiusMiles: Number(radiusMiles) || 50
+            },
+            geo: { city: String(city).trim(), country: String(country).trim(), lat, lng },
+            seasonUsed: seasonForApi,
+            fixturesFetched: matches.length,
+            fixturesUpcoming: upcomingMatches.length,
+            fixturesDroppedPast: Math.max(0, matches.length - upcomingMatches.length),
+            candidateFixturesInWindow,
+            itineraries,
+            trace: [
+                { step: 1, tool: 'weekend_window', detail: { dateFrom, dateTo, ianaTimeZone } },
+                {
+                    step: 2,
+                    tool: 'fetch_fixtures',
+                    detail: {
+                        inBounds: matches.length,
+                        upcomingKickoffs: upcomingMatches.length,
+                        droppedPast: Math.max(0, matches.length - upcomingMatches.length),
+                        inWeekendWindow: candidateFixturesInWindow
+                    }
+                },
+                {
+                    step: 3,
+                    tool: 'schedule_feasibility',
+                    detail: { itinerariesFound: itineraries.length, feasible, reasonCode }
+                }
+            ]
+        };
+    } catch (error) {
+        console.error('Plan itinerary error:', error);
+        return {
+            success: false,
+            code: 'INTERNAL',
+            message: 'Could not build an itinerary. Please try again in a moment.',
+            _httpStatus: 200
+        };
+    }
+}
 // Enhanced location extraction with better city coverage
 const extractLocation = (query, teams = null) => {
     const queryLower = query.toLowerCase();
@@ -1091,8 +1416,46 @@ const extractDistance = (query) => {
     }
     return null;
 };
+async function resolveLeaguesFromQueryText(query) {
+    const queryLower = String(query || '').toLowerCase().trim();
+    if (!queryLower) {
+        return [];
+    }
+    const candidates = new Set();
+    candidates.add(queryLower);
+    const runs = getMeaningfulWordRuns(query);
+    for (const run of runs) {
+        if (run.length >= 2) {
+            candidates.add(run.join(' '));
+        }
+    }
+    const results = [];
+    const seen = new Set();
+    for (const phrase of candidates) {
+        const found = await leagueService.searchLeagues(phrase, { limit: 3 });
+        if (!found || found.length === 0) {
+            continue;
+        }
+        for (const league of found) {
+            const apiId = String(league.apiId || '').trim();
+            if (!apiId || seen.has(apiId)) {
+                continue;
+            }
+            seen.add(apiId);
+            results.push({
+                apiId,
+                name: league.name || apiId
+            });
+        }
+        if (results.length >= 3) {
+            break;
+        }
+    }
+    return results;
+}
 const CALENDAR_SEASON_LEAGUE_IDS = new Set([
-    '253' // MLS
+    '253', // MLS
+    '1' // FIFA World Cup
 ]);
 
 function inferLeagueIdsFromTeamDocs(teams) {
@@ -1450,6 +1813,10 @@ function calculatePeriodDateRange(query, referenceDate = new Date()) {
 const parseNaturalLanguage = async (query, conversationHistory = []) => {
     let result = {
         isMultiQuery: false, // NEW: Multi-query flag
+        intent: 'search',
+        minMatches: null,
+        weekendAnchorLocalDate: null,
+        ianaTimeZone: null,
         location: null,
         date: null,
         dateRange: null,
@@ -1509,7 +1876,11 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                     {
                         role: "system",
                         content: `You are a football match search assistant. Parse natural language queries into structured search parameters.
-                        The current date is ${formatDate(now)}. 
+                        The current date is ${formatDate(now)}.
+                        INTENT (single-query only):
+                        - intent: "search" (default) — list/filter fixtures in a date range.
+                        - intent: "plan_itinerary" — user wants a multi-match WEEKEND trip with feasible travel (e.g. "plan a football weekend", "itinerary for 3 games in London", "see multiple matches same weekend"). Requires location + timeframe + league(s) like a normal search.
+                        When intent is "plan_itinerary", you may set minMatches (2–6, default 3) and optionally weekendAnchorLocalDate (YYYY-MM-DD in that city) or ianaTimeZone (IANA id e.g. Europe/London); otherwise leave them null.
                         MULTI-QUERY DETECTION:
                         - If query contains phrases like "but would also like", "but also", "plus", "other matches", "additional matches", parse as multi-query
                         - Multi-query structure: primary match + secondary matches with different criteria
@@ -1597,16 +1968,37 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                         For single query, use this structure:
                         {
                             "isMultiQuery": false,
+                            "intent": "search",
                             "location": { "city": "London", "country": "United Kingdom", "coordinates": [-0.118092, 51.509865] },
                             "dateRange": { "start": "2025-03-01", "end": "2025-03-31" },
                             "leagues": [39],
                             "maxDistance": 50,
                             "teams": ["Arsenal FC"],
                             "matchTypes": [],
+                            "minMatches": null,
+                            "weekendAnchorLocalDate": null,
+                            "ianaTimeZone": null,
+                            "errorMessage": null,
+                            "suggestions": []
+                        }
+                        For single-query weekend itinerary planning:
+                        {
+                            "isMultiQuery": false,
+                            "intent": "plan_itinerary",
+                            "location": { "city": "London", "country": "United Kingdom", "coordinates": [-0.118092, 51.509865] },
+                            "dateRange": { "start": "2026-03-06", "end": "2026-03-08" },
+                            "leagues": [39, 40],
+                            "maxDistance": 50,
+                            "teams": [],
+                            "matchTypes": [],
+                            "minMatches": 3,
+                            "weekendAnchorLocalDate": null,
+                            "ianaTimeZone": "Europe/London",
                             "errorMessage": null,
                             "suggestions": []
                         }
                         Fields:
+                        - intent: "search" | "plan_itinerary" (single query only; omit or "search" for multi-query)
                         - isMultiQuery (boolean) - REQUIRED: true if multi-query detected, false otherwise
                         - For multi-query: primary, secondary, relationship objects
                         - For single query: location, dateRange, leagues, maxDistance, teams, matchTypes
@@ -1733,9 +2125,24 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 result.confidence = 0;
                 // Don't return early - let context inheritance handle it
             }
+            if (!parsedResponse.isMultiQuery) {
+                if (parsedResponse.intent === 'plan_itinerary') {
+                    result.intent = 'plan_itinerary';
+                }
+                if (typeof parsedResponse.minMatches === 'number' && parsedResponse.minMatches >= 2 && parsedResponse.minMatches <= 10) {
+                    result.minMatches = parsedResponse.minMatches;
+                }
+                if (typeof parsedResponse.weekendAnchorLocalDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsedResponse.weekendAnchorLocalDate.trim())) {
+                    result.weekendAnchorLocalDate = parsedResponse.weekendAnchorLocalDate.trim();
+                }
+                if (typeof parsedResponse.ianaTimeZone === 'string' && parsedResponse.ianaTimeZone.includes('/')) {
+                    result.ianaTimeZone = parsedResponse.ianaTimeZone.trim();
+                }
+            }
             // Check if multi-query
             if (parsedResponse.isMultiQuery) {
                 result.isMultiQuery = true;
+                result.intent = 'search';
                 // Map primary criteria
                 result.primary = {
                     teams: parsedResponse.primary?.teams || [],
@@ -1806,6 +2213,9 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
             // Apply conversation state management after AI parsing
             const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
             Object.assign(result, updatedResult);
+            if (!result.isMultiQuery && detectPlanItineraryFromQuery(query)) {
+                result.intent = 'plan_itinerary';
+            }
             return result;
             } catch (openaiError) {
                 // Fall through to regex parser
@@ -1837,6 +2247,9 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         // Apply conversation state management after regex parsing
         const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
         Object.assign(result, updatedResult);
+        if (!result.isMultiQuery && detectPlanItineraryFromQuery(query)) {
+            result.intent = 'plan_itinerary';
+        }
         // DATE VALIDATION - Always require dates
         if (!result.dateRange) {
             result.errorMessage = "Please specify when you want to see these matches";
@@ -2202,6 +2615,8 @@ router.post('/natural-language', async (req, res) => {
             parsed.dateRange = explicitSingleDayRange;
         }
         let searchParams = buildSearchParameters(parsed);
+        parsed.location = normalizeLocation(parsed.location);
+        searchParams = { ...searchParams, location: normalizeLocation(searchParams.location) };
         // For direct team/league queries without an explicit location in this turn,
         // prefer global search (no city bounds) instead of silently pinning to an inferred city.
         const explicitLocationInQuery = extractLocation(query, parsed.teams);
@@ -2229,6 +2644,8 @@ router.post('/natural-language', async (req, res) => {
             { phrase: 'primeira liga', apiId: '94', name: 'Primeira Liga' },
             { phrase: 'champions league', apiId: '2', name: 'Champions League' },
             { phrase: 'europa league', apiId: '3', name: 'Europa League' },
+            { phrase: 'fifa world cup', apiId: '1', name: 'FIFA World Cup' },
+            { phrase: 'world cup', apiId: '1', name: 'FIFA World Cup' },
             { phrase: 'segunda división', apiId: '141', name: 'La Liga 2' }
         ];
         const explicitLeague = explicitLeagueMappings.find(({ phrase }) => queryLower.includes(phrase));
@@ -2236,17 +2653,11 @@ router.post('/natural-language', async (req, res) => {
             searchParams = { ...searchParams, leagues: [explicitLeague.apiId] };
             parsed.leagues = [{ apiId: explicitLeague.apiId, name: explicitLeague.name }];
         } else if (!searchParams.leagues || searchParams.leagues.length === 0) {
-            // Backend fallback: if parser returned no leagues, resolve a likely league phrase.
-            for (const { phrase } of explicitLeagueMappings) {
-                if (queryLower.includes(phrase)) {
-                    const found = await leagueService.searchLeagues(phrase, { limit: 1 });
-                    if (found && found.length > 0) {
-                        const apiId = String(found[0].apiId);
-                        searchParams = { ...searchParams, leagues: [apiId] };
-                        parsed.leagues = [{ apiId, name: found[0].name || phrase }];
-                        break;
-                    }
-                }
+            // DB/API-backed fallback: resolve competitions from free-text query phrases.
+            const resolvedLeagues = await resolveLeaguesFromQueryText(query);
+            if (resolvedLeagues.length > 0) {
+                searchParams = { ...searchParams, leagues: resolvedLeagues.map((l) => l.apiId) };
+                parsed.leagues = resolvedLeagues;
             }
         }
         // Guardrails: date is always required; location required only for broad queries.
@@ -2418,6 +2829,110 @@ router.post('/natural-language', async (req, res) => {
                 season = determineSeasonForCompetitions(searchParams.startDate, leagueIds);
             }
         }
+        const wantsPlanItinerary =
+            !parsed.isMultiQuery &&
+            parsed.intent === 'plan_itinerary' &&
+            searchParams.location &&
+            searchParams.location.city &&
+            searchParams.location.country &&
+            leagueIds.length > 0;
+        if (wantsPlanItinerary) {
+            const ianaTz =
+                (typeof parsed.ianaTimeZone === 'string' && parsed.ianaTimeZone.includes('/')
+                    ? parsed.ianaTimeZone.trim()
+                    : null) ||
+                (await resolveIanaTimeZoneForLocation(
+                    searchParams.location.city,
+                    searchParams.location.country,
+                    searchParams.location.coordinates
+                ));
+            if (!ianaTz) {
+                return res.status(200).json({
+                    success: false,
+                    intent: 'plan_itinerary',
+                    code: 'TIMEZONE_UNAVAILABLE',
+                    message: 'Could not resolve timezone for that location. Try a more specific city or region.',
+                    parsed: {
+                        teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
+                        leagues: parsed.leagues,
+                        location: parsed.location,
+                        dateRange: parsed.dateRange,
+                        distance: parsed.distance
+                    },
+                    suggestions: ['Try: Premier League weekend plan in London next month', 'Include country with the city (e.g. London, UK)']
+                });
+            }
+            const anchorDate =
+                (typeof parsed.weekendAnchorLocalDate === 'string' &&
+                    /^\d{4}-\d{2}-\d{2}$/.test(parsed.weekendAnchorLocalDate.trim()) &&
+                    parsed.weekendAnchorLocalDate.trim()) ||
+                weekendAnchorLocalDateFromRange(searchParams.startDate, searchParams.endDate, ianaTz);
+            const minM =
+                (Number.isFinite(Number(parsed.minMatches)) &&
+                Number(parsed.minMatches) >= 2 &&
+                Number(parsed.minMatches) <= 10
+                    ? Number(parsed.minMatches)
+                    : null) ??
+                extractMinMatchesFromQuery(query) ??
+                3;
+            const radiusMiles =
+                Number.isFinite(Number(parsed.distance)) && Number(parsed.distance) > 0 ? Number(parsed.distance) : 50;
+            const planPayload = await runPlanItinerary({
+                city: searchParams.location.city,
+                country: searchParams.location.country,
+                ianaTimeZone: ianaTz,
+                weekendAnchorLocalDate: anchorDate,
+                competitions: leagueIds,
+                minMatches: minM,
+                maxMatches: 6,
+                maxTravelMinutesBetweenMatches: 90,
+                fixedBufferMinutes: 25,
+                minutesPerKm: 3.5,
+                maxLegsPerDay: 2,
+                radiusMiles
+            });
+            const { _httpStatus: planHttp, ...planOut } = planPayload;
+            if (planHttp === 400) {
+                return res.status(400).json({ ...planOut, intent: 'plan_itinerary', query });
+            }
+            if (!planPayload.success) {
+                return res.status(planHttp || 200).json({ ...planOut, intent: 'plan_itinerary', query });
+            }
+            const leaguesWithNamesPlan = await mapLeagueIdsToNamesAsync(leagueIds);
+            const bestItin = planPayload.itineraries && planPayload.itineraries[0];
+            const planMatches = planPayload.feasible && bestItin && bestItin.matches ? bestItin.matches : [];
+            const planMessage =
+                typeof planPayload.userMessage === 'string' && planPayload.userMessage.length > 0
+                    ? planPayload.userMessage
+                    : planPayload.feasible && bestItin
+                      ? `Found a feasible ${bestItin.matchCount}-match weekend plan.`
+                      : `Could not build a ${minM}-match weekend plan for that window.`;
+            return res.json({
+                success: true,
+                intent: 'plan_itinerary',
+                reasonCode: planPayload.reasonCode,
+                query,
+                confidence: parsed.confidence,
+                message: planMessage,
+                parsed: {
+                    teams: parsed.teams.any.map(t => ({ name: t.name, id: t._id })),
+                    leagues: leaguesWithNamesPlan,
+                    location: parsed.location,
+                    dateRange: parsed.dateRange,
+                    distance: parsed.distance,
+                    itineraryConstraints: planPayload.constraints,
+                    weekendWindow: planPayload.window
+                },
+                preSelectedFilters: {
+                    country: parsed.location?.country || null,
+                    leagues: leaguesWithNamesPlan.map(l => l.name),
+                    teams: parsed.teams.any.map(t => t.name)
+                },
+                plan: planOut,
+                matches: planMatches,
+                count: planMatches.length
+            });
+        }
         // For broad queries, still respect location-based league selection
         // This ensures Paris searches show French leagues, London shows English leagues, etc.
         // Add geographic distance filtering for natural language search
@@ -2568,6 +3083,28 @@ router.post('/parse', async (req, res) => {
         res.status(500).json({ error: 'Error parsing query' });
     }
 });
+/**
+ * Match-only itinerary planner: fetch fixtures for a weekend window and return feasible match chains
+ * under travel/time constraints (agent-style loop reserved for future widen steps).
+ *
+ * Body: city, country, ianaTimeZone, weekendAnchorLocalDate (YYYY-MM-DD), competitions[] (league API ids),
+ * optional: minMatches, maxMatches, maxTravelMinutesBetweenMatches, fixedBufferMinutes, minutesPerKm,
+ * maxLegsPerDay, radiusMiles. Season for API-Sports is derived from date + competitions.
+ */
+router.post('/plan-itinerary', async (req, res) => {
+    try {
+        const payload = await runPlanItinerary(req.body || {});
+        const { _httpStatus: httpStatus, ...body } = payload;
+        return res.status(httpStatus || 200).json(body);
+    } catch (error) {
+        console.error('Plan itinerary route error:', error);
+        return res.status(200).json({
+            success: false,
+            code: 'INTERNAL',
+            message: 'Could not build an itinerary. Please try again in a moment.'
+        });
+    }
+});
 module.exports = router;
 // Export parser helpers for unit tests.
 module.exports.parseNaturalLanguage = parseNaturalLanguage;
@@ -2576,3 +3113,8 @@ module.exports.extractLocation = extractLocation;
 module.exports.inferLeagueIdsFromTeamDocs = inferLeagueIdsFromTeamDocs;
 module.exports.resolveLeagueIdsFromTeams = resolveLeagueIdsFromTeams;
 module.exports.determineSeasonForCompetitions = determineSeasonForCompetitions;
+module.exports.resolveLeaguesFromQueryText = resolveLeaguesFromQueryText;
+module.exports.runPlanItinerary = runPlanItinerary;
+module.exports.detectPlanItineraryFromQuery = detectPlanItineraryFromQuery;
+module.exports.weekendAnchorLocalDateFromRange = weekendAnchorLocalDateFromRange;
+module.exports.describePlanItineraryOutcome = describePlanItineraryOutcome;
