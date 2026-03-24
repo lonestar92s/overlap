@@ -104,12 +104,13 @@ const MessagesScreen = ({ navigation }) => {
         data: error.response?.data,
         stack: error.stack
       });
-      
+
       const errorMessage = {
         id: (Date.now() + 1).toString(),
-        text: `Sorry, I encountered an error: ${error.message}. Please try again.`,
+        text: "Something went wrong. Please try again.",
         isBot: true,
         timestamp: new Date(),
+        suggestions: ['Try again in a moment', 'Use a shorter query with team, place, and dates'],
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {

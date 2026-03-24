@@ -9,6 +9,7 @@ const geocodingService = require('../services/geocodingService');
 const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
+const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/searchLeagueFilter');
 const router = express.Router();
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
@@ -263,11 +264,14 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 continue; // Skip this match if it doesn't match any of the specified teams
             }
         }
-        // Apply league filtering if provided (additional to competitions)
-        if (leagues && leagues.length > 0) {
+        // Apply league filtering if provided (additional to competitions).
+        // Skip when filters are numeric ids matching competitions exactly (already scoped by API fetch).
+        // Otherwise match by api id for numeric tokens or substring on name for text tokens (OpenAI may pass "39" as name).
+        if (leagues && leagues.length > 0 && !shouldSkipLeagueFilter(leagues, competitions)) {
             const leagueName = transformed.league.name.toLowerCase();
-            const leagueMatches = leagues.some(league => 
-                leagueName.includes(league.toLowerCase())
+            const leagueId = transformed.league.id;
+            const leagueMatches = leagues.some(league =>
+                matchesLeagueFilterToken(leagueId, leagueName, league)
             );
             if (!leagueMatches) {
                 continue; // Skip this match if it doesn't match any of the specified leagues
@@ -801,9 +805,74 @@ const parseQuery = async (query) => {
         return simpleParseQuery(query);
     }
 };
+// Stopwords for NL fallback parsing: avoids n-grams like "play" matching random teams.
+const NL_STOPWORDS = new Set([
+    'i', 'want', 'to', 'see', 'the', 'a', 'an', 'at', 'in', 'on', 'for', 'of', 'and', 'or', 'but', 'with', 'from', 'by',
+    'is', 'are', 'was', 'were', 'it', 'we', 'you', 'they', 'this', 'that', 'next', 'last', 'can', 'could', 'would', 'should',
+    'please', 'just', 'only', 'also', 'some', 'any', 'all', 'my', 'your', 'me', 'us', 'let', 'there', 'here', 'when', 'where',
+    'what', 'how', 'which', 'who', 'home', 'away', 'month', 'week', 'weekend', 'year', 'day', 'today', 'tomorrow',
+    'play', 'plays', 'playing', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'vs', 'v', 'against',
+    'near', 'around', 'within', 'between', 'through', 'during', 'about', 'like', 'looking', 'trying', 'plan', 'trip', 'trips',
+    'show', 'find', 'give', 'get', 'recommend', 'watch', 'going', 'am', 'try', 'make'
+]);
+// If we already matched a multi-word club, skip a lone city token that often duplicates location ("in Manchester").
+const CITY_WORD_SKIP_WHEN_TEAM_FOUND = new Set([
+    'manchester', 'london', 'liverpool', 'birmingham', 'leeds', 'newcastle', 'brighton', 'bristol', 'nottingham',
+    'barcelona', 'madrid', 'milan', 'rome', 'turin', 'munich', 'dortmund', 'berlin', 'paris', 'lyon', 'marseille',
+    'amsterdam', 'rotterdam', 'lisbon', 'porto', 'glasgow', 'edinburgh', 'dublin', 'copenhagen', 'stockholm', 'oslo',
+    'vienna', 'prague', 'warsaw', 'istanbul', 'moscow', 'tokyo', 'seoul', 'sydney', 'melbourne'
+]);
+function normalizeNlWord(word) {
+    return word.replace(/[^\w'-]/g, '').toLowerCase();
+}
+function getMeaningfulWordRuns(query) {
+    const words = query.trim().split(/\s+/).map(normalizeNlWord).filter(Boolean);
+    const runs = [];
+    let current = [];
+    for (const w of words) {
+        if (NL_STOPWORDS.has(w)) {
+            if (current.length) {
+                runs.push(current);
+                current = [];
+            }
+        } else {
+            current.push(w);
+        }
+    }
+    if (current.length) {
+        runs.push(current);
+    }
+    return runs;
+}
+function buildTeamSearchQueriesFromRuns(runs) {
+    const queries = [];
+    for (const run of runs) {
+        if (run.length === 0) {
+            continue;
+        }
+        if (run.length === 1) {
+            const w = run[0];
+            if (w.length >= 4) {
+                queries.push({ q: w, weight: 1 });
+            }
+            continue;
+        }
+        queries.push({ q: run.join(' '), weight: run.length });
+    }
+    queries.sort((a, b) => b.weight - a.weight);
+    const seen = new Set();
+    const ordered = [];
+    for (const { q } of queries) {
+        if (seen.has(q)) {
+            continue;
+        }
+        seen.add(q);
+        ordered.push(q);
+    }
+    return ordered;
+}
 // Enhanced team extraction using database
 const extractTeams = async (query) => {
-    const queryLower = query.toLowerCase();
     const result = {
         home: null,
         away: null,
@@ -840,28 +909,27 @@ const extractTeams = async (query) => {
                 result.any.push(awayTeams[0]);
             }
         } else {
-            // General team search - look for any team mentions
-            const words = query.split(/\s+/);
-            const teamQueries = [];
-            // Try different combinations of words as team names
-            for (let i = 0; i < words.length; i++) {
-                for (let j = i + 1; j <= Math.min(i + 3, words.length); j++) {
-                    const teamQuery = words.slice(i, j).join(' ');
-                    if (teamQuery.length > 2) {
-                        teamQueries.push(teamQuery);
-                    }
-                }
-            }
-            // Search for each potential team name
+            const runs = getMeaningfulWordRuns(query);
+            const teamQueries = buildTeamSearchQueriesFromRuns(runs);
+            let foundMultiWord = false;
+            const maxTeams = 5;
             for (const teamQuery of teamQueries) {
-                const teams = await teamService.searchTeams(teamQuery, { limit: 2 });
-                if (teams.length > 0) {
-                    // Add unique teams
-                    teams.forEach(team => {
-                        if (!result.any.find(t => t._id.toString() === team._id.toString())) {
-                            result.any.push(team);
-                        }
-                    });
+                const isMulti = teamQuery.trim().split(/\s+/).length >= 2;
+                if (!isMulti && foundMultiWord && CITY_WORD_SKIP_WHEN_TEAM_FOUND.has(teamQuery.toLowerCase())) {
+                    continue;
+                }
+                const limit = isMulti ? 1 : 2;
+                const teams = await teamService.searchTeams(teamQuery, { limit });
+                if (teams.length > 0 && isMulti) {
+                    foundMultiWord = true;
+                }
+                for (const team of teams) {
+                    if (!result.any.find(t => t._id.toString() === team._id.toString())) {
+                        result.any.push(team);
+                    }
+                    if (result.any.length >= maxTeams) {
+                        return result;
+                    }
                 }
             }
         }
@@ -875,30 +943,7 @@ const extractLeagues = async (query) => {
     const queryLower = query.toLowerCase();
     const leagues = [];
     try {
-        // Direct league name search
-        const words = query.split(/\s+/);
-        const leagueQueries = [];
-        // Try different combinations for league names
-        for (let i = 0; i < words.length; i++) {
-            for (let j = i + 1; j <= Math.min(i + 4, words.length); j++) {
-                const leagueQuery = words.slice(i, j).join(' ');
-                if (leagueQuery.length > 2) {
-                    leagueQueries.push(leagueQuery);
-                }
-            }
-        }
-        // Search for leagues
-        for (const leagueQuery of leagueQueries) {
-            const foundLeagues = await leagueService.searchLeagues(leagueQuery);
-            if (foundLeagues && foundLeagues.length > 0) {
-                foundLeagues.forEach(league => {
-                    if (!leagues.find(l => l.apiId === league.apiId)) {
-                        leagues.push(league);
-                    }
-                });
-            }
-        }
-        // Fallback to common league mappings if database search fails
+        // Explicit phrase → league IDs (reliable; avoids regex noise from n-grams)
         const leagueMapping = {
             'premier league': { apiId: '39', name: 'Premier League', country: 'England' },
             'championship': { apiId: '40', name: 'Championship', country: 'England' },
@@ -918,6 +963,25 @@ const extractLeagues = async (query) => {
                 leagues.push(leagueData);
             }
         });
+        // Only search DB for multi-word phrases from meaningful runs (single-word leagues covered by mapping keys like "bundesliga")
+        const runs = getMeaningfulWordRuns(query);
+        for (const run of runs) {
+            if (run.length < 2) {
+                continue;
+            }
+            const phrase = run.join(' ');
+            const foundLeagues = await leagueService.searchLeagues(phrase, { limit: 2 });
+            if (foundLeagues && foundLeagues.length > 0) {
+                foundLeagues.forEach(league => {
+                    if (!leagues.find(l => l.apiId === league.apiId)) {
+                        leagues.push(league);
+                    }
+                });
+            }
+            if (leagues.length >= 8) {
+                break;
+            }
+        }
     } catch (error) {
         console.error('Error extracting leagues:', error);
     }
@@ -1413,6 +1477,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         leagues: [],
         distance: null,
         matchType: null,
+        matchTypes: [],
         confidence: 0,
         errorMessage: null,
         // NEW: Multi-query structures
@@ -1713,6 +1778,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 result.dateRange = result.relationship.dateRange;
                 result.teams.any = result.primary.teams.map(name => ({ name }));
                 result.matchType = result.primary.matchType;
+                result.matchTypes = result.matchType ? [result.matchType] : [];
                 result.leagues = result.primary.leagues.map(leagueId => ({ apiId: String(leagueId), name: String(leagueId) }));
                 // Calculate confidence for multi-query
                 let confidence = 0;
@@ -1729,6 +1795,10 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                 result.dateRange = parsedResponse.dateRange;
                 result.distance = parsedResponse.maxDistance;
                 result.matchType = parsedResponse.matchTypes?.[0] || null;
+                result.matchTypes =
+                    Array.isArray(parsedResponse.matchTypes) && parsedResponse.matchTypes.length > 0
+                        ? parsedResponse.matchTypes
+                        : (result.matchType ? [result.matchType] : []);
                 result.suggestions = parsedResponse.suggestions || [];
                 // Convert team names to our team objects (simplified for now)
                 if (parsedResponse.teams && parsedResponse.teams.length > 0) {
@@ -1783,6 +1853,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         } else if (queryLower.includes('away') || queryLower.includes('at away')) {
             result.matchType = 'away';
         }
+        result.matchTypes = result.matchType ? [result.matchType] : [];
         // Apply conversation state management after regex parsing
         const updatedResult = ConversationStateManager.fillMissingContext(result, conversationHistory);
         Object.assign(result, updatedResult);
@@ -2376,7 +2447,10 @@ router.post('/natural-language', async (req, res) => {
         // Extract teams, leagues, and matchTypes from parsed query for filtering
         const teams = parsed.teams?.any?.map(team => team.name) || [];
         const leagues = parsed.leagues?.map(league => league.name) || [];
-        const matchTypes = parsed.matchTypes || [];
+        const matchTypes =
+            parsed.matchTypes && parsed.matchTypes.length > 0
+                ? parsed.matchTypes
+                : (parsed.matchType ? [parsed.matchType] : []);
         console.log({
             teams: teams,
             leagues: leagues,
@@ -2472,10 +2546,12 @@ router.post('/natural-language', async (req, res) => {
         res.json(response);
     } catch (error) {
         console.error('Natural language search error:', error);
-        // Return 200 with success: false so the client can show a friendly message (MVP: agent gives NL recommendation based on error)
+        // Return 200 with success: false so the client can show a friendly message.
+        // Do not expose error.message to clients (may contain DB/API internals).
         res.status(200).json({
             success: false,
-            message: `Something went wrong while searching. ${error.message || 'Please try again in a moment.'}`,
+            code: 'INTERNAL',
+            message: 'Something went wrong while searching. Please try again in a moment.',
             suggestions: [
                 'Try a simpler query (e.g. "Premier League matches in London next month")',
                 'Check your date range and location',
@@ -2495,4 +2571,7 @@ router.post('/parse', async (req, res) => {
         res.status(500).json({ error: 'Error parsing query' });
     }
 });
-module.exports = router; 
+module.exports = router;
+// Export parser helpers for unit tests.
+module.exports.parseNaturalLanguage = parseNaturalLanguage;
+module.exports.buildSearchParameters = buildSearchParameters;

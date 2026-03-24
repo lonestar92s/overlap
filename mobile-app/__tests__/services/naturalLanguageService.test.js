@@ -4,12 +4,42 @@
  * - getSearchExamples: returns example queries
  */
 import {
+  processNaturalLanguageQuery,
   formatSearchResults,
   getSearchExamples,
   extractSearchParams,
 } from '../../services/naturalLanguageService';
 
 describe('naturalLanguageService - Match Planning Agent MVP', () => {
+  describe('processNaturalLanguageQuery', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('returns structured failure on non-OK without throwing or echoing server body', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => ({ message: 'upstream database connection refused' }),
+      });
+      const out = await processNaturalLanguageQuery('Arsenal next month', []);
+      expect(out.success).toBe(false);
+      expect(out.code).toBe('HTTP_ERROR');
+      expect(out.message).toMatch(/couldn't reach the search service/i);
+      expect(out.message).not.toMatch(/database/i);
+    });
+
+    it('returns structured failure on network error without throwing', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+      const out = await processNaturalLanguageQuery('test', []);
+      expect(out.success).toBe(false);
+      expect(out.code).toBe('NETWORK');
+      expect(out.message).toMatch(/couldn't complete that search/i);
+    });
+  });
+
   describe('formatSearchResults', () => {
     it('returns success: false and message for greeting/error response', () => {
       const apiResponse = {

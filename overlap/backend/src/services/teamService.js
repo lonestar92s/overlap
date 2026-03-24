@@ -125,17 +125,15 @@ class TeamService {
                     ]
                 });
                 if (leagueDoc) {
-                    query.leagueId = leagueDoc._id;
+                    query['leagues.leagueId'] = String(leagueDoc.apiId);
                 }
             }
             const teams = await Team.find(query)
-                .populate('leagueId')
-                .populate('venueId')
                 .sort({ popularity: -1, searchCount: -1 })
                 .limit(limit);
-            // Update search counts for found teams
+            // Best-effort metrics: never fail team search if counter updates fail.
             const updatePromises = teams.map(team => team.incrementSearch());
-            await Promise.all(updatePromises);
+            await Promise.allSettled(updatePromises);
             return teams;
         } catch (error) {
             console.error('Error searching teams:', error);
@@ -148,8 +146,6 @@ class TeamService {
     async getPopularTeams(limit = 50) {
         try {
             const teams = await Team.find({})
-                .populate('leagueId')
-                .populate('venueId')
                 .sort({ popularity: -1, searchCount: -1 })
                 .limit(limit);
             return teams;

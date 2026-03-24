@@ -27,6 +27,7 @@ describe('Multi-Query Parsing - Unit Tests', () => {
   let buildSearchParameters;
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.OPENAI_API_KEY = 'test-key';
     // Import functions after mocks are set up
     const searchRoute = require('../../../src/routes/search');
     parseNaturalLanguage = searchRoute.parseNaturalLanguage || 
@@ -191,7 +192,7 @@ describe('Multi-Query Parsing - Unit Tests', () => {
     it('should build single-query search parameters', () => {
       const parsed = {
         isMultiQuery: false,
-        teams: { any: [{ name: "Arsenal FC" }] },
+        teams: { any: [{ _id: "team-1", name: "Arsenal FC" }] },
         leagues: [{ apiId: "39" }],
         location: {
           city: "London",
@@ -205,7 +206,7 @@ describe('Multi-Query Parsing - Unit Tests', () => {
         distance: 50
       };
       const params = buildSearchParameters(parsed);
-      expect(params.isMultiQuery).toBe(false);
+      expect(params.isMultiQuery).toBeUndefined();
       expect(params.teams).toBeDefined();
       expect(params.leagues).toBeDefined();
     });
@@ -236,7 +237,7 @@ describe('Multi-Query Parsing - Unit Tests', () => {
           message: {
             content: JSON.stringify({
               isMultiQuery: false,
-              leagues: [{ apiId: "253", name: "Major League Soccer" }],
+              leagues: [253],
               dateRange: {
                 start: "2025-03-01",
                 end: "2025-03-31"
@@ -269,7 +270,7 @@ describe('Multi-Query Parsing - Unit Tests', () => {
           message: {
             content: JSON.stringify({
               isMultiQuery: false,
-              leagues: [{ apiId: "39", name: "Premier League" }],
+              leagues: [39],
               dateRange: {
                 start: "2025-03-01",
                 end: "2025-03-31"

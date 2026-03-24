@@ -23,13 +23,24 @@ export const processNaturalLanguageQuery = async (query, conversationHistory = [
         console.log('🤖 Natural Language Service - Response status:', response.status);
         console.log('🤖 Natural Language Service - Response ok:', response.ok);
         
+        const data = response.ok
+            ? await response.json()
+            : await response.json().catch(() => ({}));
+
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('🤖 Natural Language Service - API Error:', errorData);
-            throw new Error(`API Error: ${response.status} - ${errorData.message || response.statusText}`);
+            console.error('🤖 Natural Language Service - API Error:', response.status, data);
+            // Same shape as a failed NL search; never echo response bodies (often HTML or technical).
+            return {
+                success: false,
+                code: 'HTTP_ERROR',
+                message: "We couldn't reach the search service. Please try again.",
+                suggestions: Array.isArray(data.suggestions) ? data.suggestions : [
+                    'Check your connection and try again',
+                    'Try a simpler query with a city and a date range',
+                ],
+            };
         }
-        
-        const data = await response.json();
+
         console.log('🤖 Natural Language Service - Response data:', data);
         return data;
     } catch (error) {
@@ -39,7 +50,12 @@ export const processNaturalLanguageQuery = async (query, conversationHistory = [
             name: error.name,
             stack: error.stack
         });
-        throw error;
+        return {
+            success: false,
+            code: 'NETWORK',
+            message: "We couldn't complete that search. Check your connection and try again.",
+            suggestions: ['Check your internet connection', 'Try again in a few seconds'],
+        };
     }
 };
 
