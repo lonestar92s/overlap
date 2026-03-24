@@ -298,7 +298,11 @@ See `ai_agents/ARCHITECTURE_ANALYSIS.md` for detailed analysis of:
 - **Architecture Analysis**: `ai_agents/ARCHITECTURE_ANALYSIS.md`
 - **Flight/Train Architecture**: `ai_agents/FLIGHT_TRAIN_SEARCH_ARCHITECTURE.md`
 - **Multi-Query Architecture**: `ai_agents/MULTI_MATCH_SEARCH_ARCHITECTURE.md`
-- **Notifications Architecture**: `ai_agents/NOTIFICATIONS_SERVICE_ARCHITECTURE.md`
+- **Notifications** (`notification_center/`):
+  - `notification_center/README.md` (index + implementation map + client foreground behavior)
+  - `notification_center/NOTIFICATIONS_SERVICE_ARCHITECTURE.md`
+  - `notification_center/NOTIFICATIONS_IMPLEMENTATION_PLAN.md`
+  - `notification_center/NOTIFICATION_CENTER_CATEGORIES.md`
 - **Component Analysis**: `mobile-app/components/COMPONENT_AUDIT_REPORT.md`
 
 ### Requirements

@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/api';
+import NotificationService from '../services/notifications';
 
 // Secure storage keys
 const SECURE_STORAGE_KEYS = {
@@ -92,6 +93,19 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rememberMe, setRememberMe] = useState(false);
+  const pushTokenRef = useRef(null);
+
+  const registerPushToken = async () => {
+    try {
+      const pushToken = await NotificationService.registerForPushNotifications();
+      if (pushToken) {
+        pushTokenRef.current = pushToken;
+        await NotificationService.registerTokenWithBackend(pushToken);
+      }
+    } catch (error) {
+      console.warn('Push notification registration failed (non-blocking):', error);
+    }
+  };
 
   // Check for existing token on app start
   useEffect(() => {
@@ -126,6 +140,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const userData = await ApiService.getCurrentUser();
           setUser(userData);
+          registerPushToken();
         } catch (error) {
           // Check if it's a rate limit error - don't clear auth state for rate limits
           if (error.isRateLimit || error.status === 429 || error.message.includes('rate limit') || error.message.includes('Too many requests')) {
@@ -180,6 +195,8 @@ export const AuthProvider = ({ children }) => {
         
         // Store remember me preference in AsyncStorage (not sensitive)
         await AsyncStorage.setItem('rememberMe', remember ? 'true' : 'false');
+
+        registerPushToken();
         
         return { success: true };
       } else {
@@ -212,6 +229,8 @@ export const AuthProvider = ({ children }) => {
         // secureStorage.setItem now saves to both AsyncStorage and SecureStore
         await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
+
+        registerPushToken();
         
         return { success: true };
       } else {
@@ -227,6 +246,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Unregister push token before clearing auth
+      if (pushTokenRef.current) {
+        await NotificationService.unregisterTokenFromBackend(pushTokenRef.current);
+        pushTokenRef.current = null;
+      }
+
       // Clear stored data from secure storage (with fallback)
       await secureStorage.removeItem(SECURE_STORAGE_KEYS.AUTH_TOKEN);
       
@@ -267,6 +292,8 @@ export const AuthProvider = ({ children }) => {
         // secureStorage.setItem now saves to both AsyncStorage and SecureStore
         await secureStorage.setItem(SECURE_STORAGE_KEYS.AUTH_TOKEN, authToken);
         await AsyncStorage.setItem('rememberMe', 'true');
+
+        registerPushToken();
         
         return { success: true };
       } else {

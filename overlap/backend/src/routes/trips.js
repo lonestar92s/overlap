@@ -178,6 +178,17 @@ router.post('/', authenticateToken, async (req, res) => {
         await user.save();
         // Return the newly created trip
         const createdTrip = user.trips[user.trips.length - 1];
+
+        // Schedule T+30 ticket status notification if trip has matches
+        if (createdTrip.matches && createdTrip.matches.length > 0) {
+            try {
+                const { scheduleT30ForTrip } = require('../services/notificationScheduler');
+                await scheduleT30ForTrip(user._id, createdTrip._id);
+            } catch (schedErr) {
+                console.error('Failed to schedule ticket prompt notification:', schedErr);
+            }
+        }
+
         res.status(201).json({
             success: true,
             trip: createdTrip,
@@ -395,7 +406,14 @@ router.post('/:id/matches', auth, async (req, res) => {
             // Still invalidate cache even if regeneration fails
             const deletedCount = invalidateRecommendedMatchesCache(user.id);
         }
-        // Check what was actually saved
+        // Schedule ticket status notification if not already pending for this trip
+        try {
+            const { scheduleT30ForTrip } = require('../services/notificationScheduler');
+            await scheduleT30ForTrip(user._id, trip._id);
+        } catch (schedErr) {
+            console.error('Failed to schedule ticket prompt notification:', schedErr);
+        }
+
         const savedMatch = trip.matches[trip.matches.length - 1];
         res.json({
             success: true,

@@ -128,9 +128,32 @@ const userSchema = new mongoose.Schema({
             priceAlerts: {
                 type: Boolean,
                 default: false
+            },
+            tripTicketStatus: {
+                type: Boolean,
+                default: true
             }
         }
     },
+    deviceTokens: [{
+        token: {
+            type: String,
+            required: true
+        },
+        platform: {
+            type: String,
+            enum: ['ios', 'android', 'web'],
+            required: true
+        },
+        registeredAt: {
+            type: Date,
+            default: Date.now
+        },
+        lastUsedAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
     savedMatches: [{
         matchId: String,
         homeTeam: {

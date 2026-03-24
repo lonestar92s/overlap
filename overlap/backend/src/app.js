@@ -20,6 +20,7 @@ const venuesRoutes = require('./routes/venues');
 const recommendationsRoutes = require('./routes/recommendations');
 const feedbackRoutes = require('./routes/feedback');
 const adminRouter = require('./routes/admin');
+const notificationsRoutes = require('./routes/notifications');
 // Configure dotenv with explicit path
 const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
@@ -175,6 +176,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRoutes);
 app.use('/api/transportation', transportationRoutes);
+app.use('/api/notifications', notificationsRoutes);
 // Test endpoint to check environment variables (only in development)
 if (process.env.NODE_ENV !== 'production') {
     app.get('/api/debug/env', (req, res) => {
@@ -203,7 +205,9 @@ const PORT = process.env.PORT || 3001;
 // Only start server if not in test environment (supertest handles this)
 if (process.env.NODE_ENV !== 'test') {
     app.listen(PORT, '0.0.0.0', () => {
-        // Server is running
+        // Start notification scheduler after server is listening
+        const { startScheduler } = require('./services/notificationScheduler');
+        startScheduler();
     });
 }
 module.exports = app; 

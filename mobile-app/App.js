@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from './styles/designTokens';
+import NotificationService from './services/notifications';
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -228,6 +229,21 @@ function AccountStack() {
 // Main app component with authentication
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
+  const navigationRef = useRef(null);
+
+  useEffect(() => {
+    const subscription = NotificationService.addNotificationResponseListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.type === 'trip_ticket_status_prompt' && data?.tripId && navigationRef.current) {
+        navigationRef.current.navigate('TripsTab', {
+          screen: 'TripOverview',
+          params: { tripId: data.tripId },
+        });
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   if (loading) {
     return <LoadingScreen />;
@@ -236,7 +252,7 @@ function AppContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
         <StatusBar style="light" backgroundColor={colors.primary} />
         {isAuthenticated() ? (
           <FilterProvider>
