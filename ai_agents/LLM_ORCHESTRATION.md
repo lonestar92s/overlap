@@ -133,7 +133,6 @@ Use these for country/league discovery behavior.
 
 ---
 
----
 
 ## Implementation checklist (for PRs)
 
@@ -141,6 +140,31 @@ Use these for country/league discovery behavior.
 - [ ] Success / empty messages **do not** contradict populated `parsed` fields.
 - [ ] No user-facing **API keys**, DB errors, or stack traces.
 - [ ] Add or update a **test** or **eval case** when behavior is user-visible.
+
+---
+
+## Scenario → test case matrix
+
+Use this table to map orchestration scenarios to concrete implementation and validation work.
+
+| Scenario | Parse assertions | Search/filter assertions | Response assertions | Test type |
+|----------|------------------|--------------------------|---------------------|-----------|
+| **S1** Specific + matches | `teams`, `leagues`, `location`, `dateRange` all populated | Returned matches respect requested team/league/date/location | Message confirms result and **does not** ask to add team/league | unit + integration |
+| **S2** Broad + matches | `location` + `dateRange` populated; teams/leagues optional | Results returned for broad scope with stable sort | Message suggests one narrowing axis (team **or** league) | unit + integration |
+| **S3** Plausible + empty | Valid parse with no parser error | Search returns `count = 0` after filters | Message gives concise no-results guidance (wider dates/area) | integration |
+| **S4** League/location mismatch | Parse captures explicit league + location | Mismatch detection path triggers deterministic alternatives | Message explains mismatch without technical jargon | integration |
+| **S5** Missing required fields | Missing date/location identified with `missingFields` | No fixture search call required | Single clarification + examples | unit |
+| **S6** Greeting/small talk | No search intent extracted | No fixture search call required | Brief greeting + one example query | unit |
+| **S7** Internal/upstream error | Parse may succeed or fail | Error path returns safe payload | Generic retry message; no raw internals | integration |
+| **S8** Mixed side constraints | `teamConstraints` array with team+side entries | **AND** semantics by default; city-cluster-first then widen policy | Message discloses widening when applied | unit + integration |
+| **S9** Discovery (country→leagues) | Country intent captured | League list lookup only (no fixture search unless asked) | Tier-aware list + one next-step suggestion | unit + integration |
+
+### Definition of done per scenario
+
+- Parser output matches scenario contract.
+- Search/filter behavior matches scenario policy.
+- User-facing copy follows scenario response rules.
+- At least one automated test and one eval/example query are recorded.
 
 ---
 
@@ -152,6 +176,7 @@ Use these for country/league discovery behavior.
 | 2026-03-23 | Added S8 and parse contract for mixed home/away per-team constraints. |
 | 2026-03-23 | Added S8 location policy: city-cluster first, then widen to league/country with explicit disclosure. |
 | 2026-03-23 | Added S9 discovery scenario and country→league examples. |
+| 2026-03-23 | Added Scenario → test case matrix and definition of done checklist. |
 
 ---
 

@@ -10,6 +10,7 @@ const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/searchLeagueFilter');
+const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
 const router = express.Router();
 // API-Sports configuration
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
@@ -987,9 +988,22 @@ const extractLeagues = async (query) => {
     }
     return leagues;
 };
+function hasExplicitLocationPhrase(queryLower, token) {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const explicitPatterns = [
+        new RegExp(`\\b(?:in|near|around|within|from|at|outside|across|throughout)\\s+${escaped}\\b`, 'i'),
+        new RegExp(`\\b${escaped}\\s+(?:area|region|city|country)\\b`, 'i')
+    ];
+    return explicitPatterns.some((pattern) => pattern.test(queryLower));
+}
 // Enhanced location extraction with better city coverage
-const extractLocation = (query) => {
+const extractLocation = (query, teams = null) => {
     const queryLower = query.toLowerCase();
+    const teamNamesLower = new Set(
+        (teams?.any || [])
+            .map(t => String(t.name || '').toLowerCase())
+            .filter(Boolean)
+    );
     // Expanded city mapping
     const cityMapping = {
         // UK Cities
@@ -1030,6 +1044,12 @@ const extractLocation = (query) => {
     // Look for city mentions
     for (const [cityKey, cityData] of Object.entries(cityMapping)) {
         if (queryLower.includes(cityKey)) {
+            // Avoid treating city tokens inside team names as explicit location.
+            const cityAppearsInTeamName = Array.from(teamNamesLower).some((teamName) => teamName.includes(cityKey));
+            const explicitLocationPhrase = hasExplicitLocationPhrase(queryLower, cityKey);
+            if (cityAppearsInTeamName && !explicitLocationPhrase) {
+                continue;
+            }
             return cityData;
         }
     }
@@ -1071,121 +1091,81 @@ const extractDistance = (query) => {
     }
     return null;
 };
-// Smart league inference based on teams
-const inferLeagueFromTeams = (teams) => {
-    if (!teams || !teams.any || teams.any.length === 0) {
+const CALENDAR_SEASON_LEAGUE_IDS = new Set([
+    '253' // MLS
+]);
+
+function inferLeagueIdsFromTeamDocs(teams) {
+    if (!teams || !Array.isArray(teams.any) || teams.any.length === 0) {
         return [];
     }
-    // Team-to-league mapping
-    const teamLeagueMapping = {
-        // Premier League teams
-        'arsenal': '39',
-        'chelsea': '39',
-        'liverpool': '39',
-        'manchester united': '39',
-        'manchester city': '39',
-        'tottenham': '39',
-        'west ham': '39',
-        'leeds': '39',
-        'newcastle': '39',
-        'brighton': '39',
-        'everton': '39',
-        'leicester': '39',
-        'aston villa': '39',
-        'crystal palace': '39',
-        'fulham': '39',
-        'brentford': '39',
-        'wolves': '39',
-        'southampton': '39',
-        'burnley': '39',
-        'watford': '39',
-        'norwich': '39',
-        // Championship teams (some examples)
-        'birmingham': '40',
-        'blackburn': '40',
-        'bristol city': '40',
-        'cardiff': '40',
-        'coventry': '40',
-        'derby': '40',
-        'huddersfield': '40',
-        'hull': '40',
-        'ipswich': '40',
-        'middlesbrough': '40',
-        'millwall': '40',
-        'nottingham forest': '40',
-        'peterborough': '40',
-        'preston': '40',
-        'queens park rangers': '40',
-        'reading': '40',
-        'sheffield united': '40',
-        'stoke': '40',
-        'swansea': '40',
-        'west bromwich': '40',
-        // La Liga teams
-        'barcelona': '140',
-        'real madrid': '140',
-        'atletico madrid': '140',
-        'sevilla': '140',
-        'valencia': '140',
-        'athletic bilbao': '140',
-        'real sociedad': '140',
-        'villarreal': '140',
-        'real betis': '140',
-        'celta vigo': '140',
-        // Bundesliga teams
-        'bayern munich': '78',
-        'borussia dortmund': '78',
-        'rb leipzig': '78',
-        'bayer leverkusen': '78',
-        'eintracht frankfurt': '78',
-        'wolfsburg': '78',
-        'hoffenheim': '78',
-        'union berlin': '78',
-        'freiburg': '78',
-        'mainz': '78',
-        // Ligue 1 teams
-        'paris saint-germain': '61',
-        'olympique marseille': '61',
-        'olympique lyon': '61',
-        'monaco': '61',
-        'lille': '61',
-        'rennes': '61',
-        'nice': '61',
-        'strasbourg': '61',
-        'lens': '61',
-        'nantes': '61',
-        // Serie A teams
-        'juventus': '135',
-        'ac milan': '135',
-        'inter milan': '135',
-        'napoli': '135',
-        'roma': '135',
-        'lazio': '135',
-        'atalanta': '135',
-        'fiorentina': '135',
-        'torino': '135',
-        'bologna': '135'
-    };
-    const detectedLeagues = new Set();
+    const detected = new Set();
     for (const team of teams.any) {
-        const teamName = team.name.toLowerCase();
-        let leagueId = teamLeagueMapping[teamName];
-        // If exact match not found, try partial matching
-        if (!leagueId) {
-            for (const [mappedTeam, mappedLeague] of Object.entries(teamLeagueMapping)) {
-                if (teamName.includes(mappedTeam) || mappedTeam.includes(teamName)) {
-                    leagueId = mappedLeague;
-                    break;
-                }
+        if (!Array.isArray(team?.leagues)) {
+            continue;
+        }
+        for (const entry of team.leagues) {
+            const id = String(entry?.leagueId || '').trim();
+            if (id) {
+                detected.add(id);
             }
         }
-        if (leagueId) {
-            detectedLeagues.add(leagueId);
-        } else {
+    }
+    return Array.from(detected);
+}
+
+async function resolveLeagueIdsFromTeams(teams) {
+    const direct = inferLeagueIdsFromTeamDocs(teams);
+    if (direct.length > 0) {
+        return direct;
+    }
+    if (!teams || !Array.isArray(teams.any) || teams.any.length === 0) {
+        return [];
+    }
+    const detected = new Set();
+    for (const team of teams.any) {
+        if (!team?.name) {
+            continue;
+        }
+        try {
+            const candidates = await teamService.searchTeams(team.name, { limit: 1 });
+            const best = candidates?.[0];
+            if (Array.isArray(best?.leagues)) {
+                for (const entry of best.leagues) {
+                    const id = String(entry?.leagueId || '').trim();
+                    if (id) {
+                        detected.add(id);
+                    }
+                }
+            }
+        } catch (error) {
+            // Best effort only; continue with other teams.
         }
     }
-    return Array.from(detectedLeagues);
-};
+    return Array.from(detected);
+}
+
+function determineSeasonForCompetitions(startDate, competitionIds = []) {
+    let season = 2025;
+    if (!startDate) {
+        return season;
+    }
+    const start = new Date(startDate);
+    const startYear = start.getFullYear();
+    const startMonth = start.getMonth() + 1;
+    const ids = competitionIds.map((id) => String(id));
+    const hasIds = ids.length > 0;
+    const allCalendar = hasIds && ids.every((id) => CALENDAR_SEASON_LEAGUE_IDS.has(id));
+    if (allCalendar) {
+        return startYear;
+    }
+    if (startMonth >= 7) {
+        season = startYear;
+    } else {
+        season = startYear - 1;
+    }
+    return season;
+}
 // Country to default city mapping (for leagues not in hardcoded mapping)
 const countryToCityMapping = {
     'United Kingdom': { city: 'London', coordinates: [-0.118092, 51.509865] },
@@ -1833,13 +1813,13 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
         } else {
         }
         // Fallback to regex-based parsing
-        const [teams, leagues, location, dateRange, distance] = await Promise.all([
+        const [teams, leagues, dateRange, distance] = await Promise.all([
             extractTeams(query),
             extractLeagues(query),
-            extractLocation(query),
             parseComplexDates(query),
             extractDistance(query)
         ]);
+        const location = extractLocation(query, teams);
         // Populate results
         result.teams = teams;
         result.leagues = leagues;
@@ -2222,6 +2202,17 @@ router.post('/natural-language', async (req, res) => {
             parsed.dateRange = explicitSingleDayRange;
         }
         let searchParams = buildSearchParameters(parsed);
+        // For direct team/league queries without an explicit location in this turn,
+        // prefer global search (no city bounds) instead of silently pinning to an inferred city.
+        const explicitLocationInQuery = extractLocation(query, parsed.teams);
+        const hasEntityFilters =
+            (parsed.teams?.any && parsed.teams.any.length > 0) ||
+            (parsed.leagues && parsed.leagues.length > 0);
+        const hasConversationContext = Array.isArray(conversationHistory) && conversationHistory.length > 0;
+        if (!explicitLocationInQuery && hasEntityFilters && !hasConversationContext) {
+            searchParams = { ...searchParams, location: null };
+            parsed.location = null;
+        }
         const queryLower = (query || '').toLowerCase();
         // Canonical explicit league phrases: when user names a league, keep intent precise.
         const explicitLeagueMappings = [
@@ -2258,10 +2249,15 @@ router.post('/natural-language', async (req, res) => {
                 }
             }
         }
-        // Guardrails for MVP: location and date are required.
+        // Guardrails: date is always required; location required only for broad queries.
         const missingFields = [];
         if (!searchParams.startDate || !searchParams.endDate) missingFields.push('date');
-        if (!searchParams.location?.country || !searchParams.location?.city) missingFields.push('location');
+        const requiresLocation =
+            !(parsed.teams?.any && parsed.teams.any.length > 0) &&
+            !(searchParams.leagues && searchParams.leagues.length > 0);
+        if (requiresLocation && (!searchParams.location?.country || !searchParams.location?.city)) {
+            missingFields.push('location');
+        }
         if (missingFields.length > 0) {
             const likelyGreetingOrSmallTalk =
                 !!parsed.errorMessage &&
@@ -2319,19 +2315,8 @@ router.post('/natural-language', async (req, res) => {
         }
         // Use existing search infrastructure instead of raw API calls
         const axios = require('axios');
-        // Determine season based on the date range
-        let season = 2025; // Default season
-        if (searchParams.startDate) {
-            const startYear = new Date(searchParams.startDate).getFullYear();
-            // For football seasons, if the date is in the second half of the year, 
-            // it's likely the start of the next season
-            const startMonth = new Date(searchParams.startDate).getMonth() + 1;
-            if (startMonth >= 7) {
-                season = startYear;
-            } else {
-                season = startYear - 1;
-            }
-        }
+        // Determine season based on date + competition season model (calendar vs split-season)
+        let season = determineSeasonForCompetitions(searchParams.startDate, searchParams.leagues || []);
         // Determine which leagues to search based on location and query type
         let leagueIds = [];
         console.log({
@@ -2398,9 +2383,19 @@ router.post('/natural-language', async (req, res) => {
             }
         }
         if (leagueIds.length === 0) {
-            const teamBasedLeagues = inferLeagueFromTeams(parsed.teams);
+            const teamBasedLeagues = await resolveLeagueIdsFromTeams(parsed.teams);
             if (teamBasedLeagues.length > 0) {
-                leagueIds = teamBasedLeagues;
+                // Team-first guardrail: prefer a compact competition set over broad global fan-out.
+                let inferredCountry = searchParams.location?.country || null;
+                if (!inferredCountry) {
+                    const inferredLocation = await inferLocationFromTeamsAndLeagues(parsed.teams, parsed.leagues || []);
+                    inferredCountry = inferredLocation?.country || null;
+                }
+                leagueIds = buildPrioritizedCompetitionIds({
+                    primaryLeagueIds: teamBasedLeagues,
+                    country: inferredCountry
+                });
+                season = determineSeasonForCompetitions(searchParams.startDate, leagueIds);
             } else if (searchParams.location?.country) {
                 const countryName = searchParams.location.country;
                 const titleCased = countryName.split(' ').map(w => w.charAt(0).toUpperCase() + (w.slice(1) || '').toLowerCase()).join(' ');
@@ -2416,9 +2411,11 @@ router.post('/natural-language', async (req, res) => {
                     const allLeagues = await leagueService.getAllLeagues();
                     leagueIds = allLeagues.slice(0, 15).map(l => String(l.apiId));
                 }
+                season = determineSeasonForCompetitions(searchParams.startDate, leagueIds);
             } else {
                 const allLeagues = await leagueService.getAllLeagues();
                 leagueIds = allLeagues.slice(0, 15).map(l => String(l.apiId));
+                season = determineSeasonForCompetitions(searchParams.startDate, leagueIds);
             }
         }
         // For broad queries, still respect location-based league selection
@@ -2575,3 +2572,7 @@ module.exports = router;
 // Export parser helpers for unit tests.
 module.exports.parseNaturalLanguage = parseNaturalLanguage;
 module.exports.buildSearchParameters = buildSearchParameters;
+module.exports.extractLocation = extractLocation;
+module.exports.inferLeagueIdsFromTeamDocs = inferLeagueIdsFromTeamDocs;
+module.exports.resolveLeagueIdsFromTeams = resolveLeagueIdsFromTeams;
+module.exports.determineSeasonForCompetitions = determineSeasonForCompetitions;
