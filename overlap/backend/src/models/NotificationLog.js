@@ -22,6 +22,10 @@ const notificationLogSchema = new mongoose.Schema({
         default: Date.now,
         index: true
     },
+    openedAt: {
+        type: Date,
+        default: null
+    },
     title: String,
     body: String,
     data: mongoose.Schema.Types.Mixed,

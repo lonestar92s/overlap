@@ -1,6 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
+const NotificationLog = require('../models/NotificationLog');
 const router = express.Router();
 
 router.post('/register-token', auth, async (req, res) => {
@@ -44,6 +46,34 @@ router.delete('/unregister-token/:token', auth, async (req, res) => {
     } catch (error) {
         console.error('Error unregistering device token:', error);
         res.status(500).json({ error: 'Failed to unregister device token' });
+    }
+});
+
+router.post('/log-opened/:logId', auth, async (req, res) => {
+    try {
+        const { logId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(logId)) {
+            return res.status(400).json({ error: 'Invalid notification log id' });
+        }
+
+        const log = await NotificationLog.findOne({
+            _id: logId,
+            userId: req.user._id
+        });
+
+        if (!log) {
+            return res.status(404).json({ error: 'Notification log not found' });
+        }
+
+        if (!log.openedAt) {
+            log.openedAt = new Date();
+            await log.save();
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error recording notification open:', error);
+        res.status(500).json({ error: 'Failed to record notification open' });
     }
 });
 

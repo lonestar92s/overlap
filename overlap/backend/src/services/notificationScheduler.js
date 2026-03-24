@@ -83,11 +83,11 @@ function startScheduler() {
         }
     });
 
-    // Daily recurring check: run at 10 AM and 6 PM UTC
-    cron.schedule('0 10,18 * * *', async () => {
+    // Daily recurring check: 15:00 UTC (single sweep; T+30 still handled separately)
+    cron.schedule('0 15 * * *', async () => {
         try {
             const result = await processAllUsers();
-            console.log(`[notif-scheduler] Daily run: ${result.totalSent} sent, ${result.tripsProcessed} trips, ${result.usersChecked} users`);
+            console.log(`[notif-scheduler] Daily run (15:00 UTC): ${result.totalSent} sent, ${result.tripsProcessed} trips, ${result.usersChecked} users`);
         } catch (error) {
             console.error('[notif-scheduler] Error in daily run:', error);
         }

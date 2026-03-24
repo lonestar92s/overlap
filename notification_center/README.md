@@ -17,7 +17,7 @@ Product and engineering docs for push, scheduling, preferences, and related back
 | Mobile — permissions, Expo token, register with API, **foreground presentation** | `mobile-app/services/notifications.js` |
 | Mobile — token registration after login / logout | `mobile-app/contexts/AuthContext.js` |
 | Mobile — tap → navigate to trip | `mobile-app/App.js` |
-| Backend — device tokens, prefs | `overlap/backend/src/routes/notifications.js`, `overlap/backend/src/models/User.js` |
+| Backend — device tokens, prefs, **open tracking** (`openedAt`, `POST .../log-opened/:logId`) | `overlap/backend/src/routes/notifications.js`, `overlap/backend/src/models/User.js`, `overlap/backend/src/models/NotificationLog.js` |
 | Backend — Expo send, receipts | `overlap/backend/src/services/pushNotificationService.js` |
 | Backend — trip ticket prompt logic | `overlap/backend/src/services/tripTicketPromptService.js` |
 | Backend — cron (T+30, daily, receipts) | `overlap/backend/src/services/notificationScheduler.js` |

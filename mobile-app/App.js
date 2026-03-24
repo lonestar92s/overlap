@@ -6,7 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform, InteractionManager } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from './styles/designTokens';
 import NotificationService from './services/notifications';
@@ -230,20 +231,59 @@ function AccountStack() {
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
   const navigationRef = useRef(null);
+  const coldStartNotificationHandledRef = useRef(false);
+
+  const handleNotificationOpen = async (response) => {
+    const data = response?.notification?.request?.content?.data;
+    if (data?.notificationLogId != null && data.notificationLogId !== '') {
+      await NotificationService.recordNotificationOpened(String(data.notificationLogId));
+    }
+    const tripId = data?.tripId;
+    if (data?.type === 'trip_ticket_status_prompt' && tripId) {
+      InteractionManager.runAfterInteractions(() => {
+        if (navigationRef.current) {
+          navigationRef.current.navigate('TripsTab', {
+            screen: 'TripOverview',
+            params: { tripId: String(tripId) },
+          });
+        }
+      });
+    }
+  };
 
   useEffect(() => {
-    const subscription = NotificationService.addNotificationResponseListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.type === 'trip_ticket_status_prompt' && data?.tripId && navigationRef.current) {
-        navigationRef.current.navigate('TripsTab', {
-          screen: 'TripOverview',
-          params: { tripId: data.tripId },
-        });
-      }
+    const subscription = NotificationService.addNotificationResponseListener((response) => {
+      handleNotificationOpen(response);
     });
-
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      coldStartNotificationHandledRef.current = false;
+      return;
+    }
+    if (loading) return;
+
+    let cancelled = false;
+    (async () => {
+      if (coldStartNotificationHandledRef.current) return;
+      coldStartNotificationHandledRef.current = true;
+      try {
+        const response = await Notifications.getLastNotificationResponseAsync();
+        if (!cancelled && response) {
+          await handleNotificationOpen(response);
+        }
+      } catch (e) {
+        if (__DEV__) {
+          console.warn('getLastNotificationResponseAsync:', e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user]);
 
   if (loading) {
     return <LoadingScreen />;

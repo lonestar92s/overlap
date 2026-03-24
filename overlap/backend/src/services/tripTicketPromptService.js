@@ -92,19 +92,35 @@ async function processTrip(userId, trip, user) {
     if (sentToday >= maxPerDay) return null;
 
     const { title, body, data } = buildNotificationContent(trip, eligible);
-    const result = await sendPushToUser(userId, { title, body, data });
 
-    if (result.sent > 0) {
-        await NotificationLog.create({
-            userId,
-            tripId: trip._id,
-            categoryId: CATEGORY_ID,
-            title,
-            body,
-            data,
-            pushTicketIds: result.ticketIds || [],
-            status: 'sent'
-        });
+    const log = await NotificationLog.create({
+        userId,
+        tripId: trip._id,
+        categoryId: CATEGORY_ID,
+        title,
+        body,
+        data: { ...data },
+        pushTicketIds: [],
+        status: 'sent'
+    });
+
+    const payloadData = { ...data, notificationLogId: log._id.toString() };
+    log.data = payloadData;
+    await log.save();
+
+    let result;
+    try {
+        result = await sendPushToUser(userId, { title, body, data: payloadData });
+    } catch (err) {
+        await NotificationLog.deleteOne({ _id: log._id }).catch(() => {});
+        throw err;
+    }
+
+    log.pushTicketIds = result.ticketIds || [];
+    if (result.sent === 0) {
+        await NotificationLog.deleteOne({ _id: log._id });
+    } else {
+        await log.save();
     }
 
     return result;

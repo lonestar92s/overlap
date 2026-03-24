@@ -114,6 +114,32 @@ async function getStoredAuthToken() {
     }
 }
 
+async function recordNotificationOpened(notificationLogId) {
+    if (notificationLogId == null || notificationLogId === '') return;
+    try {
+        const authToken = await getStoredAuthToken();
+        if (!authToken) return;
+
+        const response = await fetch(
+            `${getApiBaseUrl()}/notifications/log-opened/${encodeURIComponent(String(notificationLogId))}`,
+            {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${authToken}`,
+                },
+            }
+        );
+        if (!response.ok && __DEV__) {
+            const err = await response.json().catch(() => ({}));
+            console.warn('recordNotificationOpened failed:', response.status, err);
+        }
+    } catch (error) {
+        if (__DEV__) {
+            console.warn('recordNotificationOpened error:', error);
+        }
+    }
+}
+
 function addNotificationResponseListener(callback) {
     return Notifications.addNotificationResponseReceivedListener(callback);
 }
@@ -126,6 +152,7 @@ export default {
     registerForPushNotifications,
     registerTokenWithBackend,
     unregisterTokenFromBackend,
+    recordNotificationOpened,
     addNotificationResponseListener,
     addNotificationReceivedListener,
 };
