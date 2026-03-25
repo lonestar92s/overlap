@@ -48,7 +48,7 @@ import { useRecommendations } from '../hooks/useRecommendations';
  */
 const TripOverviewScreen = ({ navigation, route }) => {
   const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary, updateItinerary } = useItineraries();
-  const itineraryId = route?.params?.itineraryId;
+  const itineraryId = route?.params?.itineraryId ?? route?.params?.tripId;
   const fromAccountTab = route?.params?.fromAccountTab === true;
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -5,6 +5,64 @@ const User = require('../models/User');
 const NotificationLog = require('../models/NotificationLog');
 const router = express.Router();
 
+const MAX_NOTIFICATION_PAGE = 100;
+
+router.get('/unread-count', auth, async (req, res) => {
+    try {
+        const count = await NotificationLog.countDocuments({
+            userId: req.user._id,
+            openedAt: null
+        });
+        res.json({ success: true, unreadCount: count });
+    } catch (error) {
+        console.error('Error counting unread notifications:', error);
+        res.status(500).json({ error: 'Failed to count notifications' });
+    }
+});
+
+router.get('/', auth, async (req, res) => {
+    try {
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit, 10) || 50, 1),
+            MAX_NOTIFICATION_PAGE
+        );
+        const cursor = req.query.cursor;
+        const query = { userId: req.user._id };
+        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+            query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+        }
+
+        const raw = await NotificationLog.find(query)
+            .sort({ sentAt: -1, _id: -1 })
+            .limit(limit + 1)
+            .lean();
+
+        const hasMore = raw.length > limit;
+        const slice = hasMore ? raw.slice(0, limit) : raw;
+        const nextCursor =
+            hasMore && slice.length > 0
+                ? String(slice[slice.length - 1]._id)
+                : null;
+
+        res.json({
+            success: true,
+            notifications: slice.map((n) => ({
+                id: String(n._id),
+                title: n.title || '',
+                body: n.body || '',
+                sentAt: n.sentAt,
+                openedAt: n.openedAt,
+                categoryId: n.categoryId,
+                data: n.data || {}
+            })),
+            nextCursor
+        });
+    } catch (error) {
+        console.error('Error listing notifications:', error);
+        res.status(500).json({ error: 'Failed to list notifications' });
+    }
+});
+
 router.post('/register-token', auth, async (req, res) => {
     try {
         const { token, platform } = req.body;

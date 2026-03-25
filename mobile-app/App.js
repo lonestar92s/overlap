@@ -1,16 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import UnifiedSearchScreen from './screens/UnifiedSearchScreen';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Platform, InteractionManager } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from './styles/designTokens';
+import { colors, typography } from './styles/designTokens';
 import NotificationService from './services/notifications';
+import { executeNotificationPayload } from './utils/notificationDeepLink';
 
 import SearchScreen from './screens/SearchScreen';
 import MapResultsScreen from './screens/MapResultsScreen';
@@ -32,11 +33,15 @@ import MessagesScreen from './screens/MessagesScreen';
 import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
 import AccountScreen from './screens/AccountScreen';
 import FeedbackScreen from './screens/FeedbackScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import { NotificationInboxProvider, useNotificationInbox } from './contexts/NotificationInboxContext';
 import { ItineraryProvider } from './contexts/ItineraryContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { validateEnvironmentVariables } from './utils/envValidation';
 import { FEATURE_FLAGS } from './utils/featureFlags';
+
+const rootNavigationRef = createNavigationContainerRef();
 
 // Validate environment variables on app startup
 // In production, this will fail fast if required variables are missing
@@ -205,6 +210,7 @@ function AccountStack() {
         headerTintColor: colors.onPrimary,
         headerTitleStyle: {
           fontWeight: 'bold',
+          fontFamily: typography.fontFamily,
         },
       }}
     >
@@ -227,27 +233,167 @@ function AccountStack() {
   );
 }
 
+function NotificationsStack() {
+  return (
+    <Stack.Navigator
+      initialRouteName="NotificationsList"
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.primary,
+        },
+        headerTintColor: colors.onPrimary,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+          fontFamily: typography.fontFamily,
+        },
+      }}
+    >
+      <Stack.Screen
+        name="NotificationsList"
+        component={NotificationsScreen}
+        options={{
+          title: 'Notifications',
+          headerTitleAlign: 'center',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function AuthenticatedTabs() {
+  const { unreadCount, refreshUnreadCount } = useNotificationInbox();
+
+  useEffect(() => {
+    const sub = NotificationService.addNotificationReceivedListener(() => {
+      refreshUnreadCount();
+    });
+    return () => sub.remove();
+  }, [refreshUnreadCount]);
+
+  const notificationsBadge =
+    unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : undefined;
+
+  return (
+    <FilterProvider>
+      <ItineraryProvider>
+        <Tab.Navigator
+          initialRouteName="SearchTab"
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            tabBarActiveTintColor: colors.primary,
+            tabBarInactiveTintColor: colors.text.secondary,
+            tabBarStyle: { backgroundColor: colors.card, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+            tabBarLabelStyle: { fontSize: typography.caption.fontSize, fontWeight: '500' },
+            tabBarIcon: ({ color, size }) => {
+              let iconName;
+              switch (route.name) {
+                case 'SearchTab':
+                  iconName = 'search';
+                  break;
+                case 'UnifiedSearchTab':
+                  iconName = 'manage-search';
+                  break;
+                case 'MemoriesTab':
+                  iconName = 'memory';
+                  break;
+                case 'TripsTab':
+                  iconName = 'work-outline';
+                  break;
+                case 'NotificationsTab':
+                  iconName = 'notifications';
+                  break;
+                case 'MessagesTab':
+                  iconName = 'chat-bubble-outline';
+                  break;
+                case 'AccountTab':
+                  iconName = 'person-outline';
+                  break;
+                default:
+                  iconName = 'circle';
+              }
+              return <MaterialIcons name={iconName} size={size} color={color} />;
+            },
+          })}
+        >
+          <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
+          {FEATURE_FLAGS.enableUnifiedSearchTab && (
+            <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
+          )}
+          <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
+          <Tab.Screen
+            name="TripsTab"
+            component={TripsStack}
+            options={{ tabBarLabel: 'Trips' }}
+            listeners={({ navigation }) => ({
+              tabPress: (e) => {
+                const state = navigation.getState();
+                const tripsTabState = state?.routes?.find((r) => r.name === 'TripsTab')?.state;
+                const currentScreen = tripsTabState?.routes?.[tripsTabState.index]?.name;
+                const currentParams = tripsTabState?.routes?.[tripsTabState.index]?.params;
+
+                if (currentScreen === 'TripOverview' && currentParams?.fromAccountTab === true) {
+                  e.preventDefault();
+                  navigation.navigate('TripsTab', {
+                    screen: 'TripsList',
+                  });
+                }
+              },
+            })}
+          />
+          <Tab.Screen
+            name="NotificationsTab"
+            component={NotificationsStack}
+            options={{
+              tabBarLabel: 'Alerts',
+              tabBarBadge: notificationsBadge,
+            }}
+          />
+          {FEATURE_FLAGS.enableMessagesTab && (
+            <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
+          )}
+          <Tab.Screen name="AccountTab" component={AccountStack} options={{ tabBarLabel: 'Profile' }} />
+        </Tab.Navigator>
+      </ItineraryProvider>
+    </FilterProvider>
+  );
+}
+
 // Main app component with authentication
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
-  const navigationRef = useRef(null);
   const coldStartNotificationHandledRef = useRef(false);
+  const notificationActionInFlightRef = useRef(new Set());
+  const pendingNotificationOpenRef = useRef(null);
 
   const handleNotificationOpen = async (response) => {
-    const data = response?.notification?.request?.content?.data;
-    if (data?.notificationLogId != null && data.notificationLogId !== '') {
-      await NotificationService.recordNotificationOpened(String(data.notificationLogId));
+    if (!rootNavigationRef.isReady()) {
+      pendingNotificationOpenRef.current = response;
+      return;
     }
-    const tripId = data?.tripId;
-    if (data?.type === 'trip_ticket_status_prompt' && tripId) {
-      InteractionManager.runAfterInteractions(() => {
-        if (navigationRef.current) {
-          navigationRef.current.navigate('TripsTab', {
-            screen: 'TripOverview',
-            params: { tripId: String(tripId) },
-          });
-        }
-      });
+    pendingNotificationOpenRef.current = null;
+
+    const data = response?.notification?.request?.content?.data;
+    const logId = data?.notificationLogId != null && data.notificationLogId !== '' ? String(data.notificationLogId) : null;
+    if (logId && notificationActionInFlightRef.current.has(logId)) {
+      return;
+    }
+    if (logId) {
+      notificationActionInFlightRef.current.add(logId);
+    }
+    try {
+      await executeNotificationPayload(data, rootNavigationRef, { skipRecordOpened: false });
+    } finally {
+      if (logId) {
+        notificationActionInFlightRef.current.delete(logId);
+      }
+    }
+  };
+
+  const onNavigationReady = () => {
+    const pending = pendingNotificationOpenRef.current;
+    if (pending) {
+      pendingNotificationOpenRef.current = null;
+      handleNotificationOpen(pending);
     }
   };
 
@@ -289,88 +435,17 @@ function AppContent() {
     return <LoadingScreen />;
   }
 
+  const inboxEnabled = isAuthenticated() && !loading;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
-        <NavigationContainer ref={navigationRef}>
-        <StatusBar style="light" backgroundColor={colors.primary} />
-        {isAuthenticated() ? (
-          <FilterProvider>
-            <ItineraryProvider>
-            <Tab.Navigator
-              initialRouteName="SearchTab"
-              screenOptions={({ route }) => ({
-                headerShown: false,
-                tabBarActiveTintColor: colors.primary,
-                tabBarInactiveTintColor: colors.text.secondary,
-                tabBarStyle: { backgroundColor: colors.card, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
-                tabBarLabelStyle: { fontSize: typography.caption.fontSize, fontWeight: '500' },
-                tabBarIcon: ({ color, size }) => {
-                  let iconName;
-                  switch (route.name) {
-                    case 'SearchTab':
-                      iconName = 'search';
-                      break;
-                case 'UnifiedSearchTab':
-                  iconName = 'manage-search';
-                  break;
-                    case 'MemoriesTab':
-                      iconName = 'memory';
-                      break;
-                    case 'TripsTab':
-                      iconName = 'work-outline';
-                      break;
-                    case 'MessagesTab':
-                      iconName = 'chat-bubble-outline';
-                      break;
-                    case 'AccountTab':
-                      iconName = 'person-outline';
-                      break;
-                    default:
-                      iconName = 'circle';
-                  }
-                  return <MaterialIcons name={iconName} size={size} color={color} />;
-                },
-              })}
-            >
-              <Tab.Screen name="SearchTab" component={SearchStack} options={{ tabBarLabel: 'Search' }} />
-              {FEATURE_FLAGS.enableUnifiedSearchTab && (
-                <Tab.Screen name="UnifiedSearchTab" component={UnifiedSearchScreen} options={{ tabBarLabel: 'Unified' }} />
-              )}
-              <Tab.Screen name="MemoriesTab" component={MemoriesStack} options={{ tabBarLabel: 'Memories' }} />
-              <Tab.Screen 
-                name="TripsTab" 
-                component={TripsStack} 
-                options={{ tabBarLabel: 'Trips' }}
-                listeners={({ navigation, route }) => ({
-                  tabPress: (e) => {
-                    // Check if we're on TripOverview with fromAccountTab param
-                    const state = navigation.getState();
-                    const tripsTabState = state?.routes?.find(r => r.name === 'TripsTab')?.state;
-                    const currentScreen = tripsTabState?.routes?.[tripsTabState.index]?.name;
-                    const currentParams = tripsTabState?.routes?.[tripsTabState.index]?.params;
-                    
-                    // If we're on TripOverview from AccountTab, navigate to TripsList instead
-                    if (currentScreen === 'TripOverview' && currentParams?.fromAccountTab === true) {
-                      e.preventDefault();
-                      navigation.navigate('TripsTab', {
-                        screen: 'TripsList'
-                      });
-                    }
-                  }
-                })}
-              />
-              {FEATURE_FLAGS.enableMessagesTab && (
-                <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
-              )}
-              <Tab.Screen name="AccountTab" component={AccountStack} options={{ tabBarLabel: 'Profile' }} />
-            </Tab.Navigator>
-          </ItineraryProvider>
-        </FilterProvider>
-      ) : (
-        <AuthStack />
-      )}
-        </NavigationContainer>
+        <NotificationInboxProvider enabled={inboxEnabled}>
+          <NavigationContainer ref={rootNavigationRef} onReady={onNavigationReady}>
+            <StatusBar style="light" backgroundColor={colors.primary} />
+            {isAuthenticated() ? <AuthenticatedTabs /> : <AuthStack />}
+          </NavigationContainer>
+        </NotificationInboxProvider>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );

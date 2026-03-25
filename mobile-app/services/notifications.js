@@ -148,6 +148,54 @@ function addNotificationReceivedListener(callback) {
     return Notifications.addNotificationReceivedListener(callback);
 }
 
+async function fetchUnreadCount() {
+    try {
+        const authToken = await getStoredAuthToken();
+        if (!authToken) return 0;
+
+        const response = await fetch(`${getApiBaseUrl()}/notifications/unread-count`, {
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+            },
+        });
+        const data = await response.json();
+        if (!response.ok) return 0;
+        return typeof data.unreadCount === 'number' ? data.unreadCount : 0;
+    } catch {
+        return 0;
+    }
+}
+
+async function fetchNotifications({ cursor, limit = 50 } = {}) {
+    try {
+        const authToken = await getStoredAuthToken();
+        if (!authToken) {
+            return { ok: false, error: 'Not signed in' };
+        }
+
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (cursor) params.set('cursor', cursor);
+
+        const response = await fetch(`${getApiBaseUrl()}/notifications?${params}`, {
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+            },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { ok: false, error: data.error || 'Failed to load notifications' };
+        }
+
+        return {
+            ok: true,
+            notifications: data.notifications || [],
+            nextCursor: data.nextCursor || null,
+        };
+    } catch (error) {
+        return { ok: false, error: error.message || 'Network error' };
+    }
+}
+
 export default {
     registerForPushNotifications,
     registerTokenWithBackend,
@@ -155,4 +203,6 @@ export default {
     recordNotificationOpened,
     addNotificationResponseListener,
     addNotificationReceivedListener,
+    fetchUnreadCount,
+    fetchNotifications,
 };
