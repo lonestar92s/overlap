@@ -1,4 +1,5 @@
 const express = require('express');
+const { performance } = require('perf_hooks');
 const OpenAI = require('openai');
 const { DateTime } = require('luxon');
 const { find: geoTzFind } = require('geo-tz');
@@ -8,6 +9,7 @@ const teamService = require('../services/teamService');
 const leagueService = require('../services/leagueService');
 const venueService = require('../services/venueService');
 const geocodingService = require('../services/geocodingService');
+const apiSportsService = require('../services/apiSportsService');
 const Team = require('../models/Team');
 const League = require('../models/League');
 const Venue = require('../models/Venue');
@@ -15,9 +17,6 @@ const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/s
 const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
 const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/matchItineraryPlanner');
 const router = express.Router();
-// API-Sports configuration
-const API_SPORTS_KEY = process.env.API_SPORTS_KEY || '0ab95ca9f7baeb6fd551af7ca41ed8d2';
-const API_SPORTS_BASE_URL = 'https://v3.football.api-sports.io';
 // LocationIQ configuration for autocomplete
 const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
 const LOCATIONIQ_AUTOCOMPLETE_URL = 'https://api.locationiq.com/v1/autocomplete';
@@ -25,6 +24,17 @@ const LOCATIONIQ_AUTOCOMPLETE_URL = 'https://api.locationiq.com/v1/autocomplete'
 const searchHttpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
+
+function roundDuration(durationMs) {
+    return Math.round(durationMs * 100) / 100;
+}
+
+function logPerformSearchMetrics(details = {}) {
+    console.log('[search/performSearch]', {
+        ...details,
+        limiter: apiSportsService.getLimiterState()
+    });
+}
 // Function to generate ALL responses using OpenAI
 async function generateResponse(context) {
     const client = createOpenAIClient();
@@ -93,17 +103,15 @@ Generate a friendly, conversational message that:
 }
 // Function to perform search directly (extracted from matches route)
 async function performSearch({ competitions, dateFrom, dateTo, season, bounds, teams, leagues, matchTypes }) {
+    const searchStartTime = performance.now();
     const requests = [];
-    // League requests
     for (const leagueId of competitions) {
         requests.push(
-            axios.get(`${API_SPORTS_BASE_URL}/fixtures`, {
-                params: { league: leagueId, season: season, from: dateFrom, to: dateTo },
-                headers: { 'x-apisports-key': API_SPORTS_KEY },
-                httpsAgent: searchHttpsAgent,
+            apiSportsService.get('/fixtures', {
+                params: { league: leagueId, season, from: dateFrom, to: dateTo },
                 timeout: 10000
             }).then(r => ({ type: 'league', id: leagueId, data: r.data }))
-              .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
+                .catch(() => ({ type: 'league', id: leagueId, data: { response: [] } }))
         );
     }
     const settled = await Promise.allSettled(requests);
@@ -116,14 +124,76 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
             }
         }
     }
-    // Transform and filter matches
-    const transformedMatches = [];
-    for (const match of fixtures) {
+    const seenFixtureIds = new Set();
+    const uniqueFixtures = fixtures.filter((fixture) => {
+        const fixtureId = fixture.fixture?.id;
+        if (!fixtureId || seenFixtureIds.has(fixtureId)) {
+            return false;
+        }
+        seenFixtureIds.add(fixtureId);
+        return true;
+    });
+    const venueIds = [];
+    const venueNameLookups = [];
+    const apiTeamNames = [];
+    for (const match of uniqueFixtures) {
         const venue = match.fixture?.venue;
+        if (venue?.id) {
+            venueIds.push(venue.id);
+        }
+        if (venue?.name) {
+            venueNameLookups.push({
+                name: venue.name,
+                city: (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city
+            });
+        }
+        if (match.teams?.home?.name) {
+            apiTeamNames.push(match.teams.home.name);
+        }
+        if (match.teams?.away?.name) {
+            apiTeamNames.push(match.teams.away.name);
+        }
+    }
+    const uniqueVenueIds = [...new Set(venueIds)];
+    const uniqueVenueNames = [...new Map(
+        venueNameLookups.map(v => [`${v.name}|${v.city || ''}`, v])
+    ).values()];
+    const uniqueApiTeamNames = [...new Set(apiTeamNames)];
+    const mappedTeamEntries = await Promise.all(
+        uniqueApiTeamNames.map(async apiTeamName => ([
+            apiTeamName,
+            await teamService.mapApiNameToTeam(apiTeamName)
+        ]))
+    );
+    const mappedTeamNameMap = new Map(mappedTeamEntries);
+    const uniqueMappedTeamNames = [...new Set(
+        mappedTeamEntries.map(([, mappedName]) => mappedName).filter(Boolean)
+    )];
+    const teamDocs = uniqueMappedTeamNames.length > 0
+        ? await Team.find({ name: { $in: uniqueMappedTeamNames } })
+            .select('name venue city country ticketingUrl logo')
+            .lean()
+        : [];
+    const teamDocByName = new Map(teamDocs.map(team => [team.name, team]));
+    const linkedVenueIds = [...new Set(
+        teamDocs
+            .map(team => team.venue?.venueId)
+            .filter(venueId => venueId != null)
+    )];
+    const [venueMapById, venueMapByName] = await Promise.all([
+        venueService.batchGetVenuesById([...new Set([...uniqueVenueIds, ...linkedVenueIds])]),
+        venueService.batchGetVenuesByName(uniqueVenueNames)
+    ]);
+    const geocodeCandidates = [];
+    const candidateMatches = uniqueFixtures.map((match) => {
+        const venue = match.fixture?.venue;
+        const mappedHome = mappedTeamNameMap.get(match.teams.home.name) || match.teams.home.name;
+        const mappedAway = mappedTeamNameMap.get(match.teams.away.name) || match.teams.away.name;
+        const homeTeam = teamDocByName.get(mappedHome) || null;
+        const awayTeam = teamDocByName.get(mappedAway) || null;
         let venueInfo = null;
         if (venue?.id) {
-            // Try to get venue coordinates from local database first
-            const localVenue = await venueService.getVenueByApiId(venue.id);
+            const localVenue = venueMapById.get(venue.id);
             if (localVenue) {
                 venueInfo = {
                     id: venue.id,
@@ -133,101 +203,110 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                     coordinates: localVenue.coordinates || localVenue.location?.coordinates,
                     image: localVenue.image || null
                 };
-            } else {
-                // Fall back to venue name lookup
-                const byName = await venueService.getVenueByName(venue.name, venue.city);
-                if (byName?.coordinates) {
-                    venueInfo = {
-                        id: venue.id,
-                        name: byName.name,
-                        city: byName.city,
-                        country: byName.country,
-                        coordinates: byName.coordinates,
-                        image: null
-                    };
-                } else {
-                    // Try geocoding if no coordinates available
-                    let coordinates = venue.coordinates; // Usually null from API
-                    if (!coordinates && venue.name && venue.city) {
-                        try {
-                            const geocodedCoords = await geocodingService.geocodeVenueCoordinates(
-                                venue.name,
-                                venue.city,
-                                venue.country
-                            );
-                            if (geocodedCoords) {
-                                coordinates = geocodedCoords;
-                                // Save to database for future use
-                                await venueService.saveVenueWithCoordinates({
-                                    venueId: venue.id,
-                                    name: venue.name,
-                                    city: venue.city,
-                                    country: venue.country,
-                                    coordinates: coordinates
-                                });
-                            }
-                        } catch (geocodeError) {
-                        }
-                    }
-                    venueInfo = {
-                        id: venue.id,
-                        name: venue.name,
-                        city: venue.city,
-                        country: venue.country,
-                        coordinates: coordinates,
-                        image: null
-                    };
-                }
             }
+        }
+        if (!venueInfo && venue?.name) {
+            const byName = venueMapByName.get(`${venue.name}|${(venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? '' : venue.city}`);
+            const foundCoords = byName?.coordinates || byName?.location?.coordinates;
+            if (byName && foundCoords) {
+                venueInfo = {
+                    id: venue.id || byName.venueId || `venue-${venue.name.replace(/\s+/g, '-').toLowerCase()}`,
+                    name: byName.name,
+                    city: byName.city,
+                    country: byName.country,
+                    coordinates: foundCoords,
+                    image: byName.image || null
+                };
+            }
+        }
+        if (!venueInfo && homeTeam?.venue?.venueId) {
+            const linkedVenue = venueMapById.get(homeTeam.venue.venueId);
+            const coords = linkedVenue?.coordinates || linkedVenue?.location?.coordinates;
+            if (coords && Array.isArray(coords) && coords.length === 2) {
+                venueInfo = {
+                    id: venue?.id || linkedVenue.venueId || null,
+                    name: linkedVenue.name || homeTeam.venue.name || 'Unknown Venue',
+                    city: linkedVenue.city || homeTeam.city || 'Unknown City',
+                    country: linkedVenue.country || homeTeam.country || match.league?.country || 'Unknown Country',
+                    coordinates: coords,
+                    image: linkedVenue.image || null
+                };
+            }
+        }
+        if (!venueInfo && homeTeam?.venue?.coordinates) {
+            venueInfo = {
+                id: venue?.id || homeTeam.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                name: homeTeam.venue.name || venue?.name || 'Unknown Venue',
+                city: homeTeam.city || venue?.city || 'Unknown City',
+                country: homeTeam.country || match.league?.country || 'Unknown Country',
+                coordinates: homeTeam.venue.coordinates,
+                image: null
+            };
         }
         if (!venueInfo) {
-            // Try team venue fallback if no venue ID
-            const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
-            const team = await Team.findOne({
-                $or: [
-                    { name: mappedHome },
-                    { name: { $regex: new RegExp(`^${mappedHome}$`, 'i') } },
-                    { apiName: mappedHome },
-                    { aliases: mappedHome }
-                ]
-            });
-            // If team has venueId, try to lookup venue from Venue collection first
-            if (team?.venue?.venueId) {
-                const Venue = require('../models/Venue');
-                const linkedVenue = await Venue.findOne({ venueId: team.venue.venueId });
-                if (linkedVenue) {
-                    const coords = linkedVenue.coordinates || linkedVenue.location?.coordinates;
-                    if (coords && Array.isArray(coords) && coords.length === 2) {
-                        venueInfo = {
-                            id: venue?.id || linkedVenue.venueId || null,
-                            name: linkedVenue.name || team.venue.name || 'Unknown Venue',
-                            city: linkedVenue.city || team.city || 'Unknown City',
-                            country: linkedVenue.country || team.country || match.league?.country || 'Unknown Country',
-                            coordinates: coords
-                        };
-                    }
-                }
-            }
-            // Fallback to team.venue.coordinates if venueId lookup didn't work
-            if (!venueInfo && team?.venue?.coordinates) {
-                venueInfo = {
-                    id: venue?.id || team.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
-                    name: team.venue.name || venue?.name || 'Unknown Venue',
-                    city: team.city || venue?.city || 'Unknown City',
-                    country: team.country || match.league?.country || 'Unknown Country',
-                    coordinates: team.venue.coordinates
-                };
-            }
-            if (!venueInfo) {
-                venueInfo = {
-                    id: venue?.id || null,
-                    name: venue?.name || 'Unknown Venue',
-                    city: venue?.city || 'Unknown City',
-                    country: match.league?.country || 'Unknown Country',
-                    coordinates: venue?.coordinates || null  // Use API coordinates if available
-                };
+            venueInfo = {
+                id: venue?.id || null,
+                name: venue?.name || 'Unknown Venue',
+                city: venue?.city || 'Unknown City',
+                country: venue?.country || match.league?.country || 'Unknown Country',
+                coordinates: venue?.coordinates || null,
+                image: null
+            };
+            if (!venueInfo.coordinates && venueInfo.name && venueInfo.city && venueInfo.city !== 'Unknown City') {
+                const geocodeKey = `${venueInfo.name}|${venueInfo.city || ''}|${venueInfo.country || ''}`;
+                geocodeCandidates.push({
+                    key: geocodeKey,
+                    venueId: venue?.id || null,
+                    venueInfo
+                });
             }
         }
+        return {
+            match,
+            venueInfo,
+            mappedHome,
+            mappedAway,
+            homeTeam,
+            awayTeam
+        };
+    });
+    const uniqueGeocodeCandidates = [...new Map(
+        geocodeCandidates.map(candidate => [candidate.key, candidate])
+    ).values()];
+    if (uniqueGeocodeCandidates.length > 0) {
+        const geocodeConcurrency = Math.max(1, Number(process.env.MATCHES_SYNC_GEOCODE_CONCURRENCY) || 2);
+        const geocodeIntervalMs = Math.max(0, Number(process.env.MATCHES_SYNC_GEOCODE_INTERVAL_MS) || 400);
+        const geocodeResults = await geocodingService.batchGeocodeVenues(
+            uniqueGeocodeCandidates.map(({ venueInfo }) => ({
+                name: venueInfo.name,
+                city: venueInfo.city,
+                country: venueInfo.country
+            })),
+            {
+                concurrency: geocodeConcurrency,
+                minIntervalMs: geocodeIntervalMs,
+                maxRetries: 1,
+                failFastOnRateLimit: true,
+                logFailures: false
+            }
+        );
+        uniqueGeocodeCandidates.forEach(({ key, venueId, venueInfo }) => {
+            const coords = geocodeResults.get(key);
+            if (coords) {
+                venueInfo.coordinates = coords;
+                venueService.saveVenueWithCoordinates({
+                    venueId,
+                    name: venueInfo.name,
+                    city: venueInfo.city,
+                    country: venueInfo.country,
+                    coordinates: coords
+                }).catch(() => {});
+            }
+        });
+    }
+    const transformedMatches = [];
+    for (const candidate of candidateMatches) {
+        const { match, venueInfo, mappedHome, mappedAway, homeTeam, awayTeam } = candidate;
         const transformed = {
             id: match.fixture.id,
             fixture: {
@@ -243,17 +322,17 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
                 logo: match.league.logo
             },
             teams: {
-                home: await (async () => {
-                    const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
-                    const team = await Team.findOne({ name: mappedName });
-                    return {
-                        id: match.teams.home.id,
-                        name: mappedName,
-                        logo: match.teams.home.logo,
-                        ticketingUrl: team?.ticketingUrl || undefined
-                    };
-                })(),
-                away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
+                home: {
+                    id: match.teams.home.id,
+                    name: mappedHome,
+                    logo: homeTeam?.logo || match.teams.home.logo,
+                    ticketingUrl: homeTeam?.ticketingUrl || undefined
+                },
+                away: {
+                    id: match.teams.away.id,
+                    name: mappedAway,
+                    logo: awayTeam?.logo || match.teams.away.logo
+                }
             }
         };
         // Apply team filtering if provided
@@ -321,8 +400,15 @@ async function performSearch({ competitions, dateFrom, dateTo, season, bounds, t
             transformedMatches.push(transformed);
         }
     }
-    // Sort by date
     transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+    logPerformSearchMetrics({
+        durationMs: roundDuration(performance.now() - searchStartTime),
+        requestCount: requests.length,
+        fixturesFetched: fixtures.length,
+        uniqueFixtures: uniqueFixtures.length,
+        matchesReturned: transformedMatches.length,
+        geocodeCandidates: uniqueGeocodeCandidates.length
+    });
     return transformedMatches;
 }
 // Function to check if coordinates are within bounds

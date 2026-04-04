@@ -30,6 +30,71 @@ function logMatchesDebug(message, details = {}) {
         console.log(`[matches] ${message}`, details);
     }
 }
+
+function roundDuration(durationMs) {
+    return Math.round(durationMs * 100) / 100;
+}
+
+function logSearchMetrics(mode, details = {}) {
+    console.log(`[matches/search] ${mode}`, {
+        ...details,
+        limiter: apiSportsService.getLimiterState()
+    });
+}
+
+function enqueueBackgroundVenueGeocoding(lookups, options = {}) {
+    if (!Array.isArray(lookups) || lookups.length === 0) {
+        return;
+    }
+    const {
+        concurrency = 2,
+        minIntervalMs = 0,
+        searchSessionId = null
+    } = options;
+    setImmediate(async () => {
+        try {
+            const geocodeInputs = lookups.map(({ venueInfo }) => ({
+                name: venueInfo.name,
+                city: venueInfo.city,
+                country: venueInfo.country
+            }));
+            const { results, metadata } = await geocodingService.batchGeocodeVenues(geocodeInputs, {
+                concurrency,
+                minIntervalMs,
+                maxRetries: 1,
+                failFastOnRateLimit: true,
+                logFailures: false,
+                includeMetadata: true
+            });
+            let savedCount = 0;
+            for (const lookup of lookups) {
+                const coords = results.get(lookup.key);
+                if (!coords) {
+                    continue;
+                }
+                savedCount += 1;
+                venueService.saveVenueWithCoordinates({
+                    venueId: lookup.venueId,
+                    name: lookup.venueInfo.name,
+                    city: lookup.venueInfo.city,
+                    country: lookup.venueInfo.country,
+                    coordinates: coords
+                }).catch(error => {
+                    console.error(`❌ Error saving background geocoded venue ${lookup.venueInfo.name}:`, error.message);
+                });
+            }
+            logMatchesDebug('background venue geocoding finished', {
+                searchSessionId,
+                queued: lookups.length,
+                savedCount,
+                metadata
+            });
+        } catch (error) {
+            console.error('❌ Background venue geocoding failed:', error.message);
+        }
+    });
+}
+
 function getAxiosErrorSummary(error) {
     const response = error?.response;
     const headers = response?.headers || {};
@@ -71,8 +136,7 @@ async function getVenueFromApiFootball(venueId) {
         return null;
     }
 }
-// Batch fetch venue data from API-Football (optimized for processing multiple matches)
-// Processes venues in batches of 10 to respect rate limits
+// Batch fetch venue data from API-Football. The shared limiter controls pacing.
 async function batchGetVenuesFromApiFootball(venueIds) {
     if (!venueIds || venueIds.length === 0) {
         return new Map();
@@ -99,44 +163,27 @@ async function batchGetVenuesFromApiFootball(venueIds) {
     }
     if (process.env.NODE_ENV !== 'production') {
     }
-    // Process in batches of 10 to respect rate limits
-    const BATCH_SIZE = 10;
-    const batches = [];
-    for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
-        batches.push(uncachedIds.slice(i, i + BATCH_SIZE));
-    }
-    // Process batches sequentially with delay between batches
-    for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i];
-        // Process batch in parallel
-        const batchPromises = batch.map(async (venueId) => {
-            try {
-                const response = await apiSportsService.get('/venues', {
-                    params: { id: venueId },
-                    timeout: 3000
-                });
-                if (response.data && response.data.response && response.data.response.length > 0) {
-                    const venueData = response.data.response[0];
-                    venueCache.set(venueId, venueData);
-                    return { venueId, venueData };
-                }
-                return { venueId, venueData: null };
-            } catch (error) {
-                return { venueId, venueData: null };
+    const venueResults = await Promise.allSettled(uncachedIds.map(async (venueId) => {
+        try {
+            const response = await apiSportsService.get('/venues', {
+                params: { id: venueId },
+                timeout: 3000
+            });
+            if (response.data && response.data.response && response.data.response.length > 0) {
+                const venueData = response.data.response[0];
+                venueCache.set(venueId, venueData);
+                return { venueId, venueData };
             }
-        });
-        const batchResults = await Promise.allSettled(batchPromises);
-        // Add successful results to map
-        batchResults.forEach((result) => {
-            if (result.status === 'fulfilled' && result.value && result.value.venueData) {
-                venueMap.set(result.value.venueId, result.value.venueData);
-            }
-        });
-        // Add delay between batches (except for last batch)
-        if (i < batches.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+            return { venueId, venueData: null };
+        } catch (error) {
+            return { venueId, venueData: null };
         }
-    }
+    }));
+    venueResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value && result.value.venueData) {
+            venueMap.set(result.value.venueId, result.value.venueData);
+        }
+    });
     if (process.env.NODE_ENV !== 'production') {
         const successCount = Array.from(venueMap.values()).filter(v => v != null).length;
     }
@@ -588,12 +635,44 @@ const REGIONAL_INTERNATIONALS = {
 // Global/Elite International Competitions that should be checked everywhere
 const GLOBAL_INTERNATIONAL_IDS = [1]; // World Cup
 // Helper function to filter leagues by geographic relevance and subscription tier
-async function getRelevantLeagueIds(searchContext, user = null) {
+async function getRelevantLeagueIds(searchContext, user = null, options = {}) {
     // Get accessible leagues based on subscription tier
     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
     const domesticCountries = getDomesticCountriesFromContext(searchContext);
     const domesticCountrySet = new Set(domesticCountries.map(normalizeCountryName));
+    const isCityLevelSearch = options.isCityLevelSearch === true;
+    const localLeagueBounds = options.localLeagueBounds || searchContext?.bounds || null;
+
+    let cityScopedDomesticLeagueIds = null;
+    if (isCityLevelSearch && localLeagueBounds) {
+        const nearbyTeams = await Team.find({
+            'venue.coordinates.0': {
+                $gte: localLeagueBounds.southwest.lng,
+                $lte: localLeagueBounds.northeast.lng
+            },
+            'venue.coordinates.1': {
+                $gte: localLeagueBounds.southwest.lat,
+                $lte: localLeagueBounds.northeast.lat
+            }
+        }).select('leagues').lean();
+
+        cityScopedDomesticLeagueIds = new Set();
+        nearbyTeams.forEach((team) => {
+            (team.leagues || []).forEach((leagueEntry) => {
+                const leagueIdStr = String(leagueEntry?.leagueId || '');
+                const leagueId = parseInt(leagueIdStr, 10);
+                if (
+                    leagueEntry?.isActive !== false &&
+                    leagueIdStr &&
+                    !isNaN(leagueId) &&
+                    accessibleLeagueIdsSet.has(leagueIdStr)
+                ) {
+                    cityScopedDomesticLeagueIds.add(leagueId);
+                }
+            });
+        });
+    }
     // Get all active leagues from MongoDB
     const dbLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
     // Get API mappings for leagues not in database
@@ -621,7 +700,11 @@ async function getRelevantLeagueIds(searchContext, user = null) {
         const leagueIdStr = String(league.apiId);
         // A. DOMESTIC: If country is nearby, include ALL its leagues
         if (domesticCountrySet.has(normalizeCountryName(league.country))) {
-                    shouldInclude = true;
+            if (cityScopedDomesticLeagueIds && cityScopedDomesticLeagueIds.size > 0) {
+                shouldInclude = cityScopedDomesticLeagueIds.has(leagueId);
+            } else {
+                shouldInclude = true;
+            }
         }
         // B. INTERNATIONAL: Filter based on detected regions
         else if (league.country === 'International' || league.country === 'Europe') {
@@ -666,6 +749,9 @@ async function getRelevantLeagueIds(searchContext, user = null) {
     }
     // Fallback: if no relevant leagues found, include top European leagues plus international (filtered by subscription)
     if (relevantLeagueIds.length === 0) {
+        if (cityScopedDomesticLeagueIds && cityScopedDomesticLeagueIds.size > 0) {
+            return Array.from(cityScopedDomesticLeagueIds);
+        }
         const fallbackApiIds = ['39', '140', '78', '135', '61', '62', '2', '3']; // PL, La Liga, Bundesliga, Serie A, Ligue 1, Ligue 2, UCL, UEL
         const fallbackLeagues = await League.find({ 
             apiId: { $in: fallbackApiIds },
@@ -876,6 +962,7 @@ router.get('/venues/stats', async (req, res) => {
 // Search for matches between specific teams
 router.get('/search', async (req, res) => {
     try {
+        const searchRequestStartTime = performance.now();
         const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025, competitions, teams, neLat, neLng, swLat, swLng, dateFlexibility: dateFlexibilityParam } = req.query;
         // Location-only search: if bounds and date range are provided without competitions/teams/teams
         const hasBounds = neLat && neLng && swLat && swLng;
@@ -890,6 +977,7 @@ router.get('/search', async (req, res) => {
                 user = await User.findById(req.user.id);
             }
             const searchSessionId = `location_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const phaseTimings = {};
             // PHASE 1: Buffer Zones - Expand bounds by 30% to prevent gaps when panning
             const originalBounds = {
                 northeast: { lat: parseFloat(neLat), lng: parseFloat(neLng) },
@@ -943,6 +1031,7 @@ router.get('/search', async (req, res) => {
             const searchCountry = searchContext.primaryCountry;
             const domesticCountries = getDomesticCountriesFromContext(searchContext);
             const domesticCountrySet = new Set(domesticCountries.map(normalizeCountryName));
+            const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0;
             const visibleCountryKey = domesticCountries.length > 0
                 ? domesticCountries.slice().sort().join('|')
                 : searchCountry;
@@ -958,7 +1047,8 @@ router.get('/search', async (req, res) => {
             const effectiveTo = addDays(dateTo, dateFlexibility);
             const clampedFrom = effectiveFrom < todayStr ? todayStr : effectiveFrom;
             // Cache by visible countries/regions rather than a single inferred center country.
-            const cacheKey = `location-search:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
+            const searchBehaviorVersion = 'v2';
+            const cacheKey = `location-search:${searchBehaviorVersion}:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
@@ -969,7 +1059,7 @@ router.get('/search', async (req, res) => {
                 const cachedMatchCount = cachedData.data?.length || 0;
                 // If it's a major country and we only have 1-2 matches, cache might be incomplete
                 // This can happen if the first search had corrupted coordinates or API issues
-                if (isMajorCountry && cachedMatchCount <= 2) {
+                if (!isCityLevelSearch && isMajorCountry && cachedMatchCount <= 2) {
                     matchesCache.delete(cacheKey);
                     // Fall through to fresh fetch below
                 } else {
@@ -1072,7 +1162,7 @@ router.get('/search', async (req, res) => {
                     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
                     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
                     const filteredMatches = filterMatchesByAccessAndCoords(matchesWithCoords, accessibleLeagueIdsSet);
-                    return res.json({ 
+                    const responsePayload = {
                         success: true, 
                         data: filteredMatches, 
                         count: filteredMatches.length,
@@ -1085,14 +1175,31 @@ router.get('/search', async (req, res) => {
                             enrichedFromMongoDB: enrichedCount,
                             totalInCache: cachedData.data.length
                         }
+                    };
+                    logSearchMetrics('location-cache-hit', {
+                        durationMs: roundDuration(performance.now() - searchRequestStartTime),
+                        cacheKey,
+                        cacheHit: true,
+                        matchesReturned: filteredMatches.length,
+                        matchesWithCoords: matchesWithCoords.length,
+                        matchesMissingCoords: matchesMissingCoords.length,
+                        enrichedFromMongoDb: enrichedCount
                     });
+                    return res.json(responsePayload);
                     // Return early if cache was valid (not invalidated)
-                    return;
                 }
             }
             // Cache miss or invalidated - fetch fresh data
             // Get relevant league IDs using geographic filtering and subscription tier (similar to /leagues/relevant)
-            const majorLeagueIds = await getRelevantLeagueIds(searchContext, user);
+            const leagueSelectionStartTime = performance.now();
+            const majorLeagueIds = await getRelevantLeagueIds(searchContext, user, {
+                isCityLevelSearch,
+                localLeagueBounds: bounds
+            });
+            phaseTimings.leagueSelection = {
+                durationMs: roundDuration(performance.now() - leagueSelectionStartTime),
+                relevantLeagueCount: majorLeagueIds.length
+            };
             if (majorLeagueIds.length === 0) {
                 // Fallback to essential leagues
                 majorLeagueIds.push(39, 140, 78, 135, 61, 62, 2, 3);
@@ -1111,7 +1218,7 @@ router.get('/search', async (req, res) => {
                 requestDates.push(currentDate.toISOString().slice(0, 10));
                 currentDate.setUTCDate(currentDate.getUTCDate() + 1);
             }
-            // PHASE 1: Fetch daily fixture slates, then filter locally.
+            // PHASE 1: Fetch fixtures from API-Sports.
             async function fetchFixturesForDate(searchDate, maxRetries = 3) {
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
@@ -1161,9 +1268,14 @@ router.get('/search', async (req, res) => {
                             });
                             return { type: 'date', id: searchDate, data: { response: [] }, success: false };
                         } else {
-                            const delayMs = errorSummary.retryAfterSeconds != null
-                                ? errorSummary.retryAfterSeconds * 1000
-                                : Math.pow(2, attempt) * 1000;
+                            const isTransientUpstreamError = !isRateLimited && (
+                                errorSummary.status == null ||
+                                errorSummary.status >= 500 ||
+                                errorSummary.code === 'ECONNABORTED'
+                            );
+                            const delayMs = isRateLimited
+                                ? 0
+                                : (isTransientUpstreamError ? Math.pow(2, attempt) * 500 : 0);
                             if (isRateLimited) {
                                 rateLimitEvents.push({
                                     searchDate,
@@ -1198,12 +1310,76 @@ router.get('/search', async (req, res) => {
                                     searchSessionId
                                 });
                             }
+                            if (delayMs > 0) {
+                                await new Promise(resolve => setTimeout(resolve, delayMs));
+                            }
+                        }
+                    }
+                }
+            }
+            async function fetchFixturesForLeague(leagueId, maxRetries = 3) {
+                const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        logMatchesDebug('location search upstream request', {
+                            leagueId,
+                            season: leagueSeason,
+                            attempt: attempt + 1,
+                            maxRetries,
+                            params: { league: leagueId, season: leagueSeason, from: clampedFrom, to: effectiveTo },
+                            searchSessionId
+                        });
+                        const response = await apiSportsService.get('/fixtures', {
+                            params: { league: leagueId, season: leagueSeason, from: clampedFrom, to: effectiveTo },
+                            timeout: 10000
+                        });
+                        return { type: 'league', id: leagueId, data: response.data, success: true };
+                    } catch (error) {
+                        const isLastAttempt = attempt === maxRetries - 1;
+                        const errorSummary = getAxiosErrorSummary(error);
+                        const isRateLimited = errorSummary.status === 429;
+                        if (isLastAttempt) {
+                            console.error('[matches/search] Upstream league fixtures request failed', {
+                                leagueId,
+                                season: leagueSeason,
+                                attempt: attempt + 1,
+                                maxRetries,
+                                status: errorSummary.status,
+                                code: errorSummary.code,
+                                message: errorSummary.message,
+                                retryAfterSeconds: errorSummary.retryAfterSeconds,
+                                upstreamErrors: errorSummary.upstreamErrors,
+                                searchSessionId
+                            });
+                            return { type: 'league', id: leagueId, data: { response: [] }, success: false };
+                        }
+                        const isTransientUpstreamError = !isRateLimited && (
+                            errorSummary.status == null ||
+                            errorSummary.status >= 500 ||
+                            errorSummary.code === 'ECONNABORTED'
+                        );
+                        const delayMs = isRateLimited
+                            ? 0
+                            : (isTransientUpstreamError ? Math.pow(2, attempt) * 500 : 0);
+                        if (isRateLimited) {
+                            rateLimitEvents.push({
+                                searchDate: `league:${leagueId}`,
+                                attempt: attempt + 1,
+                                delayMs,
+                                retryAfterSeconds: errorSummary.retryAfterSeconds
+                            });
+                        }
+                        if (delayMs > 0) {
                             await new Promise(resolve => setTimeout(resolve, delayMs));
                         }
                     }
                 }
             }
-            const settled = await Promise.allSettled(requestDates.map(searchDate => fetchFixturesForDate(searchDate)));
+            const fixtureFetchStartTime = performance.now();
+            const fixtureRequests = isCityLevelSearch
+                ? majorLeagueIds.map(leagueId => fetchFixturesForLeague(leagueId))
+                : requestDates.map(searchDate => fetchFixturesForDate(searchDate));
+            const settled = await Promise.allSettled(fixtureRequests);
             const fixtures = [];
             for (const s of settled) {
                 if (s.status === 'fulfilled') {
@@ -1215,6 +1391,13 @@ router.get('/search', async (req, res) => {
                     console.error('❌ Date request failed:', s.reason);
                 }
             }
+            phaseTimings.fixtureFetch = {
+                durationMs: roundDuration(performance.now() - fixtureFetchStartTime),
+                strategy: isCityLevelSearch ? 'league-range' : 'date-slate',
+                requestDateCount: requestDates.length,
+                requestCount: fixtureRequests.length,
+                fetchedFixtureCount: fixtures.length
+            };
             if (rateLimitEvents.length > 0) {
                 const uniqueRateLimitedDates = Array.from(new Set(rateLimitEvents.map(event => event.searchDate)));
                 const totalRetryDelayMs = rateLimitEvents.reduce((sum, event) => sum + event.delayMs, 0);
@@ -1226,6 +1409,7 @@ router.get('/search', async (req, res) => {
                     dates: uniqueRateLimitedDates
                 });
             }
+            const dedupeAndFilterStartTime = performance.now();
             // Dedupe by fixture id
             const seen = new Set();
             const uniqueFixtures = fixtures.filter(fx => {
@@ -1245,6 +1429,12 @@ router.get('/search', async (req, res) => {
                 const leagueIdStr = match.league?.id?.toString();
                 return !leagueIdStr || accessibleLeagueIdsSet.has(leagueIdStr);
             });
+            phaseTimings.dedupeAndLeagueFilter = {
+                durationMs: roundDuration(performance.now() - dedupeAndFilterStartTime),
+                uniqueFixtureCount: uniqueFixtures.length,
+                relevantFixtureCount: relevantFixtures.length,
+                accessibleFixtureCount: accessibleFixtures.length
+            };
             // Track matches filtered out (starts with subscription filtering, then adds bounds filtering)
             let matchesFilteredOut = relevantFixtures.length - accessibleFixtures.length;
             if (process.env.NODE_ENV !== 'production' && matchesFilteredOut > 0) {
@@ -1274,6 +1464,7 @@ router.get('/search', async (req, res) => {
                 venueNameLookups.map(v => [`${v.name}|${v.city}`, v])
             ).values()];
             const uniqueApiTeamNames = [...new Set(apiTeamNames)];
+            const preloadStartTime = performance.now();
             const mappedTeamEntries = await Promise.all(
                 uniqueApiTeamNames.map(async apiTeamName => ([
                     apiTeamName,
@@ -1311,9 +1502,19 @@ router.get('/search', async (req, res) => {
                     : Promise.resolve(new Map())
             ]);
             const batchEndTime = performance.now();
+            phaseTimings.preload = {
+                durationMs: roundDuration(performance.now() - preloadStartTime),
+                uniqueVenueIds: uniqueVenueIds.length,
+                uniqueVenueNames: uniqueVenueNames.length,
+                uniqueApiTeamNames: uniqueApiTeamNames.length,
+                combinedVenueIds: combinedVenueIds.length,
+                apiVenuePrefetches: apiVenueIdsToFetch.length,
+                batchFetchDurationMs: roundDuration(batchEndTime - batchStartTime)
+            };
             if (process.env.NODE_ENV !== 'production') {
             }
             // PHASE 5: Build candidate matches with bulk-loaded data
+            const candidateTransformStartTime = performance.now();
             const candidateMatches = await Promise.all(accessibleFixtures.map(async match => {
                 const leagueId = match.league?.id;
                 const venue = match.fixture?.venue;
@@ -1406,9 +1607,12 @@ router.get('/search', async (req, res) => {
                     } : null
                 };
             }));
+            phaseTimings.candidateTransform = {
+                durationMs: roundDuration(performance.now() - candidateTransformStartTime),
+                candidateMatchCount: candidateMatches.length
+            };
             const filteredBoundsLatSpan = bounds.northeast.lat - bounds.southwest.lat;
             const filteredBoundsLngSpan = bounds.northeast.lng - bounds.southwest.lng;
-            const isCityLevelSearch = filteredBoundsLatSpan < 1.0 && filteredBoundsLngSpan < 1.0;
             // PHASE 6: Batch geocode unresolved venues once per unique venue
             const uniqueGeocodeLookups = new Map();
             for (const candidate of candidateMatches) {
@@ -1416,7 +1620,14 @@ router.get('/search', async (req, res) => {
                     uniqueGeocodeLookups.set(candidate.geocodeLookup.key, candidate.geocodeLookup);
                 }
             }
-            const syncGeocodeLimit = Number(process.env.MATCHES_SYNC_GEOCODE_LIMIT) || (isCityLevelSearch ? 8 : 20);
+            const isBroadDateRangeSearch = requestDates.length > 7;
+            const defaultSyncGeocodeLimit = isBroadDateRangeSearch
+                ? (isCityLevelSearch ? 4 : 3)
+                : (isCityLevelSearch ? 6 : 5);
+            const syncGeocodeLimit = Number(process.env.MATCHES_SYNC_GEOCODE_LIMIT) || defaultSyncGeocodeLimit;
+            const syncGeocodeConcurrency = Math.max(1, Number(process.env.MATCHES_SYNC_GEOCODE_CONCURRENCY) || 2);
+            const syncGeocodeIntervalMs = Math.max(0, Number(process.env.MATCHES_SYNC_GEOCODE_INTERVAL_MS) || 0);
+            const backgroundGeocodeConcurrency = Math.max(1, Number(process.env.MATCHES_BACKGROUND_GEOCODE_CONCURRENCY) || Math.min(syncGeocodeConcurrency, 2));
             const prioritizedGeocodeLookups = Array.from(uniqueGeocodeLookups.values())
                 .sort((a, b) => {
                     const aHasVenueId = a.venueId != null ? 1 : 0;
@@ -1427,7 +1638,18 @@ router.get('/search', async (req, res) => {
                     return new Date(a.fixtureDate || 0) - new Date(b.fixtureDate || 0);
                 });
             const synchronousGeocodeLookups = prioritizedGeocodeLookups.slice(0, syncGeocodeLimit);
-            const skippedGeocodeLookups = Math.max(0, prioritizedGeocodeLookups.length - synchronousGeocodeLookups.length);
+            const deferredGeocodeLookups = prioritizedGeocodeLookups.slice(syncGeocodeLimit);
+            const skippedGeocodeLookups = deferredGeocodeLookups.length;
+            let geocodeDurationMs = 0;
+            let geocodeBatchMetadata = {
+                totalCandidates: uniqueGeocodeLookups.size,
+                cachedCount: 0,
+                uncachedCount: uniqueGeocodeLookups.size,
+                attemptedCount: 0,
+                executionMode: 'none',
+                concurrency: 0,
+                minIntervalMs: syncGeocodeIntervalMs
+            };
             if (uniqueGeocodeLookups.size > 0) {
                 const geocodeStartTime = performance.now();
                 if (process.env.NODE_ENV !== 'production') {
@@ -1437,13 +1659,18 @@ router.get('/search', async (req, res) => {
                     city: venueInfo.city,
                     country: venueInfo.country
                 }));
-                const geocodeResults = await geocodingService.batchGeocodeVenues(geocodeInputs, {
-                    concurrency: 1,
-                    minIntervalMs: 1000,
+                const {
+                    results: geocodeResults,
+                    metadata
+                } = await geocodingService.batchGeocodeVenues(geocodeInputs, {
+                    concurrency: syncGeocodeConcurrency,
+                    minIntervalMs: syncGeocodeIntervalMs,
                     maxRetries: 1,
                     failFastOnRateLimit: true,
-                    logFailures: false
+                    logFailures: false,
+                    includeMetadata: true
                 });
+                geocodeBatchMetadata = metadata;
                 for (const lookup of synchronousGeocodeLookups) {
                     const coords = geocodeResults.get(lookup.key);
                     if (coords) {
@@ -1460,6 +1687,7 @@ router.get('/search', async (req, res) => {
                     }
                 }
                 const geocodeEndTime = performance.now();
+                geocodeDurationMs = roundDuration(geocodeEndTime - geocodeStartTime);
                 if (process.env.NODE_ENV !== 'production') {
                 }
                 if (skippedGeocodeLookups > 0) {
@@ -1470,7 +1698,33 @@ router.get('/search', async (req, res) => {
                     });
                 }
             }
+            if (deferredGeocodeLookups.length > 0) {
+                logMatchesDebug('location search background geocoding queued', {
+                    attemptedSynchronously: synchronousGeocodeLookups.length,
+                    deferred: deferredGeocodeLookups.length,
+                    searchSessionId
+                });
+                enqueueBackgroundVenueGeocoding(deferredGeocodeLookups, {
+                    concurrency: backgroundGeocodeConcurrency,
+                    minIntervalMs: 0,
+                    searchSessionId
+                });
+            }
+            phaseTimings.geocoding = {
+                durationMs: geocodeDurationMs,
+                totalCandidates: uniqueGeocodeLookups.size,
+                cachedGeocodes: geocodeBatchMetadata.cachedCount,
+                uncachedGeocodes: geocodeBatchMetadata.uncachedCount,
+                attemptedGeocodes: synchronousGeocodeLookups.length,
+                deferredGeocodes: skippedGeocodeLookups,
+                skippedGeocodes: skippedGeocodeLookups,
+                executionMode: geocodeBatchMetadata.executionMode,
+                concurrency: geocodeBatchMetadata.concurrency,
+                minIntervalMs: geocodeBatchMetadata.minIntervalMs,
+                backgroundQueued: deferredGeocodeLookups.length
+            };
             // PHASE 7: Filter by bounds using the final coordinate set
+            const finalFilterStartTime = performance.now();
             const transformedMatches = [];
             let matchesWithoutCoords = 0;
             let matchesByLeague = {};
@@ -1487,11 +1741,9 @@ router.get('/search', async (req, res) => {
                     if (typeof lon === 'number' && typeof lat === 'number' &&
                         !isNaN(lon) && !isNaN(lat) &&
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-                        if (isCityLevelSearch && isDomesticLeague) {
+                        if (isWithinBounds(venueInfo.coordinates, bounds)) {
                             shouldInclude = true;
-                        } else if (isWithinBounds(venueInfo.coordinates, bounds)) {
-                            shouldInclude = true;
-                        } else if (isDomesticLeague) {
+                        } else if (!isCityLevelSearch && isDomesticLeague) {
                             shouldInclude = true;
                         } else {
                             matchesFilteredOut++;
@@ -1520,6 +1772,12 @@ router.get('/search', async (req, res) => {
                     matchesByLeague[leagueId].transformed++;
                 }
             }
+            phaseTimings.finalFilter = {
+                durationMs: roundDuration(performance.now() - finalFilterStartTime),
+                transformedMatchCount: transformedMatches.length,
+                matchesWithoutCoords,
+                matchesFilteredOut
+            };
             const leagueStatsString = Object.entries(matchesByLeague).slice(0, 10).map(([id, stats]) => 
                 `League ${id}: ${stats.total} total, ${stats.filteredOut} filtered out, ${stats.transformed} transformed`
             ).join(' | ');
@@ -1532,13 +1790,12 @@ router.get('/search', async (req, res) => {
                 count: transformedMatches.length
             };
             matchesCache.set(cacheKey, cacheData);
-            // PHASE 1: Return ALL matches that pass subscription + coordinate checks.
-            // Client-side will filter by viewport for smooth panning (Google Maps/Airbnb pattern).
+            // Return matches that pass subscription and current backend inclusion rules.
             const filteredMatches = filterMatchesByAccessAndCoords(transformedMatches, accessibleLeagueIdsSet);
             // Count matches with/without coordinates for debugging
             const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
             const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;
-            return res.json({ 
+            const responsePayload = { 
                 success: true, 
                 data: filteredMatches, 
                 count: filteredMatches.length,
@@ -1550,9 +1807,35 @@ router.get('/search', async (req, res) => {
                     withoutCoordinates: withoutCoords,
                     totalInCache: transformedMatches.length,
                     attemptedGeocodes: synchronousGeocodeLookups.length,
-                    skippedGeocodes: skippedGeocodeLookups
+                    deferredGeocodes: skippedGeocodeLookups,
+                    skippedGeocodes: skippedGeocodeLookups,
+                    relevantLeagues: majorLeagueIds.length,
+                    fixturesFetched: fixtures.length,
+                    isCityLevelSearch,
+                    phases: phaseTimings
                 }
+            };
+            logSearchMetrics('location-fresh', {
+                durationMs: roundDuration(performance.now() - searchRequestStartTime),
+                cacheKey,
+                cacheHit: false,
+                requestDates: requestDates.length,
+                relevantLeagues: majorLeagueIds.length,
+                fixturesFetched: fixtures.length,
+                matchesReturned: filteredMatches.length,
+                totalMatches: transformedMatches.length,
+                rateLimitedDates: loggedRateLimitedDates.size,
+                geocodeAttempted: synchronousGeocodeLookups.length,
+                geocodeDeferred: skippedGeocodeLookups,
+                geocodeSkipped: skippedGeocodeLookups,
+                geocodeCached: geocodeBatchMetadata.cachedCount,
+                geocodeExecutionMode: geocodeBatchMetadata.executionMode,
+                geocodeConcurrency: syncGeocodeConcurrency,
+                geocodeIntervalMs: syncGeocodeIntervalMs,
+                venueApiPrefetches: apiVenueIdsToFetch.length,
+                phases: phaseTimings
             });
+            return res.json(responsePayload);
         }
         // Aggregated search path when competitions/teams are provided
         if ((competitions && competitions.trim() !== '') || (teams && teams.trim() !== '')) {
@@ -1627,95 +1910,108 @@ router.get('/search', async (req, res) => {
                 seen.add(id);
                 return true;
             });
-            // Transform similar to popular route (include coordinates when available)
+            const venueIds = [];
+            const venueNameLookups = [];
+            const apiTeamNames = [];
+            for (const match of uniqueFixtures) {
+                const venue = match.fixture?.venue;
+                if (venue?.id) {
+                    venueIds.push(venue.id);
+                }
+                if (venue?.name) {
+                    venueNameLookups.push({
+                        name: venue.name,
+                        city: (venue.city === 'Unknown City' || venue.city === 'Unknown' || !venue.city) ? null : venue.city
+                    });
+                }
+                if (match.teams?.home?.name) {
+                    apiTeamNames.push(match.teams.home.name);
+                }
+                if (match.teams?.away?.name) {
+                    apiTeamNames.push(match.teams.away.name);
+                }
+            }
+            const uniqueVenueIds = [...new Set(venueIds)];
+            const uniqueVenueNames = [...new Map(
+                venueNameLookups.map(v => [`${v.name}|${v.city || ''}`, v])
+            ).values()];
+            const uniqueApiTeamNames = [...new Set(apiTeamNames)];
+            const mappedTeamEntries = await Promise.all(
+                uniqueApiTeamNames.map(async apiTeamName => ([
+                    apiTeamName,
+                    await teamService.mapApiNameToTeam(apiTeamName)
+                ]))
+            );
+            const mappedTeamNameMap = new Map(mappedTeamEntries);
+            const uniqueMappedTeamNames = [...new Set(
+                mappedTeamEntries.map(([, mappedName]) => mappedName).filter(Boolean)
+            )];
+            const teamDocs = uniqueMappedTeamNames.length > 0
+                ? await Team.find({ name: { $in: uniqueMappedTeamNames } })
+                    .select('name venue city country ticketingUrl logo')
+                    .lean()
+                : [];
+            const teamDocByName = new Map(teamDocs.map(team => [team.name, team]));
+            const linkedVenueIds = [...new Set(
+                teamDocs
+                    .map(team => team.venue?.venueId)
+                    .filter(venueId => venueId != null)
+            )];
+            const combinedVenueIds = [...new Set([...uniqueVenueIds, ...linkedVenueIds])];
+            const apiVenueIdsToFetch = MATCHES_API_VENUE_IMAGE_LIMIT > 0
+                ? uniqueVenueIds.slice(0, MATCHES_API_VENUE_IMAGE_LIMIT)
+                : [];
+            const [venueMapById, venueMapByName, apiVenuesMap] = await Promise.all([
+                venueService.batchGetVenuesById(combinedVenueIds),
+                venueService.batchGetVenuesByName(uniqueVenueNames),
+                apiVenueIdsToFetch.length > 0
+                    ? batchGetVenuesFromApiFootball(apiVenueIdsToFetch)
+                    : Promise.resolve(new Map())
+            ]);
             const transformedMatches = [];
             for (const match of uniqueFixtures) {
                 const venue = match.fixture?.venue;
-                // DEBUG: Log fixture venue structure to see what's included
-                if (transformedMatches.length === 0) { // Only log first match to avoid spam
-                    console.log({
-                        hasVenue: !!venue,
-                        venueId: venue?.id,
-                        venueName: venue?.name,
-                        venueCity: venue?.city,
-                        venueCountry: venue?.country,
-                        venueImage: venue?.image,
-                        venueKeys: venue ? Object.keys(venue) : [],
-                        fullVenue: venue
-                    });
+                const mappedHome = mappedTeamNameMap.get(match.teams.home.name) || match.teams.home.name;
+                const mappedAway = mappedTeamNameMap.get(match.teams.away.name) || match.teams.away.name;
+                const homeTeam = teamDocByName.get(mappedHome) || null;
+                let venueInfo = await resolveVenueWithCoordinates(venue, match.league?.name || 'Unknown', {
+                    venueMapById,
+                    venueMapByName,
+                    apiVenuesMap
+                });
+                if (!venueInfo && homeTeam?.venue?.venueId) {
+                    const linkedVenue = venueMapById.get(homeTeam.venue.venueId);
+                    const coords = linkedVenue?.coordinates || linkedVenue?.location?.coordinates;
+                    if (coords && Array.isArray(coords) && coords.length === 2) {
+                        venueInfo = {
+                            id: venue?.id || linkedVenue.venueId || null,
+                            name: linkedVenue.name || homeTeam.venue.name || 'Unknown Venue',
+                            city: linkedVenue.city || homeTeam.city || 'Unknown City',
+                            country: linkedVenue.country || homeTeam.country || match.league?.country || 'Unknown Country',
+                            coordinates: coords,
+                            image: linkedVenue.image || apiVenuesMap.get(venue?.id)?.image || null
+                        };
+                    }
                 }
-                let venueInfo = null;
-                if (venue?.id) {
-                    // Always fetch venue data from API-Football to get image (MongoDB doesn't store images)
-                    // This is cached, so subsequent calls are fast
-                    let apiVenueData = null;
-                    try {
-                        apiVenueData = await getVenueFromApiFootball(venue.id);
-                    } catch (error) {
-                    }
-                    const localVenue = await venueService.getVenueByApiId(venue.id);
-                    if (localVenue) {
-                        // Use MongoDB data but get image from API-Football
-                        venueInfo = {
-                            id: venue.id,
-                            name: localVenue.name,
-                            city: localVenue.city,
-                            country: localVenue.country,
-                            coordinates: localVenue.coordinates || localVenue.location?.coordinates,
-                            image: apiVenueData?.image || null // Use image from API-Football (MongoDB doesn't store images)
-                        };
-                    } else if (apiVenueData) {
-                        // No MongoDB data, use API-Football data
-                        venueInfo = {
-                            id: venue.id,
-                            name: apiVenueData.name,
-                            city: apiVenueData.city,
-                            country: apiVenueData.country,
-                            coordinates: null,
-                            image: apiVenueData.image || null
-                        };
-                    }
+                if (!venueInfo && homeTeam?.venue?.coordinates) {
+                    venueInfo = {
+                        id: venue?.id || homeTeam.venue.venueId || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
+                        name: homeTeam.venue.name || venue?.name || 'Unknown Venue',
+                        city: homeTeam.city || venue?.city || 'Unknown City',
+                        country: homeTeam.country || match.league?.country || 'Unknown Country',
+                        coordinates: homeTeam.venue.coordinates,
+                        image: apiVenuesMap.get(venue?.id)?.image || venue?.image || null
+                    };
                 }
                 if (!venueInfo) {
-                    // Try team venue fallback if no venue ID
-                    const mappedHome = await teamService.mapApiNameToTeam(match.teams.home.name);
-                    const team = await Team.findOne({
-                        $or: [
-                            { name: mappedHome },
-                            { name: { $regex: new RegExp(`^${mappedHome}$`, 'i') } },
-                            { apiName: mappedHome },
-                            { aliases: mappedHome }
-                        ]
-                    });
-                    if (team?.venue?.coordinates) {
-                        venueInfo = {
-                            id: venue?.id || `venue-${mappedHome.replace(/\s+/g, '-').toLowerCase()}`,
-                            name: team.venue.name || venue?.name || 'Unknown Venue',
-                            city: team.city || venue?.city || 'Unknown City',
-                            country: team.country || match.league?.country || 'Unknown Country',
-                            coordinates: team.venue.coordinates,
-                            image: team.venue?.image || venue?.image || null  // Include venue image
-                        };
-                    } else {
-                        // Try to get venue image from API-Football if we have venue ID
-                        let venueImage = null;
-                        if (venue?.id) {
-                            try {
-                                const v = await getVenueFromApiFootball(venue.id);
-                                venueImage = v?.image || null;
-                            } catch (error) {
-                                // Silently fail - image is optional
-                            }
-                        }
-                        venueInfo = {
-                            id: venue?.id || null,
-                            name: venue?.name || 'Unknown Venue',
-                            city: venue?.city || 'Unknown City',
-                            country: match.league?.country || 'Unknown Country',
-                            coordinates: venue?.coordinates || null,  // Use API coordinates if available
-                            image: venueImage || venue?.image || null  // Include venue image
-                        };
-                    }
+                    venueInfo = {
+                        id: venue?.id || null,
+                        name: venue?.name || 'Unknown Venue',
+                        city: venue?.city || 'Unknown City',
+                        country: match.league?.country || 'Unknown Country',
+                        coordinates: venue?.coordinates || null,
+                        image: apiVenuesMap.get(venue?.id)?.image || venue?.image || null
+                    };
                 }
                 const transformed = {
                     id: match.fixture.id,
@@ -1732,39 +2028,43 @@ router.get('/search', async (req, res) => {
                         logo: match.league.logo
                     },
                     teams: {
-                        home: { 
-                            id: match.teams.home.id, 
-                            name: await (async () => {
-                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
-                                return mappedName;
-                            })(), 
-                            logo: match.teams.home.logo,
-                            ticketingUrl: await (async () => {
-                                const mappedName = await teamService.mapApiNameToTeam(match.teams.home.name);
-                                const team = await Team.findOne({ name: mappedName });
-                                return team?.ticketingUrl || undefined;
-                            })()
+                        home: {
+                            id: match.teams.home.id,
+                            name: mappedHome,
+                            logo: homeTeam?.logo || match.teams.home.logo,
+                            ticketingUrl: homeTeam?.ticketingUrl || undefined
                         },
-                        away: { id: match.teams.away.id, name: await teamService.mapApiNameToTeam(match.teams.away.name), logo: match.teams.away.logo }
+                        away: {
+                            id: match.teams.away.id,
+                            name: mappedAway,
+                            logo: teamDocByName.get(mappedAway)?.logo || match.teams.away.logo
+                        }
                     }
                 };
-                // Bounds filtering if provided and we have coordinates
                 if (bounds) {
                     if (transformed.fixture.venue.coordinates && isWithinBounds(transformed.fixture.venue.coordinates, bounds)) {
                         transformedMatches.push(transformed);
                     }
-                } else {
-                    // For global, include only those with coordinates
-                    if (transformed.fixture.venue.coordinates) {
-                        transformedMatches.push(transformed);
-                    }
+                } else if (transformed.fixture.venue.coordinates) {
+                    transformedMatches.push(transformed);
                 }
             }
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
             if (transformedMatches.length === 0 && totalMatches > 0) {
             }
-            return res.json({ success: true, data: transformedMatches, count: transformedMatches.length });
+            const responsePayload = { success: true, data: transformedMatches, count: transformedMatches.length };
+            logSearchMetrics('aggregated-search', {
+                durationMs: roundDuration(performance.now() - searchRequestStartTime),
+                requestCount: requests.length,
+                fixturesFetched: fixtures.length,
+                uniqueFixtures: uniqueFixtures.length,
+                matchesReturned: transformedMatches.length,
+                uniqueVenueIds: uniqueVenueIds.length,
+                uniqueTeamNames: uniqueApiTeamNames.length,
+                venueApiPrefetches: apiVenueIdsToFetch.length
+            });
+            return res.json(responsePayload);
         }
         // Fallback: original team-vs-team search
         if (!homeTeam && !awayTeam) {

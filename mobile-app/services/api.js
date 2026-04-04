@@ -440,7 +440,18 @@ class ApiService {
         params.append('swLng', bounds.southwest.lng);
       }
       const url = `${this.baseURL}/matches/search?${params.toString()}`;
-      const response = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
+      const headers = {};
+      try {
+        const token = await getAuthToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('⚠️ [API] No auth token available for aggregated match search');
+        }
+      }
+      const response = await this.fetchWithTimeout(url, { method: 'GET', headers }, 90000);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data?.message || 'Failed to search matches');
@@ -1585,8 +1596,8 @@ class ApiService {
     const apiStartTime = performance.now();
     
     try {
-      // If no competitions or teams specified, use the location-only search endpoint
-      if (competitions.length === 0 && teams.length === 0 && bounds && dateFrom && dateTo) {
+      // Prefer the consolidated backend search route whenever bounds and dates are available.
+      if (bounds && dateFrom && dateTo) {
         // Validate and clamp bounds before making request
         if (bounds.northeast && bounds.southwest) {
           const latSpan = bounds.northeast.lat - bounds.southwest.lat;
@@ -1608,12 +1619,14 @@ class ApiService {
           bounds.southwest.lng = Math.max(-180, Math.min(180, bounds.southwest.lng));
         }
         if (__DEV__) {
-          console.log('🔍 searchMatchesByBounds: Using location-only search endpoint');
+          console.log('🔍 searchMatchesByBounds: Using consolidated search endpoint');
         }
         const params = new URLSearchParams();
         params.append('dateFrom', dateFrom);
         params.append('dateTo', dateTo);
         if (dateFlexibility != null && dateFlexibility > 0) params.append('dateFlexibility', String(dateFlexibility));
+        if (competitions.length > 0) params.append('competitions', competitions.join(','));
+        if (teams.length > 0) params.append('teams', teams.join(','));
         if (bounds?.northeast && bounds?.southwest) {
           params.append('neLat', bounds.northeast.lat);
           params.append('neLng', bounds.northeast.lng);
@@ -1638,12 +1651,11 @@ class ApiService {
           }
         }
         
-        // Location-only searches can take longer due to multiple league API calls with retries
-        // Increased timeout to 60 seconds to accommodate backend processing
+        // Broad uncached searches can take longer due to fixture fan-out and venue enrichment.
         const response = await this.fetchWithTimeout(url, { 
           method: 'GET',
           headers: headers
-        }, 60000, signal);
+        }, 90000, signal);
         const networkEndTime = performance.now();
         const networkDuration = networkEndTime - networkStartTime;
         
@@ -1697,6 +1709,8 @@ class ApiService {
         return {
           success: true,
           data: data.data || [],
+          bounds: data.bounds || null,
+          debug: data.debug || null,
           searchParams: { bounds, dateFrom, dateTo, competitions, teams },
           _performance: {
             totalDuration: totalApiDuration,

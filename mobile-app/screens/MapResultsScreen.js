@@ -49,8 +49,12 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [matches, setMatches] = useState(() => {
     // Log venue coordinates for initial matches
     if (__DEV__ && initialMatches && initialMatches.length > 0) {
-      console.log('📍 [VENUE COORDS] Initial matches venue coordinate analysis:');
-      initialMatches.forEach((match, idx) => {
+      const sampleMatches = initialMatches.slice(0, 10);
+      console.log('📍 [VENUE COORDS] Initial matches venue coordinate analysis:', {
+        totalMatches: initialMatches.length,
+        sampleCount: sampleMatches.length
+      });
+      sampleMatches.forEach((match, idx) => {
         const venue = match.fixture?.venue;
         if (venue) {
           const hasCoords = venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2;
@@ -621,36 +625,19 @@ const MapResultsScreen = ({ navigation, route }) => {
         const newMatches = Array.isArray(response.data) ? response.data : [];
         const previousMatchCount = matches.length;
         
-        // Log all matches returned from backend with bounds check
+        // Log a concise backend summary instead of every returned match.
         if (__DEV__ && newMatches.length > 0 && confirmedBounds) {
-          console.log('📥 [BACKEND MATCHES] All matches returned from backend:');
-          newMatches.forEach((match, idx) => {
-            const venue = match.fixture?.venue;
-            const coordinates = venue?.coordinates;
-            const hasCoords = coordinates && Array.isArray(coordinates) && coordinates.length === 2;
-            const [lon, lat] = hasCoords ? coordinates : [null, null];
-            
-            let inBounds = false;
-            let reason = '';
-            if (!hasCoords) {
-              reason = 'missing coordinates';
-            } else if (typeof lon !== 'number' || typeof lat !== 'number' ||
-                       lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-              reason = 'invalid coordinates';
-            } else {
-              // Check if within bounds (without the 5% buffer - this is just for logging)
-              inBounds = lat >= confirmedBounds.southwest.lat && 
-                        lat <= confirmedBounds.northeast.lat &&
-                        lon >= confirmedBounds.southwest.lng && 
-                        lon <= confirmedBounds.northeast.lng;
-              reason = inBounds ? 'in bounds' : 'out of bounds';
-            }
-            
-            const matchName = `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`;
-            const coordsStr = hasCoords ? `[${lat.toFixed(6)}, ${lon.toFixed(6)}]` : 'none';
-            console.log(`  ${idx + 1}. ${matchName} | Coords: ${coordsStr} | ${reason}`);
+          console.log('📥 [BACKEND MATCHES] Summary:', {
+            totalMatches: newMatches.length,
+            backendBoundsProvided: !!response.bounds,
+            backendDebug: response.debug || null,
+            sampleMatches: newMatches.slice(0, 5).map((match) => ({
+              id: match.id || match.fixture?.id,
+              name: `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`,
+              venue: match.fixture?.venue?.name || 'Unknown Venue',
+              coordinates: match.fixture?.venue?.coordinates || null
+            }))
           });
-          console.log(`📥 [BACKEND MATCHES] Total: ${newMatches.length} matches`);
         }
         
         if (__DEV__) {
@@ -678,9 +665,13 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
         
         // Log venue coordinate sources and final coordinates (only in dev, and only for first few matches to avoid spam)
-        if (__DEV__ && newMatches.length > 0 && newMatches.length <= 10) {
-          console.log('📍 [VENUE COORDS] Venue coordinate analysis (first 10 matches):');
-          newMatches.slice(0, 10).forEach((match, idx) => {
+        if (__DEV__ && newMatches.length > 0) {
+          const coordinateSample = newMatches.slice(0, 10);
+          console.log('📍 [VENUE COORDS] Venue coordinate analysis sample:', {
+            totalMatches: newMatches.length,
+            sampleCount: coordinateSample.length
+          });
+          coordinateSample.forEach((match, idx) => {
             const venue = match.fixture?.venue;
             if (venue) {
               const hasCoords = venue.coordinates && Array.isArray(venue.coordinates) && venue.coordinates.length === 2;
@@ -1526,8 +1517,9 @@ const MapResultsScreen = ({ navigation, route }) => {
       
       // Log filtered out matches
       if (__DEV__ && filteredOutMatches.length > 0) {
-        console.log('🚫 [FILTERED OUT] Matches filtered by bounds:');
-        filteredOutMatches.forEach((item, idx) => {
+        const sampleFilteredOut = filteredOutMatches.slice(0, 10);
+        console.log('🚫 [FILTERED OUT] Matches filtered by bounds (sample):');
+        sampleFilteredOut.forEach((item, idx) => {
           const matchName = `${item.match.teams?.home?.name || 'Unknown'} vs ${item.match.teams?.away?.name || 'Unknown'}`;
           const coordsStr = item.coordinates ? `[${item.coordinates.lat.toFixed(6)}, ${item.coordinates.lon.toFixed(6)}]` : 'none';
           console.log(`  ${idx + 1}. ${matchName} | Reason: ${item.reason} | Coords: ${coordsStr}`);
