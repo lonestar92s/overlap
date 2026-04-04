@@ -1075,6 +1075,29 @@ router.get('/search', async (req, res) => {
             const effectiveFrom = addDays(dateFrom, -dateFlexibility);
             const effectiveTo = addDays(dateTo, dateFlexibility);
             const clampedFrom = effectiveFrom < todayStr ? todayStr : effectiveFrom;
+            const locationSearchLogParams = {
+                requested: {
+                    dateFrom,
+                    dateTo,
+                    dateFlexibility,
+                    season,
+                    bounds: originalBounds
+                },
+                expanded: {
+                    effectiveFrom,
+                    effectiveTo,
+                    clampedFrom,
+                    bufferedBounds: bounds,
+                    clampedOriginalBounds
+                },
+                derived: {
+                    searchCountry,
+                    domesticCountries,
+                    visibleCountryKey,
+                    activeRegionKey,
+                    isCityLevelSearch
+                }
+            };
             // Cache by visible countries/regions rather than a single inferred center country.
             const searchBehaviorVersion = 'v2';
             const cacheKey = `location-search:${searchBehaviorVersion}:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
@@ -1209,6 +1232,7 @@ router.get('/search', async (req, res) => {
                         durationMs: roundDuration(performance.now() - searchRequestStartTime),
                         cacheKey,
                         cacheHit: true,
+                        searchParams: locationSearchLogParams,
                         matchesReturned: filteredMatches.length,
                         matchesWithCoords: matchesWithCoords.length,
                         matchesMissingCoords: matchesMissingCoords.length,
@@ -1848,6 +1872,7 @@ router.get('/search', async (req, res) => {
                 durationMs: roundDuration(performance.now() - searchRequestStartTime),
                 cacheKey,
                 cacheHit: false,
+                searchParams: locationSearchLogParams,
                 requestDates: requestDates.length,
                 relevantLeagues: majorLeagueIds.length,
                 fixturesFetched: fixtures.length,
