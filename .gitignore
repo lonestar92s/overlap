@@ -70,3 +70,6 @@ build/
 .env.backup
 *.env.backup
 overlap/backend/.env.backup
+
+# Internal GTM / strategy docs (not for remote)
+GTM Strategy/
