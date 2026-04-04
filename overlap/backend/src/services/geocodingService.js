@@ -129,11 +129,33 @@ class GeocodingService {
      */
     async batchGeocodeVenues(venues, options = {}) {
         if (!venues || venues.length === 0) {
-            return new Map();
+            return options.includeMetadata ? {
+                results: new Map(),
+                metadata: {
+                    totalCandidates: 0,
+                    cachedCount: 0,
+                    uncachedCount: 0,
+                    attemptedCount: 0,
+                    executionMode: 'none',
+                    concurrency: 0,
+                    minIntervalMs: 0
+                }
+            } : new Map();
         }
         if (!this.apiKey) {
             console.error('❌ LocationIQ API key not configured - cannot batch geocode');
-            return new Map();
+            return options.includeMetadata ? {
+                results: new Map(),
+                metadata: {
+                    totalCandidates: venues.length,
+                    cachedCount: 0,
+                    uncachedCount: 0,
+                    attemptedCount: 0,
+                    executionMode: 'disabled',
+                    concurrency: 0,
+                    minIntervalMs: 0
+                }
+            } : new Map();
         }
         // Remove duplicates
         const uniqueVenues = [...new Map(
@@ -142,7 +164,18 @@ class GeocodingService {
                 .map(v => [`${v.name}|${v.city || ''}|${v.country || ''}`, v])
         ).values()];
         if (uniqueVenues.length === 0) {
-            return new Map();
+            return options.includeMetadata ? {
+                results: new Map(),
+                metadata: {
+                    totalCandidates: 0,
+                    cachedCount: 0,
+                    uncachedCount: 0,
+                    attemptedCount: 0,
+                    executionMode: 'none',
+                    concurrency: 0,
+                    minIntervalMs: 0
+                }
+            } : new Map();
         }
         // Check cache first and separate cached vs uncached
         const cachedResults = new Map();
@@ -162,10 +195,26 @@ class GeocodingService {
         if (uncachedVenues.length === 0) {
             if (process.env.NODE_ENV !== 'production') {
             }
-            return cachedResults;
+            return options.includeMetadata ? {
+                results: cachedResults,
+                metadata: {
+                    totalCandidates: uniqueVenues.length,
+                    cachedCount: cachedResults.size,
+                    uncachedCount: 0,
+                    attemptedCount: 0,
+                    executionMode: 'cache-only',
+                    concurrency: 0,
+                    minIntervalMs: 0
+                }
+            } : cachedResults;
         }
         const minIntervalMs = Math.max(0, Number(options.minIntervalMs) || 0);
-        const runSequentially = options.concurrency === 1 || minIntervalMs > 0;
+        const requestedConcurrency = Math.max(1, Number(options.concurrency) || uncachedVenues.length);
+        const workerCount = Math.min(requestedConcurrency, uncachedVenues.length);
+        const runSequentially = workerCount === 1 || minIntervalMs > 0;
+        const buildResult = (results, metadata) => options.includeMetadata
+            ? { results, metadata }
+            : results;
         // Process uncached venues in parallel
         if (process.env.NODE_ENV !== 'production') {
         }
@@ -185,26 +234,40 @@ class GeocodingService {
                     await new Promise(resolve => setTimeout(resolve, minIntervalMs));
                 }
             }
-            return geocodeMap;
+            return buildResult(geocodeMap, {
+                totalCandidates: uniqueVenues.length,
+                cachedCount: cachedResults.size,
+                uncachedCount: uncachedVenues.length,
+                attemptedCount: uncachedVenues.length,
+                executionMode: 'sequential',
+                concurrency: 1,
+                minIntervalMs
+            });
         }
-        const geocodePromises = uncachedVenues.map(async ({ venue, cacheKey }) => {
-            try {
-                const result = await this.geocodeVenue(venue.name, venue.city, venue.country, options);
-                if (result && result.lat && result.lng) {
-                    return { cacheKey, coords: [result.lng, result.lat] };
+        const results = new Array(uncachedVenues.length);
+        let nextIndex = 0;
+        const worker = async () => {
+            while (nextIndex < uncachedVenues.length) {
+                const currentIndex = nextIndex++;
+                const { venue, cacheKey } = uncachedVenues[currentIndex];
+                try {
+                    const result = await this.geocodeVenue(venue.name, venue.city, venue.country, options);
+                    if (result && result.lat && result.lng) {
+                        results[currentIndex] = { status: 'fulfilled', value: { cacheKey, coords: [result.lng, result.lat] } };
+                    } else {
+                        results[currentIndex] = { status: 'fulfilled', value: { cacheKey, coords: null } };
+                    }
+                } catch (error) {
+                    console.error(`❌ Batch geocoding failed for ${venue.name}:`, error.message);
+                    results[currentIndex] = { status: 'rejected', reason: error };
                 }
-                return { cacheKey, coords: null };
-            } catch (error) {
-                console.error(`❌ Batch geocoding failed for ${venue.name}:`, error.message);
-                return { cacheKey, coords: null };
             }
-        });
-        // Wait for all geocoding requests to complete
-        const results = await Promise.allSettled(geocodePromises);
+        };
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
         // Process results
         const geocodeMap = new Map(cachedResults);
         results.forEach((result, index) => {
-            if (result.status === 'fulfilled' && result.value) {
+            if (result && result.status === 'fulfilled' && result.value) {
                 const { cacheKey, coords } = result.value;
                 if (coords) {
                     geocodeMap.set(cacheKey, coords);
@@ -217,7 +280,15 @@ class GeocodingService {
         if (process.env.NODE_ENV !== 'production') {
             const successCount = Array.from(geocodeMap.values()).filter(v => v != null).length;
         }
-        return geocodeMap;
+        return buildResult(geocodeMap, {
+            totalCandidates: uniqueVenues.length,
+            cachedCount: cachedResults.size,
+            uncachedCount: uncachedVenues.length,
+            attemptedCount: uncachedVenues.length,
+            executionMode: 'parallel',
+            concurrency: workerCount,
+            minIntervalMs
+        });
     }
     /**
      * Get cache statistics
