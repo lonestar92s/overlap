@@ -593,6 +593,40 @@ function createBoundsHash(bounds) {
     return `${neLat}-${neLng}-${swLat}-${swLng}`;
 }
 
+function buildLocationSearchDebug({
+    returnedCount,
+    totalInCache,
+    missingCoordinatesCount = 0,
+    excludedOutOfBounds = 0,
+    excludedByAccess = 0,
+    enrichedFromMongoDB = 0,
+    attemptedGeocodes = 0,
+    deferredGeocodes = 0,
+    skippedGeocodes = 0,
+    relevantLeagues = 0,
+    fixturesFetched = 0,
+    isCityLevelSearch = false,
+    phases = null
+}) {
+    return {
+        withCoordinates: returnedCount,
+        withoutCoordinates: missingCoordinatesCount,
+        returnedInPayload: returnedCount,
+        excludedMissingCoordinates: missingCoordinatesCount,
+        excludedOutOfBounds,
+        excludedByAccess,
+        enrichedFromMongoDB,
+        totalInCache,
+        attemptedGeocodes,
+        deferredGeocodes,
+        skippedGeocodes,
+        relevantLeagues,
+        fixturesFetched,
+        isCityLevelSearch,
+        phases
+    };
+}
+
 // Shared helper: filter matches by subscription access and valid coordinates only.
 // Bounds/viewport filtering is handled on the client (MapResultsScreen).
 function filterMatchesByAccessAndCoords(matches, accessibleLeagueIdsSet) {
@@ -1059,7 +1093,6 @@ router.get('/search', async (req, res) => {
             const searchContext = getVisibleSearchContext(clampedOriginalBounds);
             const searchCountry = searchContext.primaryCountry;
             const domesticCountries = getDomesticCountriesFromContext(searchContext);
-            const domesticCountrySet = new Set(domesticCountries.map(normalizeCountryName));
             const isCityLevelSearch = boundsLatSpan < 1.0 && boundsLngSpan < 1.0;
             const visibleCountryKey = domesticCountries.length > 0
                 ? domesticCountries.slice().sort().join('|')
@@ -1099,8 +1132,9 @@ router.get('/search', async (req, res) => {
                 }
             };
             // Cache by visible countries/regions rather than a single inferred center country.
-            const searchBehaviorVersion = 'v2';
-            const cacheKey = `location-search:${searchBehaviorVersion}:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
+            const searchBehaviorVersion = 'v3';
+            const boundsHash = createBoundsHash(clampedOriginalBounds);
+            const cacheKey = `location-search:${searchBehaviorVersion}:${visibleCountryKey}:${activeRegionKey}:${boundsHash}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
             // Check cache first
             const cachedData = matchesCache.get(cacheKey);
             if (cachedData) {
@@ -1207,26 +1241,38 @@ router.get('/search', async (req, res) => {
                     }
                     // If we enriched any matches, update the cache
                     if (enrichedCount > 0) {
-                        matchesCache.set(cacheKey, { data: [...matchesWithCoords, ...matchesMissingCoords] });
+                        matchesCache.set(cacheKey, {
+                            ...cachedData,
+                            data: [...matchesWithCoords, ...matchesMissingCoords]
+                        });
                     }
                     // Filter cached matches by subscription tier and coordinates only.
                     // Bounds/viewport filtering is handled on the client.
                     const accessibleLeagueIds = await subscriptionService.getAccessibleLeagues(user);
                     const accessibleLeagueIdsSet = new Set(accessibleLeagueIds.map(id => id.toString()));
                     const filteredMatches = filterMatchesByAccessAndCoords(matchesWithCoords, accessibleLeagueIdsSet);
+                    const cachedDebugMeta = cachedData.debugMeta || {};
                     const responsePayload = {
                         success: true, 
                         data: filteredMatches, 
                         count: filteredMatches.length,
                         fromCache: true,
                         bounds: originalBounds,
-                        debug: {
-                            withCoordinates: matchesWithCoords.length,
-                            filteredByAccessAndCoords: filteredMatches.length,
-                            withoutCoordinates: matchesMissingCoords.length,
+                        debug: buildLocationSearchDebug({
+                            returnedCount: filteredMatches.length,
+                            totalInCache: cachedData.data.length,
+                            missingCoordinatesCount: matchesMissingCoords.length,
+                            excludedOutOfBounds: cachedDebugMeta.excludedOutOfBounds || 0,
+                            excludedByAccess: cachedDebugMeta.excludedByAccess || 0,
                             enrichedFromMongoDB: enrichedCount,
-                            totalInCache: cachedData.data.length
-                        }
+                            attemptedGeocodes: cachedDebugMeta.attemptedGeocodes || 0,
+                            deferredGeocodes: cachedDebugMeta.deferredGeocodes || 0,
+                            skippedGeocodes: cachedDebugMeta.skippedGeocodes || 0,
+                            relevantLeagues: cachedDebugMeta.relevantLeagues || 0,
+                            fixturesFetched: cachedDebugMeta.fixturesFetched || 0,
+                            isCityLevelSearch,
+                            phases: cachedDebugMeta.phases || null
+                        })
                     };
                     logSearchMetrics('location-cache-hit', {
                         durationMs: roundDuration(performance.now() - searchRequestStartTime),
@@ -1236,6 +1282,7 @@ router.get('/search', async (req, res) => {
                         matchesReturned: filteredMatches.length,
                         matchesWithCoords: matchesWithCoords.length,
                         matchesMissingCoords: matchesMissingCoords.length,
+                        matchesOutOfBounds: cachedDebugMeta.excludedOutOfBounds || 0,
                         enrichedFromMongoDb: enrichedCount
                     });
                     return res.json(responsePayload);
@@ -1489,7 +1536,9 @@ router.get('/search', async (req, res) => {
                 accessibleFixtureCount: accessibleFixtures.length
             };
             // Track matches filtered out (starts with subscription filtering, then adds bounds filtering)
-            let matchesFilteredOut = relevantFixtures.length - accessibleFixtures.length;
+            const matchesExcludedByAccess = relevantFixtures.length - accessibleFixtures.length;
+            let matchesFilteredOut = matchesExcludedByAccess;
+            let matchesFilteredOutOfBounds = 0;
             if (process.env.NODE_ENV !== 'production' && matchesFilteredOut > 0) {
             }
             // PHASE 3: Collect all venue and team data upfront
@@ -1641,8 +1690,6 @@ router.get('/search', async (req, res) => {
                         }
                     }
                 };
-                const matchLeagueCountry = normalizeCountryName(match.league?.country);
-                const isDomesticLeague = matchLeagueCountry && domesticCountrySet.has(matchLeagueCountry);
                 const shouldGeocode = !venueInfo.coordinates &&
                     venueInfo.name &&
                     venueInfo.city &&
@@ -1650,7 +1697,6 @@ router.get('/search', async (req, res) => {
                     venueInfo.city !== 'Unknown City';
                 return {
                     leagueId,
-                    isDomesticLeague,
                     transformed,
                     geocodeLookup: shouldGeocode ? {
                         key: `${venueInfo.name}|${venueInfo.city}|${venueInfo.country || match.league?.country || 'Unknown Country'}`,
@@ -1782,7 +1828,7 @@ router.get('/search', async (req, res) => {
             let matchesWithoutCoords = 0;
             let matchesByLeague = {};
             for (const candidate of candidateMatches) {
-                const { leagueId, isDomesticLeague, transformed } = candidate;
+                const { leagueId, transformed } = candidate;
                 const venueInfo = transformed.fixture.venue;
                 if (!matchesByLeague[leagueId]) {
                     matchesByLeague[leagueId] = { total: 0, transformed: 0, noCoords: 0, filteredOut: 0 };
@@ -1796,10 +1842,9 @@ router.get('/search', async (req, res) => {
                         lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
                         if (isWithinBounds(venueInfo.coordinates, bounds)) {
                             shouldInclude = true;
-                        } else if (!isCityLevelSearch && isDomesticLeague) {
-                            shouldInclude = true;
                         } else {
                             matchesFilteredOut++;
+                            matchesFilteredOutOfBounds++;
                             matchesByLeague[leagueId].filteredOut++;
                         }
                     } else {
@@ -1836,18 +1881,25 @@ router.get('/search', async (req, res) => {
             ).join(' | ');
             // Sort by date
             transformedMatches.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
-            // PHASE 1: Cache the results (all country matches, not filtered by bounds)
+            // Cache the current viewport result set, including unresolved venues for later enrichment.
             const cacheData = {
                 success: true,
-                data: transformedMatches, // Store all matches, not filtered by bounds
-                count: transformedMatches.length
+                data: transformedMatches,
+                count: transformedMatches.length,
+                debugMeta: {
+                    excludedOutOfBounds: matchesFilteredOutOfBounds,
+                    excludedByAccess: matchesExcludedByAccess,
+                    attemptedGeocodes: synchronousGeocodeLookups.length,
+                    deferredGeocodes: skippedGeocodeLookups,
+                    skippedGeocodes: skippedGeocodeLookups,
+                    relevantLeagues: majorLeagueIds.length,
+                    fixturesFetched: fixtures.length,
+                    phases: phaseTimings
+                }
             };
             matchesCache.set(cacheKey, cacheData);
             // Return matches that pass subscription and current backend inclusion rules.
             const filteredMatches = filterMatchesByAccessAndCoords(transformedMatches, accessibleLeagueIdsSet);
-            // Count matches with/without coordinates for debugging
-            const withCoords = filteredMatches.filter(m => m.fixture?.venue?.coordinates).length;
-            const withoutCoords = filteredMatches.filter(m => m.fixture?.venue?.missingCoordinates).length;
             const responsePayload = { 
                 success: true, 
                 data: filteredMatches, 
@@ -1855,10 +1907,12 @@ router.get('/search', async (req, res) => {
                 fromCache: false,
                 totalMatches: transformedMatches.length, // Total matches in cache
                 bounds: originalBounds, // NEW: Tell client the requested viewport bounds
-                debug: {
-                    withCoordinates: withCoords,
-                    withoutCoordinates: withoutCoords,
+                debug: buildLocationSearchDebug({
+                    returnedCount: filteredMatches.length,
                     totalInCache: transformedMatches.length,
+                    missingCoordinatesCount: matchesWithoutCoords,
+                    excludedOutOfBounds: matchesFilteredOutOfBounds,
+                    excludedByAccess: matchesExcludedByAccess,
                     attemptedGeocodes: synchronousGeocodeLookups.length,
                     deferredGeocodes: skippedGeocodeLookups,
                     skippedGeocodes: skippedGeocodeLookups,
@@ -1866,7 +1920,7 @@ router.get('/search', async (req, res) => {
                     fixturesFetched: fixtures.length,
                     isCityLevelSearch,
                     phases: phaseTimings
-                }
+                })
             };
             logSearchMetrics('location-fresh', {
                 durationMs: roundDuration(performance.now() - searchRequestStartTime),
@@ -1878,6 +1932,7 @@ router.get('/search', async (req, res) => {
                 fixturesFetched: fixtures.length,
                 matchesReturned: filteredMatches.length,
                 totalMatches: transformedMatches.length,
+                matchesOutOfBounds: matchesFilteredOutOfBounds,
                 rateLimitedDates: loggedRateLimitedDates.size,
                 geocodeAttempted: synchronousGeocodeLookups.length,
                 geocodeDeferred: skippedGeocodeLookups,

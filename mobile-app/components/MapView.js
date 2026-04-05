@@ -33,6 +33,7 @@ const MatchMapView = forwardRef(({
   const [region, setRegion] = useState(initialRegion || defaultRegion);
   const [userLocation, setUserLocation] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapRevision, setMapRevision] = useState(0);
   const isAnimatingRef = useRef(false);
 
   // Update region when initialRegion prop changes
@@ -42,20 +43,41 @@ const MatchMapView = forwardRef(({
     }
   }, [initialRegion]);
 
-  // Force native map to re-layout markers when matches change (e.g. after "Search this area").
-  // react-native-maps often doesn't redraw markers until the region changes; re-applying the
-  // current region triggers a layout pass so new markers appear without the user moving the map.
+  const matchSignature = useMemo(
+    () => (matches || [])
+      .map(match => match?.fixture?.id || match?.id)
+      .filter(Boolean)
+      .sort()
+      .join('|'),
+    [matches]
+  );
+
+  // Force native map to re-layout markers when matches change.
+  // If the result set shrinks, bump the MapView key so removed pins do not linger.
   const regionRef = useRef(region);
   regionRef.current = region;
+  const previousMatchSignatureRef = useRef(matchSignature);
+
   useEffect(() => {
-    if (!matches || matches.length === 0) return;
+    const previousSignature = previousMatchSignatureRef.current;
+    const previousCount = previousSignature ? previousSignature.split('|').filter(Boolean).length : 0;
+    const nextCount = matches?.length || 0;
+
+    if (previousSignature && previousSignature !== matchSignature && nextCount <= previousCount) {
+      setMapRevision(current => current + 1);
+    }
+
+    previousMatchSignatureRef.current = matchSignature;
+  }, [matchSignature, matches]);
+
+  useEffect(() => {
     const t = setTimeout(() => {
       if (mapRef.current && regionRef.current && typeof mapRef.current.setRegion === 'function') {
         mapRef.current.setRegion(regionRef.current);
       }
     }, 120);
     return () => clearTimeout(t);
-  }, [matches]);
+  }, [matchSignature, mapRevision]);
 
   // Request location permission and get user location
   useEffect(() => {
@@ -708,6 +730,7 @@ const MatchMapView = forwardRef(({
   return (
     <View style={[styles.container, style]}>
       <MapView
+        key={`match-map-${mapRevision}`}
         ref={mapRef}
         style={styles.map}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
