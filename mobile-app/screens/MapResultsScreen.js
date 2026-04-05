@@ -138,9 +138,6 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [hasMovedFromInitial, setHasMovedFromInitial] = useState(false);
   const [initialSearchRegion, setInitialSearchRegion] = useState(null);
   
-  // Track matches excluded due to missing coordinates (for user awareness)
-  const [matchesWithoutCoords, setMatchesWithoutCoords] = useState(0);
-  
   // Track when we're performing a bounds search to prevent auto-fitting
   const [isPerformingBoundsSearch, setIsPerformingBoundsSearch] = useState(false);
   
@@ -737,10 +734,9 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Start state update phase (before setState calls)
         const stopStatePhase = timer ? timer.startPhase('STATE_UPDATE') : null;
         
-        // Track matches excluded due to missing coordinates
-        const excludedCount = response.debug?.excludedMissingCoordinates ?? response.debug?.withoutCoordinates ?? 0;
-        setMatchesWithoutCoords(excludedCount);
         if (__DEV__) {
+          const excludedCount =
+            response.debug?.excludedMissingCoordinates ?? response.debug?.withoutCoordinates ?? 0;
           const missingCoordMatches = newMatches.filter((m) => getMatchVenueCoordIssue(m));
           if (missingCoordMatches.length > 0) {
             console.log(
@@ -2678,11 +2674,6 @@ const MapResultsScreen = ({ navigation, route }) => {
             <View style={styles.customHandleBar} />
             <View style={styles.customHandleTextContainer}>
               <Text style={styles.customHandleText}>{displayFilteredMatches?.length || 0} results</Text>
-              {matchesWithoutCoords > 0 && (
-                <Text style={styles.missingCoordsText}>
-                  ({matchesWithoutCoords} not shown - missing location)
-                </Text>
-              )}
             </View>
           </View>
         )}
@@ -3016,12 +3007,6 @@ const styles = StyleSheet.create({
   },
   customHandleTextContainer: {
     alignItems: 'center',
-  },
-  missingCoordsText: {
-    fontSize: 10,
-    color: '#F59E0B',
-    fontWeight: '500',
-    marginTop: 2,
   },
   collapsedIndicator: {
     alignItems: 'center',
