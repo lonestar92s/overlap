@@ -634,6 +634,32 @@ const REGIONAL_INTERNATIONALS = {
 };
 // Global/Elite International Competitions that should be checked everywhere
 const GLOBAL_INTERNATIONAL_IDS = [1]; // World Cup
+const CITY_SEARCH_FALLBACK_DOMESTIC_LEAGUES = {
+    'England': ['39'],
+    'United Kingdom': ['39'],
+    'Spain': ['140'],
+    'Germany': ['78'],
+    'Italy': ['135'],
+    'France': ['61'],
+    'Netherlands': ['88'],
+    'Portugal': ['94'],
+    'United States': ['253'],
+    'USA': ['253']
+};
+
+function getCitySearchFallbackLeagueIds(domesticCountries, accessibleLeagueIdsSet) {
+    const fallbackIds = new Set();
+    for (const country of domesticCountries || []) {
+        const configuredLeagueIds = CITY_SEARCH_FALLBACK_DOMESTIC_LEAGUES[country] || [];
+        configuredLeagueIds.forEach((leagueId) => {
+            if (accessibleLeagueIdsSet.has(String(leagueId))) {
+                fallbackIds.add(parseInt(leagueId, 10));
+            }
+        });
+    }
+    return fallbackIds;
+}
+
 // Helper function to filter leagues by geographic relevance and subscription tier
 async function getRelevantLeagueIds(searchContext, user = null, options = {}) {
     // Get accessible leagues based on subscription tier
@@ -672,6 +698,9 @@ async function getRelevantLeagueIds(searchContext, user = null, options = {}) {
                 }
             });
         });
+
+        const fallbackDomesticLeagueIds = getCitySearchFallbackLeagueIds(domesticCountries, accessibleLeagueIdsSet);
+        fallbackDomesticLeagueIds.forEach((leagueId) => cityScopedDomesticLeagueIds.add(leagueId));
     }
     // Get all active leagues from MongoDB
     const dbLeagues = await League.find({ isActive: true }).select('apiId country name').lean();
@@ -1046,6 +1075,29 @@ router.get('/search', async (req, res) => {
             const effectiveFrom = addDays(dateFrom, -dateFlexibility);
             const effectiveTo = addDays(dateTo, dateFlexibility);
             const clampedFrom = effectiveFrom < todayStr ? todayStr : effectiveFrom;
+            const locationSearchLogParams = {
+                requested: {
+                    dateFrom,
+                    dateTo,
+                    dateFlexibility,
+                    season,
+                    bounds: originalBounds
+                },
+                expanded: {
+                    effectiveFrom,
+                    effectiveTo,
+                    clampedFrom,
+                    bufferedBounds: bounds,
+                    clampedOriginalBounds
+                },
+                derived: {
+                    searchCountry,
+                    domesticCountries,
+                    visibleCountryKey,
+                    activeRegionKey,
+                    isCityLevelSearch
+                }
+            };
             // Cache by visible countries/regions rather than a single inferred center country.
             const searchBehaviorVersion = 'v2';
             const cacheKey = `location-search:${searchBehaviorVersion}:${visibleCountryKey}:${activeRegionKey}:${dateFrom}:${dateTo}:${dateFlexibility}:${season}`;
@@ -1180,6 +1232,7 @@ router.get('/search', async (req, res) => {
                         durationMs: roundDuration(performance.now() - searchRequestStartTime),
                         cacheKey,
                         cacheHit: true,
+                        searchParams: locationSearchLogParams,
                         matchesReturned: filteredMatches.length,
                         matchesWithCoords: matchesWithCoords.length,
                         matchesMissingCoords: matchesMissingCoords.length,
@@ -1819,6 +1872,7 @@ router.get('/search', async (req, res) => {
                 durationMs: roundDuration(performance.now() - searchRequestStartTime),
                 cacheKey,
                 cacheHit: false,
+                searchParams: locationSearchLogParams,
                 requestDates: requestDates.length,
                 relevantLeagues: majorLeagueIds.length,
                 fixturesFetched: fixtures.length,
