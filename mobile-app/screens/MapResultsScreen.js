@@ -727,8 +727,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Start filter computation phase
         const stopFilterPhase = timer ? timer.startPhase('FILTER_COMPUTATION') : null;
         
-        // Update matches efficiently - all markers will be displayed
-        updateMatchesEfficiently(newMatches);
+        replaceMatchesForViewportSearch(newMatches, 'performBoundsSearch');
         
         // Stop filter computation phase
         if (stopFilterPhase) {
@@ -739,7 +738,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         const stopStatePhase = timer ? timer.startPhase('STATE_UPDATE') : null;
         
         // Track matches excluded due to missing coordinates
-        const excludedCount = response.debug?.withoutCoordinates || 0;
+        const excludedCount = response.debug?.excludedMissingCoordinates ?? response.debug?.withoutCoordinates ?? 0;
         setMatchesWithoutCoords(excludedCount);
         if (__DEV__) {
           const missingCoordMatches = newMatches.filter((m) => getMatchVenueCoordIssue(m));
@@ -840,53 +839,20 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   };
 
-  // Merge matches from multiple searches instead of replacing
-  const updateMatchesEfficiently = (newMatches) => {
-    // Create a Map to dedupe by match ID
-    const matchesMap = new Map();
-    
-    // Add existing matches first
-    matches.forEach(match => {
-      const matchId = match.fixture?.id || match.id;
-      if (matchId) {
-        matchesMap.set(matchId, match);
-      }
-    });
-    
-    // Add new matches (will overwrite duplicates, keeping the latest version)
-    newMatches.forEach(match => {
-      const matchId = match.fixture?.id || match.id;
-      if (matchId) {
-        matchesMap.set(matchId, match);
-      }
-    });
-    
-    // Convert back to array
-    const mergedMatches = Array.from(matchesMap.values());
-    
+  // Viewport searches should replace the active result set so prior areas do not leak forward.
+  const replaceMatchesForViewportSearch = (newMatches, context = 'viewport-search') => {
     const previousCount = matches.length;
-    const newCount = newMatches.length;
-    const mergedCount = mergedMatches.length;
-    const matchIdsBefore = matches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
-    const matchIdsAfter = mergedMatches.map(m => m.fixture?.id || m.id).filter(Boolean).sort();
-    const matchesRemoved = matchIdsBefore.filter(id => !matchIdsAfter.includes(id));
-    const matchesAdded = matchIdsAfter.filter(id => !matchIdsBefore.includes(id));
-    
+    setSelectedVenueIndex(null);
+    setOverlayMatchFallback(null);
+    setMatches(newMatches);
+
     if (__DEV__) {
-      console.log('🔄 [MATCHES] Merging:', {
+      console.log('🔄 [MATCHES] Replacing active viewport results:', {
+        context,
         previousCount,
-        newCount,
-        mergedCount,
-        difference: mergedCount - previousCount,
-        matchesRemoved: matchesRemoved.length,
-        matchesAdded: matchesAdded.length,
-        removedIds: matchesRemoved.slice(0, 5),
-        addedIds: matchesAdded.slice(0, 5)
+        newCount: newMatches.length
       });
     }
-    
-    // Update with merged matches
-    setMatches(mergedMatches);
   };
 
   // Center map on markers and update mapRegion state immediately
@@ -1955,14 +1921,13 @@ const MapResultsScreen = ({ navigation, route }) => {
           console.log(`📥 [BACKEND MATCHES] Total: ${newMatches.length} matches`);
         }
         
-        // FIXED: When filters are removed and we're doing a location-based search,
-        // merge matches instead of replacing to preserve existing matches
         if (hasWhoFilters) {
           // Filters are active - replace matches (filtered search)
+          setSelectedVenueIndex(null);
+          setOverlayMatchFallback(null);
           setMatches(newMatches);
         } else {
-          // No filters - merge matches to preserve existing results
-          updateMatchesEfficiently(newMatches);
+          replaceMatchesForViewportSearch(newMatches, 'performSearchWithFilters');
         }
         setLastSuccessfulRequestId(requestId);
         setOriginalSearchBounds(confirmedBounds);
