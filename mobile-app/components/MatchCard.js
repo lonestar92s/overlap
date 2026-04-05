@@ -284,7 +284,11 @@ const MatchCard = ({
                       onError={handleLeagueLogoError}
                     />
                   ) : null}
-                  <Text style={styles.leagueText}>
+                  <Text
+                    style={styles.leagueText}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
                     {typeof league === 'string' ? league : league.name}
                   </Text>
                 </View>
@@ -460,10 +464,12 @@ const styles = StyleSheet.create({
   dateTimeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    flexShrink: 0,
+    marginRight: spacing.sm,
   },
   dateTimeText: {
     marginLeft: spacing.sm,
+    flexShrink: 0,
   },
   dateText: {
     ...typography.bodySmall,
@@ -492,9 +498,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   headerRight: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: spacing.sm,
+    minWidth: 0,
   },
   statusBadge: {
     paddingHorizontal: spacing.sm,
@@ -502,6 +511,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xs,
     minWidth: 70,
     alignItems: 'center',
+    flexShrink: 0,
   },
   statusCompleted: {
     backgroundColor: colors.status.completedBg,
@@ -527,11 +537,14 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xs,
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
   },
   leagueText: {
     ...typography.caption,
     color: colors.text.secondary,
     fontWeight: '500',
+    flexShrink: 1,
   },
   leagueLogoSmall: {
     width: 14,
@@ -540,6 +553,7 @@ const styles = StyleSheet.create({
   },
   heartButton: {
     marginLeft: spacing.xs,
+    flexShrink: 0,
   },
   teamsContainer: {
     flexDirection: 'row',

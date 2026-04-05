@@ -32,6 +32,21 @@ import MatchCard from '../components/MatchCard';
 import MatchMapView from '../components/MapView';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
+/** @returns {string|null} Human-readable reason if the match cannot use venue coords on the map; null if coords are usable. */
+function getMatchVenueCoordIssue(match) {
+  const venue = match.fixture?.venue;
+  if (!venue) return 'no venue';
+  if (venue.missingCoordinates) return 'missingCoordinates (backend)';
+  const coordinates = venue.coordinates;
+  if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) return 'no coordinates';
+  const [lon, lat] = coordinates;
+  if (typeof lon !== 'number' || typeof lat !== 'number' || Number.isNaN(lon) || Number.isNaN(lat)) {
+    return 'invalid coordinates';
+  }
+  if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return 'coordinates out of range';
+  return null;
+}
+
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
   const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters, _performanceStartTime, isFromRecentSearch } = route.params || {};
@@ -726,8 +741,40 @@ const MapResultsScreen = ({ navigation, route }) => {
         // Track matches excluded due to missing coordinates
         const excludedCount = response.debug?.withoutCoordinates || 0;
         setMatchesWithoutCoords(excludedCount);
-        if (__DEV__ && excludedCount > 0) {
-          console.log(`⚠️ [SEARCH] ${excludedCount} matches excluded due to missing coordinates`);
+        if (__DEV__) {
+          const missingCoordMatches = newMatches.filter((m) => getMatchVenueCoordIssue(m));
+          if (missingCoordMatches.length > 0) {
+            console.log(
+              `⚠️ [SEARCH] ${missingCoordMatches.length} match(es) missing or unusable venue coordinates` +
+                (excludedCount ? ` (backend withoutCoordinates: ${excludedCount})` : '')
+            );
+            const sample = missingCoordMatches.slice(0, 10);
+            console.log('📍 [MISSING COORDS] Matches (sample):');
+            sample.forEach((match, idx) => {
+              const name = `${match.teams?.home?.name || 'Unknown'} vs ${match.teams?.away?.name || 'Unknown'}`;
+              const venue = match.fixture?.venue;
+              const venueLabel = venue?.name || venue?.city || 'Unknown venue';
+              const reason = getMatchVenueCoordIssue(match);
+              const c = venue?.coordinates;
+              let coordsStr = 'none';
+              if (Array.isArray(c) && c.length === 2) {
+                const lon = Number(c[0]);
+                const lat = Number(c[1]);
+                coordsStr =
+                  Number.isFinite(lat) && Number.isFinite(lon)
+                    ? `[${lat.toFixed(6)}, ${lon.toFixed(6)}]`
+                    : `raw: [${c[0]}, ${c[1]}]`;
+              }
+              console.log(`  ${idx + 1}. ${name} | Venue: ${venueLabel} | Reason: ${reason} | Coords: ${coordsStr}`);
+            });
+            if (missingCoordMatches.length > sample.length) {
+              console.log(`📍 [MISSING COORDS] …and ${missingCoordMatches.length - sample.length} more`);
+            }
+          } else if (excludedCount > 0) {
+            console.log(
+              `⚠️ [SEARCH] Backend reported withoutCoordinates: ${excludedCount}, but no matches in payload matched missing-coord rules (check response shape).`
+            );
+          }
         }
         
         // Stop state update phase (state updates are synchronous, so we stop immediately after)
@@ -2684,6 +2731,7 @@ const MapResultsScreen = ({ navigation, route }) => {
           ? { venue: overlayMatchFallback.fixture?.venue || {}, matches: [overlayMatchFallback] }
           : venueGroups[selectedVenueIndex];
         const isFallback = !!overlayMatchFallback;
+        const venueOverlayMatches = overlayGroup?.matches || [];
         return (
           <View style={styles.overlayCardContainer}>
             <View style={styles.venueHeader}>
@@ -2693,7 +2741,7 @@ const MapResultsScreen = ({ navigation, route }) => {
               )}
             </View>
             <ScrollView style={styles.venueMatchesList} showsVerticalScrollIndicator={false}>
-              {(overlayGroup?.matches || []).map((m, idx) => (
+              {venueOverlayMatches.map((m, idx) => (
                 <MatchCard
                   key={`venue-match-${m.fixture?.id || idx}`}
                   match={{
@@ -2709,6 +2757,11 @@ const MapResultsScreen = ({ navigation, route }) => {
                   onPress={() => handleMatchPress(m)}
                   variant="overlay"
                   showHeart={true}
+                  style={
+                    venueOverlayMatches.length > 1 && idx < venueOverlayMatches.length - 1
+                      ? styles.overlayVenueMatchCardSpacingBelow
+                      : undefined
+                  }
                 />
               ))}
             </ScrollView>
@@ -2850,6 +2903,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  /** Space between stacked match cards when a venue has multiple fixtures (overlay only). */
+  overlayVenueMatchCardSpacingBelow: {
+    marginBottom: spacing.md,
   },
   overlayControls: {
     flexDirection: 'row',
