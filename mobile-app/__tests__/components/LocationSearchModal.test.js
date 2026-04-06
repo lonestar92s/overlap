@@ -204,7 +204,7 @@ describe('LocationSearchModal - Who Section', () => {
         },
       });
 
-      const { getByText, getByPlaceholderText } = render(
+      const { getByText, getByPlaceholderText, getByTestId } = render(
         <LocationSearchModal {...defaultProps} />
       );
       
@@ -221,9 +221,9 @@ describe('LocationSearchModal - Who Section', () => {
         fireEvent.press(leagueItem);
       });
       
-      // Check that league appears in card value
+      // Header + chip both show the name; assert selection via chip
       await waitFor(() => {
-        expect(getByText('Premier League')).toBeTruthy();
+        expect(getByTestId('filter-chip-Premier League')).toBeTruthy();
       });
     });
 
@@ -238,7 +238,7 @@ describe('LocationSearchModal - Who Section', () => {
         },
       });
 
-      const { getByText, getByPlaceholderText } = render(
+      const { getByText, getByPlaceholderText, getByTestId } = render(
         <LocationSearchModal {...defaultProps} />
       );
       
@@ -255,9 +255,8 @@ describe('LocationSearchModal - Who Section', () => {
         fireEvent.press(teamItem);
       });
       
-      // Check that team appears in card value
       await waitFor(() => {
-        expect(getByText('Arsenal FC')).toBeTruthy();
+        expect(getByTestId('filter-chip-Arsenal FC')).toBeTruthy();
       });
     });
 
@@ -332,9 +331,9 @@ describe('LocationSearchModal - Who Section', () => {
         fireEvent.press(getByText('Arsenal FC'));
       });
       
-      // Check that both are selected
+      // formatWhoValue lists both names when exactly two are selected
       await waitFor(() => {
-        expect(getByText('2 selected')).toBeTruthy();
+        expect(getByText('Premier League, Arsenal FC')).toBeTruthy();
       });
     });
   });
@@ -460,13 +459,12 @@ describe('LocationSearchModal - Who Section', () => {
     });
 
     it('should require dates even when Who is selected', () => {
-      const { getByText, getByPlaceholderText } = render(
+      const { getByLabelText } = render(
         <LocationSearchModal {...defaultProps} />
       );
       
-      // Search button should be disabled without dates
-      const searchButton = getByText('Search');
-      expect(searchButton.parent.props.disabled).toBe(true);
+      const searchButton = getByLabelText('Search for matches');
+      expect(searchButton.props.accessibilityState?.disabled).toBe(true);
     });
   });
 

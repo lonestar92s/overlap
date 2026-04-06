@@ -15,6 +15,7 @@ const League = require('../models/League');
 const Venue = require('../models/Venue');
 const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/searchLeagueFilter');
 const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
+const { boundsFromLocationIqAutocompleteItem } = require('../utils/locationIqAutocomplete');
 const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/matchItineraryPlanner');
 const router = express.Router();
 // LocationIQ configuration for autocomplete
@@ -2479,6 +2480,7 @@ router.get('/locations', async (req, res) => {
                 const region = nameParts.slice(1, -1).join(', ');
                 const displayRegion = filterPostalCodes(region);
                 const uniqueId = `${item.place_id}-${item.lat}-${item.lon}-${city}-${region}-${country}`;
+                const areaBounds = boundsFromLocationIqAutocompleteItem(item);
                 return {
                     place_id: uniqueId,
                     lat: parseFloat(item.lat),
@@ -2486,7 +2488,8 @@ router.get('/locations', async (req, res) => {
                     city,
                     region, // Keep full region with postal codes for backend compatibility
                     displayRegion, // Cleaned region without postal codes
-                    country
+                    country,
+                    ...(areaBounds ? { bounds: areaBounds } : {})
                 };
             });
             // Deduplicate suggestions

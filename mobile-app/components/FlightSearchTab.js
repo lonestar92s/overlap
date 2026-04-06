@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginLeft: spacing.xs,
   },
-  // Match LocationSearchModal locationResultsContainer exactly
+  // Match LocationSearchModal non-scroll airport list viewport (modal uses inner ScrollView for long lists)
   resultsContainer: {
     marginTop: spacing.sm,
     maxHeight: 200,

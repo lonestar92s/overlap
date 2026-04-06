@@ -23,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import FlightSearchTab from './FlightSearchTab';
 import FilterChip from './FilterChip';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { getSearchBoundsAndInitialRegion } from '../utils/locationSearchBounds';
 
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
 const MAX_RECENT_SEARCHES = 5;
@@ -193,6 +194,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
         dateTo,
         dateRange: formatDateRange(dateFrom, dateTo),
       };
+      if (locationData.bounds) {
+        newSearch.bounds = locationData.bounds;
+      }
       
       const updated = [newSearch, ...recentSearches.filter(s => 
         s.city !== newSearch.city || 
@@ -449,6 +453,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       lon: search.lon,
       name: search.location,
     };
+    if (search.bounds) {
+      locationData.bounds = search.bounds;
+    }
     setLocation(locationData);
     setLocationSearchQuery(search.location);
     
@@ -778,23 +785,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
 
         // Add optional location bounds if location is provided
         if (hasLocation) {
-          const viewportDelta = 0.5;
-          apiParams.bounds = {
-            northeast: {
-              lat: location.lat + (viewportDelta / 2),
-              lng: location.lon + (viewportDelta / 2),
-            },
-            southwest: {
-              lat: location.lat - (viewportDelta / 2),
-              lng: location.lon - (viewportDelta / 2),
-            }
-          };
-          initialRegion = {
-            latitude: location.lat,
-            longitude: location.lon,
-            latitudeDelta: viewportDelta,
-            longitudeDelta: viewportDelta,
-          };
+          const { bounds, initialRegion: regionFromLocation } = getSearchBoundsAndInitialRegion(location);
+          apiParams.bounds = bounds;
+          initialRegion = regionFromLocation;
         }
 
         if (__DEV__) {
@@ -836,23 +829,13 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
         };
       } else {
         // Traditional bounds-based search
-        const viewportDelta = 0.5;
-        const bounds = {
-          northeast: {
-            lat: location.lat + (viewportDelta / 2),
-            lng: location.lon + (viewportDelta / 2),
-          },
-          southwest: {
-            lat: location.lat - (viewportDelta / 2),
-            lng: location.lon - (viewportDelta / 2),
-          }
-        };
+        const { bounds, initialRegion: regionFromLocation } = getSearchBoundsAndInitialRegion(location);
 
         if (__DEV__) {
           console.log('🔍 Initial search bounds (unified):', {
             center: { lat: location.lat, lng: location.lon },
-            viewportDelta,
-            bounds
+            bounds,
+            fromAreaBounds: !!location.bounds,
           });
         }
 
@@ -863,12 +846,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           dateFlexibility,
         });
         matches = response?.data || [];
-        initialRegion = {
-          latitude: location.lat,
-          longitude: location.lon,
-          latitudeDelta: viewportDelta,
-          longitudeDelta: viewportDelta,
-        };
+        initialRegion = regionFromLocation;
       }
 
       if (response.success) {
@@ -1046,7 +1024,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                 
                 {/* Location Search Results */}
                 {isSearchingLocation && locationSearchQuery.trim().length >= 2 && !location && (
-                  <View style={styles.locationResultsContainer}>
+                  <View style={styles.locationResultsOuter}>
                     {locationSearchLoading && locationResults.length === 0 && (
                       <View style={styles.locationLoadingContainer}>
                         <ActivityIndicator size="small" color={colors.primary} />
@@ -1057,22 +1035,32 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                         <Text style={styles.locationEmptyText}>No locations found</Text>
                       </View>
                     )}
-                    {locationResults.map((result) => (
-                      <TouchableOpacity
-                        key={result.place_id}
-                        style={styles.locationResultItem}
-                        onPress={() => handleLocationSelect(result)}
-                        activeOpacity={0.7}
+                    {locationResults.length > 0 && (
+                      <ScrollView
+                        style={styles.locationResultsScroll}
+                        contentContainerStyle={styles.locationResultsScrollContent}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator
                       >
-                        <MaterialIcons name="location-on" size={40} color={colors.text.primary} />
-                        <View style={styles.locationResultText}>
-                          <Text style={styles.locationResultTitle}>{result.city}</Text>
-                          <Text style={styles.locationResultSubtitle}>
-                            {result.displayRegion ? `${result.displayRegion}, ${result.country}` : result.country}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
+                        {locationResults.map((result) => (
+                          <TouchableOpacity
+                            key={result.place_id}
+                            style={styles.locationResultItem}
+                            onPress={() => handleLocationSelect(result)}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="location-on" size={40} color={colors.text.primary} />
+                            <View style={styles.locationResultText}>
+                              <Text style={styles.locationResultTitle}>{result.city}</Text>
+                              <Text style={styles.locationResultSubtitle}>
+                                {result.displayRegion ? `${result.displayRegion}, ${result.country}` : result.country}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
 
@@ -1326,7 +1314,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
 
                 {/* Who Search Results */}
                 {whoSearchQuery.trim().length >= 2 && (
-                  <View style={styles.locationResultsContainer}>
+                  <View style={styles.locationResultsOuter}>
                     {whoSearchLoading && whoSearchResults.leagues.length === 0 && whoSearchResults.teams.length === 0 && (
                       <View style={styles.locationLoadingContainer}>
                         <ActivityIndicator size="small" color={colors.primary} />
@@ -1337,48 +1325,58 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                         <Text style={styles.locationEmptyText}>No leagues or teams found</Text>
                       </View>
                     )}
-                    {/* League Results */}
-                    {whoSearchResults.leagues.map((league) => (
-                      <TouchableOpacity
-                        key={`league-${league.id}`}
-                        style={styles.locationResultItem}
-                        onPress={() => handleLeagueSelect(league)}
-                        activeOpacity={0.7}
+                    {(whoSearchResults.leagues.length > 0 || whoSearchResults.teams.length > 0) && (
+                      <ScrollView
+                        style={styles.locationResultsScroll}
+                        contentContainerStyle={styles.locationResultsScrollContent}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator
                       >
-                        {league.badge ? (
-                          <Image source={{ uri: league.badge }} style={styles.resultIcon} />
-                        ) : (
-                          <MaterialIcons name="emoji-events" size={40} color={colors.text.primary} />
-                        )}
-                        <View style={styles.locationResultText}>
-                          <Text style={styles.locationResultTitle}>{league.name}</Text>
-                          <Text style={styles.locationResultSubtitle}>
-                            {league.country || 'League'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                    {/* Team Results */}
-                    {whoSearchResults.teams.map((team) => (
-                      <TouchableOpacity
-                        key={`team-${team.id}`}
-                        style={styles.locationResultItem}
-                        onPress={() => handleTeamSelect(team)}
-                        activeOpacity={0.7}
-                      >
-                        {team.badge ? (
-                          <Image source={{ uri: team.badge }} style={styles.resultIcon} />
-                        ) : (
-                          <MaterialIcons name="sports-soccer" size={40} color={colors.text.primary} />
-                        )}
-                        <View style={styles.locationResultText}>
-                          <Text style={styles.locationResultTitle}>{team.name}</Text>
-                          <Text style={styles.locationResultSubtitle}>
-                            {team.city ? `${team.city}, ${team.country || ''}` : team.country || 'Team'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
+                        {/* League Results */}
+                        {whoSearchResults.leagues.map((league) => (
+                          <TouchableOpacity
+                            key={`league-${league.id}`}
+                            style={styles.locationResultItem}
+                            onPress={() => handleLeagueSelect(league)}
+                            activeOpacity={0.7}
+                          >
+                            {league.badge ? (
+                              <Image source={{ uri: league.badge }} style={styles.resultIcon} />
+                            ) : (
+                              <MaterialIcons name="emoji-events" size={40} color={colors.text.primary} />
+                            )}
+                            <View style={styles.locationResultText}>
+                              <Text style={styles.locationResultTitle}>{league.name}</Text>
+                              <Text style={styles.locationResultSubtitle}>
+                                {league.country || 'League'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                        {/* Team Results */}
+                        {whoSearchResults.teams.map((team) => (
+                          <TouchableOpacity
+                            key={`team-${team.id}`}
+                            style={styles.locationResultItem}
+                            onPress={() => handleTeamSelect(team)}
+                            activeOpacity={0.7}
+                          >
+                            {team.badge ? (
+                              <Image source={{ uri: team.badge }} style={styles.resultIcon} />
+                            ) : (
+                              <MaterialIcons name="sports-soccer" size={40} color={colors.text.primary} />
+                            )}
+                            <View style={styles.locationResultText}>
+                              <Text style={styles.locationResultTitle}>{team.name}</Text>
+                              <Text style={styles.locationResultSubtitle}>
+                                {team.city ? `${team.city}, ${team.country || ''}` : team.country || 'Team'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
               </View>
@@ -1559,9 +1557,15 @@ const styles = StyleSheet.create({
   searchLoadingIndicator: {
     marginLeft: spacing.xs,
   },
-  locationResultsContainer: {
+  locationResultsOuter: {
     marginTop: spacing.sm,
-    maxHeight: 200,
+  },
+  locationResultsScroll: {
+    maxHeight: 280,
+  },
+  locationResultsScrollContent: {
+    flexGrow: 0,
+    paddingBottom: spacing.xs,
   },
   locationLoadingContainer: {
     padding: spacing.md,
