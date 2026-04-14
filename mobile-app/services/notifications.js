@@ -2,6 +2,7 @@ import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import { getPersistedAuthToken } from './secureAuthStorage';
 
 // No system banner/sound while the app is foregrounded (user is "in" the app).
 // Background / quit → normal alert + sound + badge. Foreground → suppress (data still delivered).
@@ -60,7 +61,7 @@ async function registerTokenWithBackend(token) {
     if (!token) return;
     const platform = Platform.OS === 'ios' ? 'ios' : 'android';
     try {
-        const authToken = await getStoredAuthToken();
+        const authToken = await getPersistedAuthToken();
         if (!authToken) return;
 
         const response = await fetch(`${getApiBaseUrl()}/notifications/register-token`, {
@@ -83,7 +84,7 @@ async function registerTokenWithBackend(token) {
 async function unregisterTokenFromBackend(token) {
     if (!token) return;
     try {
-        const authToken = await getStoredAuthToken();
+        const authToken = await getPersistedAuthToken();
         if (!authToken) return;
 
         await fetch(`${getApiBaseUrl()}/notifications/unregister-token/${encodeURIComponent(token)}`, {
@@ -105,19 +106,10 @@ function getApiBaseUrl() {
     return process.env.EXPO_PUBLIC_API_URL;
 }
 
-async function getStoredAuthToken() {
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        return await AsyncStorage.getItem('authToken');
-    } catch {
-        return null;
-    }
-}
-
 async function recordNotificationOpened(notificationLogId) {
     if (notificationLogId == null || notificationLogId === '') return;
     try {
-        const authToken = await getStoredAuthToken();
+        const authToken = await getPersistedAuthToken();
         if (!authToken) return;
 
         const response = await fetch(
@@ -150,7 +142,7 @@ function addNotificationReceivedListener(callback) {
 
 async function fetchUnreadCount() {
     try {
-        const authToken = await getStoredAuthToken();
+        const authToken = await getPersistedAuthToken();
         if (!authToken) return 0;
 
         const response = await fetch(`${getApiBaseUrl()}/notifications/unread-count`, {
@@ -168,7 +160,7 @@ async function fetchUnreadCount() {
 
 async function fetchNotifications({ cursor, limit = 50 } = {}) {
     try {
-        const authToken = await getStoredAuthToken();
+        const authToken = await getPersistedAuthToken();
         if (!authToken) {
             return { ok: false, error: 'Not signed in' };
         }

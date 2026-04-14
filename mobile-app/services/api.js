@@ -23,6 +23,8 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+const { getPersistedAuthToken } = require('./secureAuthStorage');
+
 // Simple token storage for mobile app
 let authToken = null;
 
@@ -40,10 +42,8 @@ const getAuthToken = async () => {
     return authToken;
   }
   
-  // Try to get token from AsyncStorage
   try {
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    const storedToken = await AsyncStorage.getItem('authToken');
+    const storedToken = await getPersistedAuthToken();
     if (storedToken) {
       authToken = storedToken;
       return storedToken;
