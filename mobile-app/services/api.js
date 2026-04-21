@@ -106,14 +106,14 @@ const login = async (email, password) => {
   }
 };
 
-const register = async (email, password) => {
+const register = async (email, password, acceptedTerms = false) => {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, acceptedTerms })
     });
 
     // Handle rate limit errors before parsing JSON
@@ -294,6 +294,29 @@ const getCurrentUser = async () => {
     }
     
     throw error;
+  }
+};
+
+const deleteAccount = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${await getAuthToken()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setAuthToken(null);
+      return { success: true, message: data.message };
+    }
+    return { success: false, error: data.error || 'Failed to delete account' };
+  } catch (error) {
+    if (__DEV__) {
+      console.error('Delete account error:', error);
+    }
+    return { success: false, error: error.message || 'Network error' };
   }
 };
 
@@ -2845,6 +2868,7 @@ const apiService = new ApiService();
 apiService.login = login;
 apiService.register = register;
 apiService.getCurrentUser = getCurrentUser;
+apiService.deleteAccount = deleteAccount;
 apiService.setAuthToken = setAuthToken;
 apiService.getWorkOSLoginUrl = getWorkOSLoginUrl;
 apiService.handleWorkOSCallback = handleWorkOSCallback;

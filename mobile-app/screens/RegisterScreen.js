@@ -8,12 +8,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView
+  SafeAreaView,
+  Linking
 } from 'react-native';
 import { Input, Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { getLegalPageUrls } from '../config/legalUrls';
 
 const RegisterScreen = ({ navigation }) => {
   const { register, loading } = useAuth();
@@ -22,7 +24,29 @@ const RegisterScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const openLegalDoc = async (which) => {
+    const { termsUrl, privacyUrl } = getLegalPageUrls();
+    const url = which === 'terms' ? termsUrl : privacyUrl;
+    if (!url) {
+      Alert.alert(
+        'Legal',
+        'Set EXPO_PUBLIC_WEB_APP_URL to your deployed web app (no trailing slash) so Terms and Privacy open in the browser. In development, localhost:3000 is used if unset.'
+      );
+      return;
+    }
+    try {
+      if (await Linking.canOpenURL(url)) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Unable to open', url);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not open the link.');
+    }
+  };
 
   const validateForm = () => {
     const newErrors = {};
@@ -53,6 +77,10 @@ const RegisterScreen = ({ navigation }) => {
     } else if (password !== confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
+
+    if (!acceptedTerms) {
+      newErrors.terms = 'You must accept the Terms of Service and Privacy Policy';
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -62,7 +90,7 @@ const RegisterScreen = ({ navigation }) => {
     if (!validateForm()) return;
 
     try {
-      const result = await register(email.trim().toLowerCase(), password);
+      const result = await register(email.trim().toLowerCase(), password, acceptedTerms);
       
       if (result.success) {
         Alert.alert('Success', 'Account created successfully! Welcome to Flight Match Finder!');
@@ -160,6 +188,37 @@ const RegisterScreen = ({ navigation }) => {
               labelStyle={styles.label}
             />
 
+            <View style={styles.legalRow}>
+              <TouchableOpacity
+                onPress={() => setAcceptedTerms(!acceptedTerms)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptedTerms }}
+                accessibilityLabel="Toggle accept Terms of Service and Privacy Policy"
+              >
+                <MaterialIcons
+                  name={acceptedTerms ? 'check-box' : 'check-box-outline-blank'}
+                  size={24}
+                  color={acceptedTerms ? colors.primary : colors.text.secondary}
+                  style={styles.legalCheckIcon}
+                />
+              </TouchableOpacity>
+              <Text style={styles.legalText}>
+                <Text onPress={() => setAcceptedTerms(!acceptedTerms)}>I agree to the </Text>
+                <Text style={styles.legalLink} onPress={() => openLegalDoc('terms')}>
+                  Terms of Service
+                </Text>
+                <Text onPress={() => setAcceptedTerms(!acceptedTerms)}> and </Text>
+                <Text style={styles.legalLink} onPress={() => openLegalDoc('privacy')}>
+                  Privacy Policy
+                </Text>
+                <Text onPress={() => setAcceptedTerms(!acceptedTerms)}>.</Text>
+              </Text>
+            </View>
+            {errors.terms ? (
+              <Text style={styles.termsError}>{errors.terms}</Text>
+            ) : null}
+
             <View style={styles.passwordRequirements}>
               <Text style={styles.requirementsTitle}>Password Requirements:</Text>
               <Text style={[styles.requirement, password.length >= 8 && styles.requirementMet]}>
@@ -180,7 +239,7 @@ const RegisterScreen = ({ navigation }) => {
               title="Create Account"
               onPress={handleRegister}
               loading={loading}
-              disabled={loading}
+              disabled={loading || !acceptedTerms}
               buttonStyle={styles.registerButton}
               titleStyle={styles.buttonTitle}
               containerStyle={styles.buttonContainer}
@@ -269,6 +328,31 @@ const styles = StyleSheet.create({
   },
   requirementMet: {
     color: colors.success,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  legalCheckIcon: {
+    marginTop: 2,
+    marginRight: spacing.sm,
+  },
+  legalText: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  legalLink: {
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  termsError: {
+    ...typography.bodySmall,
+    color: colors.error,
+    marginBottom: spacing.sm,
   },
   buttonContainer: {
     marginBottom: spacing.lg,

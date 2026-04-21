@@ -305,7 +305,7 @@ const AddMemoryScreen = () => {
             >
               <MaterialIcons name="arrow-back" size={24} color={colors.primary} />
             </TouchableOpacity>
-            <Text style={styles.title}>Add Memory</Text>
+            <Text style={styles.title}>Add Match Memory</Text>
             <View style={styles.placeholder} />
           </View>
 
@@ -313,7 +313,7 @@ const AddMemoryScreen = () => {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Photos</Text>
             <Text style={styles.sectionSubtitle}>
-              Add photos from your match experience
+              Add at least one photo to save this memory
             </Text>
             
             <View style={styles.photoButtons}>
@@ -343,7 +343,8 @@ const AddMemoryScreen = () => {
 
           {/* Match Details */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Match Details (Optional)</Text>
+            <Text style={styles.sectionTitle}>Match Details</Text>
+            <Text style={styles.sectionSubtitle}>Optional details that make this memory richer</Text>
             
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Home Team (Optional)</Text>
@@ -451,7 +452,8 @@ const AddMemoryScreen = () => {
 
           {/* Venue Details */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Venue (Optional)</Text>
+            <Text style={styles.sectionTitle}>Venue</Text>
+            <Text style={styles.sectionSubtitle}>Optional</Text>
             
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Stadium Name (Optional)</Text>
@@ -492,7 +494,8 @@ const AddMemoryScreen = () => {
 
           {/* Notes */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+            <Text style={styles.sectionTitle}>Notes</Text>
+            <Text style={styles.sectionSubtitle}>Optional</Text>
             <TextInput
               style={styles.notesInput}
               value={userNotes}
@@ -522,7 +525,7 @@ const AddMemoryScreen = () => {
                 <MaterialIcons name="check" size={20} color={colors.text.primary} style={styles.submitButtonIcon} />
               )}
               <Text style={styles.submitButtonTitle}>
-                {loading ? 'Creating Memory...' : 'Create Memory (Photos Only)'}
+                {loading ? 'Saving memory...' : 'Save Memory'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   title: {
-    ...typography.h1,
+    ...typography.h2,
     fontWeight: '700',
     color: colors.text.primary,
   },
@@ -584,6 +587,7 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.text.secondary,
     marginBottom: spacing.md,
+    lineHeight: 18,
   },
   photoButtons: {
     flexDirection: 'row',
@@ -592,7 +596,7 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     ...components.button,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.primary,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -604,7 +608,7 @@ const styles = StyleSheet.create({
   },
   photoButtonTitle: {
     ...typography.button,
-    color: colors.text.primary,
+    color: colors.onPrimary,
   },
   photoGrid: {
     marginTop: spacing.md,
@@ -705,7 +709,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     ...components.button,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -719,7 +723,7 @@ const styles = StyleSheet.create({
   },
   submitButtonTitle: {
     ...typography.button,
-    color: colors.text.primary,
+    color: colors.onPrimary,
     fontWeight: '600',
   },
   keyboardSpacer: {

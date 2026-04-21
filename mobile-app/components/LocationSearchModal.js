@@ -994,7 +994,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
               <View style={styles.cardContent}>
                 {/* Location Search Input */}
                 <View style={styles.searchInputContainer}>
-                  <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
+                  <MaterialIcons name="search" size={20} color="rgba(0, 0, 0, 0.5)" />
                   <TextInput
                     ref={locationInputRef}
                     style={styles.searchInput}
@@ -1254,7 +1254,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
               <View style={styles.cardContent}>
                 {/* Who Search Input */}
                 <View style={styles.searchInputContainer}>
-                  <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
+                  <MaterialIcons name="search" size={20} color="rgba(0, 0, 0, 0.5)" />
                   <TextInput
                     ref={whoInputRef}
                     style={styles.searchInput}
@@ -1559,18 +1559,18 @@ const styles = StyleSheet.create({
     borderColor: colors.text.primary,
     borderRadius: borderRadius.xl,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    height: 49,
+    paddingVertical: spacing.xs,
+    minHeight: 52,
     gap: spacing.sm,
   },
   searchInput: {
     flex: 1,
     ...typography.body,
     color: colors.text.primary,
-    padding: 0,
+    paddingHorizontal: 0,
+    paddingVertical: Platform.OS === 'android' ? 2 : 4,
     margin: 0,
-    textAlignVertical: 'center',
-    includeFontPadding: false,
+    ...(Platform.OS === 'android' ? { includeFontPadding: true, textAlignVertical: 'center' } : {}),
   },
   clearSearchButton: {
     padding: spacing.xs,

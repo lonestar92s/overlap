@@ -23,6 +23,9 @@ A React Native (Expo) mobile app for discovering football matches, planning trip
 - **Attendance** — Mark matches as attended; view history
 - **Memories Map** — View memories on map
 
+### Notifications
+- **Notification inbox** — In-app notification list and unread state (see `expo-notifications` + backend notification routes)
+
 ### User & Profile
 - **Authentication** — Email/password, WorkOS SSO
 - **Preferences** — Favorite teams, leagues, venues; saved matches
@@ -30,10 +33,11 @@ A React Native (Expo) mobile app for discovering football matches, planning trip
 
 ## Prerequisites
 
-- Node.js (v18 or higher recommended)
+- Node.js **18.18+** or **20.x** (LTS recommended for Expo SDK 54)
 - npm or yarn
-- Expo CLI (installed via `npx expo`)
-- Backend server (see [Backend](#backend) below)
+- Expo CLI (via `npx expo` — no global install required)
+- **Xcode** (iOS) / **Android Studio** (Android) if you run native dev builds (`npm run ios` / `npm run android`)
+- Backend server when testing against local API (see [Backend](#3-backend))
 
 ## Setup
 
@@ -46,25 +50,32 @@ npm install
 
 ### 2. Environment variables
 
-Create a `.env` file (copy from `.env.example`):
+Create a `.env` file (start from `.env.example`):
 
 ```bash
 cp .env.example .env
 ```
 
-**Required variables:**
+**Shipped `.env.example` fields:**
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `EXPO_PUBLIC_API_URL` | Backend API URL | `https://your-api.railway.app/api` |
-| `EXPO_PUBLIC_LOCATIONIQ_API_KEY` | Location search (optional) | `pk.your_key` |
+| Variable | When to set |
+|----------|----------------|
+| `EXPO_PUBLIC_LOCATIONIQ_API_KEY` | Location autocomplete / geocoding (get a key at [LocationIQ](https://locationiq.com/)) |
+| `EXPO_PUBLIC_API_URL` | **Recommended** for consistent behavior (Expo Go, physical devices, production builds). Example: your deployed API `https://…/api` |
 
-**Optional (for full functionality):**
+**Behavior of `EXPO_PUBLIC_API_URL`:**
+
+- **Omitted in local dev (`__DEV__`):** The app falls back to `http://localhost:3001/api` (simulator/emulator only; not for Expo Go on a real device).
+- **Production / release builds:** Must be set (e.g. [EAS Secret](https://docs.expo.dev/build-reference/variables/)); see `ENV_SETUP.md`.
+
+**Optional (feature-dependent):**
 
 | Variable | Description |
 |----------|-------------|
-| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox maps (required for map views) |
-| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps (if used) |
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox (`@rnmapbox/maps`); required for map-heavy screens |
+| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps / Directions-related features when enabled |
+
+For **which URL to use** (production vs localhost vs LAN IP), read `ENV_SETUP.md` first.
 
 ### 3. Backend
 
@@ -76,9 +87,9 @@ npm install
 npm run dev
 ```
 
-For production, use the deployed Railway URL (see `ENV_SETUP.md`).
+For a hosted API, use that base URL in `EXPO_PUBLIC_API_URL` (see `ENV_SETUP.md`).
 
-### 4. Start the app
+### 4. Start the dev server
 
 ```bash
 npm start
@@ -88,51 +99,97 @@ Restart Expo after changing `.env` for changes to take effect.
 
 ## Running the App
 
-### iOS Simulator
+This repo uses **Expo Dev Client** and native projects (`ios/`, `android/`). Many flows (e.g. Mapbox, WebView) expect a **development build**, not Expo Go alone.
+
+### iOS Simulator (native dev client)
+
 ```bash
 npm run ios
 ```
 
-### Android Emulator
+Runs `expo run:ios` — builds/installs the dev client and starts Metro (Xcode required).
+
+### Android Emulator (native dev client)
+
 ```bash
 npm run android
 ```
 
-### Web Browser
+Runs `expo run:android` — same idea for Android (Android Studio / SDK required).
+
+### After a dev client is installed
+
+```bash
+npx expo start --dev-client
+```
+
+### Web
+
 ```bash
 npm run web
 ```
 
-### Physical Device (Expo Go)
-1. Install Expo Go on your device
-2. Scan the QR code from the terminal
+Runs `expo start --web` (web support varies by screen; primary target is iOS/Android).
 
-**Note:** For physical devices, set `EXPO_PUBLIC_API_URL` to your machine's IP (e.g. `http://192.168.1.100:3001/api`) if using a local backend, or use the production Railway URL.
+### Expo Go (limited)
 
-## API Configuration
+You can open the project in **Expo Go** for quick checks, but **native modules** used in this app may not match Expo Go’s prebuild. Prefer a **development build** for full behavior; see `DEV_BUILD_INSTRUCTIONS.md` and `eas.json` profile `development`.
 
-The app uses `EXPO_PUBLIC_API_URL` from `.env`. In development, it falls back to `http://localhost:3001/api` if not set.
+**Physical device + local backend:** set `EXPO_PUBLIC_API_URL` to your machine’s LAN IP (e.g. `http://192.168.1.100:3001/api`), not `localhost`.
 
-- **Production:** Use your deployed backend URL (e.g. Railway)
-- **Local + Simulator:** `http://localhost:3001/api`
-- **Local + Physical Device:** `http://YOUR_IP:3001/api`
+## Testing
 
-See `ENV_SETUP.md` for detailed setup.
+```bash
+npm test              # run Jest once
+npm run test:watch    # watch mode
+npm run test:coverage # coverage report
+```
 
-## Project Structure
+Tests live under `__tests__/` and `tests/`; Jest config is in `package.json`.
+
+## EAS Build & updates
+
+- **Profiles:** `eas.json` defines `development` (dev client), `preview`, and `production` builds.
+- **OTA (EAS Update):** `npm run update:preview` and `npm run update:production` map to `eas update` branches.
+
+See [Expo EAS](https://docs.expo.dev/eas/) and `QUICK_UPDATE_GUIDE.md` for release workflow.
+
+## API configuration
+
+The app reads `EXPO_PUBLIC_API_URL` in `services/api.js`:
+
+- **Local dev, unset:** Falls back to `http://localhost:3001/api` with a console warning.
+- **Production builds:** Missing URL throws at startup until EAS secrets (or env) are set.
+
+See `ENV_SETUP.md` for production URL, troubleshooting, and EAS secrets.
+
+## Project structure
 
 ```
 mobile-app/
-├── screens/          # Screen components
-├── components/       # Reusable UI components
-├── contexts/         # Auth, Itinerary, Filter contexts
-├── services/         # API & natural language services
-├── hooks/            # Custom hooks (recommendations, etc.)
-├── utils/            # Helpers, design tokens
-└── styles/           # Design system
+├── App.js              # Root component & navigation
+├── app.json            # Expo config
+├── eas.json            # EAS Build / submit profiles
+├── screens/            # Screen components
+├── components/         # Reusable UI
+├── contexts/           # Auth, itinerary, filters, notifications, etc.
+├── services/           # API client, NL search, notifications, secure storage
+├── hooks/              # Custom hooks
+├── utils/              # Helpers, feature flags, design tokens
+├── styles/             # Design system
+├── config/             # App config (e.g. legal URLs)
+├── assets/             # Images & static assets
+├── docs/               # Extra mobile docs
+├── data/               # Static / seed data where used
+├── types/              # Shared TS types (if present)
+├── tests/              # Jest setup / helpers
+├── __tests__/          # Unit tests
+├── scripts/            # Maintenance scripts
+├── ios/ / android/     # Native projects (prebuild / dev client)
+└── index.js            # Entry
 ```
 
-## Key API Endpoints
+## Key API endpoints
 
 - `GET /api/matches/search` — Search matches
 - `GET /api/matches/popular` — Popular matches
@@ -143,25 +200,27 @@ mobile-app/
 - `GET /api/transportation/directions/*` — Driving, walking, transit
 - `GET /api/memories` — User memories
 - `GET /api/matches/attended` — Attended matches
+- `GET /api/notifications` — Notification inbox (auth)
+- `GET /api/notifications/unread-count` — Unread count (auth)
 
 ## Troubleshooting
 
 ### Connection issues
-- Ensure backend is running (default port 3001)
-- For physical devices, use your machine's IP instead of localhost
-- Check `EXPO_PUBLIC_API_URL` in `.env`
+- Ensure the backend is running (default port **3001**) if using a local URL
+- On a **physical device** or **Expo Go**, use your machine’s **IP** or a **deployed** API URL, not `localhost`
+- Check `EXPO_PUBLIC_API_URL` in `.env` and restart Metro
 
 ### Map not loading
-- Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in `.env`
-- Get a token at [Mapbox](https://account.mapbox.com/)
+- Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in `.env` ([Mapbox account](https://account.mapbox.com/))
+- Details: `ENV_SETUP.md` (environment) + `DEV_BUILD_INSTRUCTIONS.md` (native dev client)
 
 ### Build issues
 - Clear cache: `npx expo start -c`
 - Reinstall: `rm -rf node_modules && npm install`
 
-## Additional Documentation
+## Additional documentation
 
-- `ENV_SETUP.md` — Environment variable setup
-- `DEV_BUILD_INSTRUCTIONS.md` — Development builds (e.g. for WebView)
-- `MAPBOX_SETUP.md` — Mapbox configuration
-- `../REQUIREMENTS.md` — Full feature requirements
+- `ENV_SETUP.md` — API URL choices, Mapbox/Google env vars, EAS secrets, troubleshooting
+- `DEV_BUILD_INSTRUCTIONS.md` — Development builds (WebView, `expo run:*`, EAS `development` profile)
+- `QUICK_UPDATE_GUIDE.md` — EAS Update / release tips
+- `../REQUIREMENTS.md` — Full product requirements

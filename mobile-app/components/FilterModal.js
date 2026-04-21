@@ -9,18 +9,24 @@ import {
 import { CheckBox } from 'react-native-elements';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetView, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetScrollView,
+} from '@gorhom/bottom-sheet';
 import ErrorBoundary from './ErrorBoundary';
 import FilterSection from './FilterSection';
 import FilterAccordion from './FilterAccordion';
+import FilterChip from './FilterChip';
 import { colors, spacing, typography, borderRadius, iconSizes } from '../styles/designTokens';
 
-const FilterModal = forwardRef(({ 
-  visible, 
-  onClose, 
+const FilterModal = forwardRef(({
+  visible,
+  onClose,
   filterData,
   selectedFilters,
-  onFiltersChange 
+  onFiltersChange,
+  previewMatchCount,
 }, ref) => {
   const insets = useSafeAreaInsets();
   const bottomSheetRef = React.useRef(null);
@@ -219,25 +225,20 @@ const FilterModal = forwardRef(({
     return 'some';
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = useCallback(() => {
     const cleared = { countries: [], leagues: [], teams: [] };
     setLocalFilters(cleared);
-    // Immediately apply cleared filters so results update without pressing Apply
     if (typeof onFiltersChange === 'function') {
       onFiltersChange(cleared);
     }
-  };
+  }, [onFiltersChange]);
 
-  const handleReset = () => {
-    if (selectedFilters) {
-      setLocalFilters(selectedFilters);
-    }
-  };
-
-  const handleApply = () => {
+  const handleApply = useCallback(() => {
     onFiltersChange(localFilters);
-    // Do NOT call onClose() - drawer should remain open
-  };
+    if (onClose) {
+      onClose();
+    }
+  }, [localFilters, onFiltersChange, onClose]);
 
   // Render nested leagues section for a country
   const renderLeaguesSection = useCallback((country) => {
@@ -246,7 +247,7 @@ const FilterModal = forwardRef(({
     if (countryLeagues.length === 0) return null;
     
     return (
-      <View style={styles.nestedSection}>
+      <View style={styles.leaguesBlock}>
         <View style={styles.nestedHeader}>
           <Text style={styles.nestedTitle}>Leagues</Text>
           <TouchableOpacity 
@@ -277,7 +278,7 @@ const FilterModal = forwardRef(({
               accessibilityLabel={`Filter by ${league.name} league`}
             >
               {isLeagueExpanded && leagueTeams.length > 0 && (
-                <View style={styles.nestedSection}>
+                <View style={styles.teamsBlock}>
                   <View style={styles.nestedHeader}>
                     <Text style={styles.nestedTitle}>Teams</Text>
                     <TouchableOpacity 
@@ -377,7 +378,7 @@ const FilterModal = forwardRef(({
     <View style={styles.handleContainer}>
       <View style={styles.handleBar} />
       <View style={styles.handleContent}>
-        <Text style={styles.handleTitle}>Filter Matches</Text>
+        <Text style={styles.handleTitle}>Filters</Text>
         <TouchableOpacity 
           onPress={onClose} 
           style={styles.closeButton}
@@ -390,6 +391,65 @@ const FilterModal = forwardRef(({
     </View>
   );
 
+  const previewCount = useMemo(() => {
+    if (typeof previewMatchCount !== 'function') return null;
+    return previewMatchCount(localFilters);
+  }, [previewMatchCount, localFilters]);
+
+  const applyCtaLabel = useMemo(() => {
+    if (previewCount !== null) {
+      return `Show ${previewCount} match${previewCount === 1 ? '' : 'es'}`;
+    }
+    return `Apply (${getTotalFilters()})`;
+  }, [previewCount, getTotalFilters]);
+
+  const selectedChipItems = useMemo(() => {
+    if (!filterData) return [];
+    const countries = filterData.countries || [];
+    const leagues = filterData.leagues || [];
+    const teams = filterData.teams || [];
+    const chips = [];
+    const matchId = (a, b) => String(a) === String(b);
+
+    localFilters.countries.forEach((id) => {
+      const c = countries.find((x) => matchId(x.id, id));
+      chips.push({
+        type: 'country',
+        id,
+        label: c?.name || 'Country',
+        key: `c-${id}`,
+      });
+    });
+    localFilters.leagues.forEach((id) => {
+      const l = leagues.find((x) => matchId(x.id, id));
+      chips.push({
+        type: 'league',
+        id,
+        label: l?.name || 'League',
+        key: `l-${id}`,
+      });
+    });
+    localFilters.teams.forEach((id) => {
+      const t = teams.find((x) => matchId(x.id, id));
+      chips.push({
+        type: 'team',
+        id,
+        label: t?.name || 'Team',
+        key: `t-${id}`,
+      });
+    });
+    return chips;
+  }, [localFilters, filterData]);
+
+  const recommendedLeagues = useMemo(() => {
+    const leagues = filterData?.leagues || [];
+    const selected = new Set(localFilters.leagues.map((id) => String(id)));
+    return [...leagues]
+      .sort((a, b) => (b.count || 0) - (a.count || 0))
+      .filter((l) => !selected.has(String(l.id)))
+      .slice(0, 8);
+  }, [filterData, localFilters.leagues]);
+
   // Log when component renders
   if (__DEV__) {
   }
@@ -399,6 +459,7 @@ const FilterModal = forwardRef(({
       <BottomSheetModal
         ref={bottomSheetRef}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
         enablePanDownToClose={true}
         enableContentPanningGesture={true}
         enableHandlePanningGesture={true}
@@ -409,89 +470,95 @@ const FilterModal = forwardRef(({
         bottomInset={insets.bottom}
       >
         <BottomSheetView style={styles.content}>
-          {/* Available Filters Summary (always visible) */}
-          <View style={styles.availableFiltersContainer}>
-            <Text style={styles.availableFiltersText}>
-              Available: {(filterData?.countries?.length || 0)} countries · {(filterData?.leagues?.length || 0)} leagues · {(filterData?.teams?.length || 0)} teams
-            </Text>
-          </View>
+          <View style={styles.sheetColumn}>
+            {getTotalFilters() > 0 ? (
+              <View style={styles.selectedSection}>
+                <Text style={styles.selectedSectionTitle}>Selected</Text>
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.selectedChipsRow}
+                >
+                  {selectedChipItems.map((chip) => (
+                    <FilterChip
+                      key={chip.key}
+                      label={chip.label}
+                      onRemove={() => {
+                        if (chip.type === 'country') handleCountryChange(chip.id);
+                        else if (chip.type === 'league') handleLeagueChange(chip.id);
+                        else handleTeamChange(chip.id);
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              <View style={styles.hintSection}>
+                <Text style={styles.hintText}>
+                  {`Choose from ${filterData?.countries?.length || 0} countries, ${filterData?.leagues?.length || 0} leagues, ${filterData?.teams?.length || 0} teams`}
+                </Text>
+              </View>
+            )}
 
-          {/* Active Filters Summary */}
-          {getTotalFilters() > 0 ? (
-            <View style={styles.activeFiltersContainer}>
-              <Text style={styles.activeFiltersText}>
-                {getTotalFilters()} filter{getTotalFilters() !== 1 ? 's' : ''} selected
-              </Text>
-              <TouchableOpacity 
+            <View style={styles.sectionRule} />
+
+            <BottomSheetScrollView
+              style={styles.scrollView}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
+            >
+              {recommendedLeagues.length > 0 && (
+                <View style={styles.recommendedBlock}>
+                  <Text style={styles.recommendedTitle}>Popular leagues</Text>
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.recommendedRow}
+                  >
+                    {recommendedLeagues.map((league) => (
+                      <TouchableOpacity
+                        key={league.id}
+                        style={styles.recommendedPill}
+                        onPress={() => handleLeagueChange(league.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add ${league.name} filter`}
+                      >
+                        <Text style={styles.recommendedPillPlus}>+</Text>
+                        <Text style={styles.recommendedPillText} numberOfLines={1}>
+                          {league.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <View style={styles.sectionRule} />
+                </View>
+              )}
+              {renderCountrySection()}
+            </BottomSheetScrollView>
+
+            <View style={[styles.footer, { paddingBottom: spacing.md + insets.bottom }]}>
+              <TouchableOpacity
+                style={styles.footerClearAll}
                 onPress={handleClearAll}
                 accessibilityRole="button"
                 accessibilityLabel="Clear all filters"
               >
-                <Text style={styles.clearAllText}>Clear All</Text>
+                <Text style={styles.footerClearAllText}>Clear all</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.applyButton}
+                onPress={handleApply}
+                disabled={false}
+                accessibilityRole="button"
+                accessibilityLabel={applyCtaLabel}
+              >
+                <Text style={styles.applyButtonText}>{applyCtaLabel}</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.activeFiltersContainer}>
-              <Text style={styles.activeFiltersText}>No filters selected yet</Text>
-            </View>
-          )}
-
-          {/* Current Filters Summary */}
-          {getTotalFilters() > 0 && (
-            <View style={styles.currentFiltersSummary}>
-              <Text style={styles.currentFiltersTitle}>Currently Applied:</Text>
-              {localFilters.countries.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Countries: {localFilters.countries.length} selected
-                </Text>
-              )}
-              {localFilters.leagues.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Leagues: {localFilters.leagues.length} selected
-                </Text>
-              )}
-              {localFilters.teams.length > 0 && (
-                <Text style={styles.currentFilterItem}>
-                  Teams: {localFilters.teams.length} selected
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* Filter Content */}
-          <BottomSheetScrollView 
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={true}
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: spacing.lg + (insets?.bottom || 0) }
-            ]}
-          >
-            {renderCountrySection()}
-          </BottomSheetScrollView>
-
-          {/* Footer Actions */}
-          <View style={[styles.footer, { paddingBottom: spacing.md + (insets?.bottom || 0) }]}>
-            <TouchableOpacity
-              style={styles.resetButton}
-              onPress={handleReset}
-              accessibilityRole="button"
-              accessibilityLabel="Reset filters to previous selection"
-            >
-              <Text style={styles.resetButtonText}>Reset</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.applyButton}
-              onPress={handleApply}
-              disabled={false}
-              accessibilityRole="button"
-              accessibilityLabel={`Apply ${getTotalFilters()} filter${getTotalFilters() !== 1 ? 's' : ''}`}
-            >
-              <Text style={styles.applyButtonText}>
-                Apply Filters ({getTotalFilters()})
-              </Text>
-            </TouchableOpacity>
           </View>
         </BottomSheetView>
       </BottomSheetModal>
@@ -536,60 +603,94 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // BottomSheetView merges position:absolute + top/left/right only; without bottom:0
+  // height follows intrinsic content, so expanded lists push the footer off-screen and
+  // BottomSheetScrollView never gets a bounded height. Pin bottom to fill the sheet body.
   content: {
     flex: 1,
+    minHeight: 0,
+    bottom: 0,
     backgroundColor: colors.card,
   },
-  activeFiltersContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.md,
-    backgroundColor: colors.cardGrey,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  availableFiltersContainer: {
-    padding: spacing.sm,
+  sheetColumn: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: 'column',
     backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
-  availableFiltersText: {
-    ...typography.bodySmall, // Uses design token fontFamily
+  hintSection: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.card,
+  },
+  hintText: {
+    ...typography.bodySmall,
     color: colors.text.secondary,
   },
-  activeFiltersText: {
-    ...typography.bodySmall, // Uses design token fontFamily
-    color: colors.text.secondary,
+  selectedSection: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.card,
   },
-  clearAllText: {
-    ...typography.bodySmall, // Uses design token fontFamily
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  currentFiltersSummary: {
-    backgroundColor: colors.cardGrey,
-    padding: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  currentFiltersTitle: {
-    ...typography.bodySmall, // Uses design token fontFamily
-    fontWeight: '600',
+  selectedSectionTitle: {
+    ...typography.h3,
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
-  currentFilterItem: {
-    ...typography.caption, // Uses design token fontFamily
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
+  selectedChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    paddingBottom: spacing.xs,
+  },
+  sectionRule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.borderLight,
+  },
+  recommendedBlock: {
+    marginBottom: spacing.md,
+  },
+  recommendedTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    paddingHorizontal: 0,
+  },
+  recommendedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: spacing.sm,
+  },
+  recommendedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: 200,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
+    backgroundColor: colors.card,
+  },
+  recommendedPillPlus: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginRight: spacing.xs,
+  },
+  recommendedPillText: {
+    ...typography.bodySmall,
+    color: colors.text.primary,
+    flexShrink: 1,
   },
   scrollView: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xxl,
     paddingHorizontal: spacing.md,
   },
   // Styles still used in renderLeaguesSection for nested teams
@@ -629,8 +730,10 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontWeight: '500',
   },
-  nestedSection: {
-    marginLeft: spacing.xl,
+  leaguesBlock: {
+    marginTop: spacing.sm,
+  },
+  teamsBlock: {
     marginTop: spacing.sm,
   },
   nestedHeader: {
@@ -654,27 +757,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   footer: {
+    flexShrink: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: spacing.md,
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.cardGrey,
   },
-  resetButton: {
+  footerClearAll: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     marginRight: spacing.sm,
-    alignItems: 'center',
   },
-  resetButtonText: {
-    ...typography.button, // Uses design token fontFamily
-    color: colors.text.secondary,
-    fontWeight: '500',
+  footerClearAllText: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '600',
   },
   applyButton: {
     flex: 2,

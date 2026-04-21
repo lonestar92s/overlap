@@ -5,9 +5,13 @@ const { generateTestToken } = require('../../helpers/testHelpers');
 // Mock dependencies
 jest.mock('../../../src/models/User');
 jest.mock('../../../src/services/subscriptionService');
+jest.mock('../../../src/services/deleteUserAccount', () => ({
+  deleteUserAccount: jest.fn().mockResolvedValue(undefined)
+}));
 jest.mock('@workos-inc/node');
 const User = require('../../../src/models/User');
 const subscriptionService = require('../../../src/services/subscriptionService');
+const { deleteUserAccount } = require('../../../src/services/deleteUserAccount');
 // Create a test app
 const app = express();
 app.use(express.json());
@@ -39,8 +43,9 @@ describe('Auth Routes', () => {
         .post('/api/auth/register')
         .send({
           email: 'newuser@example.com',
-          password: 'password123',
-          subscriptionTier: 'freemium'
+          password: 'Password1',
+          subscriptionTier: 'freemium',
+          acceptedTerms: true
         });
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('user');
@@ -57,7 +62,8 @@ describe('Auth Routes', () => {
         .post('/api/auth/register')
         .send({
           email: 'existing@example.com',
-          password: 'password123'
+          password: 'Password1',
+          acceptedTerms: true
         });
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -67,13 +73,41 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/register')
         .send({
-          password: 'password123'
+          password: 'Password1',
+          acceptedTerms: true
         });
       // The route should validate and return an error
       expect(response.status).toBeGreaterThanOrEqual(400);
     });
+    it('should return 400 if acceptedTerms is false', async () => {
+      User.findOne = jest.fn().mockResolvedValue(null);
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'terms@example.com',
+          password: 'Password1',
+          acceptedTerms: false
+        });
+      expect(response.status).toBe(400);
+    });
+    it('should return 400 if acceptedTerms is missing', async () => {
+      User.findOne = jest.fn().mockResolvedValue(null);
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'noterms@example.com',
+          password: 'Password1'
+        });
+      expect(response.status).toBe(400);
+    });
   });
   describe('POST /api/auth/login', () => {
+    const mockFindOneWithSelect = (resolvedUser) => {
+      User.findOne = jest.fn().mockReturnValue({
+        select: jest.fn().mockResolvedValue(resolvedUser)
+      });
+    };
+
     it('should login user with valid credentials', async () => {
       const mockUser = {
         _id: '507f1f77bcf86cd799439011',
@@ -85,7 +119,7 @@ describe('Auth Routes', () => {
           email: 'test@example.com'
         })
       };
-      User.findOne = jest.fn().mockResolvedValue(mockUser);
+      mockFindOneWithSelect(mockUser);
       const response = await request(app)
         .post('/api/auth/login')
         .send({
@@ -102,7 +136,7 @@ describe('Auth Routes', () => {
         email: 'test@example.com',
         comparePassword: jest.fn().mockResolvedValue(false)
       };
-      User.findOne = jest.fn().mockResolvedValue(mockUser);
+      mockFindOneWithSelect(mockUser);
       const response = await request(app)
         .post('/api/auth/login')
         .send({
@@ -112,7 +146,7 @@ describe('Auth Routes', () => {
       expect(response.status).toBe(401);
     });
     it('should return 401 if user not found', async () => {
-      User.findOne = jest.fn().mockResolvedValue(null);
+      mockFindOneWithSelect(null);
       const response = await request(app)
         .post('/api/auth/login')
         .send({
@@ -120,6 +154,24 @@ describe('Auth Routes', () => {
           password: 'password123'
         });
       expect(response.status).toBe(401);
+    });
+  });
+  describe('DELETE /api/auth/me', () => {
+    it('should delete account when authenticated', async () => {
+      deleteUserAccount.mockClear();
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        role: 'user',
+        email: 'del@example.com'
+      };
+      User.findOne = jest.fn().mockResolvedValue(mockUser);
+      const token = generateTestToken(mockUser._id);
+      const response = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(deleteUserAccount).toHaveBeenCalledWith(mockUser);
     });
   });
   describe('GET /api/auth/me', () => {

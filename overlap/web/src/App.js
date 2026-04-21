@@ -13,6 +13,8 @@ import AttendedMatches from './components/AttendedMatches';
 import AdminDashboard from './components/AdminDashboard';
 import TeamMatches from './components/TeamMatches';
 import SearchPage from './components/SearchPage';
+import TermsOfService from './components/TermsOfService';
+import PrivacyPolicy from './components/PrivacyPolicy';
 import { SubscriptionProvider } from './hooks/useSubscription';
 
 const theme = createTheme({
@@ -76,6 +78,8 @@ function AppContent() {
           <Route path="/matches" element={<Home searchState={searchState} setSearchState={setSearchState} />} />
           <Route path="/team-matches" element={<TeamMatches />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/profile" element={user ? <Profile /> : <Auth />} />
           <Route path="/trips" element={user ? <Trips /> : <Auth />} />
           <Route path="/attended-matches" element={user ? <AttendedMatches /> : <Auth />} />

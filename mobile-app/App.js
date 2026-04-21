@@ -204,30 +204,16 @@ function AccountStack() {
     <Stack.Navigator
       initialRouteName="Account"
       screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.primary,
-        },
-        headerTintColor: colors.onPrimary,
-        headerTitleStyle: {
-          fontWeight: 'bold',
-          fontFamily: typography.fontFamily,
-        },
+        headerShown: false,
       }}
     >
       <Stack.Screen
         name="Account"
         component={AccountScreen}
-        options={{
-          headerShown: false,
-        }}
       />
       <Stack.Screen
         name="Feedback"
         component={FeedbackScreen}
-        options={{
-          title: 'Send Feedback',
-          headerTitleAlign: 'center',
-        }}
       />
     </Stack.Navigator>
   );
@@ -238,23 +224,12 @@ function NotificationsStack() {
     <Stack.Navigator
       initialRouteName="NotificationsList"
       screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.primary,
-        },
-        headerTintColor: colors.onPrimary,
-        headerTitleStyle: {
-          fontWeight: 'bold',
-          fontFamily: typography.fontFamily,
-        },
+        headerShown: false,
       }}
     >
       <Stack.Screen
         name="NotificationsList"
         component={NotificationsScreen}
-        options={{
-          title: 'Notifications',
-          headerTitleAlign: 'center',
-        }}
       />
     </Stack.Navigator>
   );

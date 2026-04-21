@@ -44,6 +44,16 @@ const userSchema = new mongoose.Schema({
         enum: ['user', 'admin'],
         default: 'user'
     },
+    legalAcceptance: {
+        termsVersion: {
+            type: String,
+            default: null
+        },
+        termsAcceptedAt: {
+            type: Date,
+            default: null
+        }
+    },
     subscription: {
         tier: {
             type: String,

@@ -10,6 +10,7 @@ import { normalizeIds } from '../utils/idNormalizer';
 
 const AccountScreen = ({ navigation }) => {
   const { user, logout, refreshUser } = useAuth();
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [prefs, setPrefs] = useState({ 
@@ -27,6 +28,49 @@ const AccountScreen = ({ navigation }) => {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Logout', style: 'destructive', onPress: logout }
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account',
+      'This permanently deletes your account, profile, trips, preferences, saved data, and device tokens. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              'This permanently deletes your account and all associated personal data. You cannot undo this.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Confirm delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleteBusy(true);
+                    try {
+                      const result = await ApiService.deleteAccount();
+                      if (result.success) {
+                        await logout();
+                        Alert.alert('Account deleted', 'Your account and personal data have been removed.');
+                      } else {
+                        Alert.alert('Could not delete account', result.error || 'Please try again or contact support.');
+                      }
+                    } catch (e) {
+                      Alert.alert('Error', e.message || 'Something went wrong.');
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
       ]
     );
   };
@@ -505,13 +549,24 @@ const AccountScreen = ({ navigation }) => {
           </>
         )}
         
+        <Button
+          title="Delete my account"
+          onPress={handleDeleteAccount}
+          disabled={deleteBusy}
+          loading={deleteBusy}
+          type="clear"
+          titleStyle={styles.deleteAccountTitle}
+          buttonStyle={styles.deleteAccountButton}
+          containerStyle={{ marginTop: spacing.xl }}
+        />
+
         {/* Logout button - visible on all tabs */}
         <Button
           title="Logout"
           onPress={handleLogout}
           buttonStyle={styles.logoutButton}
           titleStyle={styles.logoutButtonTitle}
-          containerStyle={{ marginTop: spacing.lg }}
+          containerStyle={{ marginTop: spacing.md }}
         />
       </View>
     </ScrollView>
@@ -721,6 +776,15 @@ const styles = StyleSheet.create({
   starButton: {
     padding: spacing.xs,
     marginLeft: spacing.sm,
+  },
+  deleteAccountButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: spacing.sm,
+  },
+  deleteAccountTitle: {
+    ...typography.button,
+    color: colors.error,
+    textDecorationLine: 'underline',
   },
   logoutButton: {
     backgroundColor: colors.error,

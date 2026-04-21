@@ -6,14 +6,20 @@ import {
   Alert,
   KeyboardAvoidingView,
   ScrollView,
-  SafeAreaView,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Input, Button } from 'react-native-elements';
 import ApiService from '../services/api';
 import { colors, spacing, typography, borderRadius, input, components } from '../styles/designTokens';
 import { screenKeyboardAvoidingProps } from '../utils/keyboardUtils';
+
+// Match TripsListScreen / NotificationsScreen header horizontal padding
+const CARD_PADDING = 24;
 
 const FeedbackScreen = () => {
   const navigation = useNavigation();
@@ -53,6 +59,21 @@ const FeedbackScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar style="dark" />
+      <View style={styles.screenHeader}>
+        <TouchableOpacity
+          style={styles.headerBackButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <MaterialIcons name="arrow-back" size={28} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={styles.screenHeaderTitle} numberOfLines={1}>
+          Send Feedback
+        </Text>
+      </View>
       <KeyboardAvoidingView
         {...screenKeyboardAvoidingProps()}
         style={styles.keyboardView}
@@ -64,8 +85,6 @@ const FeedbackScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.contentContainer}>
-            <Text style={styles.title}>Send Feedback</Text>
-            
             {initialMessage && (
               <Text style={styles.initialMessage}>{initialMessage}</Text>
             )}
@@ -116,10 +135,31 @@ const FeedbackScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
+  },
+  screenHeader: {
+    paddingTop: spacing.lg + spacing.xs,
+    paddingBottom: spacing.md,
+    paddingHorizontal: CARD_PADDING,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+  },
+  headerBackButton: {
+    marginRight: spacing.sm,
+    padding: spacing.xs,
+    marginLeft: -spacing.xs,
+  },
+  screenHeaderTitle: {
+    flex: 1,
+    fontSize: 32,
+    fontWeight: '700',
+    lineHeight: 32,
+    color: colors.text.primary,
   },
   keyboardView: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -135,11 +175,6 @@ const styles = StyleSheet.create({
     // This ensures readable line length on larger screens
     maxWidth: 600,
     alignSelf: 'center',
-  },
-  title: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.lg,
   },
   initialMessage: {
     ...typography.body,

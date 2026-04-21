@@ -21,6 +21,7 @@ import { useItineraries } from '../contexts/ItineraryContext';
 import ApiService from '../services/api';
 import { calculateSearchBounds } from '../utils/adaptiveBounds';
 import { processMatchesForFilterData } from '../utils/filterDataProcessor';
+import { filterMatchesBySelection } from '../utils/matchFilterBySelection';
 import * as performanceTracker from '../utils/performanceTracker';
 import * as Haptics from 'expo-haptics';
 
@@ -1334,78 +1335,25 @@ const MapResultsScreen = ({ navigation, route }) => {
   // FIXED: Don't filter if filterData is not ready - return all matches to prevent race condition
   const getFilteredMatches = () => {
     if (!matches) return matches;
-    
-    // If filterData is not ready, return all matches (prevents race condition)
+
     if (!filterData || !filterData.matchIds || filterData.matchIds.length === 0) {
-      // Log once when filterData is not ready (for debugging)
       if (__DEV__ && matches.length > 0) {
         console.log('⚠️ [FILTER] Filter data not ready, showing all matches:', matches.length);
       }
       return matches;
     }
-    
+
     if (!selectedFilters) return matches;
-    
-    const { countries, leagues, teams } = selectedFilters;
-    // Normalize selected IDs to strings for consistent comparisons
-    const selectedCountryIds = (countries || []).map((id) => id?.toString());
-    const selectedLeagueIds = (leagues || []).map((id) => id?.toString());
-    const selectedTeamIds = (teams || []).map((id) => id?.toString());
-    
-    // If no filters are selected, return all matches
-    if (selectedCountryIds.length === 0 && selectedLeagueIds.length === 0 && selectedTeamIds.length === 0) {
-      return matches;
-    }
-    
-    // Reduced verbose logging
-    
-    const filtered = matches.filter(match => {
-      let matched = false;
-      
-      // Country OR
-      if (selectedCountryIds.length > 0) {
-        const matchCountry =
-          match.area?.code ||
-          match.area?.id?.toString() ||
-          (typeof match.venue?.country === 'string'
-            ? match.venue.country
-            : match.venue?.country?.id?.toString());
-        if (selectedCountryIds.includes(matchCountry)) {
-          matched = true;
-        }
-      }
-      
-      // League OR
-      if (selectedLeagueIds.length > 0) {
-        const matchLeague =
-          match.competition?.id?.toString() ||
-          match.competition?.code?.toString() ||
-          (typeof match.league === 'string'
-            ? match.league
-            : match.league?.id?.toString() || match.league?.name);
-        if (selectedLeagueIds.includes(matchLeague)) {
-          matched = true;
-        }
-      }
-      
-      // Team OR
-      if (selectedTeamIds.length > 0) {
-        const homeTeamId = match.teams?.home?.id;
-        const awayTeamId = match.teams?.away?.id;
-        const homeTeamIdStr = homeTeamId?.toString();
-        const awayTeamIdStr = awayTeamId?.toString();
-        const homeMatch = selectedTeamIds.includes(homeTeamIdStr) || selectedTeamIds.includes(homeTeamId);
-        const awayMatch = selectedTeamIds.includes(awayTeamIdStr) || selectedTeamIds.includes(awayTeamId);
-        if (homeMatch || awayMatch) {
-          matched = true;
-        }
-      }
-      
-      return matched;
-    });
-    
-    return filtered;
+    return filterMatchesBySelection(matches, selectedFilters, filterData);
   };
+
+  const previewMatchCount = useCallback(
+    (filters) => {
+      if (!matches) return 0;
+      return filterMatchesBySelection(matches, filters, filterData).length;
+    },
+    [matches, filterData]
+  );
 
   // Get the filtered matches for display (memoized)
   // FIXED: Include filterData in dependencies to ensure re-computation when filterData is ready
@@ -2528,8 +2476,8 @@ const MapResultsScreen = ({ navigation, route }) => {
     <View style={styles.container}>
       {/* Header Navigation */}
       <View style={styles.headerNav}>
-        <TouchableOpacity 
-          style={styles.backButton}
+        <TouchableOpacity
+          style={[styles.backButton, styles.headerNavSlot]}
           onPress={() => navigation.goBack()}
         >
           <Text style={styles.backButtonText}>←</Text>
@@ -2763,6 +2711,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         filterData={filterData}
         selectedFilters={selectedFilters}
         onFiltersChange={handleApplyFilters}
+        previewMatchCount={previewMatchCount}
       />
     </View>
   );
@@ -2791,6 +2740,12 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  /** Match headerRight width so the title block shares the same horizontal center as full-width overlays (e.g. Search this area). */
+  headerNavSlot: {
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backButtonText: {
     fontSize: 20,
     color: '#000',
@@ -2799,9 +2754,9 @@ const styles = StyleSheet.create({
   headerCenter: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    maxWidth: '60%', // Limit the width to prevent overlap
-    marginRight: 8, // Add margin to create separation from filter icon
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    minWidth: 0,
   },
   headerTitle: {
     fontSize: 16,
@@ -2814,8 +2769,8 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   headerRight: {
+    width: 56,
     padding: 8,
-    minWidth: 50, // Ensure minimum width for filter icon
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2911,9 +2866,9 @@ const styles = StyleSheet.create({
   floatingSearchButton: {
     position: 'absolute',
     // top is now set dynamically via animated value based on filter chips visibility
-    left: '50%',
-    transform: [{ translateX: -100 }],
-    width: 200,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   floatingSearchButtonInner: {
     backgroundColor: '#fff',

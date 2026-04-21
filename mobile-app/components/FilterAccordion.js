@@ -117,8 +117,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nestedSection: {
-    marginLeft: spacing.xl,
+    marginLeft: spacing.md,
     marginTop: spacing.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.borderLight,
+    paddingLeft: spacing.sm,
   },
 });
 

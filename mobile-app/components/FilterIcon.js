@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 const FilterIcon = ({ onPress, filterCount = 0 }) => {
@@ -13,7 +13,7 @@ const FilterIcon = ({ onPress, filterCount = 0 }) => {
       accessibilityRole="button"
     >
       <View style={styles.iconContainer}>
-        <Ionicons name="filter" size={24} color={colors.primary} />
+        <MaterialIcons name="tune" size={24} color={colors.text.primary} />
         {filterCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>

@@ -7,6 +7,7 @@ const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
 const emailService = require('../services/emailService');
 const { auth, adminAuth } = require('../middleware/auth');
+const { deleteUserAccount } = require('../services/deleteUserAccount');
 const router = express.Router();
 // Initialize WorkOS client lazily (only when needed)
 // This prevents the server from crashing if WorkOS keys are not set
@@ -26,6 +27,8 @@ const getWorkOSClient = () => {
 const isWorkOSConfigured = () => {
     return !!(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
 };
+/** Bump when Terms/Privacy meaningfully change (audit / future re-accept flows). */
+const LEGAL_DOCS_VERSION = process.env.LEGAL_DOCS_VERSION || '1.0';
 // Register a new user
 router.post('/register', [
     body('email')
@@ -36,7 +39,10 @@ router.post('/register', [
         .isLength({ min: 8 })
         .withMessage('Password must be at least 8 characters long')
         .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-        .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+        .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+    body('acceptedTerms')
+        .custom((value) => value === true || value === 'true')
+        .withMessage('You must accept the Terms of Service and Privacy Policy to create an account')
 ], async (req, res) => {
     try {
         // Check for validation errors
@@ -61,6 +67,10 @@ router.post('/register', [
             email,
             password,
             profile: profile || {},
+            legalAcceptance: {
+                termsVersion: LEGAL_DOCS_VERSION,
+                termsAcceptedAt: new Date()
+            },
             preferences: {
                 defaultLocation: {
                     city: '',
@@ -94,7 +104,8 @@ router.post('/register', [
                 role: user.role,
                 profile: user.profile,
                 preferences: user.preferences,
-                subscription: user.subscription
+                subscription: user.subscription,
+                legalAcceptance: user.legalAcceptance
             },
             token
         });
@@ -170,6 +181,19 @@ router.get('/me', auth, async (req, res) => {
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
+    }
+});
+// Delete current user account and associated PII (CCPA / consumer privacy)
+router.delete('/me', auth, async (req, res) => {
+    try {
+        await deleteUserAccount(req.user);
+        res.json({
+            success: true,
+            message: 'Your account and associated personal data have been permanently deleted.'
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ error: error.message || 'Failed to delete account' });
     }
 });
 // Logout user (optional - client-side token removal)

@@ -11,6 +11,7 @@ const FilterChip = ({ label, onRemove, type = 'default' }) => {
         onPress={onRemove}
         style={styles.removeButton}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        testID={`remove-${label}`}
         accessibilityLabel={`Remove ${label} filter`}
         accessibilityRole="button"
       >

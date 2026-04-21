@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     Alert
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -16,6 +17,9 @@ import NotificationService from '../services/notifications';
 import { executeNotificationPayload } from '../utils/notificationDeepLink';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 import { useNotificationInbox } from '../contexts/NotificationInboxContext';
+
+// Match TripsListScreen header horizontal padding
+const CARD_PADDING = 24;
 
 function formatRelativeTime(iso) {
     if (!iso) return '';
@@ -159,47 +163,83 @@ export default function NotificationsScreen() {
         [onPressItem]
     );
 
+    const listHeader = (
+        <>
+            <StatusBar style="dark" />
+            <View style={styles.screenHeader}>
+                <Text style={styles.screenHeaderTitle}>Alerts</Text>
+            </View>
+        </>
+    );
+
     if (loading && items.length === 0) {
         return (
-            <SafeAreaView style={styles.centered} edges={['bottom']}>
-                <ActivityIndicator size="large" color={colors.primary} />
+            <SafeAreaView style={styles.container} edges={['top']}>
+                {listHeader}
+                <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                </View>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['bottom']}>
-            <FlatList
-                data={items}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-                }
-                onEndReached={loadMore}
-                onEndReachedThreshold={0.3}
-                ListFooterComponent={
-                    loadingMore ? (
-                        <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
-                    ) : null
-                }
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <MaterialIcons name="notifications-none" size={48} color={colors.text.light} />
-                        <Text style={styles.emptyTitle}>No notifications yet</Text>
-                        <Text style={styles.emptySubtitle}>
-                            When we send updates about your trips, they will appear here.
-                        </Text>
-                    </View>
-                }
-                contentContainerStyle={items.length === 0 ? styles.emptyList : styles.listContent}
-            />
+        <SafeAreaView style={styles.container} edges={['top']}>
+            {listHeader}
+            <View style={styles.listWrap}>
+                <FlatList
+                    data={items}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderItem}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+                    }
+                    onEndReached={loadMore}
+                    onEndReachedThreshold={0.3}
+                    ListFooterComponent={
+                        loadingMore ? (
+                            <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
+                        ) : null
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.empty}>
+                            <MaterialIcons name="notifications-none" size={48} color={colors.text.light} />
+                            <Text style={styles.emptyTitle}>No notifications yet</Text>
+                            <Text style={styles.emptySubtitle}>
+                                When we send updates about your trips, they will appear here.
+                            </Text>
+                        </View>
+                    }
+                    contentContainerStyle={items.length === 0 ? styles.emptyList : styles.listContent}
+                />
+            </View>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
+        flex: 1,
+        backgroundColor: colors.card
+    },
+    screenHeader: {
+        paddingTop: spacing.lg + spacing.xs,
+        paddingBottom: spacing.md,
+        paddingHorizontal: CARD_PADDING,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.card,
+        position: 'relative'
+    },
+    screenHeaderTitle: {
+        fontSize: 32,
+        fontWeight: '700',
+        lineHeight: 32,
+        color: colors.text.primary,
+        textAlign: 'left'
+    },
+    listWrap: {
         flex: 1,
         backgroundColor: colors.background
     },

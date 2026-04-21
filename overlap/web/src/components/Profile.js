@@ -15,7 +15,12 @@ import {
   FormControl,
   InputLabel,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -23,16 +28,20 @@ import {
   Cancel as CancelIcon,
   PhotoCamera as PhotoCameraIcon
 } from '@mui/icons-material';
-
-
+import { useAuth } from './Auth';
+import { getBackendUrl } from '../utils/api';
 
 const Profile = () => {
+  const { logout } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Form states
   const [profile, setProfile] = useState({
@@ -78,7 +87,7 @@ const Profile = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:3001/api/preferences', {
+      const response = await fetch(`${getBackendUrl()}/api/preferences`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -123,7 +132,7 @@ const Profile = () => {
       const token = localStorage.getItem('token');
       
       // Save profile
-      const profileResponse = await fetch('http://localhost:3001/api/preferences/profile', {
+      const profileResponse = await fetch(`${getBackendUrl()}/api/preferences/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -133,7 +142,7 @@ const Profile = () => {
       });
 
       // Save preferences
-      const preferencesResponse = await fetch('http://localhost:3001/api/preferences', {
+      const preferencesResponse = await fetch(`${getBackendUrl()}/api/preferences`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -153,6 +162,40 @@ const Profile = () => {
       setError('Network error: ' + err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      setError('Type DELETE in the box to confirm permanent account deletion.');
+      return;
+    }
+    setDeletingAccount(true);
+    setError('');
+    setMessage('');
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${getBackendUrl()}/api/auth/me`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setDeleteDialogOpen(false);
+        setDeleteConfirmText('');
+        logout();
+        return;
+      }
+      setError(data.error || 'Could not delete account. Try again or contact support.');
+    } catch (err) {
+      setError(err.message || 'Network error');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -415,9 +458,64 @@ const Profile = () => {
             />
           </Grid>
 
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+              Account
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Permanently delete your account and associated personal data (profile, trips, preferences,
+              device tokens, and linked records). This cannot be undone.
+            </Typography>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={() => {
+                setDeleteConfirmText('');
+                setDeleteDialogOpen(true);
+              }}
+            >
+              Delete my account
+            </Button>
+          </Grid>
 
         </Grid>
       </Paper>
+
+      <Dialog open={deleteDialogOpen} onClose={() => !deletingAccount && setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete account?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            This will permanently remove your account and personal information from our systems, including
+            trips, saved matches, preferences, and push notification registration. Feedback you submitted may
+            be kept in anonymized form without your name or email.
+          </DialogContentText>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Type <strong>DELETE</strong> to confirm:
+          </Typography>
+          <TextField
+            fullWidth
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="DELETE"
+            disabled={deletingAccount}
+            autoComplete="off"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deletingAccount}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteAccount}
+            color="error"
+            variant="contained"
+            disabled={deletingAccount || deleteConfirmText !== 'DELETE'}
+          >
+            {deletingAccount ? 'Deleting…' : 'Delete forever'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

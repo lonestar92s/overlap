@@ -17,8 +17,11 @@ import {
   Select,
   MenuItem,
   FormHelperText,
-  Chip
+  Chip,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Login as LoginIcon,
   PersonAdd as PersonAddIcon,
@@ -94,6 +97,7 @@ const Auth = () => {
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [loginForm, setLoginForm] = useState({
     email: '',
@@ -115,6 +119,7 @@ const Auth = () => {
     setMessage('');
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setAcceptedTerms(false);
   };
 
   const handleClickShowPassword = () => {
@@ -176,6 +181,12 @@ const Auth = () => {
       return;
     }
 
+    if (!acceptedTerms) {
+      setError('You must accept the Terms of Service and Privacy Policy to create an account.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${getBackendUrl()}/api/auth/register`, {
         method: 'POST',
@@ -186,6 +197,7 @@ const Auth = () => {
           email: registerForm.email,
           password: registerForm.password,
           subscriptionTier: registerForm.subscriptionTier,
+          acceptedTerms: true,
           profile: {
             firstName: registerForm.firstName,
             lastName: registerForm.lastName
@@ -400,6 +412,30 @@ const Auth = () => {
                 </FormHelperText>
               </FormControl>
             </Box>
+
+            <FormControlLabel
+              sx={{ alignItems: 'flex-start', mb: 2, ml: 0 }}
+              control={
+                <Checkbox
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Typography variant="body2" color="text.secondary">
+                  I agree to the{' '}
+                  <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer">
+                    Terms of Service
+                  </Link>
+                  {' '}and{' '}
+                  <Link component={RouterLink} to="/privacy" target="_blank" rel="noopener noreferrer">
+                    Privacy Policy
+                  </Link>
+                  .
+                </Typography>
+              }
+            />
             
             <Button
               type="submit"
@@ -407,7 +443,7 @@ const Auth = () => {
               variant="contained"
               size="large"
               startIcon={loading ? <CircularProgress size={20} /> : <PersonAddIcon />}
-              disabled={loading}
+              disabled={loading || !acceptedTerms}
             >
               {loading ? 'Creating Account...' : 'Create Account'}
             </Button>

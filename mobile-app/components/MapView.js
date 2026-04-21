@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
   },
   locationButton: {
     position: 'absolute',
-    bottom: 120, // Moved up to be above the bottom sheet
+    bottom: 72, // Above bottom sheet; lower number = closer to bottom edge
     right: 12, // Moved closer to the right edge (was 20)
     width: 44,
     height: 44,

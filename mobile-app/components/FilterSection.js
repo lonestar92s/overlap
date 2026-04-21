@@ -63,11 +63,9 @@ const FilterSection = ({
             hasNestedItems={hasNestedItems}
             accessibilityLabel={`Filter by ${item.name} ${title.toLowerCase()}`}
           >
-            {isExpanded && nestedItems && nestedItems.length > 0 && renderNestedContent && (
-              <View style={styles.nestedSection}>
-                {renderNestedContent(item, nestedItems)}
-              </View>
-            )}
+            {isExpanded && nestedItems && nestedItems.length > 0 && renderNestedContent
+              ? renderNestedContent(item, nestedItems)
+              : null}
           </FilterAccordion>
         );
       })}
@@ -100,10 +98,6 @@ const styles = StyleSheet.create({
     color: colors.text.light,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  nestedSection: {
-    marginLeft: spacing.xl,
     marginTop: spacing.sm,
   },
 });
