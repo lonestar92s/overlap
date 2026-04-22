@@ -19,6 +19,8 @@ const MatchMapView = forwardRef(({
   travelTimes = {},
   style = {},
   showLocationButton = true,
+  /** Distance from map container bottom to the location FAB’s bottom edge (e.g. above sheet + Ask Agent). */
+  locationButtonBottom = 72,
   onMapPress = () => {},
 }, ref) => {
   const mapRef = useRef();
@@ -756,6 +758,7 @@ const MatchMapView = forwardRef(({
         <TouchableOpacity
           style={[
             styles.locationButton,
+            { bottom: locationButtonBottom },
             !userLocation && styles.locationButtonInactive
           ]}
           onPress={() => {
@@ -806,8 +809,8 @@ const styles = StyleSheet.create({
   },
   locationButton: {
     position: 'absolute',
-    bottom: 72, // Above bottom sheet; lower number = closer to bottom edge
-    right: 12, // Moved closer to the right edge (was 20)
+    // bottom set per-screen (default 72) — above bottom sheet / stacked FABs
+    right: 12,
     width: 44,
     height: 44,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',

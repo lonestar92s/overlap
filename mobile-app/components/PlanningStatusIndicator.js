@@ -67,11 +67,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     backgroundColor: '#F8F9FA',
     borderRadius: 8,
-    marginTop: 8
+    marginTop: 10
   },
   containerSmall: {
     paddingVertical: 4,
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4
+    marginBottom: 5
   },
   statusIconSmall: {
     borderRadius: 10,

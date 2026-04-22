@@ -24,6 +24,7 @@ import { processMatchesForFilterData } from '../utils/filterDataProcessor';
 import { filterMatchesBySelection } from '../utils/matchFilterBySelection';
 import * as performanceTracker from '../utils/performanceTracker';
 import * as Haptics from 'expo-haptics';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import HeartButton from '../components/HeartButton';
 import SearchModal from '../components/SearchModal';
@@ -115,6 +116,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   
   // Bottom sheet state
   const [sheetState, setSheetState] = useState('collapsed');
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const bottomSheetRef = useRef(null);
   const filterBottomSheetRef = useRef(null);
   
@@ -124,6 +126,7 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Overlay card state (Airbnb-like) - selection is by venue group
   const [selectedVenueIndex, setSelectedVenueIndex] = useState(null);
   const [overlayMatchFallback, setOverlayMatchFallback] = useState(null);
+  const askAgentOpacity = useRef(new Animated.Value(1)).current;
   
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
@@ -1934,47 +1937,89 @@ const MapResultsScreen = ({ navigation, route }) => {
     // User must explicitly tap "Search this area" to fetch new data
   }, [selectedFilters, filterData, updateSelectedFilters]);
 
-  // Animated height for filter chips container
+  // Animated height for filter chips container (active filters only)
   const filterChipsHeight = useRef(new Animated.Value(0)).current;
   const filterChipsContentRef = useRef(null);
   const [filterChipsMeasuredHeight, setFilterChipsMeasuredHeight] = useState(null); // null until measured
   const hasMeasuredRef = useRef(false);
 
-  // Measure filter chips content height when filters change
-  const onFilterChipsContentLayout = useCallback((event) => {
-    const { height } = event.nativeEvent.layout;
-    if (height > 0 && getFilterLabels.length > 0) {
-      const measuredHeight = height + (spacing.sm * 2); // Add padding to measured height
-      setFilterChipsMeasuredHeight(measuredHeight);
-      hasMeasuredRef.current = true;
-      // Update height with measured value
-      filterChipsHeight.setValue(measuredHeight);
+  // Bottom-right FAB stack: Ask Agent sits just above collapsed sheet; location FAB above Ask.
+  const collapsedSheetPx = useMemo(
+    () => (typeof snapPoints[0] === 'number' ? snapPoints[0] : 48),
+    [snapPoints]
+  );
+  const askAgentBottomOffset = useMemo(
+    () => insets.bottom + collapsedSheetPx + spacing.sm,
+    [insets.bottom, collapsedSheetPx]
+  );
+  /** Reserve vertical space for Ask Agent chip + gap so the location button clears it. */
+  const askAgentStackReservePx = 56;
+  const locationFabBottomOffset = useMemo(
+    () => askAgentBottomOffset + askAgentStackReservePx + spacing.sm,
+    [askAgentBottomOffset]
+  );
+  const isMatchOverlayOpen = selectedVenueIndex !== null || !!overlayMatchFallback;
+  const isMatchListDrawerOpen = isDrawerExpanded;
+  const shouldHideAskAgent = isMatchOverlayOpen || isMatchListDrawerOpen;
+
+  const applySheetStateFromIndex = useCallback((index) => {
+    // Robust for non-integer / dynamic indices: anything above 0 means drawer is open.
+    setIsDrawerExpanded(index > 0);
+    if (index === -1) {
+      setSheetState('closed');
+      return;
     }
-  }, [getFilterLabels.length, filterChipsHeight]);
+    if (index <= 0) {
+      setSheetState('collapsed');
+      return;
+    }
+    if (index >= 2) {
+      setSheetState('full');
+      return;
+    }
+    setSheetState('half');
+  }, []);
+
+  useEffect(() => {
+    Animated.timing(askAgentOpacity, {
+      toValue: shouldHideAskAgent ? 0 : 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [shouldHideAskAgent, askAgentOpacity]);
+
+  // Measure filter chips content height when filters change
+  const onFilterChipsContentLayout = useCallback(
+    (event) => {
+      const { height } = event.nativeEvent.layout;
+      if (height > 0 && getFilterLabels.length > 0) {
+        const measuredHeight = height + spacing.sm * 2;
+        setFilterChipsMeasuredHeight(measuredHeight);
+        hasMeasuredRef.current = true;
+        filterChipsHeight.setValue(measuredHeight);
+      }
+    },
+    [getFilterLabels.length, filterChipsHeight]
+  );
 
   // Animate filter chips container when filters change
   useEffect(() => {
     const hasFilters = getFilterLabels.length > 0;
-    
+
     if (hasFilters) {
-      // Use measured height or fallback to a reasonable default (60px minimum)
       const targetHeight = filterChipsMeasuredHeight || 60;
-      // If we haven't measured yet, set immediately to default so container is visible for measurement
       if (!hasMeasuredRef.current) {
         filterChipsHeight.setValue(targetHeight);
       } else {
-        // We have a measurement, animate smoothly
         Animated.timing(filterChipsHeight, {
           toValue: targetHeight,
           duration: 250,
-          useNativeDriver: false, // height animation doesn't support native driver
+          useNativeDriver: false,
         }).start();
       }
     } else {
-      // Reset measurement flag when filters are cleared
       hasMeasuredRef.current = false;
       setFilterChipsMeasuredHeight(null);
-      // Animate to 0
       Animated.timing(filterChipsHeight, {
         toValue: 0,
         duration: 250,
@@ -1983,20 +2028,20 @@ const MapResultsScreen = ({ navigation, route }) => {
     }
   }, [getFilterLabels.length, filterChipsMeasuredHeight, filterChipsHeight]);
 
-  // Animated search button position based on filter chips height
+  // Floating "Search this area" — below header and optional filter chips row
   const searchButtonTopAnimated = useRef(new Animated.Value(160)).current;
-  
-  // Calculate dynamic search button position based on filter chips visibility
+
   useEffect(() => {
-    const headerHeight = 120; // Approximate header height (60 paddingTop + 16 paddingBottom + content)
-    const filterChipsHeightValue = getFilterLabels.length > 0 ? filterChipsMeasuredHeight || 50 : 0;
-    const buttonSpacing = spacing.lg; // 24px spacing for better visual separation
+    const headerHeight = 120;
+    const filterChipsHeightValue =
+      getFilterLabels.length > 0 ? filterChipsMeasuredHeight || 50 : 0;
+    const buttonSpacing = spacing.lg;
     const targetTop = headerHeight + filterChipsHeightValue + buttonSpacing;
-    
+
     Animated.timing(searchButtonTopAnimated, {
       toValue: targetTop,
       duration: 250,
-      useNativeDriver: false, // position animation doesn't support native driver
+      useNativeDriver: false,
     }).start();
   }, [getFilterLabels.length, filterChipsMeasuredHeight, searchButtonTopAnimated]);
 
@@ -2519,28 +2564,28 @@ const MapResultsScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Filter Chips Section - Animated */}
+      {/* Filter chips row (in-flow) — active filters only */}
       {getFilterLabels.length > 0 && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.filterChipsContainer,
             {
               height: filterChipsHeight,
               overflow: 'hidden',
-            }
+            },
           ]}
         >
           <View
             ref={filterChipsContentRef}
             onLayout={onFilterChipsContentLayout}
-            style={{ minHeight: 60 }} // Ensure minimum height for measurement
+            style={{ minHeight: 60 }}
           >
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterChipsContent}
             >
-              {getFilterLabels.map(filter => (
+              {getFilterLabels.map((filter) => (
                 <FilterChip
                   key={filter.id}
                   label={filter.label}
@@ -2558,7 +2603,7 @@ const MapResultsScreen = ({ navigation, route }) => {
         ref={mapRef}
         matches={mapMarkersMatches}
         initialRegion={mapRegion || getInitialRegion()}
-
+        locationButtonBottom={locationFabBottomOffset}
         onRegionChange={handleMapRegionChange}
         onMarkerPress={handleMarkerPress}
         onMapPress={handleMapPress}
@@ -2569,6 +2614,27 @@ const MapResultsScreen = ({ navigation, route }) => {
         }
         style={styles.map}
       />
+
+      {/* Ask Agent — bottom-right, above collapsed sheet; location FAB stacked above */}
+      <Animated.View
+        style={[
+          styles.floatingAskAgent,
+          { bottom: askAgentBottomOffset, opacity: askAgentOpacity },
+        ]}
+        pointerEvents={shouldHideAskAgent ? 'none' : 'box-none'}
+      >
+        <TouchableOpacity
+          style={styles.askAgentChip}
+          onPress={() => undefined}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ask Agent"
+          testID="ask-agent-chip"
+        >
+          <MaterialIcons name="auto-awesome" size={20} color={colors.primary} style={styles.askAgentChipIcon} />
+          <Text style={styles.askAgentChipLabel}>Ask Agent</Text>
+        </TouchableOpacity>
+      </Animated.View>
       
       {/* Floating Search Button - Always visible like Google Maps */}
       {/* User can re-search current area or trigger search after panning to new region */}
@@ -2602,15 +2668,8 @@ const MapResultsScreen = ({ navigation, route }) => {
       <BottomSheet
         ref={bottomSheetRef}
         snapPoints={snapPoints}
-        onChange={(index) => {
-          const states = ['collapsed', 'half', 'full'];
-          if (index === -1) {
-            setSheetState('closed');
-          } else {
-            setSheetState(states[index]);
-            // Filter drawer can remain open on top - no need to close it
-          }
-        }}
+        onAnimate={(_fromIndex, toIndex) => applySheetStateFromIndex(toIndex)}
+        onChange={(index) => applySheetStateFromIndex(index)}
         enablePanDownToClose={false}
         enableContentPanningGesture={true}
         enableHandlePanningGesture={true}
@@ -3210,6 +3269,35 @@ const styles = StyleSheet.create({
   },
   filterChipsContent: {
     paddingRight: spacing.md,
+  },
+  floatingAskAgent: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 5,
+    alignItems: 'flex-end',
+  },
+  askAgentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  askAgentChipIcon: {
+    marginRight: spacing.xs,
+  },
+  askAgentChipLabel: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
   },
   loadingOverlay: {
     position: 'absolute',

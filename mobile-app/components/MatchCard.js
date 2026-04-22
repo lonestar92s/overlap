@@ -123,6 +123,11 @@ const MatchCard = ({
   };
 
   const isOverlay = variant === 'overlay' || variant === 'compact';
+  const leagueName = useMemo(
+    () => (typeof league === 'string' ? league : league?.name),
+    [league]
+  );
+  const shouldShowLeagueBadge = useMemo(() => !!leagueName, [leagueName]);
 
   // Extract team data to avoid inline functions
   const homeTeamName = useMemo(() => {
@@ -252,6 +257,7 @@ const MatchCard = ({
         </View>
         
         <View style={styles.headerRight}>
+          <View style={styles.headerTopRow}>
           {/* Match Status Badge - Only show for non-upcoming matches */}
           {(matchStatus.type !== 'upcoming') && (
             <View style={[
@@ -268,34 +274,6 @@ const MatchCard = ({
               </Text>
             </View>
           )}
-
-          {/* League Badge */}
-          {useMemo(() => {
-            const shouldShowBadge = !!(league?.name || (typeof league === 'string' && league));
-            
-            if (shouldShowBadge) {
-              return (
-                <View style={styles.leagueBadge}>
-                  {typeof league !== 'string' && (league?.logo || league?.emblem) ? (
-                    <Image 
-                      source={{ uri: league.logo || league.emblem }} 
-                      style={styles.leagueLogoSmall} 
-                      resizeMode="contain"
-                      onError={handleLeagueLogoError}
-                    />
-                  ) : null}
-                  <Text
-                    style={styles.leagueText}
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
-                  >
-                    {typeof league === 'string' ? league : league.name}
-                  </Text>
-                </View>
-              );
-            }
-            return null;
-          }, [league])}
           
           {showHeart && matchId !== 'unknown' && (
             <HeartButton
@@ -305,6 +283,28 @@ const MatchCard = ({
               size={20}
               style={styles.heartButton}
             />
+          )}
+          </View>
+
+          {/* League Badge */}
+          {shouldShowLeagueBadge && (
+            <View style={styles.leagueBadge}>
+              {typeof league !== 'string' && (league?.logo || league?.emblem) ? (
+                <Image 
+                  source={{ uri: league.logo || league.emblem }} 
+                  style={styles.leagueLogoSmall} 
+                  resizeMode="contain"
+                  onError={handleLeagueLogoError}
+                />
+              ) : null}
+              <Text
+                style={styles.leagueText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {leagueName}
+              </Text>
+            </View>
           )}
         </View>
       </View>
@@ -499,11 +499,16 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     flex: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    marginLeft: spacing.sm,
+    minWidth: 0,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacing.sm,
-    minWidth: 0,
   },
   statusBadge: {
     paddingHorizontal: spacing.sm,
@@ -537,13 +542,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    flexShrink: 1,
+    marginTop: spacing.xs,
+    maxWidth: '100%',
     minWidth: 0,
   },
   leagueText: {
     ...typography.caption,
     color: colors.text.secondary,
     fontWeight: '500',
+    maxWidth: 140,
     flexShrink: 1,
   },
   leagueLogoSmall: {
@@ -566,6 +573,8 @@ const styles = StyleSheet.create({
   },
   teamInfo: {
     alignItems: 'center',
+    width: '100%',
+    minWidth: 0,
   },
   teamName: {
     ...typography.body,
@@ -573,6 +582,7 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     textAlign: 'center',
     marginBottom: spacing.sm,
+    width: '100%',
     maxWidth: '100%',
   },
   overlayTeamName: {
