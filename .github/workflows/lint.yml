@@ -13,7 +13,7 @@ jobs:
     
     defaults:
       run:
-        working-directory: overlap/backend
+        working-directory: backend
     
     steps:
       - name: Checkout code
@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'npm'
-          cache-dependency-path: overlap/backend/package-lock.json
+          cache-dependency-path: backend/package-lock.json
       
       - name: Install dependencies
         run: |

@@ -269,7 +269,7 @@ function AuthenticatedTabs() {
                   iconName = 'manage-search';
                   break;
                 case 'MemoriesTab':
-                  iconName = 'memory';
+                  iconName = 'photo-camera';
                   break;
                 case 'TripsTab':
                   iconName = 'work-outline';

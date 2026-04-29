@@ -22,6 +22,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { useItineraries } from '../contexts/ItineraryContext';
+import { useAuth } from '../contexts/AuthContext';
 import MatchCard from '../components/MatchCard';
 import HeartButton from '../components/HeartButton';
 import MatchPlanningModal from '../components/MatchPlanningModal';
@@ -48,6 +49,7 @@ import { useRecommendations } from '../hooks/useRecommendations';
  */
 const TripOverviewScreen = ({ navigation, route }) => {
   const { getItineraryById, updateMatchPlanning, addMatchToItinerary, deleteItinerary, refreshItinerary, updateItinerary } = useItineraries();
+  const { user } = useAuth();
   const itineraryId = route?.params?.itineraryId ?? route?.params?.tripId;
   const fromAccountTab = route?.params?.fromAccountTab === true;
   const [itinerary, setItinerary] = useState(null);
@@ -121,6 +123,18 @@ const TripOverviewScreen = ({ navigation, route }) => {
   const descriptionInputRef = useRef(null);
   const notesSectionRef = useRef(null);
   const [notesSectionY, setNotesSectionY] = useState(0);
+  /** When true, in-flight async work must not call goBack() (would leave Trips and return e.g. to MapResults). */
+  const exitedToTripsRef = useRef(false);
+
+  const navigateToTripsList = React.useCallback(() => {
+    exitedToTripsRef.current = true;
+    navigation.navigate('TripsTab', { screen: 'TripsList' });
+  }, [navigation]);
+
+  // New trip id = clear delete guard so focus/refresh callbacks behave normally
+  useEffect(() => {
+    exitedToTripsRef.current = false;
+  }, [itineraryId]);
 
   // Detect if this is a past trip (completed trip)
   const isPastTrip = itinerary?.isCompleted === true;
@@ -187,9 +201,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
                               response.error?.includes('not found');
             
             if (isNotFound) {
-              // Trip was deleted - navigate back
+              // Trip was deleted or missing — go to Trips list (never goBack: stack may be MapResults → Trips)
               setLoading(false);
-              navigation.goBack();
+              navigateToTripsList();
               return;
             }
             
@@ -202,9 +216,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
               // Recommendations are automatically fetched by useRecommendations hook
               // The hook will fetch when tripId becomes available
             } else {
-              // Not in context and API failed - navigate back
+              // Not in context and API failed — Trips list is the safe landing
               setLoading(false);
-              navigation.goBack();
+              navigateToTripsList();
             }
           }
         } catch (error) {
@@ -219,9 +233,9 @@ const TripOverviewScreen = ({ navigation, route }) => {
             setNotesText(foundItinerary.notes || '');
             // Recommendations are automatically fetched by useRecommendations hook
           } else {
-            // Not in context and error occurred - navigate back
+            // Not in context and error occurred — Trips list is the safe landing
             setLoading(false);
-            navigation.goBack();
+            navigateToTripsList();
           }
         } finally {
           setLoading(false);
@@ -232,7 +246,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
       // No itineraryId provided, stop loading
       setLoading(false);
     }
-  }, [itineraryId, getItineraryById, navigation]);
+  }, [itineraryId, getItineraryById, navigation, navigateToTripsList]);
 
   // Refetch recommendations when screen comes into focus (to sync with other screens)
   // Use a ref to track if this is the initial mount to avoid double-fetching
@@ -290,9 +304,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
         isRefreshingRef.current = true;
         lastRefreshTimeRef.current = now;
         refreshItinerary(itineraryId).then(updatedItinerary => {
+          if (exitedToTripsRef.current) {
+            return;
+          }
           // Check if itinerary was deleted
           if (updatedItinerary?.deleted) {
-            navigation.goBack();
+            navigateToTripsList();
             return;
           }
           if (updatedItinerary) {
@@ -305,8 +322,8 @@ const TripOverviewScreen = ({ navigation, route }) => {
               refetchRecommendations(false);
             }
           } else {
-            // Couldn't refresh - might be deleted, navigate back
-            navigation.goBack();
+            // Couldn't refresh - might be deleted; avoid goBack (cross-tab)
+            navigateToTripsList();
           }
         }).catch(err => {
           if (__DEV__) {
@@ -333,9 +350,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
         lastRefreshTimeRef.current = now;
         // Refresh itinerary to get latest recommendations from backend
         refreshItinerary(itineraryId).then(updatedItinerary => {
+          if (exitedToTripsRef.current) {
+            return;
+          }
           // Check if itinerary was deleted
           if (updatedItinerary?.deleted) {
-            navigation.goBack();
+            navigateToTripsList();
             return;
           }
           if (updatedItinerary) {
@@ -355,7 +375,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         lastRefreshTimeRef.current = now;
         refetchRecommendations(false); // Don't force refresh, just fetch normally
       }
-    }, [itineraryId, refreshItinerary, refetchRecommendations, getItineraryById, navigation]) // Removed 'itinerary' from dependencies to prevent infinite loop
+    }, [itineraryId, refreshItinerary, refetchRecommendations, getItineraryById, navigation, navigateToTripsList]) // Removed 'itinerary' from dependencies to prevent infinite loop
   );
 
   // Refresh itinerary after flight is added
@@ -1055,7 +1075,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </Text>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => navigateToTripsList()}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -1073,7 +1093,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
         </Text>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => navigateToTripsList()}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -1192,7 +1212,7 @@ const TripOverviewScreen = ({ navigation, route }) => {
               <View style={styles.profileIcon}>
                 <Text style={styles.profileIconText}>A</Text>
               </View>
-              <Text style={styles.userName}>Andrew Aluko</Text>
+              <Text style={styles.userName}>{user?.username || user?.email?.split('@')[0] || 'User'}</Text>
             </View>
             <TouchableOpacity style={styles.followButton}>
               <Text style={styles.followButtonText}>Follow</Text>
@@ -1722,10 +1742,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
                         style: 'destructive',
                         onPress: async () => {
                           try {
+                            // Block stale refresh/load callbacks from calling goBack after trip is gone
+                            exitedToTripsRef.current = true;
                             await deleteItinerary(itinerary.id || itinerary._id);
-                            // Navigate back to trips list after successful deletion
-                            navigation.goBack();
+                            navigateToTripsList();
                           } catch (error) {
+                            exitedToTripsRef.current = false;
                             console.error('Error deleting trip:', error);
                             Alert.alert('Error', 'Failed to delete trip. Please try again.');
                           }

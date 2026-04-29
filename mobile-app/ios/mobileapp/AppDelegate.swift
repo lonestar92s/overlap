@@ -62,6 +62,11 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
 
   override func bundleURL() -> URL? {
 #if DEBUG
+    // On iOS Simulator, force localhost to avoid stale LAN host/IP resolution
+    // after workspace or network changes.
+#if targetEnvironment(simulator)
+    RCTBundleURLProvider.sharedSettings().jsLocation = "127.0.0.1:8081"
+#endif
     return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
 #else
     return Bundle.main.url(forResource: "main", withExtension: "jsbundle")

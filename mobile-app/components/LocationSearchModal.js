@@ -91,6 +91,9 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // State to track Who section position for scrolling
   const [whoSectionY, setWhoSectionY] = useState(0);
 
+  // When section Y for scroll-into-view (ref so we don't re-scroll when layout shifts other cards)
+  const whenSectionYRef = useRef(0);
+
   // Load recent searches
   useEffect(() => {
     if (visible) {
@@ -145,8 +148,28 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       setWhoSearchQuery('');
       setWhoSearchResults({ leagues: [], teams: [] });
       setWhoExpanded(false);
+      whenSectionYRef.current = 0;
     }
   }, [visible, initialLocation]);
+
+  // Scroll so the When calendar (bottom row / pills) is reachable above footer actions when it opens
+  useEffect(() => {
+    if (!visible || !whenExpanded || !showCalendar) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const y = whenSectionYRef.current;
+      if (y > 0) {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, y - 50),
+          animated: true,
+        });
+      } else {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [visible, whenExpanded, showCalendar]);
 
   const loadRecentSearches = async () => {
     try {
@@ -893,6 +916,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           preSelectedFilters,
           isFromRecentSearch: fromRecentSearch,
           _performanceStartTime: searchStartTime,
+          openedFromSearchModal: true,
         });
       } else {
         Alert.alert('Error', 'Failed to search matches');
@@ -1110,7 +1134,12 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           </View>
 
           {/* When Card - Collapsible */}
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              whenSectionYRef.current = event.nativeEvent.layout.y;
+            }}
+          >
             <TouchableOpacity
               style={styles.cardHeader}
               onPress={() => {

@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
+import { Alert, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import TripOverviewScreen from '../../screens/TripOverviewScreen';
-import { ItineraryProvider } from '../../contexts/ItineraryContext';
+import { ItineraryProvider, useItineraries } from '../../contexts/ItineraryContext';
 import ApiService from '../../services/api';
 
 // Mock dependencies
@@ -43,12 +44,13 @@ jest.mock('../../components/HomeBaseSection', () => {
   return (props) => <View testID="home-base-section" />;
 });
 
-// Mock the useItineraries hook
-const mockUseItineraries = jest.fn();
 jest.mock('../../contexts/ItineraryContext', () => ({
-  ...jest.requireActual('../../contexts/ItineraryContext'),
-  useItineraries: mockUseItineraries,
+  ItineraryProvider: ({ children }) => children,
+  useItineraries: jest.fn(),
 }));
+
+// Mock the useItineraries hook
+const mockUseItineraries = useItineraries;
 
 jest.mock('../../hooks/useRecommendations', () => ({
   useRecommendations: () => ({
@@ -158,7 +160,7 @@ describe('TripOverviewScreen', () => {
       });
     });
 
-    it('should navigate back when trip is deleted (404) and not in context', async () => {
+    it('should navigate to Trips list when trip is deleted (404) and not in context', async () => {
       // Configure mock to return null (trip not found in context)
       mockUseItineraries.mockReturnValue({
         getItineraryById: jest.fn(() => null),
@@ -182,10 +184,11 @@ describe('TripOverviewScreen', () => {
 
       renderTripOverviewScreen();
 
-      // Wait for navigation to be called
+      // Wait for navigation to Trips (never goBack — would return to Search/Map stack)
       await waitFor(() => {
-        expect(mockNavigation.goBack).toHaveBeenCalled();
+        expect(mockNavigation.navigate).toHaveBeenCalledWith('TripsTab', { screen: 'TripsList' });
       });
+      expect(mockNavigation.goBack).not.toHaveBeenCalled();
     });
 
     it('should not attempt API call when trip exists in context (preventing deleted trip errors)', async () => {
@@ -233,6 +236,59 @@ describe('TripOverviewScreen', () => {
 
       // Verify navigation back is not called (since trip exists in context)
       expect(mockNavigation.goBack).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Trip Deletion Navigation', () => {
+    it('should navigate to Trips tab/list after successful trip deletion', async () => {
+      const mockTrip = {
+        id: 'test-trip-id',
+        _id: 'test-trip-id',
+        name: 'Test Trip',
+        description: 'Test Description',
+        matches: [],
+      };
+      const mockDeleteItinerary = jest.fn().mockResolvedValue({ success: true });
+
+      mockUseItineraries.mockReturnValue({
+        getItineraryById: jest.fn(() => mockTrip),
+        updateMatchPlanning: jest.fn(),
+        addMatchToItinerary: jest.fn(),
+        deleteItinerary: mockDeleteItinerary,
+        refreshItinerary: jest.fn(),
+        updateItinerary: jest.fn(),
+        itineraries: [mockTrip],
+        loading: false,
+      });
+
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        if (deleteButton?.onPress) {
+          deleteButton.onPress();
+        }
+      });
+
+      const { UNSAFE_getAllByType, getAllByText } = renderTripOverviewScreen();
+
+      const settingsButton = UNSAFE_getAllByType(TouchableOpacity).find((touchable) => {
+        const children = React.Children.toArray(touchable.props.children);
+        return children.some((child) => child?.props?.name === 'more-vert');
+      });
+
+      expect(settingsButton).toBeTruthy();
+      fireEvent.press(settingsButton);
+      fireEvent.press(getAllByText('Delete')[0]);
+
+      await waitFor(() => {
+        expect(mockDeleteItinerary).toHaveBeenCalledWith('test-trip-id');
+      });
+
+      await waitFor(() => {
+        expect(mockNavigation.navigate).toHaveBeenCalledWith('TripsTab', { screen: 'TripsList' });
+      });
+
+      expect(mockNavigation.goBack).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
     });
   });
 });

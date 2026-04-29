@@ -9,7 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  Linking
+  Linking,
+  Image
 } from 'react-native';
 import { Input, Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -115,9 +116,12 @@ const RegisterScreen = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.header}>
-            <MaterialIcons name="sports-soccer" size={80} color={colors.primary} />
-            <Text style={styles.title}>Join the Community</Text>
-            <Text style={styles.subtitle}>Create your account to start planning football trips</Text>
+            <Image
+              source={require('../assets/overlap_logo_variant_3.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="Overlap logo"
+            />
           </View>
 
           <View style={styles.form}>
@@ -265,7 +269,7 @@ const RegisterScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   keyboardAvoid: {
     flex: 1,
@@ -277,18 +281,12 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.lg,
   },
-  title: {
-    ...typography.h1Large,
-    color: colors.text.primary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    textAlign: 'center',
+  logo: {
+    width: 260,
+    height: 60,
+    marginBottom: 0,
   },
   form: {
     backgroundColor: colors.card,

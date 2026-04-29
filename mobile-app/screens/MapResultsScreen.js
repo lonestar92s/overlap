@@ -10,6 +10,10 @@ import {
   ActivityIndicator,
   ScrollView,
   Animated,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -51,10 +55,36 @@ function getMatchVenueCoordIssue(match) {
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
-  const { searchParams, matches: initialMatches, initialRegion, hasWho, preSelectedFilters, _performanceStartTime, isFromRecentSearch } = route.params || {};
+  const {
+    searchParams,
+    matches: initialMatches,
+    initialRegion,
+    hasWho,
+    preSelectedFilters,
+    _performanceStartTime,
+    isFromRecentSearch,
+    openedFromSearchModal,
+  } = route.params || {};
   
   // Track initial search end-to-end performance (if coming from LocationSearchModal)
   const initialSearchTimerRef = useRef(null);
+
+  /** Home search modal flow: reopen modal on Search; other entry points use normal stack pop */
+  const navigateBackFromMapResults = useCallback(() => {
+    if (openedFromSearchModal) {
+      navigation.navigate('Search', { openLocationSearchModal: true });
+    } else {
+      navigation.goBack();
+    }
+  }, [navigation, openedFromSearchModal]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      navigateBackFromMapResults();
+      return true;
+    });
+    return () => sub.remove();
+  }, [navigateBackFromMapResults]);
   
   // Search state
   const [location, setLocation] = useState(searchParams?.location || null);
@@ -131,6 +161,8 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [askAgentModalVisible, setAskAgentModalVisible] = useState(false);
+  const [askAgentPrompt, setAskAgentPrompt] = useState('');
   
   // Request cancellation and tracking
   const [currentRequestId, setCurrentRequestId] = useState(0);
@@ -2523,7 +2555,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       <View style={styles.headerNav}>
         <TouchableOpacity
           style={[styles.backButton, styles.headerNavSlot]}
-          onPress={() => navigation.goBack()}
+          onPress={navigateBackFromMapResults}
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
@@ -2625,7 +2657,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       >
         <TouchableOpacity
           style={styles.askAgentChip}
-          onPress={() => undefined}
+          onPress={() => setAskAgentModalVisible(true)}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Ask Agent"
@@ -2772,6 +2804,62 @@ const MapResultsScreen = ({ navigation, route }) => {
         onFiltersChange={handleApplyFilters}
         previewMatchCount={previewMatchCount}
       />
+
+      {askAgentModalVisible && (
+        <View style={styles.askAgentOverlay} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.askAgentBackdrop}
+            activeOpacity={1}
+            onPress={() => setAskAgentModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close Ask Agent modal"
+          />
+          <KeyboardAvoidingView
+            style={styles.askAgentModalWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.askAgentModalCard}>
+              <View style={styles.askAgentModalHeader}>
+                <View style={styles.askAgentModalTitleWrap}>
+                  <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+                  <Text style={styles.askAgentModalTitle}>Ask Agent</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setAskAgentModalVisible(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close Ask Agent"
+                >
+                  <MaterialIcons name="close" size={20} color={colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                value={askAgentPrompt}
+                onChangeText={setAskAgentPrompt}
+                multiline
+                placeholder="Ask anything about this trip..."
+                placeholderTextColor={colors.text.light}
+                style={styles.askAgentInput}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={styles.askAgentSendButton}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Alert.alert('Ask Agent', 'Demo mode: not wired yet.');
+                  setAskAgentModalVisible(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Send Ask Agent message"
+              >
+                <MaterialIcons name="send" size={16} color={colors.white} style={styles.askAgentSendIcon} />
+                <Text style={styles.askAgentSendLabel}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
     </View>
   );
 };
@@ -3298,6 +3386,74 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.primary,
     fontWeight: '600',
+  },
+  askAgentOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 12,
+    justifyContent: 'flex-end',
+  },
+  askAgentBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  askAgentModalWrap: {
+    justifyContent: 'flex-end',
+  },
+  askAgentModalCard: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  askAgentModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  askAgentModalTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  askAgentModalTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  askAgentInput: {
+    minHeight: 120,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...typography.body,
+    color: colors.text.primary,
+    backgroundColor: colors.background,
+    marginBottom: spacing.md,
+  },
+  askAgentSendButton: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  askAgentSendIcon: {
+    marginRight: spacing.xs,
+  },
+  askAgentSendLabel: {
+    ...typography.bodySmall,
+    color: colors.white,
+    fontWeight: '700',
   },
   loadingOverlay: {
     position: 'absolute',

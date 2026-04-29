@@ -13,7 +13,7 @@ jobs:
     
     defaults:
       run:
-        working-directory: overlap/backend
+        working-directory: backend
     
     strategy:
       matrix:
@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-          cache-dependency-path: overlap/backend/package-lock.json
+          cache-dependency-path: backend/package-lock.json
       
       - name: Install dependencies
         run: |
@@ -49,7 +49,7 @@ jobs:
         if: matrix.node-version == '20.x'
         uses: codecov/codecov-action@v4
         with:
-          file: ./overlap/backend/coverage/coverage-final.json
+          file: ./backend/coverage/coverage-final.json
           flags: backend
           name: backend-coverage
           fail_ci_if_error: false

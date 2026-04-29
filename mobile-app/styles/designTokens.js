@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 export const colors = {
   // Primary colors
-  primary: '#007AFF',
+  primary: '#0B9B50',
   secondary: '#FF385C',
   background: '#F5F5F5',
   card: '#FFFFFF',
@@ -44,8 +44,8 @@ export const colors = {
   
   // Interactive state colors
   interactive: {
-    hover: '#0056CC', // Darker primary for hover
-    pressed: '#003D99', // Even darker for pressed
+    hover: '#098A47', // Darker primary for hover
+    pressed: '#087A3F', // Even darker for pressed
     disabled: '#CCCCCC', // For disabled buttons/inputs
     disabledText: '#999999', // Text color when disabled
   },

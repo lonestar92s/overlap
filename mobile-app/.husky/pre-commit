@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/../..//overlap/backend/.husky/_/husky.sh" || . "$(dirname -- "$0")/_/husky.sh"
+. "$(dirname -- "$0")/../..//backend/.husky/_/husky.sh" || . "$(dirname -- "$0")/_/husky.sh"
 
 # Run mobile app tests before commit
 # Only run tests if we're in the mobile-app directory or if mobile app files changed

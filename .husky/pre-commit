@@ -13,11 +13,11 @@ cd "$REPO_ROOT"
 TESTS_FAILED=0
 
 # Check for backend changes
-BACKEND_CHANGED=$(git diff --cached --name-only | grep -E '^(overlap/backend/src|overlap/backend/tests)' | wc -l)
+BACKEND_CHANGED=$(git diff --cached --name-only | grep -E '^(backend/src|backend/tests)' | wc -l)
 if [ "$BACKEND_CHANGED" -gt 0 ]; then
   echo "📦 Backend files changed, running backend tests..."
-  if [ -d "overlap/backend" ]; then
-    cd overlap/backend
+  if [ -d "backend" ]; then
+    cd backend
     npm test -- --passWithNoTests 2>/dev/null || {
       echo "❌ Backend tests failed!"
       TESTS_FAILED=1

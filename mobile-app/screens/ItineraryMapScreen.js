@@ -581,7 +581,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          style={styles.backButton}
+          style={[styles.backButton, styles.headerNavSlot]}
           onPress={() => navigation.goBack()}
         >
           <Text style={styles.backButtonText}>←</Text>
@@ -593,6 +593,8 @@ const ItineraryMapScreen = ({ navigation, route }) => {
             {itinerary.matches?.length || 0} matches
           </Text>
         </View>
+
+        <View style={styles.headerNavSlot} />
       </View>
 
       {/* Map */}
@@ -725,6 +727,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
@@ -738,6 +741,11 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+  },
+  headerNavSlot: {
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backButtonText: {
     fontSize: 20,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { CommonActions } from '@react-navigation/native';
+import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import PopularMatches from '../components/PopularMatches';
 import PopularMatchModal from '../components/PopularMatchModal';
@@ -76,7 +76,7 @@ const popularDestinations = [
   },
 ];
 
-const SearchScreen = ({ navigation }) => {
+const SearchScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   
   // Map-based home screen state (only used if flag is enabled)
@@ -95,6 +95,16 @@ const SearchScreen = ({ navigation }) => {
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
   const [popularMatches, setPopularMatches] = useState([]);
+
+  // Re-open location search after returning from MapResults (see MapResultsScreen back navigation)
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.openLocationSearchModal === true) {
+        setShowLocationSearchModal(true);
+        navigation.setParams({ openLocationSearchModal: false });
+      }
+    }, [navigation, route?.params?.openLocationSearchModal])
+  );
 
   // Map-based home screen: Get user location and search for matches
   useEffect(() => {

@@ -16,7 +16,7 @@ jobs:
     
     defaults:
       run:
-        working-directory: overlap/backend
+        working-directory: backend
     
     steps:
       - name: Checkout code

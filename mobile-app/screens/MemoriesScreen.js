@@ -199,17 +199,7 @@ const MemoriesScreen = () => {
   const getDisplayName = useCallback(() => {
     if (!user) return 'User';
     
-    // Prefer full name from profile
-    if (user.profile?.firstName && user.profile?.lastName) {
-      return `${user.profile.firstName} ${user.profile.lastName}`;
-    }
-    
-    // Use firstName if available
-    if (user.profile?.firstName) {
-      return user.profile.firstName;
-    }
-    
-    // Fallback to username (capitalize first letter)
+    // Prefer username so profile surfaces use a consistent identity label
     if (user.username) {
       return user.username.charAt(0).toUpperCase() + user.username.slice(1);
     }

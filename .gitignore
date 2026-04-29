@@ -69,7 +69,11 @@ build/
 # Backup environment files
 .env.backup
 *.env.backup
-overlap/backend/.env.backup
+backend/.env.backup
 
 # Internal GTM / strategy docs (not for remote)
 GTM Strategy/
+
+# Internal planning (not tracked)
+REQUIREMENTS.md
+TEST_PLAN.md

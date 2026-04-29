@@ -284,9 +284,9 @@ const AccountScreen = ({ navigation }) => {
     );
   };
 
-  // Extract username from email for display
-  const username = user?.email?.split('@')[0] || 'user';
-  const displayName = user?.name || user?.email?.split('@')[0] || 'User Name';
+  // Prefer username for consistency across profile surfaces
+  const username = user?.username || user?.email?.split('@')[0] || 'user';
+  const displayName = user?.username || user?.email?.split('@')[0] || 'User';
   
   // Get subscription tier for badge display
   const subscriptionTier = user?.subscription?.tier;
