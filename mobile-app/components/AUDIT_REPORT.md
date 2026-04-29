@@ -109,7 +109,7 @@
 - ❌ **Hardcoded spacing** (line 290): Using `120`, `12` instead of spacing tokens
 - ⚠️ **Component-specific styling** - Some hardcoded values acceptable for map controls
 
-### 13. MapboxMapView.js
+### 13. MapView.js
 **Issues:**
 - ⚠️ **Platform-specific component** - Mostly OK for map rendering
 - ❌ **Hardcoded colors** (lines 245, 263): Using `#ff385c`, `#1976d2` instead of `colors.secondary`, `colors.primary`
@@ -222,7 +222,7 @@ Several components don't import designTokens at all:
 | MatchModal.js | 92% | ✅ Excellent |
 | TripHeader.js | 98% | ✅ Excellent |
 | MatchView.js | 75% | ⚠️ Needs Work |
-| MapboxMapView.js | 70% | ⚠️ Needs Work |
+| MapView.js | 70% | ⚠️ Needs Work |
 | AttendanceModal.js | 35% | ❌ Critical |
 | ErrorBoundary.js | 30% | ❌ Critical |
 | FilterIcon.js | 40% | ❌ Critical |

@@ -57,18 +57,6 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-// Mock Mapbox
-jest.mock('@rnmapbox/maps', () => ({
-  MapView: 'MapView',
-  Camera: 'Camera',
-  PointAnnotation: 'PointAnnotation',
-  ShapeSource: 'ShapeSource',
-  SymbolLayer: 'SymbolLayer',
-  CircleLayer: 'CircleLayer',
-  LineLayer: 'LineLayer',
-  setAccessToken: jest.fn(),
-}));
-
 // Mock react-native-maps
 jest.mock('react-native-maps', () => {
   const React = require('react');

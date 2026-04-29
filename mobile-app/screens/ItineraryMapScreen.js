@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { MAP_PROVIDER } from '../utils/mapConfig';
 import HeartButton from '../components/HeartButton';
 import MatchCard from '../components/MatchCard';
 import HomeBaseCard from '../components/HomeBaseCard';
@@ -43,14 +42,7 @@ const ItineraryMapScreen = ({ navigation, route }) => {
     addToTrip: addRecommendationToTrip
   } = useRecommendations(itineraryId, itinerary, { autoFetch: !!itineraryId });
   
-  // Conditional import for map component
-  const MatchMapView = React.useMemo(() => {
-    if (MAP_PROVIDER === 'mapbox') {
-      return require('../components/MapboxMapView').default;
-    } else {
-      return require('../components/MapView').default;
-    }
-  }, []);
+  const MatchMapView = React.useMemo(() => require('../components/MapView').default, []);
   
   const insets = useSafeAreaInsets();
   const mapRef = useRef();

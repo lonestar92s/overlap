@@ -24,7 +24,7 @@ Flight Match Finder is a full-stack application for finding and planning trips a
 - **Framework**: React Native with Expo
 - **Navigation**: React Navigation
 - **State Management**: React Context API
-- **Maps**: Mapbox (@rnmapbox/maps)
+- **Maps**: Google Maps (`react-native-maps`)
 - **Styling**: StyleSheet with Design Tokens
 - **Testing**: Jest + React Native Testing Library
 
@@ -195,9 +195,9 @@ User Preferences + Trip Context → Recommendation Service
 - **Integration**: OpenAI API
 - **Usage**: Convert user queries to structured search parameters
 
-### Mapbox
+### Google Maps
 - **Purpose**: Map rendering and geocoding
-- **Integration**: @rnmapbox/maps SDK
+- **Integration**: `react-native-maps`
 - **Usage**: Display match locations, venue search
 
 ### Amadeus (Planned)

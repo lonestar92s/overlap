@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
@@ -32,7 +32,6 @@ import Matches from './Matches';
 import LocationAutocomplete from './LocationAutocomplete';
 import SearchBar from './SearchBar';
 
-import Map from './Map'; // Uncomment Map import
 import Filters from './Filters';
 import { getAllLeagues, getCountryCode, getLeaguesForCountry, getLeagueById } from '../data/leagues';
 import NaturalLanguageSearch from './NaturalLanguageSearch';
@@ -49,13 +48,11 @@ const Home = ({ searchState, setSearchState }) => {
     const navigate = useNavigate();
     const today = startOfToday();
     const [hasSearched, setHasSearched] = useState(false);
-    const mapRef = useRef(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [selectedDistance, setSelectedDistance] = useState(null);
     const [selectedLeagues, setSelectedLeagues] = useState([]);
     const [selectedTeams, setSelectedTeams] = useState([]);
-    const activeMarkerRef = useRef(null);
     const [selectedMatch, setSelectedMatch] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [favoritedMatches, setFavoritedMatches] = useState([]);
@@ -98,12 +95,6 @@ const Home = ({ searchState, setSearchState }) => {
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
-
-    const scrollToMap = () => {
-        if (mapRef.current) {
-            mapRef.current.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-        }
-    };
 
     const scrollToTop = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -312,11 +303,6 @@ const Home = ({ searchState, setSearchState }) => {
                 }));
                 
                 setHasSearched(true);
-
-                // Scroll to map after a short delay to ensure it's rendered
-                if (sortedMatches.length > 0) {
-                    setTimeout(scrollToMap, 100);
-                }
 
             } catch (err) {
                 console.error('❌ Error in handleSearch:', err);
@@ -548,14 +534,6 @@ const Home = ({ searchState, setSearchState }) => {
 
     const handleMatchClick = (match) => {
         setSelectedMatch(match);
-        // Trigger marker popup and map centering
-        if (activeMarkerRef.current) {
-            activeMarkerRef.current(match);
-            // On mobile, scroll to map when a match is clicked
-            if (window.innerWidth < 900) { // md breakpoint
-                mapRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }
-        }
     };
 
     // Reset selected match when filters change
@@ -853,7 +831,7 @@ const Home = ({ searchState, setSearchState }) => {
 
 
 
-                            {/* Full-screen Map with Rail */}
+                            {/* Full-screen Match List */}
                             <Box sx={{ 
                                 position: 'absolute',
                                 top: { xs: '140px', sm: '146px' }, // Header (64px) + compact search bar height
@@ -864,14 +842,14 @@ const Home = ({ searchState, setSearchState }) => {
                             }}>
                                 {/* Left Rail with Matches */}
                                 <Box sx={{
-                                    width: { xs: '100%', md: '480px' },
+                                    width: '100%',
                                     height: '100%',
                                     backgroundColor: 'white',
-                                    borderRight: { xs: 'none', md: '1px solid #DDDDDD' },
+                                    borderRight: 'none',
                                     overflowY: 'auto',
-                                    display: { xs: selectedMatch ? 'none' : 'block', md: 'block' },
+                                    display: 'block',
                                     zIndex: 5,
-                                    boxShadow: { xs: 'none', md: '2px 0 8px rgba(0,0,0,0.1)' }
+                                    boxShadow: 'none'
                                 }}>
                                     {/* Matches List */}
                                     <Box sx={{ 
@@ -1009,55 +987,6 @@ const Home = ({ searchState, setSearchState }) => {
                                     </Box>
                                 </Box>
 
-                                {/* Full-screen Map */}
-                                <Box sx={{ 
-                                    flex: 1,
-                                    height: '100%',
-                                    position: 'relative'
-                                }}>
-                                    <Map
-                                        matches={filteredMatches}
-                                        location={searchState.location}
-                                        showLocation={true}
-                                        selectedMatches={searchState.selectedMatches}
-                                        selectedTransportation={searchState.selectedTransportation}
-                                        setActiveMarker={(callback) => {
-                                            activeMarkerRef.current = callback;
-                                        }}
-                                        onHeartClick={handleHeartClick}
-                                        favoritedMatches={favoritedMatches}
-                                        visitedStadiums={visitedStadiums}
-                                    />
-                                    
-                                    {/* Mobile toggle button to show matches list */}
-                                    <Box sx={{ 
-                                        display: { xs: 'block', md: 'none' },
-                                        position: 'absolute',
-                                        bottom: { xs: 20, sm: 16 },
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        zIndex: 5
-                                    }}>
-                                        <Button
-                                            variant="contained"
-                                            onClick={() => setSelectedMatch(null)}
-                                            sx={{
-                                                display: selectedMatch ? 'flex' : 'none',
-                                                backgroundColor: 'white',
-                                                color: '#333',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                                                px: { xs: 2, sm: 3 },
-                                                py: { xs: 1, sm: 1.5 },
-                                                fontSize: { xs: '0.875rem', sm: '1rem' },
-                                                '&:hover': {
-                                                    backgroundColor: '#f5f5f5'
-                                                }
-                                            }}
-                                        >
-                                            Back to List
-                                        </Button>
-                                    </Box>
-                                </Box>
                             </Box>
                         </>
                     )}

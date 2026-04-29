@@ -232,7 +232,7 @@ flightSearch: {
 - Implement request queue with exponential backoff
 - Use batch requests for multiple routes
 - Fallback to cached data if rate limit hit
-- Consider Mapbox as alternative (different rate limits)
+- Consider alternate directions providers with compatible rate limits
 
 ---
 

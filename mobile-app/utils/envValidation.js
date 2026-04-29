@@ -21,11 +21,6 @@ export const validateEnvironmentVariables = () => {
       );
     }
     
-    // Mapbox token required if using Mapbox
-    // Note: This check is informational - mapConfig.js will handle missing token
-    if (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN === undefined) {
-      console.warn('⚠️ EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN not set - Mapbox will not work if enabled');
-    }
   }
   
   // Development environment warnings

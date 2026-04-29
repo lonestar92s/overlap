@@ -241,7 +241,7 @@ selection and price comparison.
 fix: Resolve map marker rendering issue on Android
 
 The issue was caused by incorrect coordinate format. Now
-using proper lat/lng format for Mapbox markers.
+using proper lat/lng format for map markers.
 ```
 
 ### Branch Naming

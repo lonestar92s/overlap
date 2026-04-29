@@ -374,9 +374,9 @@ Use `colors.status.*` for status indicators:
 ### When Hardcoded Values Are Acceptable
 
 **Third-Party Libraries:**
-- Map components (Mapbox, Google Maps) may require specific styling
+- Map components may require specific styling
 - Chart libraries with their own styling systems
-- Document: "Exception: Mapbox component requires specific marker styling"
+- Document: "Exception: map component requires specific marker styling"
 
 **Platform-Specific Components:**
 - Native components that don't support design tokens
@@ -395,9 +395,9 @@ When documenting exceptions, include:
 
 Example:
 ```javascript
-// Exception: Mapbox marker styling requires specific color format
+// Exception: map marker styling requires specific color format
 // Location: components/MapView.js:45
-// Justification: Mapbox library expects hex colors without alpha channel
+// Justification: map library expects hex colors without alpha channel
 // Alternative: Consider adding mapMarkerColor to designTokens if used elsewhere
 const markerColor = '#FFD700'; // colors.markers.recommended without alpha
 ```

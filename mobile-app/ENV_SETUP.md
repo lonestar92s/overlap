@@ -75,7 +75,6 @@ ipconfig | findstr IPv4
   - Local Dev: `http://YOUR_IP:3001/api` or `http://localhost:3001/api`
 
 ### Optional
-- `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` - For Mapbox maps
 - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` - For Google Maps
 
 ---

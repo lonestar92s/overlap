@@ -1017,7 +1017,7 @@ trips: [{
 ```
 
 **Implementation**:
-- Use Google Maps Directions API or Mapbox Directions API
+- Use Google Maps Directions API
 - Calculate travel times for all matches from applicable home bases
 - Cache results in `TravelTimeCache` collection
 - Consider match time when recommending routes (e.g., if match is at 8 PM, prefer transit over walking)
@@ -1317,7 +1317,7 @@ class TransportationService {
   async calculateTravelTimes(tripId, matchId, homeBaseId) {
     // 1. Get trip, match, and home base data
     // 2. Check cache for existing travel times
-    // 3. Call Google Maps/Mapbox Directions API
+    // 3. Call Google Maps Directions API
     // 4. Calculate multiple route options (walking, driving, transit)
     // 5. Cache results
     // 6. Return travel times
@@ -1388,7 +1388,7 @@ class TransportationService {
   - Use batch requests for multiple routes (up to 25 routes per batch)
   - Implement request queue with priority (user-initiated > background)
   - Fallback strategy: If rate limit exceeded, use cached data or return "Unable to calculate" message
-  - Consider Mapbox as alternative (different rate limits: 600 requests/minute)
+  - Consider alternate providers with compatible rate limits
 - **Geocoding APIs**:
   - Cache geocoding results indefinitely (addresses don't change)
   - Batch geocode requests when possible
@@ -1550,7 +1550,7 @@ class TransportationService {
    - Update Trip model to include `homeBases` array
    - Implement `/api/trips/:id/home-bases` endpoints (CRUD)
    - Implement `/api/trips/:id/travel-times` endpoint
-   - Integrate Google Maps/Mapbox Directions API
+   - Integrate Google Maps Directions API
    - Create `TravelTimeCache` model for performance (with time-of-day support)
    - Implement geocoding for addresses
    - Add validation rules (type validation, date range validation, location validation)
@@ -1834,7 +1834,7 @@ RAIL_EUROPE_API_KEY=xxx
      - Asia: Case-by-case (high-speed rail in some regions)
 
 6. **Home Base Data Sources**:
-   - Use Google Maps Directions API or Mapbox?
+   - Use Google Maps Directions API?
    - Integrate hotel booking APIs (Booking.com, Airbnb)?
    - Cost considerations for Directions API calls?
 
@@ -1896,7 +1896,7 @@ The design follows existing patterns in the codebase (Context API, service layer
 - **Cycling**: Optional, for shorter distances
 
 **API Integration**:
-- Use Google Maps Directions API or Mapbox Directions API
+- Use Google Maps Directions API
 - Cache results to reduce API calls
 - Consider real-time traffic for driving (if available)
 - Cache for 24 hours (traffic patterns don't change much)

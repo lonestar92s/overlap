@@ -72,7 +72,6 @@ cp .env.example .env
 
 | Variable | Description |
 |----------|-------------|
-| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox (`@rnmapbox/maps`); required for map-heavy screens |
 | `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps / Directions-related features when enabled |
 
 For **which URL to use** (production vs localhost vs LAN IP), read `ENV_SETUP.md` first.
@@ -99,7 +98,7 @@ Restart Expo after changing `.env` for changes to take effect.
 
 ## Running the App
 
-This repo uses **Expo Dev Client** and native projects (`ios/`, `android/`). Many flows (e.g. Mapbox, WebView) expect a **development build**, not Expo Go alone.
+This repo uses **Expo Dev Client** and native projects (`ios/`, `android/`). Many flows (e.g. WebView) expect a **development build**, not Expo Go alone.
 
 ### iOS Simulator (native dev client)
 
@@ -210,17 +209,13 @@ mobile-app/
 - On a **physical device** or **Expo Go**, use your machine’s **IP** or a **deployed** API URL, not `localhost`
 - Check `EXPO_PUBLIC_API_URL` in `.env` and restart Metro
 
-### Map not loading
-- Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in `.env` ([Mapbox account](https://account.mapbox.com/))
-- Details: `ENV_SETUP.md` (environment) + `DEV_BUILD_INSTRUCTIONS.md` (native dev client)
-
 ### Build issues
 - Clear cache: `npx expo start -c`
 - Reinstall: `rm -rf node_modules && npm install`
 
 ## Additional documentation
 
-- `ENV_SETUP.md` — API URL choices, Mapbox/Google env vars, EAS secrets, troubleshooting
+- `ENV_SETUP.md` — API URL choices, Google env vars, EAS secrets, troubleshooting
 - `DEV_BUILD_INSTRUCTIONS.md` — Development builds (WebView, `expo run:*`, EAS `development` profile)
 - `QUICK_UPDATE_GUIDE.md` — EAS Update / release tips
 - `../REQUIREMENTS.md` — Full product requirements
