@@ -8,12 +8,16 @@ export const resolveAgentSearchToMapData = async (data) => {
   const location = parsed.location;
   const dateFrom = parsed.dateRange?.start || null;
   const dateTo = parsed.dateRange?.end || null;
-  const leagues = parsed.leagues?.map((l) => l.id) || [];
+  const leagues = parsed.leagues?.map((l) => l.id).filter(Boolean) || [];
   const teams = parsed.teams?.map((t) => t.id) || [];
 
   const hasLocation = Boolean(location?.coordinates && location.coordinates.length === 2);
   const hasDates = Boolean(dateFrom && dateTo);
-  const hasWho = leagues.length + teams.length > 0;
+  // Broad NL queries can include inferred leagues from backend fallback expansion.
+  // Treat explicit teams as "who"; only use leagues as "who" when teams are present
+  // or when leagues appear intentionally constrained.
+  const hasExplicitTeams = teams.length > 0;
+  const hasWho = hasExplicitTeams;
 
   if (!hasWho && (!hasLocation || !hasDates)) {
     return {
@@ -75,6 +79,28 @@ export const resolveAgentSearchToMapData = async (data) => {
     const aggregated = await ApiService.searchAggregatedMatches(apiParams);
     matches = aggregated?.data || [];
     autoFitKey = Date.now();
+
+    // Parity fallback: broad/conversational asks sometimes resolve to inferred leagues
+    // that over-constrain aggregated search. If that happens, retry with bounds search.
+    if (matches.length === 0 && hasLocation && hasDates) {
+      const bounds = {
+        northeast: {
+          lat: location.coordinates[1] + DEFAULT_BOUNDS_DELTA,
+          lng: location.coordinates[0] + DEFAULT_BOUNDS_DELTA,
+        },
+        southwest: {
+          lat: location.coordinates[1] - DEFAULT_BOUNDS_DELTA,
+          lng: location.coordinates[0] - DEFAULT_BOUNDS_DELTA,
+        },
+      };
+
+      const fallbackResponse = await ApiService.searchMatchesByBounds({
+        bounds,
+        dateFrom,
+        dateTo,
+      });
+      matches = fallbackResponse?.data || [];
+    }
   } else {
     const bounds = {
       northeast: {

@@ -1113,13 +1113,33 @@ function normalizeLocation(location) {
     const country = typeof location.country === 'string' ? location.country.trim() : '';
     const coords = Array.isArray(location.coordinates) ? location.coordinates : [];
     const hasCoords = coords.length === 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1]);
+    let normalizedCoordinates = hasCoords ? coords : [];
+
+    // NL responses occasionally return coordinates in [lat, lng] order.
+    // When we can resolve a known city anchor, pick the order that is closer
+    // to expected city coordinates and normalize to GeoJSON [lng, lat].
+    if (hasCoords && city) {
+        const cityAnchor = getLocationWithCountry(city);
+        if (cityAnchor && (!country || !cityAnchor.country || cityAnchor.country.toLowerCase() === country.toLowerCase())) {
+            const [anchorLng, anchorLat] = cityAnchor.coordinates;
+            const [first, second] = coords;
+
+            const asGeoJsonDistance = Math.abs(first - anchorLng) + Math.abs(second - anchorLat);
+            const swappedDistance = Math.abs(second - anchorLng) + Math.abs(first - anchorLat);
+
+            if (swappedDistance + 0.0001 < asGeoJsonDistance) {
+                normalizedCoordinates = [second, first];
+            }
+        }
+    }
+
     if (!city && !country && !hasCoords) {
         return null;
     }
     return {
         city: city || null,
         country: country || null,
-        coordinates: hasCoords ? coords : []
+        coordinates: normalizedCoordinates
     };
 }
 function detectPlanItineraryFromQuery(query) {
