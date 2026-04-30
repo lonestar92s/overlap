@@ -2724,25 +2724,27 @@ const MapResultsScreen = ({ navigation, route }) => {
       />
 
       {/* Ask Agent — bottom-right, above collapsed sheet; location FAB stacked above */}
-      <Animated.View
-        style={[
-          styles.floatingAskAgent,
-          { bottom: askAgentBottomOffset, opacity: askAgentOpacity },
-        ]}
-        pointerEvents={shouldHideAskAgent ? 'none' : 'box-none'}
-      >
-        <TouchableOpacity
-          style={styles.askAgentChip}
-          onPress={openAskAgentModal}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Ask Agent"
-          testID="ask-agent-chip"
+      {!askAgentModalVisible ? (
+        <Animated.View
+          style={[
+            styles.floatingAskAgent,
+            { bottom: askAgentBottomOffset, opacity: askAgentOpacity },
+          ]}
+          pointerEvents={shouldHideAskAgent ? 'none' : 'box-none'}
         >
-          <MaterialIcons name="auto-awesome" size={20} color={colors.primary} style={styles.askAgentChipIcon} />
-          <Text style={styles.askAgentChipLabel}>Ask Agent</Text>
-        </TouchableOpacity>
-      </Animated.View>
+          <TouchableOpacity
+            style={styles.askAgentChip}
+            onPress={openAskAgentModal}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ask Agent"
+            testID="ask-agent-chip"
+          >
+            <MaterialIcons name="auto-awesome" size={20} color={colors.primary} style={styles.askAgentChipIcon} />
+            <Text style={styles.askAgentChipLabel}>Ask Agent</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      ) : null}
       
       {/* Floating Search Button - Always visible like Google Maps */}
       {/* User can re-search current area or trigger search after panning to new region */}

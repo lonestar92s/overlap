@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Dimensions,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,8 +10,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../styles/designTokens';
+
+const WINDOW_HEIGHT = Dimensions.get('window').height;
+/** Fixed height so % min/max on an unmeasured parent never leaves a bottom strip of map. */
+const SHEET_HEIGHT = Math.round(WINDOW_HEIGHT * 0.50);
 
 const AskAgentModal = ({
   visible,
@@ -28,8 +32,8 @@ const AskAgentModal = ({
 }) => {
   const defaultPrompts = useMemo(
     () => [
-      'Find me top matches in Manchester from May 1 to May 5.',
-      'Show me Manchester United matches and nearby fixtures.',
+      'Find me matches in Manchester, UK from May 2nd to May 5th.',
+      'Show me matches in Milan this weekend.',
       'Plan a weekend with at least 2 matches in London.',
     ],
     []
@@ -43,6 +47,15 @@ const AskAgentModal = ({
         ? styles.feedbackSuccess
         : styles.feedbackInfo;
 
+  const insets = useSafeAreaInsets();
+  const modalCardStyle = useMemo(
+    () => [
+      styles.modalCard,
+      { height: SHEET_HEIGHT, paddingBottom: Math.max(spacing.md, insets.bottom) },
+    ],
+    [insets.bottom]
+  );
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay} pointerEvents="box-none">
@@ -53,11 +66,8 @@ const AskAgentModal = ({
           accessibilityRole="button"
           accessibilityLabel="Close Ask Agent modal"
         />
-        <KeyboardAvoidingView
-          style={styles.modalWrap}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalCard}>
+        <View style={styles.modalWrap}>
+          <View style={modalCardStyle}>
             <View style={styles.dragHandle} />
 
             <View style={styles.header}>
@@ -82,7 +92,7 @@ const AskAgentModal = ({
             >
               <View style={styles.heroSection}>
                 <Text style={styles.heroTitle}>Hi there</Text>
-                <Text style={styles.heroSubtitle}>How can I help plan your football trip?</Text>
+                <Text style={styles.heroSubtitle}>How can I help you find matches?</Text>
               </View>
 
               <ScrollView
@@ -137,7 +147,7 @@ const AskAgentModal = ({
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );
@@ -150,11 +160,10 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
   },
   modalWrap: {
     width: '100%',
-    paddingBottom: spacing.md,
   },
   modalCard: {
     backgroundColor: colors.card,
@@ -162,9 +171,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius.xl,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    minHeight: '68%',
-    maxHeight: '84%',
   },
   dragHandle: {
     alignSelf: 'center',

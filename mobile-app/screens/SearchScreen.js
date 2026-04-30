@@ -87,8 +87,8 @@ const popularDestinations = [
 
 const SearchScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const homeAskAgentBottom = insets.bottom + spacing.xl + spacing.md;
-  const homeLocationFabBottom = homeAskAgentBottom + 52;
+  const homeAskAgentBottom = insets.bottom + spacing.sm;
+  const homeLocationFabBottom = homeAskAgentBottom + 45;
   const nonMapAskAgentBottom = insets.bottom + spacing.xl + spacing.md;
   
   // Map-based home screen state (only used if flag is enabled)
@@ -499,18 +499,20 @@ const SearchScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}>
-          <TouchableOpacity
-            style={styles.askAgentChip}
-            onPress={openAskAgentModal}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Ask Agent"
-          >
-            <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
-            <Text style={styles.askAgentChipText}>Ask Agent</Text>
-          </TouchableOpacity>
-        </View>
+        {!askAgentModalVisible ? (
+          <View style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}>
+            <TouchableOpacity
+              style={styles.askAgentChip}
+              onPress={openAskAgentModal}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Ask Agent"
+            >
+              <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+              <Text style={styles.askAgentChipText}>Ask Agent</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <TripCountdownWidget onTripPress={handleTripPress} />
 
@@ -630,18 +632,20 @@ const SearchScreen = ({ navigation, route }) => {
         onNavigate={handleModalNavigate}
       />
 
-      <View style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}>
-        <TouchableOpacity
-          style={styles.askAgentChip}
-          onPress={openAskAgentModal}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Ask Agent"
-        >
-          <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
-          <Text style={styles.askAgentChipText}>Ask Agent</Text>
-        </TouchableOpacity>
-      </View>
+      {!askAgentModalVisible ? (
+        <View style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}>
+          <TouchableOpacity
+            style={styles.askAgentChip}
+            onPress={openAskAgentModal}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ask Agent"
+          >
+            <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+            <Text style={styles.askAgentChipText}>Ask Agent</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <AskAgentModal
         visible={askAgentModalVisible}
