@@ -35,7 +35,11 @@ const DEFAULT_LOCATION = {
   city: 'London',
 };
 
+const REVERSE_GEOCODE_COOLDOWN_MS = 2 * 60 * 1000;
+const REVERSE_GEOCODE_MIN_DELTA = 0.01;
+
 let homeAskAgentDraft = '';
+let lastReverseGeocodeLookup = null;
 
 // Popular destinations data
 const popularDestinations = [
@@ -109,6 +113,21 @@ const SearchScreen = ({ navigation, route }) => {
   const [askAgentFeedbackMessage, setAskAgentFeedbackMessage] = useState('');
   const [askAgentFeedbackType, setAskAgentFeedbackType] = useState('info');
 
+  const getCachedCityForCoordinates = (latitude, longitude) => {
+    if (!lastReverseGeocodeLookup) return null;
+
+    const isWithinCooldown = Date.now() - lastReverseGeocodeLookup.timestamp < REVERSE_GEOCODE_COOLDOWN_MS;
+    const isNearPreviousCoordinates =
+      Math.abs(lastReverseGeocodeLookup.latitude - latitude) < REVERSE_GEOCODE_MIN_DELTA &&
+      Math.abs(lastReverseGeocodeLookup.longitude - longitude) < REVERSE_GEOCODE_MIN_DELTA;
+
+    if (isWithinCooldown && isNearPreviousCoordinates) {
+      return lastReverseGeocodeLookup.city;
+    }
+
+    return null;
+  };
+
   // Re-open location search after returning from MapResults (see MapResultsScreen back navigation)
   useFocusEffect(
     useCallback(() => {
@@ -145,19 +164,30 @@ const SearchScreen = ({ navigation, route }) => {
             const { latitude, longitude } = location.coords;
             locationObj = { latitude, longitude };
 
-            // Reverse geocode to get city
-            try {
-              const reverseGeocode = await Location.reverseGeocodeAsync({
-                latitude,
-                longitude,
-              });
+            const cachedCity = getCachedCityForCoordinates(latitude, longitude);
+            if (cachedCity) {
+              city = cachedCity;
+            } else {
+              // Reverse geocode to get city
+              try {
+                const reverseGeocode = await Location.reverseGeocodeAsync({
+                  latitude,
+                  longitude,
+                });
 
-              if (reverseGeocode && reverseGeocode.length > 0) {
-                const address = reverseGeocode[0];
-                city = address.city || address.subAdministrativeArea || address.administrativeArea || DEFAULT_LOCATION.city;
+                if (reverseGeocode && reverseGeocode.length > 0) {
+                  const address = reverseGeocode[0];
+                  city = address.city || address.subAdministrativeArea || address.administrativeArea || DEFAULT_LOCATION.city;
+                  lastReverseGeocodeLookup = {
+                    latitude,
+                    longitude,
+                    city,
+                    timestamp: Date.now(),
+                  };
+                }
+              } catch (error) {
+                console.error('Reverse geocoding error:', error);
               }
-            } catch (error) {
-              console.error('Reverse geocoding error:', error);
             }
           } catch (error) {
             console.error('Location error:', error);
