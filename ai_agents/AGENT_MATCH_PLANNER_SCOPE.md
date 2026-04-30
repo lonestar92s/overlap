@@ -24,19 +24,19 @@ An **in-product AI agent** that helps users plan around matches by understanding
 
 ## 3. MVP (Phase 1)
 
-**Goal:** Return the correct matches from natural language, and ask for clarification when information is missing or ambiguous.
+**Goal:** Return the correct matches from natural language in the map experience, and ask for clarification when information is missing or ambiguous.
 
 ### 3.1 Interface
 
-- **Chat UI:** Re-enable the **Messages** tab as the agent surface.
-  - **Current state:** Tab exists (`MessagesScreen.js`), uses `naturalLanguageService` (`processNaturalLanguageQuery`, `formatSearchResults`). Tab is **off** via `FEATURE_FLAGS.enableMessagesTab` in `mobile-app/utils/featureFlags.js`.
-  - **MVP:** Ensure matches are returned correctly from natural language; agent can ask for clarification when needed.
+- **Map overlay UI:** Launch the Match Planning Agent from the **Ask Agent** chip in `MapResultsScreen` and present it as a modal overlay.
+  - **Current state:** Modal shell exists in `mobile-app/screens/MapResultsScreen.js` with prompt input and send action, but send is currently demo-only.
+  - **MVP:** Wire send to natural-language search/planning and render deterministic result/error states in-modal.
 
 ### 3.2 Flow
 
-1. User types in natural language (e.g. “Premier League matches in London next month”, “Arsenal home games in March”).
+1. User opens map results, taps **Ask Agent**, and types in natural language (e.g. “Premier League matches in London next month”, “Arsenal home games in March”).
 2. Agent infers intent (dates, location, league, team, etc.) and calls **match search** (and any existing search APIs) with structured parameters.
-3. Agent returns the matching matches (or a short summary) in the chat.
+3. Agent returns the matching matches (or a short summary) in the modal.
 4. If required information is missing or ambiguous (e.g. no dates, “London” vs “London, ON”), the agent **asks for clarification** instead of guessing; after the user responds, the agent re-queries and returns results.
 
 ### 3.3 Conversational behavior (greetings and small talk)
@@ -49,6 +49,7 @@ An **in-product AI agent** that helps users plan around matches by understanding
 - Natural language → match search only.
 - Clarification loop (ask for dates, location, league, team, etc. when needed).
 - Correct mapping from user utterance to search API parameters and correct display of results.
+- Ask Agent modal states: idle → loading → result/error.
 - Conversational replies for greetings/small talk (via prompt).
 
 ### 3.5 Out of scope for MVP
@@ -79,7 +80,7 @@ After MVP is stable, add in stages:
 - **Date flexibility** – “What if I shift by ±1/±7/±14 days?” → impact on matches (no cost context).
 - **Travel feasibility** – For a given trip + home base(s), summarize “can I get from A to B in time?” (directions/travel-time APIs).
 
-Same pattern: chat + clarification; no cost/route history.
+Same pattern: Ask Agent modal + clarification; no cost/route history.
 
 ---
 
@@ -133,14 +134,14 @@ Same pattern: chat + clarification; no cost/route history.
 
 ### 6.1 Resolved decisions
 
-1. **Feature flag:** Ship behind `enableMessagesTab`; enable for all users at launch. Rollout can be refined later (no external users yet).
-2. **Tier gating:** No tier gating at launch; agent (Messages tab) is for everyone. Tier gating (e.g. by subscription plan) can be added later.
-3. **Natural language service:** Use the existing backend **`POST /search/natural-language`** as the single source of truth for NL → search params in MVP. It already uses **OpenAI** (`OPENAI_API_KEY` on backend) for parsing; mobile calls this endpoint via `naturalLanguageService`. No separate LLM agent layer in MVP.
+1. **Surface:** The product agent surface is the **Ask Agent modal overlay** in `MapResultsScreen` (the previous Messages tab path is no longer the primary UX).
+2. **Tier gating:** No tier gating at launch; agent is for everyone. Tier gating (e.g. by subscription plan) can be added later.
+3. **Natural language service:** Use the existing backend **`POST /search/natural-language`** as the single source of truth for NL → search params in MVP. It already uses **OpenAI** (`OPENAI_API_KEY` on backend) for parsing; mobile Ask Agent calls this endpoint (or equivalent planner wrapper). No separate LLM orchestration layer in MVP.
 4. **Clarification UX:** Max **2 clarification rounds** before suggesting a fallback (e.g. “Here are some popular leagues; pick one”).
 5. **Errors and fallbacks:** When match search fails or returns empty, the agent should give a **natural-language recommendation based on the error** (e.g. suggest loosening filters, different dates, or explain what went wrong), not a generic message.
 6. **Analytics and safety:** **Yes, log** (anonymized) query patterns and failure rates for improving intent parsing and clarification. Maintain a **possible PII list** (see below) and decide what to redact or exclude from logs.
 7. **Localization:** MVP in **English only**. App-wide localization is planned separately.
-8. **Accessibility:** Chat UI must meet the **same accessibility standards as the rest of the app**. **Scope app-wide accessibility** (including chat) as a separate task (screen reader order, focus management, error announcements, contrast, touch targets).
+8. **Accessibility:** Ask Agent modal UI must meet the **same accessibility standards as the rest of the app**. **Scope app-wide accessibility** (including Ask Agent) as a separate task (screen reader order, focus management, error announcements, contrast, touch targets).
 9. **Trip recommendations (when to surface):** **Configurable**, e.g. in **user settings**. Options: always show / only when user asks / off.
 
 ### 6.2 Possible PII (for logging)
@@ -163,8 +164,8 @@ When logging agent queries and analytics, consider redacting or excluding:
 
 ## 7. References
 
-- **Chat UI:** `mobile-app/screens/MessagesScreen.js`, `mobile-app/services/naturalLanguageService.js`
-- **Feature flag:** `mobile-app/utils/featureFlags.js` → `enableMessagesTab`
-- **App tab registration:** `mobile-app/App.js` → MessagesTab (gated by `FEATURE_FLAGS.enableMessagesTab`)
+- **Ask Agent UI surface:** `mobile-app/screens/MapResultsScreen.js` (Ask Agent chip + modal overlay)
+- **Natural language client:** `mobile-app/services/naturalLanguageService.js`
+- **Legacy chat surface (deprecated):** `mobile-app/screens/MessagesScreen.js`
 - **Flight/train and planning context:** `ai_agents/FLIGHT_TRAIN_SEARCH_ARCHITECTURE.md`, `ai_agents/ARCHITECTURE_REVIEW.md`
 - **Recommendations model:** `overlap/backend/src/services/recommendationService.js`, `overlap/backend/src/routes/recommendations.js` (GET `/api/trips/:tripId/recommendations`)

@@ -20,7 +20,10 @@ import LocationSearchModal from '../components/LocationSearchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import MatchMapView from '../components/MapView';
 import MatchCard from '../components/MatchCard';
+import AskAgentModal from '../components/AskAgentModal';
 import ApiService from '../services/api';
+import { processNaturalLanguageQuery, formatSearchResults } from '../services/naturalLanguageService';
+import { resolveAgentSearchToMapData } from '../services/askAgentMapSearch';
 import { FEATURE_FLAGS } from '../utils/featureFlags';
 import { getMatchStatus } from '../utils/matchStatus';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
@@ -31,6 +34,8 @@ const DEFAULT_LOCATION = {
   longitude: -0.1278,
   city: 'London',
 };
+
+let homeAskAgentDraft = '';
 
 // Popular destinations data
 const popularDestinations = [
@@ -78,6 +83,9 @@ const popularDestinations = [
 
 const SearchScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
+  const homeAskAgentBottom = insets.bottom + spacing.xl + spacing.md;
+  const homeLocationFabBottom = homeAskAgentBottom + 52;
+  const nonMapAskAgentBottom = insets.bottom + spacing.xl + spacing.md;
   
   // Map-based home screen state (only used if flag is enabled)
   const [userLocation, setUserLocation] = useState(null);
@@ -95,6 +103,11 @@ const SearchScreen = ({ navigation, route }) => {
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
   const [popularMatches, setPopularMatches] = useState([]);
+  const [askAgentModalVisible, setAskAgentModalVisible] = useState(false);
+  const [askAgentPrompt, setAskAgentPrompt] = useState(homeAskAgentDraft);
+  const [askAgentLoading, setAskAgentLoading] = useState(false);
+  const [askAgentFeedbackMessage, setAskAgentFeedbackMessage] = useState('');
+  const [askAgentFeedbackType, setAskAgentFeedbackType] = useState('info');
 
   // Re-open location search after returning from MapResults (see MapResultsScreen back navigation)
   useFocusEffect(
@@ -343,6 +356,82 @@ const SearchScreen = ({ navigation, route }) => {
     });
   };
 
+  const openAskAgentModal = () => {
+    setAskAgentPrompt(homeAskAgentDraft);
+    setAskAgentFeedbackMessage('');
+    setAskAgentFeedbackType('info');
+    setAskAgentModalVisible(true);
+  };
+
+  const closeAskAgentModal = () => {
+    homeAskAgentDraft = askAgentPrompt;
+    setAskAgentModalVisible(false);
+  };
+
+  const handleAskAgentPromptChange = (text) => {
+    homeAskAgentDraft = text;
+    setAskAgentPrompt(text);
+  };
+
+  const handleAskAgentSend = async () => {
+    const prompt = askAgentPrompt.trim();
+    if (!prompt) return;
+
+    setAskAgentLoading(true);
+    setAskAgentFeedbackMessage('');
+    setAskAgentFeedbackType('info');
+
+    try {
+      const response = await processNaturalLanguageQuery(prompt, []);
+      const formatted = formatSearchResults(response);
+
+      if (!formatted.success) {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage(formatted.message || "I couldn't parse that request.");
+        return;
+      }
+
+      const mapData = await resolveAgentSearchToMapData(formatted);
+
+      if (!mapData.success) {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage(mapData.message);
+        return;
+      }
+
+      if (mapData.type === 'no_results') {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage('No matches found. Try wider dates or fewer team constraints.');
+        return;
+      }
+
+      setAskAgentFeedbackType('success');
+      setAskAgentFeedbackMessage(formatted.message || `Found ${mapData.count} matches.`);
+      homeAskAgentDraft = '';
+      setAskAgentPrompt('');
+      setAskAgentModalVisible(false);
+
+      navigation.navigate('SearchTab', {
+        screen: 'MapResults',
+        params: {
+          searchParams: mapData.searchParams,
+          matches: mapData.matches,
+          initialRegion: mapData.initialRegion,
+          autoFitKey: mapData.autoFitKey,
+          hasLocation: mapData.hasLocation,
+          hasDates: mapData.hasDates,
+          hasWho: mapData.hasWho,
+          preSelectedFilters: mapData.preSelectedFilters,
+        },
+      });
+    } catch (error) {
+      setAskAgentFeedbackType('error');
+      setAskAgentFeedbackMessage("I couldn't reach search right now. Please retry.");
+    } finally {
+      setAskAgentLoading(false);
+    }
+  };
+
   // Render map-based home screen
   if (FEATURE_FLAGS.enableMapHomeScreen) {
     if (loading) {
@@ -363,7 +452,7 @@ const SearchScreen = ({ navigation, route }) => {
               matches={matches}
               initialRegion={mapRegion}
               onMarkerPress={handleMarkerPress}
-              showLocationButton={true}
+              showLocationButton={false}
               style={styles.map}
             />
           )}
@@ -377,6 +466,19 @@ const SearchScreen = ({ navigation, route }) => {
           >
             <MaterialIcons name="search" size={25} color="rgba(0, 0, 0, 0.5)" />
             <Text style={styles.startLapButtonText}>Start your lap</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}>
+          <TouchableOpacity
+            style={styles.askAgentChip}
+            onPress={openAskAgentModal}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ask Agent"
+          >
+            <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+            <Text style={styles.askAgentChipText}>Ask Agent</Text>
           </TouchableOpacity>
         </View>
 
@@ -427,6 +529,18 @@ const SearchScreen = ({ navigation, route }) => {
           onClose={handleLocationModalClose}
           navigation={navigation}
           initialLocation={initialLocation}
+        />
+
+        <AskAgentModal
+          visible={askAgentModalVisible}
+          onClose={closeAskAgentModal}
+          prompt={askAgentPrompt}
+          onPromptChange={handleAskAgentPromptChange}
+          onSend={handleAskAgentSend}
+          loading={askAgentLoading}
+          feedbackMessage={askAgentFeedbackMessage}
+          feedbackType={askAgentFeedbackType}
+          placeholder="Describe your trip and teams to follow..."
         />
       </SafeAreaView>
     );
@@ -484,6 +598,31 @@ const SearchScreen = ({ navigation, route }) => {
         currentMatchIndex={selectedMatchIndex}
         onClose={handleModalClose}
         onNavigate={handleModalNavigate}
+      />
+
+      <View style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}>
+        <TouchableOpacity
+          style={styles.askAgentChip}
+          onPress={openAskAgentModal}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ask Agent"
+        >
+          <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+          <Text style={styles.askAgentChipText}>Ask Agent</Text>
+        </TouchableOpacity>
+      </View>
+
+      <AskAgentModal
+        visible={askAgentModalVisible}
+        onClose={closeAskAgentModal}
+        prompt={askAgentPrompt}
+        onPromptChange={handleAskAgentPromptChange}
+        onSend={handleAskAgentSend}
+        loading={askAgentLoading}
+        feedbackMessage={askAgentFeedbackMessage}
+        feedbackType={askAgentFeedbackType}
+        placeholder="Describe your trip and teams to follow..."
       />
     </SafeAreaView>
   );
@@ -603,6 +742,37 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     alignSelf: 'center',
     zIndex: 2,
+  },
+  askAgentFloating: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 3,
+  },
+  askAgentFloatingNonMap: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 3,
+  },
+  askAgentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  askAgentChipText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
 

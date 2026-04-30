@@ -677,11 +677,31 @@ const parseComplexDates = (query) => {
     }
     return null;
 };
+const hasExplicitDateRangeIntent = (queryLower) => {
+    if (!queryLower) return false;
+
+    // Explicit connectors that imply a range (e.g. "May 2nd through May 5th").
+    if (/\b(?:between|from)\b[\s\S]{0,40}\b(?:and|to|through|thru|until|till)\b/i.test(queryLower)) {
+        return true;
+    }
+    if (/\b(?:to|through|thru|until|till)\b/i.test(queryLower)) {
+        return true;
+    }
+
+    // Compact range forms like "March 15-30" or "March 15 – 30".
+    if (/(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{1,2}\s*[-–]\s*\d{1,2}/i.test(queryLower)) {
+        return true;
+    }
+
+    return false;
+};
+
 // Deterministic override for explicit single-day queries (e.g. "March 21st")
 const extractSingleDayRangeFromQuery = (query) => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const queryLower = (query || '').toLowerCase();
+    if (hasExplicitDateRangeIntent(queryLower)) return null;
     const singleDayPattern = /(?:on\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i;
     const match = queryLower.match(singleDayPattern);
     if (!match) return null;

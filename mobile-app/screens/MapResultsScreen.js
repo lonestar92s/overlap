@@ -10,9 +10,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Animated,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
   BackHandler,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +33,9 @@ import FilterIcon from '../components/FilterIcon';
 import FilterChip from '../components/FilterChip';
 import MatchCard from '../components/MatchCard';
 import MatchMapView from '../components/MapView';
+import AskAgentModal from '../components/AskAgentModal';
+import { processNaturalLanguageQuery, formatSearchResults } from '../services/naturalLanguageService';
+import { resolveAgentSearchToMapData } from '../services/askAgentMapSearch';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
 
 /** @returns {string|null} Human-readable reason if the match cannot use venue coords on the map; null if coords are usable. */
@@ -52,6 +52,8 @@ function getMatchVenueCoordIssue(match) {
   if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return 'coordinates out of range';
   return null;
 }
+
+let mapAskAgentDraft = '';
 
 const MapResultsScreen = ({ navigation, route }) => {
   // Get search parameters and results from navigation
@@ -162,7 +164,10 @@ const MapResultsScreen = ({ navigation, route }) => {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [askAgentModalVisible, setAskAgentModalVisible] = useState(false);
-  const [askAgentPrompt, setAskAgentPrompt] = useState('');
+  const [askAgentPrompt, setAskAgentPrompt] = useState(mapAskAgentDraft);
+  const [askAgentLoading, setAskAgentLoading] = useState(false);
+  const [askAgentFeedbackMessage, setAskAgentFeedbackMessage] = useState('');
+  const [askAgentFeedbackType, setAskAgentFeedbackType] = useState('info');
   
   // Request cancellation and tracking
   const [currentRequestId, setCurrentRequestId] = useState(0);
@@ -1239,6 +1244,77 @@ const MapResultsScreen = ({ navigation, route }) => {
 
   const handleSearchModalClose = () => {
     setSearchModalVisible(false);
+  };
+
+  const openAskAgentModal = () => {
+    setAskAgentPrompt(mapAskAgentDraft);
+    setAskAgentFeedbackMessage('');
+    setAskAgentFeedbackType('info');
+    setAskAgentModalVisible(true);
+  };
+
+  const closeAskAgentModal = () => {
+    mapAskAgentDraft = askAgentPrompt;
+    setAskAgentModalVisible(false);
+  };
+
+  const handleAskAgentPromptChange = (text) => {
+    mapAskAgentDraft = text;
+    setAskAgentPrompt(text);
+  };
+
+  const handleAskAgentSend = async () => {
+    const prompt = askAgentPrompt.trim();
+    if (!prompt) return;
+
+    setAskAgentLoading(true);
+    setAskAgentFeedbackMessage('');
+    setAskAgentFeedbackType('info');
+
+    try {
+      const response = await processNaturalLanguageQuery(prompt, []);
+      const formatted = formatSearchResults(response);
+
+      if (!formatted.success) {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage(formatted.message || "I couldn't parse that request.");
+        return;
+      }
+
+      const mapData = await resolveAgentSearchToMapData(formatted);
+
+      if (!mapData.success) {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage(mapData.message);
+        return;
+      }
+
+      if (mapData.type === 'no_results') {
+        setAskAgentFeedbackType('error');
+        setAskAgentFeedbackMessage('No matches found. Try wider dates or fewer team constraints.');
+        return;
+      }
+
+      clearAllFilters();
+      setSelectedVenueIndex(null);
+      setOverlayMatchFallback(null);
+      setMatches(mapData.matches);
+      setMapRegion(mapData.initialRegion || mapRegion);
+      setLocation(mapData.searchParams?.location || null);
+      setDateFrom(mapData.searchParams?.dateFrom || null);
+      setDateTo(mapData.searchParams?.dateTo || null);
+
+      setAskAgentFeedbackType('success');
+      setAskAgentFeedbackMessage(formatted.message || `Found ${mapData.count} matches.`);
+      mapAskAgentDraft = '';
+      setAskAgentPrompt('');
+      setAskAgentModalVisible(false);
+    } catch (error) {
+      setAskAgentFeedbackType('error');
+      setAskAgentFeedbackMessage("I couldn't reach search right now. Please retry.");
+    } finally {
+      setAskAgentLoading(false);
+    }
   };
 
   const handleSearchUpdate = async (newSearchParams) => {
@@ -2657,7 +2733,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       >
         <TouchableOpacity
           style={styles.askAgentChip}
-          onPress={() => setAskAgentModalVisible(true)}
+          onPress={openAskAgentModal}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Ask Agent"
@@ -2805,61 +2881,17 @@ const MapResultsScreen = ({ navigation, route }) => {
         previewMatchCount={previewMatchCount}
       />
 
-      {askAgentModalVisible && (
-        <View style={styles.askAgentOverlay} pointerEvents="box-none">
-          <TouchableOpacity
-            style={styles.askAgentBackdrop}
-            activeOpacity={1}
-            onPress={() => setAskAgentModalVisible(false)}
-            accessibilityRole="button"
-            accessibilityLabel="Close Ask Agent modal"
-          />
-          <KeyboardAvoidingView
-            style={styles.askAgentModalWrap}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View style={styles.askAgentModalCard}>
-              <View style={styles.askAgentModalHeader}>
-                <View style={styles.askAgentModalTitleWrap}>
-                  <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
-                  <Text style={styles.askAgentModalTitle}>Ask Agent</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setAskAgentModalVisible(false)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close Ask Agent"
-                >
-                  <MaterialIcons name="close" size={20} color={colors.text.secondary} />
-                </TouchableOpacity>
-              </View>
-
-              <TextInput
-                value={askAgentPrompt}
-                onChangeText={setAskAgentPrompt}
-                multiline
-                placeholder="Ask anything about this trip..."
-                placeholderTextColor={colors.text.light}
-                style={styles.askAgentInput}
-                textAlignVertical="top"
-              />
-
-              <TouchableOpacity
-                style={styles.askAgentSendButton}
-                activeOpacity={0.85}
-                onPress={() => {
-                  Alert.alert('Ask Agent', 'Demo mode: not wired yet.');
-                  setAskAgentModalVisible(false);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Send Ask Agent message"
-              >
-                <MaterialIcons name="send" size={16} color={colors.white} style={styles.askAgentSendIcon} />
-                <Text style={styles.askAgentSendLabel}>Send</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      )}
+      <AskAgentModal
+        visible={askAgentModalVisible}
+        onClose={closeAskAgentModal}
+        prompt={askAgentPrompt}
+        onPromptChange={handleAskAgentPromptChange}
+        onSend={handleAskAgentSend}
+        loading={askAgentLoading}
+        feedbackMessage={askAgentFeedbackMessage}
+        feedbackType={askAgentFeedbackType}
+        placeholder="Refine this search (dates, teams, leagues, location)..."
+      />
     </View>
   );
 };
@@ -3386,74 +3418,6 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.primary,
     fontWeight: '600',
-  },
-  askAgentOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 12,
-    justifyContent: 'flex-end',
-  },
-  askAgentBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-  },
-  askAgentModalWrap: {
-    justifyContent: 'flex-end',
-  },
-  askAgentModalCard: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-    borderTopWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  askAgentModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  askAgentModalTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  askAgentModalTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    fontWeight: '700',
-  },
-  askAgentInput: {
-    minHeight: 120,
-    maxHeight: 200,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    ...typography.body,
-    color: colors.text.primary,
-    backgroundColor: colors.background,
-    marginBottom: spacing.md,
-  },
-  askAgentSendButton: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.pill,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  askAgentSendIcon: {
-    marginRight: spacing.xs,
-  },
-  askAgentSendLabel: {
-    ...typography.bodySmall,
-    color: colors.white,
-    fontWeight: '700',
   },
   loadingOverlay: {
     position: 'absolute',
