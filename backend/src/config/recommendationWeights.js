@@ -39,7 +39,7 @@ module.exports = {
             proximity: {
                 within5miles: 25,   // Within 5 miles of a favorite venue
                 within25miles: 20,  // Within 25 miles
-                within50miles: 15,  // Within 50 miles
+                within50miles: 15,  // Within default search radius (~30 mi; key name kept for compatibility)
                 within100miles: 10, // Within 100 miles
                 beyond: 0
             }
@@ -51,7 +51,7 @@ module.exports = {
         proximity: {
             within10miles: 40,
             within25miles: 35,
-            within50miles: 30,
+            within50miles: 30, // matches within ~30 mi of context
             within100miles: 25,
             within200miles: 20,
             beyond: 15

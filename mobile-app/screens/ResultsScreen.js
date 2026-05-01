@@ -22,7 +22,7 @@ const ResultsScreen = ({ route, navigation }) => {
   const [showDistanceFilter, setShowDistanceFilter] = useState(false);
   const [selectedDistance, setSelectedDistance] = useState(() => {
     // Find the index of the current distance in our options
-    const distanceOptions = [50, 100, 250];
+    const distanceOptions = [30, 100, 250];
     const currentDistance = searchParams.maxDistance || 100;
     return distanceOptions.indexOf(currentDistance) !== -1 ? distanceOptions.indexOf(currentDistance) : 1;
   });
@@ -34,7 +34,7 @@ const ResultsScreen = ({ route, navigation }) => {
 
   // Distance options
   const distanceOptions = [
-    { label: '50 mi', value: 50 },
+    { label: '30 mi', value: 30 },
     { label: '100 mi', value: 100 },
     { label: '250 mi', value: 250 }
   ];

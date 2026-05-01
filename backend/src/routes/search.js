@@ -17,6 +17,8 @@ const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/s
 const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
 const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/matchItineraryPlanner');
 const router = express.Router();
+/** Default geographic radius (miles) for city-anchored NL search and plan-itinerary when unspecified. */
+const DEFAULT_SEARCH_RADIUS_MILES = 30;
 // LocationIQ configuration for autocomplete
 const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
 const LOCATIONIQ_AUTOCOMPLETE_URL = 'https://api.locationiq.com/v1/autocomplete';
@@ -895,7 +897,7 @@ const parseQuery = async (query) => {
                             "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-17"
                         },
                         "leagues": ["PL"],
-                        "maxDistance": 50,
+                        "maxDistance": 30,
                         "teams": ["Arsenal FC", "Chelsea FC"],
                         "matchTypes": ["derby"]
                     }`
@@ -1297,7 +1299,7 @@ async function runPlanItinerary(body = {}) {
         fixedBufferMinutes = 25,
         minutesPerKm = 3.5,
         maxLegsPerDay = 2,
-        radiusMiles = 50
+        radiusMiles = DEFAULT_SEARCH_RADIUS_MILES
     } = body;
     if (!city || !country || !ianaTimeZone || !weekendAnchorLocalDate) {
         return {
@@ -1409,7 +1411,7 @@ async function runPlanItinerary(body = {}) {
                 fixedBufferMinutes: parseInt(String(fixedBufferMinutes), 10) || 25,
                 minutesPerKm: Number(minutesPerKm) || 3.5,
                 maxLegsPerDay: parseInt(String(maxLegsPerDay), 10) || 2,
-                radiusMiles: Number(radiusMiles) || 50
+                radiusMiles: Number(radiusMiles) || DEFAULT_SEARCH_RADIUS_MILES
             },
             geo: { city: String(city).trim(), country: String(country).trim(), lat, lng },
             seasonUsed: seasonForApi,
@@ -2098,7 +2100,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "location": { "city": "London", "country": "United Kingdom", "coordinates": [-0.118092, 51.509865] },
                             "dateRange": { "start": "2025-03-01", "end": "2025-03-31" },
                             "leagues": [39],
-                            "maxDistance": 50,
+                            "maxDistance": 30,
                             "teams": ["Arsenal FC"],
                             "matchTypes": [],
                             "minMatches": null,
@@ -2114,7 +2116,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                             "location": { "city": "London", "country": "United Kingdom", "coordinates": [-0.118092, 51.509865] },
                             "dateRange": { "start": "2026-03-06", "end": "2026-03-08" },
                             "leagues": [39, 40],
-                            "maxDistance": 50,
+                            "maxDistance": 30,
                             "teams": [],
                             "matchTypes": [],
                             "minMatches": 3,
@@ -2162,7 +2164,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                                 "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-17"
                             },
                             "leagues": ["39"],
-                            "maxDistance": 50,
+                            "maxDistance": 30,
                             "teams": ["Arsenal FC", "Chelsea FC"],
                             "matchTypes": ["derby"],
                             "errorMessage": null,
@@ -2180,7 +2182,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                                 "end": "${currentYear}-${currentMonth.toString().padStart(2, '0')}-30"
                             },
                             "leagues": [],
-                            "maxDistance": 50,
+                            "maxDistance": 30,
                             "teams": [],
                             "matchTypes": [],
                             "errorMessage": null,
@@ -2203,7 +2205,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                                 "end": "2025-11-30"
                             },
                             "leagues": [39],
-                            "maxDistance": 50,
+                            "maxDistance": 30,
                             "teams": [],
                             "matchTypes": [],
                             "errorMessage": null,
@@ -3002,7 +3004,9 @@ router.post('/natural-language', async (req, res) => {
                 extractMinMatchesFromQuery(query) ??
                 3;
             const radiusMiles =
-                Number.isFinite(Number(parsed.distance)) && Number(parsed.distance) > 0 ? Number(parsed.distance) : 50;
+                Number.isFinite(Number(parsed.distance)) && Number(parsed.distance) > 0
+                    ? Number(parsed.distance)
+                    : DEFAULT_SEARCH_RADIUS_MILES;
             const planPayload = await runPlanItinerary({
                 city: searchParams.location.city,
                 country: searchParams.location.country,
@@ -3062,11 +3066,11 @@ router.post('/natural-language', async (req, res) => {
         // For broad queries, still respect location-based league selection
         // This ensures Paris searches show French leagues, London shows English leagues, etc.
         // Add geographic distance filtering for natural language search
-        // Use default 50-mile radius around the specified city
+        // Use default radius (miles) around the specified city
         let bounds = null;
         if (searchParams.location && searchParams.location.coordinates) {
             const [lng, lat] = searchParams.location.coordinates;
-            const radiusMiles = 50; // Default radius
+            const radiusMiles = DEFAULT_SEARCH_RADIUS_MILES;
             const radiusKm = radiusMiles * 1.60934; // Convert to km
             // Calculate bounds for the radius
             const latDelta = radiusKm / 111.32; // Approximate km per degree latitude

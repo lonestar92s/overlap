@@ -27,6 +27,7 @@ import { resolveAgentSearchToMapData } from '../services/askAgentMapSearch';
 import { FEATURE_FLAGS } from '../utils/featureFlags';
 import { getMatchStatus } from '../utils/matchStatus';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import { searchBoundsFromMiles, SEARCH_RADIUS_MILES } from '../utils/geoSearchBounds';
 
 // Default to London if location permissions denied
 const DEFAULT_LOCATION = {
@@ -239,17 +240,7 @@ const SearchScreen = ({ navigation, route }) => {
       const dateFrom = today.toISOString().split('T')[0];
       const dateTo = today.toISOString().split('T')[0];
 
-      // Create bounds around location (small radius for city-level search)
-      const bounds = {
-        northeast: {
-          lat: lat + 0.1, // ~10km radius
-          lng: lon + 0.1,
-        },
-        southwest: {
-          lat: lat - 0.1,
-          lng: lon - 0.1,
-        },
-      };
+      const bounds = searchBoundsFromMiles(lat, lon, SEARCH_RADIUS_MILES);
 
       const response = await ApiService.searchMatchesByBounds({
         bounds,

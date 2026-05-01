@@ -552,7 +552,7 @@ class RecommendationService {
             const distance = match._proximityData.closestDistance;
             if (distance <= 10) score += weights.context.proximity.within10miles;
             else if (distance <= 25) score += weights.context.proximity.within25miles;
-            else if (distance <= 50) score += weights.context.proximity.within50miles;
+            else if (distance <= 30) score += weights.context.proximity.within50miles;
             else if (distance <= 100) score += weights.context.proximity.within100miles;
             else if (distance <= 200) score += weights.context.proximity.within200miles;
             else score += weights.context.proximity.beyond;

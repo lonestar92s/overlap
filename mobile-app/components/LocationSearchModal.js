@@ -23,6 +23,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import FlightSearchTab from './FlightSearchTab';
 import FilterChip from './FilterChip';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
+import {
+  mapRegionFromSearchRadius,
+  searchBoundsFromMiles,
+  SEARCH_RADIUS_MILES,
+} from '../utils/geoSearchBounds';
 
 const RECENT_SEARCHES_KEY = 'searchRecentLocations';
 const MAX_RECENT_SEARCHES = 5;
@@ -801,23 +806,16 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
 
         // Add optional location bounds if location is provided
         if (hasLocation) {
-          const viewportDelta = 0.5;
-          apiParams.bounds = {
-            northeast: {
-              lat: location.lat + (viewportDelta / 2),
-              lng: location.lon + (viewportDelta / 2),
-            },
-            southwest: {
-              lat: location.lat - (viewportDelta / 2),
-              lng: location.lon - (viewportDelta / 2),
-            }
-          };
-          initialRegion = {
-            latitude: location.lat,
-            longitude: location.lon,
-            latitudeDelta: viewportDelta,
-            longitudeDelta: viewportDelta,
-          };
+          apiParams.bounds = searchBoundsFromMiles(
+            location.lat,
+            location.lon,
+            SEARCH_RADIUS_MILES,
+          );
+          initialRegion = mapRegionFromSearchRadius(
+            location.lat,
+            location.lon,
+            SEARCH_RADIUS_MILES,
+          );
         }
 
         if (__DEV__) {
@@ -859,23 +857,13 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
         };
       } else {
         // Traditional bounds-based search
-        const viewportDelta = 0.5;
-        const bounds = {
-          northeast: {
-            lat: location.lat + (viewportDelta / 2),
-            lng: location.lon + (viewportDelta / 2),
-          },
-          southwest: {
-            lat: location.lat - (viewportDelta / 2),
-            lng: location.lon - (viewportDelta / 2),
-          }
-        };
+        const bounds = searchBoundsFromMiles(location.lat, location.lon, SEARCH_RADIUS_MILES);
 
         if (__DEV__) {
           console.log('🔍 Initial search bounds (unified):', {
             center: { lat: location.lat, lng: location.lon },
-            viewportDelta,
-            bounds
+            radiusMiles: SEARCH_RADIUS_MILES,
+            bounds,
           });
         }
 
@@ -886,12 +874,11 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
           dateFlexibility,
         });
         matches = response?.data || [];
-        initialRegion = {
-          latitude: location.lat,
-          longitude: location.lon,
-          latitudeDelta: viewportDelta,
-          longitudeDelta: viewportDelta,
-        };
+        initialRegion = mapRegionFromSearchRadius(
+          location.lat,
+          location.lon,
+          SEARCH_RADIUS_MILES,
+        );
       }
 
       if (response.success) {

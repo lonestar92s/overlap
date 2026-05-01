@@ -21,7 +21,7 @@ import { getAllLeagues, LEAGUES } from '../data/leagues';
 import { useSubscription } from '../hooks/useSubscription';
 
 const DISTANCE_OPTIONS = [
-    { value: 50, label: '50 miles' },
+    { value: 30, label: '30 miles' },
     { value: 100, label: '100 miles' },
     { value: 250, label: '250 miles' }
 ];

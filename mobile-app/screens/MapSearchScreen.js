@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import debounce from 'lodash/debounce';
 import {
   View,
   Text,
@@ -19,6 +20,7 @@ import BottomSheet from '../components/BottomSheet';
 import MatchMapView from '../components/MapView';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import ApiService from '../services/api';
+import { mapRegionFromSearchRadius, SEARCH_RADIUS_MILES } from '../utils/geoSearchBounds';
 
 const MapSearchScreen = ({ navigation }) => {
   // Search state
@@ -90,12 +92,11 @@ const MapSearchScreen = ({ navigation }) => {
     
     if (selectedLocation && mapRef.current) {
       // Center map on selected location
-      const newRegion = {
-        latitude: selectedLocation.lat,
-        longitude: selectedLocation.lon,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-      };
+      const newRegion = mapRegionFromSearchRadius(
+        selectedLocation.lat,
+        selectedLocation.lon,
+        SEARCH_RADIUS_MILES,
+      );
       
       mapRef.current.animateToRegion(newRegion, 1000);
     }

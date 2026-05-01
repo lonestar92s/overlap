@@ -83,7 +83,7 @@ export const formatSearchResults = (response) => {
 // Enhanced examples for Phase 1 capabilities
 export const getSearchExamples = () => [
     "Arsenal vs Chelsea matches in London between March 15-30",
-    "Premier League games within 50 miles of Manchester next month",
+    "Premier League games within 30 miles of Manchester next month",
     "Liverpool away games in Spain this weekend",
     "Barcelona matches at home in La Liga next weekend",
     "Championship matches in Birmingham this month",
