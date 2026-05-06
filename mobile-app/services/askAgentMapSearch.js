@@ -1,11 +1,7 @@
 import ApiService from './api';
-import {
-  mapRegionFromSearchRadius,
-  searchBoundsFromMiles,
-  SEARCH_RADIUS_MILES,
-} from '../utils/geoSearchBounds';
 
 const DEFAULT_VIEWPORT_DELTA = 0.5;
+const DEFAULT_BOUNDS_DELTA = 0.25;
 /** Padding around bbox when fitting map to NL matches (avoids pins on viewport edge). */
 const NL_MATCHES_REGION_PAD = 1.4;
 
@@ -40,7 +36,12 @@ export function buildInitialRegionFromNlMatches(matches, fallbackLngLat) {
       !Number.isNaN(lng) &&
       !Number.isNaN(lat)
     ) {
-      return mapRegionFromSearchRadius(lat, lng, SEARCH_RADIUS_MILES);
+      return {
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: DEFAULT_VIEWPORT_DELTA,
+        longitudeDelta: DEFAULT_VIEWPORT_DELTA,
+      };
     }
     return null;
   }
@@ -100,18 +101,19 @@ export const resolveAgentSearchToMapData = async (data) => {
     dateTo,
   };
 
-  // NL already resolved fixtures with the same geography as the server default radius (~30 mi) unless parsed.distance overrides.
+  // NL already resolved fixtures with the same geography as parsed.distance (~50 mi) on the server.
   // Re-querying with tiny bounds often drops Como/Bergamo-style rows vs Duomo centroid — use NL list.
   const nlMatches = Array.isArray(data?.matches) ? data.matches.filter(Boolean) : [];
   if (nlMatches.length > 0) {
     const fallbackCoords = location?.coordinates?.length === 2 ? location.coordinates : null;
     let initialRegion = buildInitialRegionFromNlMatches(nlMatches, fallbackCoords);
     if (!initialRegion && hasLocation) {
-      initialRegion = mapRegionFromSearchRadius(
-        location.coordinates[1],
-        location.coordinates[0],
-        SEARCH_RADIUS_MILES,
-      );
+      initialRegion = {
+        latitude: location.coordinates[1],
+        longitude: location.coordinates[0],
+        latitudeDelta: DEFAULT_VIEWPORT_DELTA,
+        longitudeDelta: DEFAULT_VIEWPORT_DELTA,
+      };
     }
     return {
       success: true,
@@ -160,17 +162,23 @@ export const resolveAgentSearchToMapData = async (data) => {
     }
 
     if (hasLocation) {
-      apiParams.bounds = searchBoundsFromMiles(
-        location.coordinates[1],
-        location.coordinates[0],
-        SEARCH_RADIUS_MILES,
-      );
+      apiParams.bounds = {
+        northeast: {
+          lat: location.coordinates[1] + DEFAULT_VIEWPORT_DELTA / 2,
+          lng: location.coordinates[0] + DEFAULT_VIEWPORT_DELTA / 2,
+        },
+        southwest: {
+          lat: location.coordinates[1] - DEFAULT_VIEWPORT_DELTA / 2,
+          lng: location.coordinates[0] - DEFAULT_VIEWPORT_DELTA / 2,
+        },
+      };
 
-      initialRegion = mapRegionFromSearchRadius(
-        location.coordinates[1],
-        location.coordinates[0],
-        SEARCH_RADIUS_MILES,
-      );
+      initialRegion = {
+        latitude: location.coordinates[1],
+        longitude: location.coordinates[0],
+        latitudeDelta: DEFAULT_VIEWPORT_DELTA,
+        longitudeDelta: DEFAULT_VIEWPORT_DELTA,
+      };
     }
 
     const aggregated = await ApiService.searchAggregatedMatches(apiParams);
@@ -180,11 +188,16 @@ export const resolveAgentSearchToMapData = async (data) => {
     // Parity fallback: broad/conversational asks sometimes resolve to inferred leagues
     // that over-constrain aggregated search. If that happens, retry with bounds search.
     if (matches.length === 0 && hasLocation && hasDates) {
-      const bounds = searchBoundsFromMiles(
-        location.coordinates[1],
-        location.coordinates[0],
-        SEARCH_RADIUS_MILES,
-      );
+      const bounds = {
+        northeast: {
+          lat: location.coordinates[1] + DEFAULT_BOUNDS_DELTA,
+          lng: location.coordinates[0] + DEFAULT_BOUNDS_DELTA,
+        },
+        southwest: {
+          lat: location.coordinates[1] - DEFAULT_BOUNDS_DELTA,
+          lng: location.coordinates[0] - DEFAULT_BOUNDS_DELTA,
+        },
+      };
 
       const fallbackResponse = await ApiService.searchMatchesByBounds({
         bounds,
@@ -194,11 +207,16 @@ export const resolveAgentSearchToMapData = async (data) => {
       matches = fallbackResponse?.data || [];
     }
   } else {
-    const bounds = searchBoundsFromMiles(
-      location.coordinates[1],
-      location.coordinates[0],
-      SEARCH_RADIUS_MILES,
-    );
+    const bounds = {
+      northeast: {
+        lat: location.coordinates[1] + DEFAULT_BOUNDS_DELTA,
+        lng: location.coordinates[0] + DEFAULT_BOUNDS_DELTA,
+      },
+      southwest: {
+        lat: location.coordinates[1] - DEFAULT_BOUNDS_DELTA,
+        lng: location.coordinates[0] - DEFAULT_BOUNDS_DELTA,
+      },
+    };
 
     const response = await ApiService.searchMatchesByBounds({
       bounds,
@@ -207,11 +225,12 @@ export const resolveAgentSearchToMapData = async (data) => {
     });
     matches = response?.data || [];
 
-    initialRegion = mapRegionFromSearchRadius(
-      location.coordinates[1],
-      location.coordinates[0],
-      SEARCH_RADIUS_MILES,
-    );
+    initialRegion = {
+      latitude: location.coordinates[1],
+      longitude: location.coordinates[0],
+      latitudeDelta: DEFAULT_VIEWPORT_DELTA,
+      longitudeDelta: DEFAULT_VIEWPORT_DELTA,
+    };
   }
 
   return {

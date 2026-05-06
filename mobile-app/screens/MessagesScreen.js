@@ -18,11 +18,6 @@ import * as Haptics from 'expo-haptics';
 import { processNaturalLanguageQuery, formatSearchResults, getSearchExamples } from '../services/naturalLanguageService';
 import ApiService from '../services/api';
 import { colors, spacing, typography, borderRadius, shadows } from '../styles/designTokens';
-import {
-  mapRegionFromSearchRadius,
-  searchBoundsFromMiles,
-  SEARCH_RADIUS_MILES,
-} from '../utils/geoSearchBounds';
 import MatchCard from '../components/MatchCard';
 
 const { width } = Dimensions.get('window');
@@ -204,16 +199,25 @@ const MessagesScreen = ({ navigation }) => {
         
         // Add optional bounds if location is provided
         if (hasLocation) {
-          apiParams.bounds = searchBoundsFromMiles(
-            location.coordinates[1],
-            location.coordinates[0],
-            SEARCH_RADIUS_MILES,
-          );
-          initialRegion = mapRegionFromSearchRadius(
-            location.coordinates[1],
-            location.coordinates[0],
-            SEARCH_RADIUS_MILES,
-          );
+          // Use exact viewport bounds (no buffer) - matches initialRegion exactly
+          const viewportDelta = 0.5; // Default viewport size
+          apiParams.bounds = {
+            northeast: { 
+              lat: location.coordinates[1] + (viewportDelta / 2), 
+              lng: location.coordinates[0] + (viewportDelta / 2) 
+            },
+            southwest: { 
+              lat: location.coordinates[1] - (viewportDelta / 2), 
+              lng: location.coordinates[0] - (viewportDelta / 2) 
+            }
+          };
+          // Set initial region for map centering (matches bounds exactly)
+          initialRegion = {
+            latitude: location.coordinates[1],
+            longitude: location.coordinates[0],
+            latitudeDelta: viewportDelta,
+            longitudeDelta: viewportDelta,
+          };
         }
         
         console.log('MessagesScreen: Calling searchAggregatedMatches with params:', apiParams);
@@ -225,11 +229,10 @@ const MessagesScreen = ({ navigation }) => {
         autoFitKey = Date.now(); // trigger map to auto-fit
       } else {
         // Traditional bounds-based search (requires both location and dates)
-        const bounds = searchBoundsFromMiles(
-          location.coordinates[1],
-          location.coordinates[0],
-          SEARCH_RADIUS_MILES,
-        );
+        const bounds = {
+          northeast: { lat: location.coordinates[1] + 0.25, lng: location.coordinates[0] + 0.25 },
+          southwest: { lat: location.coordinates[1] - 0.25, lng: location.coordinates[0] - 0.25 }
+        };
         const response = await ApiService.searchMatchesByBounds({
           bounds,
           dateFrom: searchParams.dateFrom,
@@ -237,11 +240,13 @@ const MessagesScreen = ({ navigation }) => {
         });
         matches = response.data || [];
         
-        initialRegion = mapRegionFromSearchRadius(
-          location.coordinates[1],
-          location.coordinates[0],
-          SEARCH_RADIUS_MILES,
-        );
+        // Set initial region for bounds-based search
+        initialRegion = {
+          latitude: location.coordinates[1],
+          longitude: location.coordinates[0],
+          latitudeDelta: 0.5,
+          longitudeDelta: 0.5,
+        };
       }
       
       // Navigate to MapResults with the search results
