@@ -41,22 +41,47 @@ jest.mock('react-native-maps', () => {
 });
 jest.mock('@gorhom/bottom-sheet', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { View, TextInput } = require('react-native');
+  const SheetRef = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      snapToIndex: jest.fn(),
+      close: jest.fn(),
+      expand: jest.fn(),
+      present: jest.fn(),
+      dismiss: jest.fn(),
+    }));
+    return <View ref={ref} testID="bottom-sheet" {...props} />;
+  });
+  SheetRef.displayName = 'BottomSheet';
+  const ModalRef = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      present: jest.fn(),
+      dismiss: jest.fn(),
+      snapToIndex: jest.fn(),
+      close: jest.fn(),
+      expand: jest.fn(),
+    }));
+    return <View ref={ref} testID="bottom-sheet-modal" {...props} />;
+  });
+  ModalRef.displayName = 'BottomSheetModal';
   return {
     __esModule: true,
-    default: React.forwardRef((props, ref) => {
-      React.useImperativeHandle(ref, () => ({
-        snapToIndex: jest.fn(),
-        close: jest.fn(),
-        expand: jest.fn(),
-      }));
-      return <View ref={ref} testID="bottom-sheet" {...props} />;
-    }),
+    default: SheetRef,
+    BottomSheetModal: ModalRef,
+    BottomSheetBackdrop: (props) => <View testID="bottom-sheet-backdrop" {...props} />,
+    BottomSheetView: View,
+    BottomSheetScrollView: View,
+    BottomSheetTextInput: TextInput,
     BottomSheetFlatList: ({ children, ...props }) => <View testID="bottom-sheet-flatlist" {...props}>{children}</View>,
   };
 });
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'Light',
+    Medium: 'Medium',
+    Heavy: 'Heavy',
+  },
 }));
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -72,7 +97,9 @@ jest.mock('../../utils/performanceTracker', () => ({
     startPhase: jest.fn(() => jest.fn()),
     stop: jest.fn(),
   })),
-  trackSyncPerformance: jest.fn((_metricType, fn) => (typeof fn === 'function' ? fn() : fn)),
+  trackSyncPerformance: jest.fn((_metricType, fn) =>
+    typeof fn === 'function' ? fn() : fn
+  ),
   MetricType: {
     SEARCH_THIS_AREA: 'SEARCH_THIS_AREA',
     FILTER_COMPUTATION: 'FILTER_COMPUTATION',
@@ -172,6 +199,31 @@ describe('MapResultsScreen - Filter Behavior', () => {
       </FilterProvider>
     );
   };
+
+  describe('filterData sync', () => {
+    it('runs FILTER_COMPUTATION a bounded number of times after mount (no thrash loop)', async () => {
+      const performanceTracker = require('../../utils/performanceTracker');
+      performanceTracker.trackSyncPerformance.mockClear();
+
+      const route = createMockRoute();
+      renderWithProvider(route);
+
+      await waitFor(
+        () => {
+          const filterCalls = performanceTracker.trackSyncPerformance.mock.calls.filter(
+            (call) => call[0] === performanceTracker.MetricType.FILTER_COMPUTATION
+          );
+          expect(filterCalls.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      const filterRuns = performanceTracker.trackSyncPerformance.mock.calls.filter(
+        (call) => call[0] === performanceTracker.MetricType.FILTER_COMPUTATION
+      ).length;
+      expect(filterRuns).toBeLessThanOrEqual(8);
+    });
+  });
 
   describe('Pre-selected Filters', () => {
     it('should apply pre-selected filters on mount', async () => {

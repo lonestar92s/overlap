@@ -1,318 +1,150 @@
-# Architecture
+# Overlap — Mobile & Backend Architecture
 
-This document provides a high-level overview of the Flight Match Finder architecture. For detailed technical specifications, see the referenced documents.
+This document describes how the **Expo / React Native** mobile app (`mobile-app/`) and the **Express** API (`backend/`) fit together. The **web** app is out of scope here.
 
-## System Overview
+---
 
-Flight Match Finder is a full-stack application for finding and planning trips around football matches. It consists of:
+## System context
 
-1. **Mobile App** (React Native/Expo)
-2. **Backend API** (Node.js/Express)
-3. **Web App** (React) - Optional admin/overlap extension
+```mermaid
+flowchart LR
+  subgraph mobile["Mobile app (Expo)"]
+    UI["Screens, components"]
+    NAV["React Navigation"]
+    CTX["Contexts (auth, itinerary, filters, notifications)"]
+    API_CLIENT["REST client + helpers"]
+    UI --> NAV
+    NAV --> UI
+    UI --> CTX
+    CTX --> API_CLIENT
+  end
 
-## Architecture Principles
+  subgraph backend["Backend (Node / Express)"]
+    HTTP["`/api/*` routes"]
+    MID["Middleware (auth, rate limits, CORS)"]
+    SVC["Services & providers"]
+    HTTP --> MID
+    MID --> SVC
+  end
 
-1. **Modular Design**: Each module should be independently understandable and modifiable
-2. **Separation of Concerns**: Clear boundaries between UI, business logic, and data layers
-3. **Reusability**: Shared components, utilities, and services
-4. **Performance First**: Caching, lazy loading, and optimization
-5. **Scalability**: Design for growth in users and features
+  DB[(MongoDB)]
 
-## Mobile App Architecture
+  subgraph third["External services"]
+    EXPO_PUSH["Expo Push"]
+    WORKOS["WorkOS (optional SSO)"]
+    API_SPORTS["API-Sports (fixtures)"]
+    LOC["LocationIQ (geocoding)"]
+    AMAD["Amadeus (flights, when configured)"]
+    CLOUD["Cloudinary (media, when configured)"]
+    MAIL["Email provider (via emailService)"]
+  end
 
-### Tech Stack
-- **Framework**: React Native with Expo
-- **Navigation**: React Navigation
-- **State Management**: React Context API
-- **Maps**: Google Maps (`react-native-maps`)
-- **Styling**: StyleSheet with Design Tokens
-- **Testing**: Jest + React Native Testing Library
-
-### Folder Structure
-```
-mobile-app/
-├── components/       # Reusable UI components
-├── screens/          # Screen-level components
-├── contexts/         # Global state management
-├── hooks/            # Custom React hooks
-├── services/         # API and external services
-├── utils/            # Utility functions
-├── styles/           # Design tokens and theme
-└── __tests__/        # Test files
-```
-
-### Key Patterns
-
-**Context API for State:**
-- `AuthContext`: User authentication state
-- `FilterContext`: Search filter state
-- `ItineraryContext`: Trip/itinerary state
-
-**Service Layer:**
-- `api.js`: Centralized API client
-- `naturalLanguageService.js`: Natural language processing
-
-**Custom Hooks:**
-- `useDateRange.js`: Date range management
-- `useMatchFilters.js`: Filter logic
-- `useSearchState.js`: Search state management
-
-**Design System:**
-- `designTokens.js`: Centralized colors, spacing, typography
-- Consistent styling across all components
-
-### Component Architecture
-
-**Screen Components:**
-- Full-page components that handle navigation
-- Examples: `SearchScreen`, `TripOverviewScreen`, `MapResultsScreen`
-
-**Reusable Components:**
-- Self-contained, reusable UI elements
-- Examples: `MatchCard`, `FilterModal`, `LocationAutocomplete`
-
-**Modal Components:**
-- Overlay components for focused interactions
-- Examples: `CreateTripModal`, `MatchModal`, `FilterModal`
-
-### State Management Flow
-
-```
-User Action → Component → Context/Hook → Service → API → Backend
-                ↓
-            Update State → Re-render UI
+  API_CLIENT <-->|HTTPS JSON<br/>Bearer JWT when logged in| HTTP
+  SVC --> DB
+  SVC --> API_SPORTS
+  SVC --> LOC
+  SVC -.-> AMAD
+  SVC -.-> CLOUD
+  SVC -.-> MAIL
+  SVC -.-> WORKOS
+  SVC --> EXPO_PUSH
+  EXPO_PUSH -.->|"device notification"| mobile
 ```
 
-## Backend Architecture
+**Configuration:** The app resolves `EXPO_PUBLIC_API_URL` (see `mobile-app/services/api.js`); production builds must define it explicitly.
 
-### Tech Stack
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: MongoDB with Mongoose
-- **Authentication**: JWT
-- **External APIs**: API-Sports, OpenAI, Amadeus, Cloudinary
+---
 
-### Folder Structure
-```
-overlap/backend/src/
-├── routes/           # Express route handlers
-├── services/         # Business logic
-├── models/           # Mongoose models
-├── middleware/       # Express middleware
-├── utils/            # Utility functions
-├── config/           # Configuration
-└── providers/        # External API providers
-```
+## Mobile app (logical layers)
 
-### API Structure
+```mermaid
+flowchart TB
+  subgraph presentation["Presentation"]
+    SCR["Screens: search, maps, trips, memories, account, auth, …"]
+    CMP["Components: maps, filters, modals, cards, …"]
+  end
 
-**Authentication Routes** (`/api/auth`):
-- POST `/register` - User registration
-- POST `/login` - User login
-- POST `/forgot-password` - Password reset request
-- POST `/reset-password` - Password reset
-- GET `/me` - Get current user
+  subgraph state["App state"]
+    AUTH_CTX["AuthContext + secure token storage"]
+    ITIN["ItineraryContext"]
+    FILT["FilterContext"]
+    NINBOX["NotificationInboxContext"]
+  end
 
-**Match Routes** (`/api/matches`):
-- GET `/search` - Search matches
-- GET `/by-team` - Get matches by team
-- GET `/recommended` - Get recommendations
+  subgraph integration["Integration"]
+    API["services/api.js — primary REST"]
+    NLP["naturalLanguageService — `/search/natural-language`"]
+    AGENT_MAP["askAgentMapSearch — agent-style map flows"]
+    NOTIF["notifications — Expo permissions & local handling"]
+  end
 
-**Trip Routes** (`/api/trips`):
-- GET `/` - Get user trips
-- POST `/` - Create trip
-- GET `/:id` - Get trip details
-- PUT `/:id` - Update trip
-- DELETE `/:id` - Delete trip
+  SCR --> CMP
+  SCR --> AUTH_CTX
+  SCR --> ITIN
+  SCR --> FILT
+  SCR --> NINBOX
+  SCR --> API
+  SCR --> NLP
+  SCR --> AGENT_MAP
+  SCR --> NOTIF
 
-**Search Routes** (`/api/search`):
-- POST `/natural-language` - Natural language search
-- GET `/venues` - Search venues
+  subgraph device["Device / Maps"]
+    GMAPS["Google Maps SDK when `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is set"]
+  end
 
-### Service Layer
-
-**Core Services:**
-- `recommendationService.js`: Match recommendation algorithm
-- `geocodingService.js`: Location geocoding
-- `venueService.js`: Venue management
-- `transportationService.js`: Flight/train search (planned)
-
-**External Integrations:**
-- `amadeusProvider.js`: Flight API integration
-- OpenAI: Natural language processing
-- Cloudinary: Image storage
-
-### Data Models
-
-**User Model:**
-- Authentication data
-- Preferences (teams, leagues, venues)
-- Trips array
-- Saved matches
-- Memories
-
-**Trip Model:**
-- Trip metadata (name, dates)
-- Matches array
-- Home bases (planned)
-- Travel information (planned)
-
-**Match Model:**
-- Match data from API-Sports
-- Venue information
-- Team information
-- League information
-
-## Data Flow
-
-### Search Flow
-```
-User Input → Natural Language Parser (OpenAI) → Search Parameters
-    → Match Search (API-Sports) → Filter/Process → Results → UI
+  CMP --> GMAPS
 ```
 
-### Trip Creation Flow
+---
+
+## Backend — HTTP surface
+
+Routes are mounted in `backend/src/app.js` under **`/api`**.
+
+```mermaid
+flowchart LR
+  Client["Mobile app"]
+
+  subgraph routes["`/api` route groups"]
+    R1["`/auth` — register, login, JWT, WorkOS SSO"]
+    R2["`/matches`, `/teams`, `/leagues`, `/venues`"]
+    R3["`/search` — search + natural-language planning"]
+    R4["`/trips`, `/preferences`, `/recommendations`"]
+    R5["`/memories`, `/feedback`"]
+    R6["`/notifications` — inbox + push orchestration"]
+    R7["`/transportation`, `/attendance`, attended matches"]
+    R8["`/admin`"]
+  end
+
+  DB[(MongoDB)]
+
+  Client --> routes
+  routes --> DB
 ```
-Select Matches → Create Trip → Save to User → Update Context
-    → Display in Trip List → Navigate to Trip Overview
+
+**Cross-cutting:** `helmet`, CORS, JSON body limits, and rate limiting (`/api` plus stricter `/api/auth`). Static uploads are served from `/uploads` when used.
+
+---
+
+## Push notifications path
+
+```mermaid
+sequenceDiagram
+  participant App as Mobile app
+  participant API as Backend /api/notifications
+  participant DB as MongoDB
+  participant Expo as Expo push service
+
+  App->>API: Register / update device push token (authenticated)
+  API->>DB: Store tokens on user
+  Note over API: Scheduler / triggers send notifications
+  API->>Expo: Push messages (expo-server-sdk)
+  Expo-->>App: Delivery to device
 ```
 
-### Recommendation Flow
-```
-User Preferences + Trip Context → Recommendation Service
-    → Scoring Algorithm → Filtered Results → UI
-```
+---
 
-## External Integrations
+## Diagram maintenance
 
-### API-Sports
-- **Purpose**: Match data (teams, leagues, fixtures)
-- **Integration**: REST API with rate limiting
-- **Caching**: Implemented for frequently accessed data
-
-### OpenAI
-- **Purpose**: Natural language query parsing
-- **Integration**: OpenAI API
-- **Usage**: Convert user queries to structured search parameters
-
-### Google Maps
-- **Purpose**: Map rendering and geocoding
-- **Integration**: `react-native-maps`
-- **Usage**: Display match locations, venue search
-
-### Amadeus (Planned)
-- **Purpose**: Flight search and booking
-- **Integration**: Amadeus API
-- **Usage**: Flight search for trip planning
-
-### Cloudinary
-- **Purpose**: Image storage and optimization
-- **Integration**: Cloudinary SDK
-- **Usage**: User-uploaded photos for memories
-
-## Security Architecture
-
-### Authentication
-- JWT tokens for API authentication
-- Secure token storage (expo-secure-store)
-- Token expiration and refresh
-
-### Authorization
-- Role-based access control (admin/user)
-- Resource ownership validation
-- API rate limiting
-
-### Data Protection
-- Password hashing (bcrypt)
-- Input validation and sanitization
-- HTTPS only in production
-- Environment variable management
-
-## Performance Optimizations
-
-### Frontend
-- Component memoization (React.memo)
-- Lazy loading of heavy components
-- Image optimization
-- Debounced search inputs
-- Cached API responses
-
-### Backend
-- Database indexing
-- API response caching
-- Rate limiting
-- Efficient database queries
-- Connection pooling
-
-## Testing Strategy
-
-### Frontend Testing
-- Unit tests for utilities and hooks
-- Component tests with React Native Testing Library
-- Integration tests for user flows
-
-### Backend Testing
-- Unit tests for services
-- Integration tests for API routes
-- Mock external API calls
-
-## Deployment
-
-### Infrastructure
-- **Backend**: Railway
-- **Mobile**: Expo/EAS for builds
-- **Database**: MongoDB (hosted)
-
-### CI/CD
-- Automated testing on PR
-- Automated deployment on merge
-- Environment variable management
-
-## Known Architecture Issues
-
-See `ai_agents/ARCHITECTURE_ANALYSIS.md` for detailed analysis of:
-- Oversized components (needs refactoring)
-- State management improvements needed
-- Code duplication issues
-- Performance optimization opportunities
-
-## Future Architecture Plans
-
-### Planned Improvements
-1. **State Management**: Consider Redux for complex state
-2. **Caching Layer**: Redis for API caching
-3. **Real-time Updates**: WebSocket support for live match updates
-4. **Offline Support**: Local database sync
-5. **Microservices**: Split backend into services (planned)
-
-### Planned Features
-- Flight search integration
-- Train search integration
-- Push notifications
-- Cost tracking
-- Home base management
-
-## References
-
-### Detailed Documentation
-- **Architecture Analysis**: `ai_agents/ARCHITECTURE_ANALYSIS.md`
-- **Flight/Train Architecture**: `ai_agents/FLIGHT_TRAIN_SEARCH_ARCHITECTURE.md`
-- **Multi-Query Architecture**: `ai_agents/MULTI_MATCH_SEARCH_ARCHITECTURE.md`
-- **Notifications** (`notification_center/`):
-  - `notification_center/README.md` (index + implementation map + client foreground behavior)
-  - `notification_center/NOTIFICATIONS_SERVICE_ARCHITECTURE.md`
-  - `notification_center/NOTIFICATIONS_IMPLEMENTATION_PLAN.md`
-  - `notification_center/NOTIFICATION_CENTER_CATEGORIES.md`
-- **Component Analysis**: `mobile-app/components/COMPONENT_AUDIT_REPORT.md`
-
-### Requirements
-- **Requirements**: `REQUIREMENTS.md`
-- **User Stories**: `USER_STORIES.md`
-- **Conventions**: `CONVENTIONS.md`
-
-### Technical Specs
-- **Phase 1 Specs**: `ai_agents/PHASE1_TECHNICAL_SPECS.md`
-- **API Contracts**: `ai_agents/MULTI_QUERY_API_CONTRACT.md`
-- **Test Plan**: `TEST_PLAN.md`
-
-
+- **Edit** the Mermaid blocks in this file when you add routes or major integrations.
+- **Preview:** use your editor’s Mermaid preview, or paste into [mermaid.live](https://mermaid.live) for PNG/SVG export.

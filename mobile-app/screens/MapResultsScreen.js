@@ -195,6 +195,8 @@ const MapResultsScreen = ({ navigation, route }) => {
   // Track if pre-selected filters have been applied (prevent reappearance)
   const hasAppliedPreSelectedFiltersRef = useRef(false);
   const isInitialMountRef = useRef(true);
+  /** JSON.stringify(sorted match ids) last passed to updateFilterData — avoids filterData/processMatches churn loops */
+  const syncedFilterMatchIdsRef = useRef('');
 
   
   // Refs
@@ -227,82 +229,49 @@ const MapResultsScreen = ({ navigation, route }) => {
     );
   }, []);
 
-  // Wrapper that updates context (for use in useEffect)
-  const processMatchesForFilters = useCallback((matchesToProcess) => {
-    if (!matchesToProcess || matchesToProcess.length === 0) return;
-    
-    const currentMatchIds = matchesToProcess.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
-    const previousMatchIds = filterData?.matchIds || [];
-    
-    // Only update if match IDs are different (avoid unnecessary updates on map movement)
-    if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
-      const computedData = computeFilterData(matchesToProcess);
-      updateFilterData(computedData);
-    }
-  }, [filterData, updateFilterData, computeFilterData]);
-
-  // Process real match data for filters
-  // FIXED: Process filter data from displayFilteredMatches (the filtered list) instead of all matches
-  // This ensures filter options match what's actually shown in the list and map
-  // Filter options will only show countries/leagues/teams from matches in the original search viewport
+  // Sync filter metadata from the rows we surface (viewport-bounded list when possible, otherwise full matches).
+  // Depends only on derived match lists — not filterData — so context updates cannot re-trigger an infinite loop.
   useEffect(() => {
-    // Filter data should be generated from the filtered list (displayFilteredMatches)
-    // This ensures filter options only show countries/leagues/teams that are actually visible
-    const matchesToProcess = displayFilteredMatches && displayFilteredMatches.length > 0 
-      ? displayFilteredMatches 
-      : (matches && matches.length > 0 ? matches : []);
-    
-    if (matchesToProcess.length > 0) {
-      const currentMatchIds = matchesToProcess.map(m => m.id || m.fixture?.id).filter(Boolean).sort();
-      const previousMatchIds = filterData?.matchIds || [];
-      
-      // Only process if match IDs are different (avoid unnecessary updates)
-      if (JSON.stringify(currentMatchIds) !== JSON.stringify(previousMatchIds)) {
-        const source = displayFilteredMatches && displayFilteredMatches.length > 0 
-          ? 'displayFilteredMatches (filtered by bounds)' 
-          : 'matches (all - no bounds filter yet)';
-        
-        if (__DEV__) {
-          console.log('🔧 [FILTER] Processing filterData:', {
-            source,
-            filteredCount: displayFilteredMatches?.length || 0,
-            totalMatches: matches.length,
-            processingCount: matchesToProcess.length,
-            note: 'Filter options will match visible matches only'
-          });
-        }
-        processMatchesForFilters(matchesToProcess);
-      }
+    if (!matches?.length) {
+      syncedFilterMatchIdsRef.current = '';
+      return;
     }
-  }, [displayFilteredMatches, matches, originalSearchBounds, filterData, processMatchesForFilters]);
 
-  // Validation logging: Track when filter data becomes ready
-  useEffect(() => {
-    if (filterData && filterData.matchIds && filterData.matchIds.length > 0) {
-      if (__DEV__) {
-      
-      }
-    }
-  }, [filterData, matches.length]);
+    const matchesToProcess =
+      displayFilteredMatches && displayFilteredMatches.length > 0
+        ? displayFilteredMatches
+        : matches;
 
-  // FIXED: Initialize filterData synchronously from initialMatches on mount
-  // This prevents race condition where getFilteredMatches runs before filterData is ready
-  useEffect(() => {
-    if (initialMatches && initialMatches.length > 0 && (!filterData || !filterData.matchIds || filterData.matchIds.length === 0)) {
-      const initialFilterData = computeFilterData(initialMatches);
-      if (initialFilterData && initialFilterData.matchIds.length > 0) {
-        updateFilterData(initialFilterData);
-        if (__DEV__) {
-          console.log('✅ [FILTER] Initialized filterData synchronously from initialMatches:', {
-            countries: initialFilterData.countries?.length || 0,
-            leagues: initialFilterData.leagues?.length || 0,
-            teams: initialFilterData.teams?.length || 0,
-            matchIds: initialFilterData.matchIds.length
-          });
-        }
-      }
+    if (!matchesToProcess.length) return;
+
+    const currentMatchIds = matchesToProcess
+      .map((m) => m.id || m.fixture?.id)
+      .filter(Boolean)
+      .sort();
+    const signature = JSON.stringify(currentMatchIds);
+
+    if (signature === syncedFilterMatchIdsRef.current) return;
+
+    syncedFilterMatchIdsRef.current = signature;
+
+    const source =
+      displayFilteredMatches && displayFilteredMatches.length > 0
+        ? 'displayFilteredMatches (filtered by bounds)'
+        : 'matches (all - no bounds filter yet)';
+
+    if (__DEV__) {
+      console.log('🔧 [FILTER] Processing filterData:', {
+        source,
+        filteredCount: displayFilteredMatches?.length || 0,
+        totalMatches: matches.length,
+        processingCount: matchesToProcess.length,
+        note: 'Filter options will match visible matches only',
+      });
     }
-  }, []); // Only run once on mount
+
+    const computedData = computeFilterData(matchesToProcess);
+    updateFilterData(computedData);
+  }, [displayFilteredMatches, matches, computeFilterData, updateFilterData]);
 
   // Set initial search region when component mounts
   // FIXED: Only run once on mount to prevent repeated initialization
