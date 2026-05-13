@@ -20,7 +20,7 @@ flowchart LR
   end
 
   subgraph backend["Backend (Node / Express)"]
-    HTTP["`/api/*` routes"]
+    HTTP["/api/* routes"]
     MID["Middleware (auth, rate limits, CORS)"]
     SVC["Services & providers"]
     HTTP --> MID
@@ -39,7 +39,7 @@ flowchart LR
     MAIL["Email provider (via emailService)"]
   end
 
-  API_CLIENT <-->|HTTPS JSON<br/>Bearer JWT when logged in| HTTP
+  API_CLIENT <-->|HTTPS JSON, Bearer JWT when logged in| HTTP
   SVC --> DB
   SVC --> API_SPORTS
   SVC --> LOC
@@ -73,7 +73,7 @@ flowchart TB
 
   subgraph integration["Integration"]
     API["services/api.js — primary REST"]
-    NLP["naturalLanguageService — `/search/natural-language`"]
+    NLP["naturalLanguageService — /search/natural-language"]
     AGENT_MAP["askAgentMapSearch — agent-style map flows"]
     NOTIF["notifications — Expo permissions & local handling"]
   end
@@ -89,7 +89,7 @@ flowchart TB
   SCR --> NOTIF
 
   subgraph device["Device / Maps"]
-    GMAPS["Google Maps SDK when `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is set"]
+    GMAPS["Google Maps SDK when EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is set"]
   end
 
   CMP --> GMAPS
@@ -105,15 +105,15 @@ Routes are mounted in `backend/src/app.js` under **`/api`**.
 flowchart LR
   Client["Mobile app"]
 
-  subgraph routes["`/api` route groups"]
-    R1["`/auth` — register, login, JWT, WorkOS SSO"]
-    R2["`/matches`, `/teams`, `/leagues`, `/venues`"]
-    R3["`/search` — search + natural-language planning"]
-    R4["`/trips`, `/preferences`, `/recommendations`"]
-    R5["`/memories`, `/feedback`"]
-    R6["`/notifications` — inbox + push orchestration"]
-    R7["`/transportation`, `/attendance`, attended matches"]
-    R8["`/admin`"]
+  subgraph routes["/api route groups"]
+    R1["/auth — register, login, JWT, WorkOS SSO"]
+    R2["/matches, /teams, /leagues, /venues"]
+    R3["/search — search + natural-language planning"]
+    R4["/trips, /preferences, /recommendations"]
+    R5["/memories, /feedback"]
+    R6["/notifications — inbox + push orchestration"]
+    R7["/transportation, /attendance, attended matches"]
+    R8["/admin"]
   end
 
   DB[(MongoDB)]
