@@ -1,35 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, SafeAreaView, FlatList, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  FlatList,
+  Image,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Button } from 'react-native-elements';
+import { useNavigation } from '@react-navigation/native';
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 import { normalizeIds } from '../utils/idNormalizer';
 
+const TABS = [
+  { id: 'trips', label: 'Past Trips' },
+  { id: 'memories', label: 'Memories' },
+  { id: 'favorites', label: 'Favorites' },
+];
+
 const AccountScreen = ({ navigation }) => {
   const { user, logout, refreshUser } = useAuth();
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [prefs, setPrefs] = useState({ 
-    favoriteLeagues: [], 
-    favoriteTeams: [], 
-    favoriteVenues: [] 
-  });
+  const [activeTab, setActiveTab] = useState(TABS[0].id);
+
+  const [prefs, setPrefs] = useState({ favoriteLeagues: [], favoriteTeams: [], favoriteVenues: [] });
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
+
   const [completedTrips, setCompletedTrips] = useState([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
-  
+
+  const [memories, setMemories] = useState([]);
+  const [loadingMemories, setLoadingMemories] = useState(false);
+  const [memoriesFetched, setMemoriesFetched] = useState(false);
+
+  const username = user?.username || user?.email?.split('@')[0] || 'user';
+  const displayName = user?.username || user?.email?.split('@')[0] || 'User';
+  const subscriptionTier = user?.subscription?.tier;
+  const showSubscriptionBadge = subscriptionTier && ['pro', 'planner', 'freemium'].includes(subscriptionTier);
+
+  // Load preferences
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const p = await ApiService.getPreferences();
+        if (mounted) {
+          setPrefs({
+            favoriteLeagues: p.favoriteLeagues || [],
+            favoriteLeaguesExpanded: p.favoriteLeaguesExpanded || [],
+            favoriteTeams: p.favoriteTeams || [],
+            favoriteVenues: p.favoriteVenues || [],
+            favoriteVenuesExpanded: p.favoriteVenuesExpanded || [],
+          });
+        }
+      } catch (_) {}
+      finally { if (mounted) setLoadingPrefs(false); }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Load completed trips
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const response = await ApiService.getTrips('completed');
+        if (mounted && response.success && response.trips) {
+          setCompletedTrips(normalizeIds(response.trips));
+        }
+      } catch (_) {}
+      finally { if (mounted) setLoadingTrips(false); }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Load memories lazily when tab is first opened
+  useEffect(() => {
+    if (activeTab !== 'memories' || memoriesFetched) return;
+    let mounted = true;
+    (async () => {
+      setLoadingMemories(true);
+      try {
+        const response = await ApiService.getMemories();
+        if (mounted && response.success) {
+          setMemories(response.data || []);
+        }
+      } catch (_) {}
+      finally {
+        if (mounted) {
+          setLoadingMemories(false);
+          setMemoriesFetched(true);
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [activeTab, memoriesFetched]);
+
+  const refreshPreferences = async () => {
+    try {
+      const p = await ApiService.getPreferences();
+      setPrefs({
+        favoriteLeagues: p.favoriteLeagues || [],
+        favoriteLeaguesExpanded: p.favoriteLeaguesExpanded || [],
+        favoriteTeams: p.favoriteTeams || [],
+        favoriteVenues: p.favoriteVenues || [],
+        favoriteVenuesExpanded: p.favoriteVenuesExpanded || [],
+      });
+    } catch (_) {}
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout }
-      ]
-    );
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: logout },
+    ]);
   };
 
   const handleDeleteAccount = () => {
@@ -65,251 +158,13 @@ const AccountScreen = ({ navigation }) => {
                     } finally {
                       setDeleteBusy(false);
                     }
-                  }
-                }
-              ]
+                  },
+                },
+              ],
             );
-          }
-        }
-      ]
-    );
-  };
-
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const p = await ApiService.getPreferences();
-        if (mounted) {
-          setPrefs({
-            favoriteLeagues: p.favoriteLeagues || [],
-            favoriteLeaguesExpanded: p.favoriteLeaguesExpanded || [],
-            favoriteTeams: p.favoriteTeams || [],
-            favoriteVenues: p.favoriteVenues || [],
-            favoriteVenuesExpanded: p.favoriteVenuesExpanded || []
-          });
-        }
-      } catch (e) {
-        // ignore
-      } finally {
-        if (mounted) setLoadingPrefs(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const refreshPreferences = async () => {
-    try {
-      const p = await ApiService.getPreferences();
-      setPrefs({
-        favoriteLeagues: p.favoriteLeagues || [],
-        favoriteLeaguesExpanded: p.favoriteLeaguesExpanded || [],
-        favoriteTeams: p.favoriteTeams || [],
-        favoriteVenues: p.favoriteVenues || [],
-        favoriteVenuesExpanded: p.favoriteVenuesExpanded || []
-      });
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  // Load completed trips for Past Trips tab
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoadingTrips(true);
-        const response = await ApiService.getTrips('completed');
-        if (mounted && response.success && response.trips) {
-          const normalizedTrips = normalizeIds(response.trips);
-          setCompletedTrips(normalizedTrips);
-        }
-      } catch (e) {
-        console.error('Error loading completed trips:', e);
-        if (mounted) setCompletedTrips([]);
-      } finally {
-        if (mounted) setLoadingTrips(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const renderSectionHeader = (title) => (
-    <Text style={styles.sectionHeader}>{title}</Text>
-  );
-
-  const renderFavoriteLeagues = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Leagues')}
-        {(prefs.favoriteLeaguesExpanded || prefs.favoriteLeagues || []).length === 0 ? (
-          <Text style={styles.emptyText}>No favorite leagues yet</Text>
-        ) : (
-          (prefs.favoriteLeaguesExpanded || []).map((l) => (
-            <View key={`fav-league-${l.id}`} style={styles.favoriteItem}>
-              <View style={styles.favoriteItemContent}>
-                <View style={styles.itemIconContainer}>
-                  {l.badge || l.logo || l.emblem ? (
-                    <Image 
-                      source={{ uri: l.badge || l.logo || l.emblem }} 
-                      style={styles.itemIcon}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={styles.itemIconPlaceholder} />
-                  )}
-                </View>
-                <Text style={styles.favoriteItemText}>
-                  {l.name || `League ${l.id}`}{l.country ? ` (${l.country})` : ''}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.starButton}
-                onPress={async () => {
-                  try {
-                    await ApiService.removeFavoriteLeague(l.id);
-                    await refreshPreferences();
-                  } catch (e) {
-                    // ignore
-                  }
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel="Remove from favorites"
-                accessibilityRole="button"
-              >
-                <MaterialIcons
-                  name="star"
-                  size={20}
-                  color="#FFD700"
-                />
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  const renderFavoriteTeams = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Teams')}
-        {(prefs.favoriteTeams || []).length === 0 ? (
-          <Text style={styles.emptyText}>No favorite teams yet</Text>
-        ) : (
-          (prefs.favoriteTeams || []).map((ft) => (
-            <View key={`fav-team-${ft.teamId?._id || ft.teamId}`} style={styles.favoriteItem}>
-              <View style={styles.favoriteItemContent}>
-                <View style={styles.itemIconContainer}>
-                  {ft.teamId?.badge || ft.teamId?.logo ? (
-                    <Image 
-                      source={{ uri: ft.teamId.badge || ft.teamId.logo }} 
-                      style={styles.itemIcon}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={styles.itemIconPlaceholder} />
-                  )}
-                </View>
-                <Text style={styles.favoriteItemText}>
-                  {ft.teamId?.name || `Team ${ft.teamId}`}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.starButton}
-                onPress={async () => {
-                  try {
-                    const mongoId = ft.teamId?._id || ft.teamId;
-                    await ApiService.removeFavoriteTeamByMongoId(String(mongoId));
-                    await refreshPreferences();
-                  } catch (e) {
-                    // ignore
-                  }
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel="Remove from favorites"
-                accessibilityRole="button"
-              >
-                <MaterialIcons
-                  name="star"
-                  size={20}
-                  color="#FFD700"
-                />
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  const renderFavoriteVenues = () => {
-    return (
-      <>
-        {renderSectionHeader('Favorite Venues')}
-        {(prefs.favoriteVenuesExpanded || prefs.favoriteVenues || []).length === 0 ? (
-          <Text style={styles.emptyText}>No favorite venues yet</Text>
-        ) : (
-          (prefs.favoriteVenuesExpanded || []).map((v) => (
-            <View key={`fav-venue-${v.venueId}`} style={styles.favoriteItem}>
-              <Text style={styles.favoriteItemText}>
-                {v.name || `Venue ${v.venueId}`}
-                {v.city || v.country ? ` (${[v.city, v.country].filter(Boolean).join(', ')})` : ''}
-              </Text>
-              <TouchableOpacity
-                style={styles.starButton}
-                onPress={async () => {
-                  try {
-                    await ApiService.removeFavoriteVenue(v.venueId);
-                    await refreshPreferences();
-                  } catch (e) {
-                    // ignore
-                  }
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel="Remove from favorites"
-                accessibilityRole="button"
-              >
-                <MaterialIcons
-                  name="star"
-                  size={20}
-                  color="#FFD700"
-                />
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </>
-    );
-  };
-
-  // Prefer username for consistency across profile surfaces
-  const username = user?.username || user?.email?.split('@')[0] || 'user';
-  const displayName = user?.username || user?.email?.split('@')[0] || 'User';
-  
-  // Get subscription tier for badge display
-  const subscriptionTier = user?.subscription?.tier;
-  const showSubscriptionBadge = subscriptionTier && (subscriptionTier === 'pro' || subscriptionTier === 'planner' || subscriptionTier === 'freemium');
-  const subscriptionBadgeText = subscriptionTier?.toUpperCase() || '';
-  
-  const tabs = [
-    { id: 'trips', label: 'Past Trips' },
-    { id: 'favorites', label: 'Favorites' },
-  ];
-  
-  // Tab state - default to first tab
-  const [activeTab, setActiveTab] = useState(tabs[0].id);
-
-  const handleMoreOptions = () => {
-    Alert.alert(
-      'Options',
-      'More options',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Settings', onPress: () => {/* Navigate to settings */} },
-        { text: 'Help', onPress: () => {/* Navigate to help */} },
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -323,7 +178,7 @@ const AccountScreen = ({ navigation }) => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8
+      quality: 0.8,
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
@@ -332,13 +187,16 @@ const AccountScreen = ({ navigation }) => {
       await ApiService.uploadAvatar({
         uri: asset.uri,
         type: asset.mimeType || 'image/jpeg',
-        name: asset.fileName || 'avatar.jpg'
+        name: asset.fileName || 'avatar.jpg',
       });
       await refreshUser();
     } catch (err) {
-      const message = err.status === 429
-        ? (err.retryAfterSeconds ? `Please wait ${err.retryAfterSeconds} seconds before trying again.` : err.message)
-        : err.message || 'Failed to update avatar.';
+      const message =
+        err.status === 429
+          ? err.retryAfterSeconds
+            ? `Please wait ${err.retryAfterSeconds} seconds before trying again.`
+            : err.message
+          : err.message || 'Failed to update avatar.';
       Alert.alert('Error', message);
     } finally {
       setUploadingAvatar(false);
@@ -368,208 +226,349 @@ const AccountScreen = ({ navigation }) => {
     Alert.alert('Profile picture', 'Choose an option', options);
   };
 
+  const handleMoreOptions = () => {
+    Alert.alert('Options', 'More options', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Settings', onPress: () => {} },
+      { text: 'Help', onPress: () => {} },
+    ]);
+  };
+
   const handleTripPress = (trip) => {
-    // For past trips, navigate to TripsTab first (which shows TripsList by default)
-    // then navigate to TripOverview, ensuring TripsList is in the stack
-    // This ensures proper back navigation and tab press behavior
     navigation.navigate('TripsTab');
-    // Use requestAnimationFrame to ensure the tab switch completes
-    // before navigating to TripOverview, which will push it on top of TripsList
     requestAnimationFrame(() => {
       navigation.navigate('TripsTab', {
         screen: 'TripOverview',
-        params: { 
-          itineraryId: trip.id || trip._id,
-          fromAccountTab: true 
-        }
+        params: { itineraryId: trip.id || trip._id, fromAccountTab: true },
       });
     });
   };
 
-  const renderTripItem = ({ item }) => {
-    const matchCount = item.matches?.length || 0;
-    return (
+  // --- Render helpers ---
+
+  const renderProfileHeader = () => (
+    <View style={styles.profileHeader}>
       <TouchableOpacity
-        style={styles.tripCard}
-        onPress={() => handleTripPress(item)}
-        activeOpacity={0.7}
+        style={styles.avatarContainer}
+        onPress={handleEditAvatar}
+        disabled={uploadingAvatar}
+        accessibilityLabel="Edit profile picture"
+        accessibilityRole="button"
       >
-        <View style={styles.tripContent}>
-          <View style={styles.tripHeader}>
-            <View style={styles.tripInfo}>
-              <Text style={styles.tripName}>{item.name}</Text>
-              {item.description ? (
-                <Text style={styles.tripDescription}>{item.description}</Text>
-              ) : null}
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color={colors.text.light} />
-          </View>
-          
-          {matchCount > 0 && (
-            <View style={styles.tripStats}>
-              <MaterialIcons name="sports-soccer" size={16} color={colors.text.secondary} />
-              <Text style={styles.matchCountText}>{matchCount} {matchCount === 1 ? 'match' : 'matches'}</Text>
+        <View style={styles.avatar}>
+          {user?.profile?.avatar ? (
+            <Image source={{ uri: user.profile.avatar }} style={styles.avatarImage} resizeMode="cover" />
+          ) : (
+            <MaterialIcons name="account-circle" size={80} color={colors.text.light} />
+          )}
+          {uploadingAvatar && (
+            <View style={styles.avatarLoadingOverlay}>
+              <ActivityIndicator size="small" color={colors.primary} />
             </View>
           )}
         </View>
+        <View style={styles.editIconContainer}>
+          <MaterialIcons name="edit" size={iconSizes.xs} color={colors.text.primary} />
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.userInfo}>
+        <Text style={styles.userName}>{displayName}</Text>
+        <Text style={styles.userHandle}>@{username}</Text>
+      </View>
+
+      <View style={styles.headerActions}>
+        {showSubscriptionBadge && (
+          <View style={styles.subscriptionBadge}>
+            <Text style={styles.subscriptionBadgeText}>{subscriptionTier.toUpperCase()}</Text>
+          </View>
+        )}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => navigation.navigate('Feedback', { type: 'general' })}
+          accessibilityLabel="Send feedback"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="feedback" size={iconSizes.md} color={colors.text.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={handleMoreOptions}
+          accessibilityLabel="More options"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="more-horiz" size={iconSizes.md} color={colors.text.primary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderTabs = () => (
+    <View style={styles.tabsContainer}>
+      {TABS.map((tab) => (
+        <TouchableOpacity
+          key={tab.id}
+          style={styles.tab}
+          onPress={() => setActiveTab(tab.id)}
+          accessibilityLabel={`View ${tab.label}`}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === tab.id }}
+        >
+          <Text style={[styles.tabText, activeTab === tab.id && styles.activeTabText]}>
+            {tab.label}
+          </Text>
+          {activeTab === tab.id && <View style={styles.tabIndicator} />}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderTripCard = (trip, index) => {
+    const matchCount = trip.matches?.length || 0;
+    const coverImage = trip.matches?.[0]?.fixture?.venue?.image || trip.matches?.[0]?.venueData?.image || null;
+    const startDate = trip.startDate ? new Date(trip.startDate) : null;
+    const endDate = trip.endDate ? new Date(trip.endDate) : null;
+    let dateRange = 'Dates TBD';
+    if (startDate && endDate) {
+      const start = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const end = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      dateRange = `${start} – ${end}`;
+    }
+
+    return (
+      <TouchableOpacity
+        key={trip.id || index}
+        style={styles.tripCard}
+        onPress={() => handleTripPress(trip)}
+        activeOpacity={0.7}
+        accessibilityLabel={`Trip: ${trip.name}`}
+        accessibilityRole="button"
+      >
+        <View style={styles.tripImageContainer}>
+          {coverImage ? (
+            <Image source={{ uri: coverImage }} style={styles.tripImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.tripImagePlaceholder}>
+              <MaterialIcons name="sports-soccer" size={iconSizes.xl} color={colors.text.light} />
+            </View>
+          )}
+        </View>
+        <View style={styles.tripInfo}>
+          <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
+          {trip.description ? (
+            <Text style={styles.tripDescription} numberOfLines={1}>{trip.description}</Text>
+          ) : null}
+          <View style={styles.tripMeta}>
+            <MaterialIcons name="calendar-today" size={iconSizes.xs} color={colors.text.light} />
+            <Text style={styles.tripMetaText}>
+              {dateRange}
+              {matchCount > 0 ? ` · ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}` : ''}
+            </Text>
+          </View>
+        </View>
+        <MaterialIcons name="chevron-right" size={iconSizes.md} color={colors.text.light} />
       </TouchableOpacity>
     );
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView 
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
+  const renderMemoryItem = (memory, index) => {
+    const photoUri = memory.photos?.[0]?.url || memory.photo || null;
+    const matchTitle = memory.matchTitle || memory.match?.teams || 'Match memory';
+
+    return (
+      <TouchableOpacity
+        key={memory._id || index}
+        style={styles.memoryCard}
+        onPress={() => navigation.navigate('MemoriesTab')}
+        activeOpacity={0.8}
+        accessibilityLabel={`Memory: ${matchTitle}`}
+        accessibilityRole="button"
       >
-        {/* Profile Header - Wanderlog Pattern */}
-        <View style={styles.profileHeader}>
-        {/* Avatar with edit icon */}
-        <TouchableOpacity 
-          style={styles.avatarContainer}
-          onPress={handleEditAvatar}
-          disabled={uploadingAvatar}
-          accessibilityLabel="Edit profile picture"
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.memoryPhoto} resizeMode="cover" />
+        ) : (
+          <View style={styles.memoryPhotoPlaceholder}>
+            <MaterialIcons name="sports-soccer" size={iconSizes.md} color={colors.text.light} />
+          </View>
+        )}
+        <Text style={styles.memoryLabel} numberOfLines={2}>{matchTitle}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderFavoriteItem = ({ item, type }) => {
+    let name = '';
+    let logo = null;
+    let onRemove = null;
+
+    if (type === 'league') {
+      name = item.name || `League ${item.id}`;
+      if (item.country) name += ` (${item.country})`;
+      logo = item.badge || item.logo || item.emblem;
+      onRemove = async () => {
+        try { await ApiService.removeFavoriteLeague(item.id); await refreshPreferences(); } catch (_) {}
+      };
+    } else if (type === 'team') {
+      name = item.teamId?.name || `Team ${item.teamId}`;
+      logo = item.teamId?.badge || item.teamId?.logo;
+      onRemove = async () => {
+        try {
+          const mongoId = item.teamId?._id || item.teamId;
+          await ApiService.removeFavoriteTeamByMongoId(String(mongoId));
+          await refreshPreferences();
+        } catch (_) {}
+      };
+    } else if (type === 'venue') {
+      name = item.name || `Venue ${item.venueId}`;
+      if (item.city || item.country) name += ` (${[item.city, item.country].filter(Boolean).join(', ')})`;
+      onRemove = async () => {
+        try { await ApiService.removeFavoriteVenue(item.venueId); await refreshPreferences(); } catch (_) {}
+      };
+    }
+
+    return (
+      <View style={styles.favoriteItem}>
+        <View style={styles.favoriteItemContent}>
+          <View style={styles.itemIconContainer}>
+            {logo ? (
+              <Image source={{ uri: logo }} style={styles.itemIcon} resizeMode="contain" />
+            ) : (
+              <View style={styles.itemIconPlaceholder} />
+            )}
+          </View>
+          <Text style={styles.favoriteItemText}>{name}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.starButton}
+          onPress={onRemove}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Remove from favorites"
           accessibilityRole="button"
         >
-          <View style={styles.avatar}>
-            {user?.profile?.avatar ? (
-              <Image source={{ uri: user.profile.avatar }} style={styles.avatarImage} resizeMode="cover" />
-            ) : (
-              <MaterialIcons name="account-circle" size={80} color={colors.text.light} />
-            )}
-            {uploadingAvatar && (
-              <View style={styles.avatarLoadingOverlay}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            )}
-          </View>
-          <View style={styles.editIconContainer}>
-            <MaterialIcons name="edit" size={iconSizes.sm} color={colors.text.primary} />
-          </View>
+          <MaterialIcons name="star" size={iconSizes.md} color={colors.warning} />
         </TouchableOpacity>
-
-        {/* User Info */}
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{displayName}</Text>
-          <Text style={styles.userHandle}>@{username}</Text>
-        </View>
-
-        {/* Top Right Actions */}
-        <View style={styles.headerActions}>
-          {showSubscriptionBadge && (
-            <View style={styles.subscriptionBadge}>
-              <Text style={styles.subscriptionBadgeText}>{subscriptionBadgeText}</Text>
-            </View>
-          )}
-          <TouchableOpacity 
-            style={styles.feedbackButton}
-            onPress={() => navigation.navigate('Feedback', { type: 'general' })}
-            accessibilityLabel="Send feedback"
-            accessibilityRole="button"
-            accessibilityHint="Opens feedback form to send suggestions or report issues"
-          >
-            <MaterialIcons name="feedback" size={iconSizes.md} color={colors.text.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.moreButton}
-            onPress={handleMoreOptions}
-            accessibilityLabel="More options"
-            accessibilityRole="button"
-          >
-            <MaterialIcons name="more-horiz" size={iconSizes.md} color={colors.text.primary} />
-          </TouchableOpacity>
-        </View>
       </View>
-      
-      {/* Tab Navigation - Wanderlog Pattern */}
-      <View style={styles.tabsContainer}>
-        <View style={styles.tabs}>
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tab, activeTab === tab.id && styles.activeTab]}
-              onPress={() => setActiveTab(tab.id)}
-              accessibilityLabel={`View ${tab.label}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === tab.id }}
-            >
-              <Text style={[
-                styles.tabText,
-                activeTab === tab.id && styles.activeTabText
-              ]}>
-                {tab.label}
-              </Text>
-              {activeTab === tab.id && <View style={styles.tabIndicator} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+    );
+  };
 
-      {/* Tab Content */}
-      <View style={styles.content}>
-        {activeTab === 'favorites' && (
-          <>
-        {loadingPrefs ? (
-          <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.primary} />
+  const renderTabContent = () => {
+    if (activeTab === 'trips') {
+      if (loadingTrips) {
+        return <ActivityIndicator style={styles.loader} color={colors.primary} />;
+      }
+      if (completedTrips.length === 0) {
+        return (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="flight-takeoff" size={iconSizes.xl * 1.5} color={colors.text.light} />
+            <Text style={styles.emptyStateText}>No past trips yet</Text>
+            <Text style={styles.emptyStateSubtext}>Your completed trips will appear here</Text>
           </View>
-        ) : (
-          <>
-            {renderFavoriteLeagues()}
-            {renderFavoriteTeams()}
-            {renderFavoriteVenues()}
-          </>
-        )}
-          </>
-        )}
-        
-        {activeTab === 'trips' && (
-          <>
-            {loadingTrips ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : completedTrips.length > 0 ? (
-              <FlatList
-                data={completedTrips}
-                renderItem={renderTripItem}
-                keyExtractor={(item) => item.id || item._id}
-                scrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.tripsListContainer}
-              />
-            ) : (
-              <View style={styles.emptyState}>
-                <MaterialIcons name="flight-takeoff" size={iconSizes.xl * 2} color={colors.text.light} />
-                <Text style={styles.emptyStateText}>No past trips yet</Text>
-                <Text style={styles.emptyStateSubtext}>Your completed trips will appear here</Text>
-              </View>
-            )}
-          </>
-        )}
-        
-        <Button
-          title="Delete my account"
-          onPress={handleDeleteAccount}
-          disabled={deleteBusy}
-          loading={deleteBusy}
-          type="clear"
-          titleStyle={styles.deleteAccountTitle}
-          buttonStyle={styles.deleteAccountButton}
-          containerStyle={{ marginTop: spacing.xl }}
-        />
+        );
+      }
+      return (
+        <View style={styles.tripsList}>
+          {completedTrips.map((trip, index) => renderTripCard(trip, index))}
+        </View>
+      );
+    }
 
-        {/* Logout button - visible on all tabs */}
-        <Button
-          title="Logout"
-          onPress={handleLogout}
-          buttonStyle={styles.logoutButton}
-          titleStyle={styles.logoutButtonTitle}
-          containerStyle={{ marginTop: spacing.md }}
-        />
-      </View>
-    </ScrollView>
+    if (activeTab === 'memories') {
+      if (loadingMemories) {
+        return <ActivityIndicator style={styles.loader} color={colors.primary} />;
+      }
+      if (memories.length === 0) {
+        return (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="photo-library" size={iconSizes.xl * 1.5} color={colors.text.light} />
+            <Text style={styles.emptyStateText}>No memories yet</Text>
+            <Text style={styles.emptyStateSubtext}>Your match memories will appear here</Text>
+          </View>
+        );
+      }
+      return (
+        <View>
+          <View style={styles.memoriesGrid}>
+            {memories.slice(0, 6).map((memory, index) => renderMemoryItem(memory, index))}
+          </View>
+          {memories.length > 6 && (
+            <TouchableOpacity
+              style={styles.seeAllButton}
+              onPress={() => navigation.navigate('MemoriesTab')}
+              accessibilityLabel="See all memories"
+              accessibilityRole="button"
+            >
+              <Text style={styles.seeAllText}>See all {memories.length} memories</Text>
+              <MaterialIcons name="chevron-right" size={iconSizes.sm} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    }
+
+    if (activeTab === 'favorites') {
+      if (loadingPrefs) {
+        return <ActivityIndicator style={styles.loader} color={colors.primary} />;
+      }
+      const leagues = prefs.favoriteLeaguesExpanded || [];
+      const teams = prefs.favoriteTeams || [];
+      const venues = prefs.favoriteVenuesExpanded || [];
+      return (
+        <View>
+          <Text style={styles.sectionHeader}>Leagues</Text>
+          {leagues.length === 0
+            ? <Text style={styles.emptyText}>No favorite leagues yet</Text>
+            : leagues.map((l, i) => (
+              <View key={`league-${l.id || i}`}>{renderFavoriteItem({ item: l, type: 'league' })}</View>
+            ))}
+
+          <Text style={styles.sectionHeader}>Teams</Text>
+          {teams.length === 0
+            ? <Text style={styles.emptyText}>No favorite teams yet</Text>
+            : teams.map((t, i) => (
+              <View key={`team-${t.teamId?._id || t.teamId || i}`}>{renderFavoriteItem({ item: t, type: 'team' })}</View>
+            ))}
+
+          <Text style={styles.sectionHeader}>Venues</Text>
+          {venues.length === 0
+            ? <Text style={styles.emptyText}>No favorite venues yet</Text>
+            : venues.map((v, i) => (
+              <View key={`venue-${v.venueId || i}`}>{renderFavoriteItem({ item: v, type: 'venue' })}</View>
+            ))}
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {renderProfileHeader()}
+        {renderTabs()}
+        <View style={styles.tabContent}>
+          {renderTabContent()}
+        </View>
+
+        {/* Account actions — always visible below tab content */}
+        <View style={styles.accountActions}>
+          <Button
+            title="Logout"
+            onPress={handleLogout}
+            buttonStyle={styles.logoutButton}
+            titleStyle={styles.logoutButtonTitle}
+          />
+          <Button
+            title="Delete my account"
+            onPress={handleDeleteAccount}
+            disabled={deleteBusy}
+            loading={deleteBusy}
+            type="clear"
+            titleStyle={styles.deleteAccountTitle}
+            buttonStyle={styles.deleteAccountButton}
+          />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -582,12 +581,13 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  // Profile Header - Wanderlog Pattern
+
+  // Profile header
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg, // SafeAreaView handles safe area, this is additional spacing
+    paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
@@ -619,9 +619,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
@@ -645,17 +645,9 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: spacing.xs,
   },
-  feedbackButton: {
-    padding: spacing.xs,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moreButton: {
+  iconButton: {
     padding: spacing.xs,
     minWidth: 44,
     minHeight: 44,
@@ -667,7 +659,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    marginRight: spacing.xs,
   },
   subscriptionBadgeText: {
     ...typography.caption,
@@ -675,24 +666,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  
-  // Tab Navigation - Wanderlog Pattern
+
+  // Tabs
   tabsContainer: {
+    flexDirection: 'row',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  tabs: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
   tab: {
-    paddingBottom: spacing.sm,
+    paddingVertical: spacing.md,
+    marginRight: spacing.lg,
     position: 'relative',
-  },
-  activeTab: {
-    // Active styling handled by text and indicator
   },
   tabText: {
     ...typography.body,
@@ -709,19 +694,118 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 2,
-    backgroundColor: colors.secondary, // Orange accent like Wanderlog
+    backgroundColor: colors.secondary,
     borderRadius: 1,
   },
-  
-  content: {
+
+  // Tab content
+  tabContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.md,
+    minHeight: 300,
   },
-  loadingContainer: {
-    paddingVertical: spacing.sm,
+  loader: {
+    marginTop: spacing.xl,
+  },
+
+  // Trip cards
+  tripsList: {
+    gap: spacing.md,
+  },
+  tripCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    ...shadows.small,
   },
+  tripImageContainer: {
+    width: 80,
+    height: 80,
+    backgroundColor: colors.cardGrey,
+  },
+  tripImage: {
+    width: '100%',
+    height: '100%',
+  },
+  tripImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.cardGrey,
+  },
+  tripInfo: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+  },
+  tripName: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  tripDescription: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  tripMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  tripMetaText: {
+    ...typography.caption,
+    color: colors.text.light,
+  },
+
+  // Memories grid
+  memoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  memoryCard: {
+    width: '31%',
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.cardGrey,
+  },
+  memoryPhoto: {
+    width: '100%',
+    aspectRatio: 1,
+  },
+  memoryPhotoPlaceholder: {
+    width: '100%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.cardGrey,
+  },
+  memoryLabel: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    padding: spacing.xs,
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  seeAllText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+
+  // Favorites
   sectionHeader: {
     ...typography.body,
     fontWeight: '700',
@@ -730,12 +814,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   favoriteItem: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
   favoriteItemContent: {
     flexDirection: 'row',
@@ -743,21 +827,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemIconContainer: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.md,
   },
   itemIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: borderRadius.xs,
   },
   itemIconPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.borderLight,
@@ -767,45 +851,22 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     flex: 1,
   },
+  starButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.sm,
+  },
   emptyText: {
     ...typography.bodySmall,
     color: colors.text.secondary,
     fontStyle: 'italic',
     marginBottom: spacing.sm,
   },
-  starButton: {
-    padding: spacing.xs,
-    marginLeft: spacing.sm,
-  },
-  deleteAccountButton: {
-    backgroundColor: 'transparent',
-    paddingVertical: spacing.sm,
-  },
-  deleteAccountTitle: {
-    ...typography.button,
-    color: colors.error,
-    textDecorationLine: 'underline',
-  },
-  logoutButton: {
-    backgroundColor: colors.error,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-  },
-  logoutButtonTitle: {
-    ...typography.button,
-    color: colors.card,
-  },
-  
-  // Empty States
+
+  // Empty states
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: spacing.xxl * 2,
+    paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.xl,
-    minHeight: 400,
   },
   emptyStateText: {
     ...typography.h3,
@@ -817,53 +878,32 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: spacing.md,
   },
-  
-  // Past Trips Styles
-  tripsListContainer: {
-    paddingBottom: spacing.md,
+
+  // Account actions
+  accountActions: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
+    gap: spacing.sm,
   },
-  tripCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.md,
-    ...shadows.small,
-    overflow: 'hidden',
+  logoutButton: {
+    backgroundColor: colors.error,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm,
   },
-  tripContent: {
-    padding: spacing.md,
+  logoutButtonTitle: {
+    ...typography.button,
+    color: colors.card,
   },
-  tripHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
+  deleteAccountButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: spacing.sm,
   },
-  tripInfo: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  tripName: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  tripDescription: {
-    ...typography.bodySmall,
-    color: colors.text.secondary,
-  },
-  tripStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  matchCountText: {
-    ...typography.bodySmall,
-    color: colors.text.secondary,
-    marginLeft: spacing.xs,
+  deleteAccountTitle: {
+    ...typography.button,
+    color: colors.error,
+    textDecorationLine: 'underline',
   },
 });
 
 export default AccountScreen;
-

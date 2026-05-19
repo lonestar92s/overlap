@@ -14,8 +14,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
-import PopularMatches from '../components/PopularMatches';
-import PopularMatchModal from '../components/PopularMatchModal';
 import LocationSearchModal from '../components/LocationSearchModal';
 import TripCountdownWidget from '../components/TripCountdownWidget';
 import MatchMapView from '../components/MapView';
@@ -104,9 +102,6 @@ const SearchScreen = ({ navigation, route }) => {
   // Original home screen state (only used if flag is disabled)
   const [showLocationSearchModal, setShowLocationSearchModal] = useState(false);
   const [initialLocation, setInitialLocation] = useState(null);
-  const [showMatchModal, setShowMatchModal] = useState(false);
-  const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
-  const [popularMatches, setPopularMatches] = useState([]);
   const [askAgentModalVisible, setAskAgentModalVisible] = useState(false);
   const [askAgentPrompt, setAskAgentPrompt] = useState(homeAskAgentDraft);
   const [askAgentLoading, setAskAgentLoading] = useState(false);
@@ -321,47 +316,6 @@ const SearchScreen = ({ navigation, route }) => {
       </View>
     </TouchableOpacity>
   );
-
-  const handleMatchPress = (match) => {
-    // Find the index of the selected match in the popularMatches array
-    const matchIndex = popularMatches.findIndex(m => 
-      (m.fixture?.id && match.fixture?.id && m.fixture.id === match.fixture.id) ||
-      (m.id && match.id && m.id === match.id)
-    );
-    
-    if (matchIndex !== -1 && popularMatches.length > 0) {
-      setSelectedMatchIndex(matchIndex);
-      setShowMatchModal(true);
-    } else {
-      // Fallback: if match not found in array, navigate to MapResults
-      navigation.navigate('SearchTab', {
-        screen: 'MapResults',
-        params: {
-          matches: [match],
-          initialRegion: match.fixture?.venue?.coordinates ? {
-            latitude: match.fixture.venue.coordinates[1],
-            longitude: match.fixture.venue.coordinates[0],
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          } : null,
-        }
-      });
-    }
-  };
-
-  const handleMatchesLoaded = (matches) => {
-    setPopularMatches(matches);
-  };
-
-  const handleModalClose = () => {
-    setShowMatchModal(false);
-  };
-
-  const handleModalNavigate = (newIndex) => {
-    if (newIndex >= 0 && newIndex < popularMatches.length) {
-      setSelectedMatchIndex(newIndex);
-    }
-  };
 
   const handleMarkerPress = (match) => {
     setSelectedMatch(match);
@@ -609,12 +563,6 @@ const SearchScreen = ({ navigation, route }) => {
           />
         </View>
 
-        <View style={styles.section}>
-          <PopularMatches 
-            onMatchPress={handleMatchPress}
-            onMatchesLoaded={handleMatchesLoaded}
-          />
-        </View>
       </ScrollView>
 
       <LocationSearchModal
@@ -624,13 +572,6 @@ const SearchScreen = ({ navigation, route }) => {
         initialLocation={initialLocation}
       />
 
-      <PopularMatchModal
-        visible={showMatchModal}
-        matches={popularMatches}
-        currentMatchIndex={selectedMatchIndex}
-        onClose={handleModalClose}
-        onNavigate={handleModalNavigate}
-      />
 
       {!askAgentModalVisible ? (
         <View style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}>

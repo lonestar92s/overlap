@@ -29,7 +29,6 @@ import RegisterScreen from './screens/RegisterScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import WorkOSLoginScreen from './screens/WorkOSLoginScreen';
-import MessagesScreen from './screens/MessagesScreen';
 import AttendedMatchesScreen from './screens/AttendedMatchesScreen';
 import AccountScreen from './screens/AccountScreen';
 import FeedbackScreen from './screens/FeedbackScreen';
@@ -277,9 +276,6 @@ function AuthenticatedTabs() {
                 case 'NotificationsTab':
                   iconName = 'notifications';
                   break;
-                case 'MessagesTab':
-                  iconName = 'chat-bubble-outline';
-                  break;
                 case 'AccountTab':
                   iconName = 'person-outline';
                   break;
@@ -323,9 +319,6 @@ function AuthenticatedTabs() {
               tabBarBadge: notificationsBadge,
             }}
           />
-          {FEATURE_FLAGS.enableMessagesTab && (
-            <Tab.Screen name="MessagesTab" component={MessagesScreen} options={{ tabBarLabel: 'Messages' }} />
-          )}
           <Tab.Screen name="AccountTab" component={AccountStack} options={{ tabBarLabel: 'Profile' }} />
         </Tab.Navigator>
       </ItineraryProvider>

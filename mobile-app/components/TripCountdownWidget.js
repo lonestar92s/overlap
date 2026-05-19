@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useItineraries } from '../contexts/ItineraryContext';
 import { findNextUpcomingTrip, calculateCountdown } from '../utils/countdownUtils';
+import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 
 const { width } = Dimensions.get('window');
 
@@ -68,17 +68,17 @@ const TripCountdownWidget = ({ onTripPress }) => {
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <MaterialIcons 
-              name={status === 'in-progress' ? 'flight-takeoff' : 'schedule'} 
-              size={20} 
-              color="#1976d2" 
+            <MaterialIcons
+              name={status === 'in-progress' ? 'flight-takeoff' : 'schedule'}
+              size={iconSizes.sm}
+              color={colors.primary}
             />
           </View>
           <Text style={styles.tripName} numberOfLines={1}>
             {trip.name}
           </Text>
         </View>
-        
+
         <View style={styles.matchInfo}>
           <Text style={styles.matchText} numberOfLines={1}>
             {match.homeTeam?.name} vs {match.awayTeam?.name}
@@ -101,7 +101,7 @@ const TripCountdownWidget = ({ onTripPress }) => {
           <Text style={styles.venueText} numberOfLines={1}>
             {match.venue}
           </Text>
-          <MaterialIcons name="chevron-right" size={20} color="#666" />
+          <MaterialIcons name="chevron-right" size={iconSizes.sm} color={colors.text.secondary} />
         </View>
       </View>
     </TouchableOpacity>
@@ -110,62 +110,57 @@ const TripCountdownWidget = ({ onTripPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginVertical: 10,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.card,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    ...shadows.medium,
   },
   content: {
-    padding: 16,
+    padding: spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   iconContainer: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#e3f2fd',
+    backgroundColor: colors.status.attendancePromptBg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: spacing.sm,
   },
   tripName: {
-    fontSize: 16,
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text.primary,
     flex: 1,
   },
   matchInfo: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   matchText: {
-    fontSize: 14,
+    ...typography.bodySmall,
     fontWeight: '500',
-    color: '#333',
-    marginBottom: 2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
   leagueText: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
   },
   countdownContainer: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   countdownText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1976d2',
+    ...typography.h3,
+    color: colors.primary,
   },
   inProgressText: {
-    color: '#4CAF50',
+    color: colors.success,
   },
   footer: {
     flexDirection: 'row',
@@ -173,10 +168,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   venueText: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.caption,
+    color: colors.text.secondary,
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
 });
 
