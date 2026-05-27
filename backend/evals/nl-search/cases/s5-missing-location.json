@@ -1,0 +1,19 @@
+{
+  "id": "S5-002",
+  "scenario": "S5",
+  "modes": ["api"],
+  "description": "Require location when league and date are provided without place.",
+  "input": {
+    "query": "Premier league matches on March 21st"
+  },
+  "expect": {
+    "success": false,
+    "missingFields": [
+      "location"
+    ],
+    "messageContainsAny": [
+      "where",
+      "location"
+    ]
+  }
+}

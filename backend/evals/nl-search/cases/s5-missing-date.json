@@ -1,0 +1,26 @@
+{
+  "id": "S5-001",
+  "scenario": "S5",
+  "modes": ["api"],
+  "description": "Require date when location and league are provided without timeframe.",
+  "input": {
+    "query": "Premier league matches in London"
+  },
+  "expect": {
+    "success": false,
+    "missingFields": [
+      "date"
+    ],
+    "messageContainsAny": [
+      "when",
+      "date"
+    ],
+    "parsed": {
+      "leagues": {
+        "$leagueIdsContain": [
+          "39"
+        ]
+      }
+    }
+  }
+}

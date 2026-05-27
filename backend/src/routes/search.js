@@ -83,7 +83,7 @@ Generate a friendly, conversational message that:
             `;
         }
         const response = await client.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.7,
             max_tokens: context.type === 'error' ? 100 : 150
@@ -843,7 +843,7 @@ const parseQuery = async (query) => {
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
             messages: [
                 {
                     role: "system",
@@ -1997,7 +1997,7 @@ const parseNaturalLanguage = async (query, conversationHistory = []) => {
                     conversationContext += "\nIMPORTANT: If the current query is a follow-up (like 'just premier league' or 'only Arsenal'), use the context from previous searches to fill in missing information (location, dates, etc.).\n";
                 }
                 const completion = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
+                model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
                 messages: [
                     {
                         role: "system",

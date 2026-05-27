@@ -1,0 +1,27 @@
+{
+  "id": "S8-001",
+  "scenario": "S8",
+  "modes": ["parse", "api"],
+  "description": "Multi-query parse includes primary and secondary constraints.",
+  "input": {
+    "query": "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period. The other matches can be bundesliga 2 or austrian bundesliga"
+  },
+  "expect": {
+    "isMultiQuery": true,
+    "parsed": {
+      "primary": {
+        "teams": [
+          "Bayern Munich"
+        ],
+        "matchType": "home"
+      },
+      "secondary": {
+        "count": 2,
+        "maxDistance": 200
+      },
+      "relationship": {
+        "distanceFrom": "primary"
+      }
+    }
+  }
+}

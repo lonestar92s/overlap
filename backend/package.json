@@ -10,6 +10,9 @@
     "test:watch": "NODE_ENV=test jest --watch",
     "test:unit": "NODE_ENV=test jest --testPathPattern=tests/unit",
     "test:integration": "NODE_ENV=test jest --testPathPattern=tests/integration",
+    "eval:nl-search": "node evals/nl-search/run.js",
+    "eval:nl-search:parse": "node evals/nl-search/run.js --mode parse",
+    "eval:nl-search:api": "node evals/nl-search/run.js --mode api",
     "check:syntax": "node scripts/check-syntax.js",
     "prestart": "npm run check:syntax",
     "prepare": "husky install || true"

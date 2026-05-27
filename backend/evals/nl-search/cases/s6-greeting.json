@@ -1,0 +1,22 @@
+{
+  "id": "S6-001",
+  "scenario": "S6",
+  "modes": ["api"],
+  "description": "Greeting should return conversational response with examples.",
+  "input": {
+    "query": "hello"
+  },
+  "expect": {
+    "success": false,
+    "messageContainsAny": [
+      "help",
+      "matches",
+      "try"
+    ],
+    "parsed": {
+      "location": {
+        "$exists": false
+      }
+    }
+  }
+}
