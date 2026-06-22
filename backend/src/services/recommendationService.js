@@ -309,7 +309,7 @@ class RecommendationService {
                     params: { 
                         league: leagueId, 
                         date: date,
-                        season: 2025// Current season
+                        season: 2026 // Current season
                     },
                     headers: { 'x-apisports-key': API_SPORTS_KEY },
                     httpsAgent,

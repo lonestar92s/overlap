@@ -832,7 +832,7 @@ async function getRelevantLeagueIds(searchContext, user = null, options = {}) {
 // Helper function to calculate season based on competition type and date
 function calculateSeasonForCompetition(competitionId, dateFrom) {
     if (!dateFrom) {
-        return '2025'; // Default
+        return '2026'; // Default
     }
     const startYear = new Date(dateFrom).getFullYear();
     const startMonth = new Date(dateFrom).getMonth() + 1;
@@ -924,7 +924,7 @@ router.get('/competitions/:competitionId', authenticateToken, async (req, res) =
         // Generate unique search session ID for tracking
         const searchSessionId = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         // Determine season based on competition type and date range
-        let season = '2025'; // Default for regular leagues
+        let season = '2026'; // Default for regular leagues
         if (dateFrom) {
             const startYear = new Date(dateFrom).getFullYear();
             const startMonth = new Date(dateFrom).getMonth() + 1;
@@ -1026,7 +1026,7 @@ router.get('/venues/stats', async (req, res) => {
 router.get('/search', async (req, res) => {
     try {
         const searchRequestStartTime = performance.now();
-        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2025, competitions, teams, neLat, neLng, swLat, swLng, dateFlexibility: dateFlexibilityParam } = req.query;
+        const { homeTeam, awayTeam, dateFrom, dateTo, season = 2026, competitions, teams, neLat, neLng, swLat, swLng, dateFlexibility: dateFlexibilityParam } = req.query;
         // Location-only search: if bounds and date range are provided without competitions/teams/teams
         const hasBounds = neLat && neLng && swLat && swLng;
         const hasCompetitionsOrTeams = (competitions && competitions.trim() !== '') || (teams && teams.trim() !== '');
@@ -2736,10 +2736,11 @@ router.get('/recommended', authenticateToken, async (req, res) => {
             allMatches = [];
             const apiPromises = targetLeagues.map(async (leagueId) => {
             try {
+                const leagueSeason = calculateSeasonForCompetition(leagueId, dateFrom);
                 const apiResponse = await apiSportsService.get('/fixtures', {
                     params: { 
                         league: leagueId, 
-                        season: '2025', 
+                        season: leagueSeason, 
                         from: dateFrom, 
                         to: dateTo 
                     },
@@ -3609,17 +3610,17 @@ router.get('/by-team/:id', async (req, res) => {
             apiSportsService.get('/fixtures', {
                 params: {
                     team: teamId,
-                    season: 2025,
-                    from: '2025-07-01', // Start of 2025-2026 season
-                    to: '2026-06-30'    // End of 2025-2026 season
+                    season: 2026,
+                    from: '2026-07-01', // Start of 2026-2027 season
+                    to: '2027-06-30'    // End of 2026-2027 season
                 }
             }),
             apiSportsService.get('/fixtures', {
                 params: {
                     team: teamId,
-                    season: 2025,
-                    from: '2025-07-01', // Start of 2025-2026 season
-                    to: '2026-06-30',   // End of 2025-2026 season
+                    season: 2026,
+                    from: '2026-07-01', // Start of 2026-2027 season
+                    to: '2027-06-30',   // End of 2026-2027 season
                     status: 'FT-AET-PEN' // Finished matches
                 }
             })

@@ -1635,7 +1635,7 @@ async function resolveLeagueIdsFromTeams(teams) {
 }
 
 function determineSeasonForCompetitions(startDate, competitionIds = []) {
-    let season = 2025;
+    let season = 2026;
     if (!startDate) {
         return season;
     }
