@@ -13,12 +13,14 @@ import {
 import { Card, Avatar, Divider, Button, ButtonGroup } from 'react-native-elements';
 import ApiService from '../services/api';
 import { formatMatchTimeInVenueTimezone, getTimezoneLabel, getVenueTimezone } from '../utils/timezoneUtils';
+import ItineraryModal from '../components/ItineraryModal';
 
 const ResultsScreen = ({ route, navigation }) => {
   const { matches: initialMatches = [], searchParams = {} } = route.params || {};
   const [allMatches, setAllMatches] = useState(initialMatches); // Keep all matches
   const [matches, setMatches] = useState(initialMatches);
   const [loading, setLoading] = useState(false);
+  const [planMatch, setPlanMatch] = useState(null);
   const [showDistanceFilter, setShowDistanceFilter] = useState(false);
   const [selectedDistance, setSelectedDistance] = useState(() => {
     // Find the index of the current distance in our options
@@ -258,7 +260,7 @@ const ResultsScreen = ({ route, navigation }) => {
   };
 
   const handlePlanTrip = (match) => {
-    // TODO: Navigate to trip planning screen
+    setPlanMatch(match);
   };
 
   const renderMatchItem = ({ item }) => {
@@ -531,6 +533,12 @@ const ResultsScreen = ({ route, navigation }) => {
         scrollEnabled={!loading}
       />
       {loading && renderLoadingOverlay()}
+      <ItineraryModal
+        visible={!!planMatch}
+        onClose={() => setPlanMatch(null)}
+        matchData={planMatch}
+        onSave={() => setPlanMatch(null)}
+      />
     </View>
   );
 };

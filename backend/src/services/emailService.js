@@ -112,7 +112,7 @@ class EmailService {
      */
     async sendPasswordResetEmail(to, resetUrl) {
         await this.initialize();
-        const subject = 'Reset Your Password - Flight Match Finder';
+        const subject = 'Reset Your Password - Overlap';
         const html = `
             <!DOCTYPE html>
             <html>
@@ -123,40 +123,45 @@ class EmailService {
             </head>
             <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background-color: #007AFF; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Flight Match Finder</h1>
+                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Overlap</h1>
                 </div>
                 <div style="background-color: #FFFFFF; padding: 30px; border: 1px solid #E0E0E0; border-top: none; border-radius: 0 0 8px 8px;">
                     <h2 style="color: #333; margin-top: 0;">Reset Your Password</h2>
-                    <p>We received a request to reset your password. Click the button below to create a new password:</p>
+                    <p>We received a request to reset your password. Open the link below on your phone to create a new password in the Overlap app:</p>
                     <div style="text-align: center; margin: 30px 0;">
                         <a href="${resetUrl}" 
                            style="display: inline-block; background-color: #007AFF; color: #FFFFFF; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
                             Reset Password
                         </a>
                     </div>
-                    <p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+                    <p style="color: #666; font-size: 14px;">Or copy and paste this link into your phone’s browser (or open it from Mail on your device):</p>
                     <p style="color: #007AFF; font-size: 12px; word-break: break-all; background-color: #F5F5F5; padding: 10px; border-radius: 4px;">${resetUrl}</p>
                     <p style="color: #666; font-size: 14px; margin-top: 30px;">
-                        <strong>This link will expire in 10 minutes.</strong>
+                        If the link doesn’t open the app, open Overlap → Forgot password → Enter reset code, and paste the token from the link.
+                        <br/><strong>This link will expire in 10 minutes.</strong>
                     </p>
                     <p style="color: #666; font-size: 14px;">
                         If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
                     </p>
                     <hr style="border: none; border-top: 1px solid #E0E0E0; margin: 30px 0;">
                     <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
-                        © ${new Date().getFullYear()} Flight Match Finder. All rights reserved.
+                        © ${new Date().getFullYear()} Overlap. All rights reserved.
                     </p>
                 </div>
             </body>
             </html>
         `;
         const text = `
-Reset Your Password - Flight Match Finder
-We received a request to reset your password. Click the link below to create a new password:
+Reset Your Password - Overlap
+
+We received a request to reset your password. Open this link on your phone to create a new password:
+
 ${resetUrl}
+
 This link will expire in 10 minutes.
+If the link does not open the app, open Overlap → Forgot password → Enter reset code.
 If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
-© ${new Date().getFullYear()} Flight Match Finder. All rights reserved.
+© ${new Date().getFullYear()} Overlap. All rights reserved.
         `.trim();
         return await this._sendEmail(to, subject, html, text);
     }

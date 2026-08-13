@@ -11,7 +11,8 @@ router.get('/unread-count', auth, async (req, res) => {
     try {
         const count = await NotificationLog.countDocuments({
             userId: req.user._id,
-            openedAt: null
+            openedAt: null,
+            deletedAt: null
         });
         res.json({ success: true, unreadCount: count });
     } catch (error) {
@@ -27,7 +28,7 @@ router.get('/', auth, async (req, res) => {
             MAX_NOTIFICATION_PAGE
         );
         const cursor = req.query.cursor;
-        const query = { userId: req.user._id };
+        const query = { userId: req.user._id, deletedAt: null };
         if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
             query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
         }
@@ -116,7 +117,8 @@ router.post('/log-opened/:logId', auth, async (req, res) => {
 
         const log = await NotificationLog.findOne({
             _id: logId,
-            userId: req.user._id
+            userId: req.user._id,
+            deletedAt: null
         });
 
         if (!log) {
@@ -132,6 +134,30 @@ router.post('/log-opened/:logId', auth, async (req, res) => {
     } catch (error) {
         console.error('Error recording notification open:', error);
         res.status(500).json({ error: 'Failed to record notification open' });
+    }
+});
+
+router.delete('/:logId', auth, async (req, res) => {
+    try {
+        const { logId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(logId)) {
+            return res.status(400).json({ error: 'Invalid notification log id' });
+        }
+
+        const log = await NotificationLog.findOneAndUpdate(
+            { _id: logId, userId: req.user._id, deletedAt: null },
+            { $set: { deletedAt: new Date() } },
+            { new: true }
+        );
+
+        if (!log) {
+            return res.status(404).json({ error: 'Notification log not found' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting notification:', error);
+        res.status(500).json({ error: 'Failed to delete notification' });
     }
 });
 

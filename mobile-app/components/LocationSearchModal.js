@@ -18,6 +18,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { debounce } from 'lodash';
+import * as Location from 'expo-location';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FlightSearchTab from './FlightSearchTab';
@@ -41,6 +42,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
   // Location search results
   const [locationResults, setLocationResults] = useState([]);
   const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
   
   // Collapsible states
   const [whereExpanded, setWhereExpanded] = useState(true);
@@ -139,6 +141,7 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
       setSelectedDates({});
       setIsSearchingLocation(false);
       setLocationResults([]);
+      setNearbyLoading(false);
       setWhenExpanded(false);
       setShowCalendar(false);
       setCurrentMonth(new Date().toISOString().split('T')[0]);
@@ -461,6 +464,67 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
     }
     setWhenExpanded(true);
     setShowCalendar(true);
+  };
+
+  const handleNearbySelect = async () => {
+    setNearbyLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location access needed',
+          'Enable location permissions to find matches near you.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = position.coords;
+      let city = 'Nearby';
+      let country = '';
+      let region = '';
+
+      try {
+        const reverseGeocode = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+        if (reverseGeocode?.length > 0) {
+          const address = reverseGeocode[0];
+          city = address.city || address.subregion || address.region || 'Nearby';
+          country = address.country || '';
+          region = address.region || '';
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.error('[LocationSearchModal] Reverse geocoding error:', error);
+        }
+      }
+
+      const nearbyLocation = {
+        place_id: 'nearby',
+        city,
+        country,
+        displayRegion: region,
+        lat: latitude,
+        lon: longitude,
+        description: country ? `${city}, ${country}` : city,
+        isNearby: true,
+      };
+
+      handleLocationSelect(nearbyLocation);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[LocationSearchModal] Error getting nearby location:', error);
+      }
+      Alert.alert('Could not get location', 'Please try again or search manually.');
+    } finally {
+      setNearbyLoading(false);
+    }
   };
 
   const handleRecentSearchSelect = (search) => {
@@ -1068,6 +1132,32 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                   )}
                 </View>
                 
+                {/* Nearby / current location */}
+                {!location && locationSearchQuery.trim().length < 2 && (
+                  <View style={styles.suggestedSection}>
+                    <Text style={styles.sectionLabel}>Suggested destinations</Text>
+                    <TouchableOpacity
+                      style={styles.locationResultItem}
+                      onPress={handleNearbySelect}
+                      disabled={nearbyLoading}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Use current location"
+                    >
+                      <View style={styles.nearbyIconContainer}>
+                        <MaterialIcons name="near-me" size={24} color={colors.primary} />
+                      </View>
+                      <View style={styles.locationResultText}>
+                        <Text style={styles.locationResultTitle}>Nearby</Text>
+                        <Text style={styles.locationResultSubtitle}>Find what's around you</Text>
+                      </View>
+                      {nearbyLoading && (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {/* Location Search Results */}
                 {isSearchingLocation && locationSearchQuery.trim().length >= 2 && !location && (
                   <View style={styles.locationResultsOuter}>
@@ -1110,8 +1200,8 @@ const LocationSearchModal = ({ visible, onClose, navigation, initialLocation = n
                   </View>
                 )}
 
-                {/* Recent Searches - Show when not actively searching OR when location is selected */}
-                {(!isSearchingLocation || location) && recentSearches.length > 0 && (
+                {/* Recent Searches */}
+                {locationSearchQuery.trim().length < 2 && recentSearches.length > 0 && (
                   <View style={styles.recentSection}>
                     <Text style={styles.sectionLabel}>Recent searches</Text>
                     {recentSearches.map((search) => (
@@ -1650,6 +1740,18 @@ const styles = StyleSheet.create({
   locationResultSubtitle: {
     ...typography.caption,
     color: 'rgba(0, 0, 0, 0.5)',
+  },
+  suggestedSection: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  nearbyIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(11, 155, 80, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   recentSection: {
     gap: spacing.sm + spacing.xs + 3,

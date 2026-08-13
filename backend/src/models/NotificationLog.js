@@ -26,6 +26,11 @@ const notificationLogSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    deletedAt: {
+        type: Date,
+        default: null,
+        index: true
+    },
     title: String,
     body: String,
     data: mongoose.Schema.Types.Mixed,

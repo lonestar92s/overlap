@@ -1,10 +1,11 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "Overlap",
     "slug": "mobile-app",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "overlap",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -16,7 +17,19 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lonestar92s.overlap",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "CFBundleDisplayName": "Overlap",
+        "UIBackgroundModes": ["remote-notification"],
+        "NSCameraUsageDescription": "Overlap uses the camera so you can add photos to match memories.",
+        "NSPhotoLibraryUsageDescription": "Overlap needs photo access so you can add pictures to memories and your profile.",
+        "NSPhotoLibraryAddUsageDescription": "Overlap needs permission to save photos you take for memories.",
+        "NSLocationWhenInUseUsageDescription": "Overlap uses your location to show nearby matches and plan trips.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Overlap uses your location to show nearby matches and plan trips.",
+        "NSLocationAlwaysUsageDescription": "Overlap uses your location to show nearby matches and plan trips.",
+        "NSMicrophoneUsageDescription": "Overlap does not record audio; this permission is only requested if a feature needs it.",
+        "NSFaceIDUsageDescription": "Overlap can use Face ID to protect your account on this device."
+      },
+      "entitlements": {
+        "aps-environment": "production"
       }
     },
     "android": {
@@ -25,7 +38,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.mobileapp"
+      "package": "com.lonestar92s.overlap",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "data": [
+            {
+              "scheme": "overlap",
+              "host": "reset-password"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

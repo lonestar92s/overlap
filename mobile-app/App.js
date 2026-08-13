@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, getStateFromPath } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,7 +23,6 @@ import MemoriesMapScreen from './screens/MemoriesMapScreen';
 import TripsListScreen from './screens/TripsListScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
 import ItineraryMapScreen from './screens/ItineraryMapScreen';
-import TripMapView from './screens/TripMapView';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
@@ -41,6 +40,44 @@ import { validateEnvironmentVariables } from './utils/envValidation';
 import { FEATURE_FLAGS } from './utils/featureFlags';
 
 const rootNavigationRef = createNavigationContainerRef();
+
+/** Deep links for auth flows (password reset). Prefer overlap://reset-password?token=... */
+const linking = {
+  prefixes: ['overlap://', 'com.lonestar92s.overlap://', 'exp+mobile-app://'],
+  config: {
+    screens: {
+      ResetPassword: {
+        path: 'reset-password',
+        parse: {
+          token: (token) => token,
+        },
+      },
+      ForgotPassword: 'forgot-password',
+      Login: 'login',
+      Register: 'register',
+    },
+  },
+  getStateFromPath: (path, options) => {
+    // Support overlap://reset-password?token=abc and overlap://reset-password/abc
+    const [pathname, search = ''] = String(path).split('?');
+    const normalized = pathname.replace(/^\//, '');
+    if (normalized.startsWith('reset-password')) {
+      const pathToken = normalized.split('/')[1];
+      let token = pathToken || undefined;
+      if (!token && search) {
+        try {
+          token = new URLSearchParams(search).get('token') || undefined;
+        } catch (_) {
+          token = undefined;
+        }
+      }
+      return {
+        routes: [{ name: 'ResetPassword', params: token ? { token } : {} }],
+      };
+    }
+    return getStateFromPath(path, options);
+  },
+};
 
 // Validate environment variables on app startup
 // In production, this will fail fast if required variables are missing
@@ -161,10 +198,6 @@ function TripsStack() {
       <Stack.Screen
         name="ItineraryMap"
         component={ItineraryMapScreen}
-      />
-      <Stack.Screen
-        name="TripMapView"
-        component={TripMapView}
       />
     </Stack.Navigator>
   );
@@ -409,7 +442,11 @@ function AppContent() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <NotificationInboxProvider enabled={inboxEnabled}>
-          <NavigationContainer ref={rootNavigationRef} onReady={onNavigationReady}>
+          <NavigationContainer
+            ref={rootNavigationRef}
+            linking={linking}
+            onReady={onNavigationReady}
+          >
             <StatusBar style="light" backgroundColor={colors.primary} />
             {isAuthenticated() ? <AuthenticatedTabs /> : <AuthStack />}
           </NavigationContainer>

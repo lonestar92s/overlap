@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   FlatList,
   Image,
+  Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +20,7 @@ import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 import { normalizeIds } from '../utils/idNormalizer';
+import { getLegalPageUrls } from '../config/legalUrls';
 
 const TABS = [
   { id: 'trips', label: 'Past Trips' },
@@ -44,8 +46,7 @@ const AccountScreen = ({ navigation }) => {
 
   const username = user?.username || user?.email?.split('@')[0] || 'user';
   const displayName = user?.username || user?.email?.split('@')[0] || 'User';
-  const subscriptionTier = user?.subscription?.tier;
-  const showSubscriptionBadge = subscriptionTier && ['pro', 'planner', 'freemium'].includes(subscriptionTier);
+  // Subscription tiers exist server-side but IAP/paywall is not shipped yet — hide marketing badges.
 
   // Load preferences
   useEffect(() => {
@@ -226,11 +227,58 @@ const AccountScreen = ({ navigation }) => {
     Alert.alert('Profile picture', 'Choose an option', options);
   };
 
+  const openLegalDoc = async (which) => {
+    const { termsUrl, privacyUrl } = getLegalPageUrls();
+    const url = which === 'terms' ? termsUrl : privacyUrl;
+    if (!url) {
+      Alert.alert(
+        'Legal',
+        'Set EXPO_PUBLIC_WEB_APP_URL to your deployed web app (no trailing slash) so Terms and Privacy open in the browser.',
+      );
+      return;
+    }
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Error', 'Could not open the link.');
+    }
+  };
+
   const handleMoreOptions = () => {
-    Alert.alert('Options', 'More options', [
+    Alert.alert('Options', undefined, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Settings', onPress: () => {} },
-      { text: 'Help', onPress: () => {} },
+      {
+        text: 'Settings',
+        onPress: () => {
+          Alert.alert('Settings', undefined, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Notification settings',
+              onPress: () => Linking.openSettings(),
+            },
+            { text: 'Terms of Service', onPress: () => openLegalDoc('terms') },
+            { text: 'Privacy Policy', onPress: () => openLegalDoc('privacy') },
+          ]);
+        },
+      },
+      {
+        text: 'Help',
+        onPress: () => {
+          Alert.alert('Help', undefined, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Send feedback',
+              onPress: () => navigation.navigate('Feedback', { type: 'general' }),
+            },
+            {
+              text: 'Report a bug',
+              onPress: () => navigation.navigate('Feedback', { type: 'bug' }),
+            },
+            { text: 'Terms of Service', onPress: () => openLegalDoc('terms') },
+            { text: 'Privacy Policy', onPress: () => openLegalDoc('privacy') },
+          ]);
+        },
+      },
     ]);
   };
 
@@ -278,11 +326,6 @@ const AccountScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.headerActions}>
-        {showSubscriptionBadge && (
-          <View style={styles.subscriptionBadge}>
-            <Text style={styles.subscriptionBadgeText}>{subscriptionTier.toUpperCase()}</Text>
-          </View>
-        )}
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => navigation.navigate('Feedback', { type: 'general' })}
@@ -552,6 +595,15 @@ const AccountScreen = ({ navigation }) => {
 
         {/* Account actions — always visible below tab content */}
         <View style={styles.accountActions}>
+          <View style={styles.legalRow}>
+            <TouchableOpacity onPress={() => openLegalDoc('terms')} accessibilityRole="link">
+              <Text style={styles.legalLink}>Terms of Service</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>·</Text>
+            <TouchableOpacity onPress={() => openLegalDoc('privacy')} accessibilityRole="link">
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
           <Button
             title="Logout"
             onPress={handleLogout}
@@ -653,18 +705,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  subscriptionBadge: {
-    backgroundColor: colors.secondary,
-    borderRadius: borderRadius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  subscriptionBadgeText: {
-    ...typography.caption,
-    color: colors.onSecondary,
-    fontWeight: '600',
-    letterSpacing: 0.5,
   },
 
   // Tabs
@@ -885,6 +925,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  legalLink: {
+    ...typography.caption,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    ...typography.caption,
+    color: colors.text.light,
   },
   logoutButton: {
     backgroundColor: colors.error,

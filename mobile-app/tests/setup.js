@@ -18,9 +18,16 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 // Mock expo modules
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(() => Promise.resolve({
     coords: { latitude: 37.7749, longitude: -122.4194 }
   })),
+  reverseGeocodeAsync: jest.fn(() => Promise.resolve([{
+    city: 'San Francisco',
+    country: 'United States',
+    region: 'California',
+  }])),
+  Accuracy: { Balanced: 3, High: 4 },
 }));
 
 jest.mock('expo-image-picker', () => ({

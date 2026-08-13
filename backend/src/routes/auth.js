@@ -373,12 +373,18 @@ router.post('/forgot-password', [
         user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
         user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
         await user.save({ validateBeforeSave: false });
-        // Build reset URL
-        // For mobile apps, we'll use a deep link format: app://reset-password/:token
-        // For web, we'll use: https://domain.com/reset-password/:token
-        // For now, we'll use the API endpoint which can redirect or return JSON
-        const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
-        const resetUrl = `${baseUrl}/api/auth/reset-password/${resetToken}`;
+        // Build reset URL for the mobile app deep link (opens ResetPasswordScreen).
+        // Override with PASSWORD_RESET_URL_TEMPLATE containing {token}, or FRONTEND_URL for a web page.
+        const scheme = process.env.MOBILE_APP_SCHEME || 'overlap';
+        let resetUrl;
+        if (process.env.PASSWORD_RESET_URL_TEMPLATE) {
+            resetUrl = process.env.PASSWORD_RESET_URL_TEMPLATE.replace('{token}', resetToken);
+        } else if (process.env.FRONTEND_URL) {
+            const baseUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
+            resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+        } else {
+            resetUrl = `${scheme}://reset-password?token=${resetToken}`;
+        }
         // Send email with reset link
         try {
             const emailSent = await emailService.sendPasswordResetEmail(user.email, resetUrl);

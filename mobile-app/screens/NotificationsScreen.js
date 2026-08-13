@@ -7,12 +7,14 @@ import {
     Pressable,
     RefreshControl,
     ActivityIndicator,
-    Alert
+    Alert,
+    Animated
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import NotificationService from '../services/notifications';
 import { executeNotificationPayload } from '../utils/notificationDeepLink';
 import { colors, spacing, typography, borderRadius } from '../styles/designTokens';
@@ -45,6 +47,8 @@ export default function NotificationsScreen() {
     const [nextCursor, setNextCursor] = useState(null);
     const [loadingMore, setLoadingMore] = useState(false);
     const handlingRef = useRef(new Set());
+    const deletingRef = useRef(new Set());
+    const swipeableRefs = useRef(new Map());
 
     const loadPage = useCallback(async (cursor, append) => {
         const res = await NotificationService.fetchNotifications({ cursor, limit: 50 });
@@ -126,41 +130,113 @@ export default function NotificationsScreen() {
         [navigation, refreshUnreadCount]
     );
 
+    const closeOtherSwipeables = useCallback((activeId) => {
+        swipeableRefs.current.forEach((ref, id) => {
+            if (id !== activeId) {
+                ref?.close();
+            }
+        });
+    }, []);
+
+    const onDeleteItem = useCallback(
+        async (item) => {
+            const id = item.id;
+            if (deletingRef.current.has(id)) return;
+            deletingRef.current.add(id);
+
+            setItems((prev) => prev.filter((row) => row.id !== id));
+            swipeableRefs.current.get(id)?.close();
+
+            try {
+                const res = await NotificationService.deleteNotification(id);
+                if (!res.ok) {
+                    await loadPage(null, false);
+                    Alert.alert('Notifications', res.error || 'Failed to delete notification');
+                    return;
+                }
+                await refreshUnreadCount();
+            } finally {
+                deletingRef.current.delete(id);
+                swipeableRefs.current.delete(id);
+            }
+        },
+        [loadPage, refreshUnreadCount]
+    );
+
+    const renderRightActions = useCallback(
+        (progress, _dragX, item) => {
+            const translateX = progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [72, 0],
+                extrapolate: 'clamp'
+            });
+
+            return (
+                <Animated.View style={[styles.deleteActionWrap, { transform: [{ translateX }] }]}>
+                    <Pressable
+                        onPress={() => onDeleteItem(item)}
+                        style={styles.deleteAction}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete notification"
+                    >
+                        <MaterialIcons name="delete-outline" size={22} color={colors.onPrimary} />
+                        <Text style={styles.deleteActionText}>Delete</Text>
+                    </Pressable>
+                </Animated.View>
+            );
+        },
+        [onDeleteItem]
+    );
+
     const renderItem = useCallback(
         ({ item }) => {
             const unread = item.openedAt == null;
             return (
-                <Pressable
-                    onPress={() => onPressItem(item)}
-                    style={({ pressed }) => [
-                        styles.row,
-                        unread && styles.rowUnread,
-                        pressed && styles.rowPressed
-                    ]}
+                <Swipeable
+                    ref={(ref) => {
+                        if (ref) {
+                            swipeableRefs.current.set(item.id, ref);
+                        } else {
+                            swipeableRefs.current.delete(item.id);
+                        }
+                    }}
+                    friction={2}
+                    overshootRight={false}
+                    onSwipeableWillOpen={() => closeOtherSwipeables(item.id)}
+                    renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
                 >
-                    <View style={styles.rowIcon}>
-                        <MaterialIcons
-                            name={unread ? 'notifications-active' : 'notifications-none'}
-                            size={22}
-                            color={unread ? colors.primary : colors.text.secondary}
-                        />
-                    </View>
-                    <View style={styles.rowBody}>
-                        <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={2}>
-                            {item.title || 'Notification'}
-                        </Text>
-                        {item.body ? (
-                            <Text style={styles.body} numberOfLines={3}>
-                                {item.body}
+                    <Pressable
+                        onPress={() => onPressItem(item)}
+                        style={({ pressed }) => [
+                            styles.row,
+                            unread && styles.rowUnread,
+                            pressed && styles.rowPressed
+                        ]}
+                    >
+                        <View style={styles.rowIcon}>
+                            <MaterialIcons
+                                name={unread ? 'notifications-active' : 'notifications-none'}
+                                size={22}
+                                color={unread ? colors.primary : colors.text.secondary}
+                            />
+                        </View>
+                        <View style={styles.rowBody}>
+                            <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={2}>
+                                {item.title || 'Notification'}
                             </Text>
-                        ) : null}
-                        <Text style={styles.meta}>{formatRelativeTime(item.sentAt)}</Text>
-                    </View>
-                    <MaterialIcons name="chevron-right" size={22} color={colors.text.light} />
-                </Pressable>
+                            {item.body ? (
+                                <Text style={styles.body} numberOfLines={3}>
+                                    {item.body}
+                                </Text>
+                            ) : null}
+                            <Text style={styles.meta}>{formatRelativeTime(item.sentAt)}</Text>
+                        </View>
+                        <MaterialIcons name="chevron-right" size={22} color={colors.text.light} />
+                    </Pressable>
+                </Swipeable>
             );
         },
-        [onPressItem]
+        [onPressItem, closeOtherSwipeables, renderRightActions]
     );
 
     const listHeader = (
@@ -318,5 +394,24 @@ const styles = StyleSheet.create({
     },
     footerLoader: {
         padding: spacing.md
+    },
+    deleteActionWrap: {
+        width: 88,
+        marginVertical: spacing.xs,
+        marginRight: spacing.md
+    },
+    deleteAction: {
+        flex: 1,
+        backgroundColor: colors.error,
+        borderRadius: borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: spacing.sm
+    },
+    deleteActionText: {
+        ...typography.caption,
+        color: colors.onPrimary,
+        fontWeight: '600',
+        marginTop: spacing.xs
     }
 });

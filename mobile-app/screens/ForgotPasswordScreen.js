@@ -19,6 +19,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [devResetToken, setDevResetToken] = useState(null);
   const [errors, setErrors] = useState({});
 
   const validateForm = () => {
@@ -43,19 +44,19 @@ const ForgotPasswordScreen = ({ navigation }) => {
       
       if (response.success || response.message) {
         setEmailSent(true);
-        
-        // Show reset token in development mode
         if (response.resetToken && __DEV__) {
+          setDevResetToken(response.resetToken);
           Alert.alert(
             'Password Reset (Development Mode)',
             `Reset token: ${response.resetToken}\n\nReset URL: ${response.resetUrl}\n\nThis is only shown in development mode.`,
             [{ text: 'OK' }]
           );
         } else {
+          setDevResetToken(null);
           Alert.alert(
             'Check Your Email',
             response.message || 'If an account with that email exists, a password reset link has been sent.',
-            [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+            [{ text: 'OK' }]
           );
         }
       } else {
@@ -143,6 +144,14 @@ const ForgotPasswordScreen = ({ navigation }) => {
                   <Text style={styles.loginLink}>Sign In</Text>
                 </TouchableOpacity>
               </View>
+
+              <TouchableOpacity
+                style={styles.manualResetLink}
+                onPress={() => navigation.navigate('ResetPassword')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.loginLink}>Already have a reset code?</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.form}>
@@ -152,9 +161,17 @@ const ForgotPasswordScreen = ({ navigation }) => {
                   Password reset instructions have been sent to your email address.
                 </Text>
                 <Text style={styles.successSubtext}>
-                  Please check your inbox and follow the instructions to reset your password.
+                  Open the link on this device to continue in the app, or enter the reset code from the email below.
                 </Text>
               </View>
+
+              <Button
+                title="Enter reset code"
+                onPress={() => navigation.navigate('ResetPassword', devResetToken ? { token: devResetToken } : undefined)}
+                buttonStyle={styles.resetButton}
+                titleStyle={styles.buttonTitle}
+                containerStyle={styles.buttonContainer}
+              />
 
               <Button
                 title="Back to Login"
@@ -284,6 +301,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1976d2',
     fontWeight: '600',
+  },
+  manualResetLink: {
+    alignItems: 'center',
+    marginTop: 16,
   },
   successContainer: {
     alignItems: 'center',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import LocationSearchModal from '../../components/LocationSearchModal';
 import ApiService from '../../services/api';
 
@@ -792,6 +792,34 @@ describe('LocationSearchModal - Who Section', () => {
       // UK span should be small (less than 5 degrees)
       expect(latSpan).toBeLessThan(5);
       expect(lngSpan).toBeLessThan(5);
+    });
+  });
+
+  describe('Nearby location', () => {
+    it('should render Nearby option when no location is selected', () => {
+      const { getByText } = render(<LocationSearchModal {...defaultProps} />);
+
+      expect(getByText('Suggested destinations')).toBeTruthy();
+      expect(getByText('Nearby')).toBeTruthy();
+      expect(getByText("Find what's around you")).toBeTruthy();
+    });
+
+    it('should populate location from GPS when Nearby is pressed', async () => {
+      const { getByText, getByPlaceholderText } = render(
+        <LocationSearchModal {...defaultProps} />
+      );
+
+      fireEvent.press(getByText('Nearby'));
+
+      await waitFor(() => {
+        expect(getByPlaceholderText('Search by location').props.value).toBe(
+          'San Francisco, United States'
+        );
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
     });
   });
 });

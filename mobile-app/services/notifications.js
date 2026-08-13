@@ -188,6 +188,35 @@ async function fetchNotifications({ cursor, limit = 50 } = {}) {
     }
 }
 
+async function deleteNotification(notificationLogId) {
+    if (notificationLogId == null || notificationLogId === '') {
+        return { ok: false, error: 'Invalid notification id' };
+    }
+    try {
+        const authToken = await getPersistedAuthToken();
+        if (!authToken) {
+            return { ok: false, error: 'Not signed in' };
+        }
+
+        const response = await fetch(
+            `${getApiBaseUrl()}/notifications/${encodeURIComponent(String(notificationLogId))}`,
+            {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${authToken}`,
+                },
+            }
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            return { ok: false, error: data.error || 'Failed to delete notification' };
+        }
+        return { ok: true };
+    } catch (error) {
+        return { ok: false, error: error.message || 'Network error' };
+    }
+}
+
 export default {
     registerForPushNotifications,
     registerTokenWithBackend,
@@ -197,4 +226,5 @@ export default {
     addNotificationReceivedListener,
     fetchUnreadCount,
     fetchNotifications,
+    deleteNotification,
 };
