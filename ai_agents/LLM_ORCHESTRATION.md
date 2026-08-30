@@ -2,7 +2,9 @@
 
 This document is the **single place** for how we use OpenAI (and fallbacks) for **natural-language match search** and **user-facing messages**. Implementation lives in code; this file defines **intent, rules, and scenarios** so prompts and product behavior stay aligned.
 
-**Primary code:** `overlap/backend/src/routes/search.js` (`parseNaturalLanguage`, `generateResponse`, `/api/search/natural-language`).
+**Primary code:** `backend/src/routes/search.js` (`parseNaturalLanguage`, `generateResponse`, `/api/search/natural-language`).
+
+**Eval charter:** `ASK_AGENT_EVAL_CHARTER.md` — purpose, thresholds, and cadence for Ask Agent evals.
 
 ---
 

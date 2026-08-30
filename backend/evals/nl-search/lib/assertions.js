@@ -12,8 +12,9 @@ function includesAnyText(text, terms) {
 }
 
 function getLeagueIds(parsed) {
+  const leagues = Array.isArray(parsed) ? parsed : asArray(parsed?.leagues);
   return new Set(
-    asArray(parsed?.leagues)
+    leagues
       .map((league) => {
         if (league == null) return null;
         if (typeof league === "string" || typeof league === "number") return String(league);
@@ -25,6 +26,10 @@ function getLeagueIds(parsed) {
 
 function getTeamNames(parsed) {
   const names = [];
+  if (Array.isArray(parsed)) {
+    parsed.forEach((team) => names.push(team?.name || team));
+    return names.filter(Boolean);
+  }
   asArray(parsed?.teams?.any).forEach((team) => names.push(team?.name || team));
   asArray(parsed?.primary?.teams).forEach((team) => names.push(team?.name || team));
   asArray(parsed?.teams).forEach((team) => names.push(team?.name || team));

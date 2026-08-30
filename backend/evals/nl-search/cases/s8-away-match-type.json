@@ -1,0 +1,23 @@
+{
+  "id": "S8-003",
+  "scenario": "S8",
+  "modes": ["parse"],
+  "description": "Single query: away match type extracted for explicit away phrasing.",
+  "input": {
+    "query": "Arsenal away matches in London next month"
+  },
+  "expect": {
+    "isMultiQuery": false,
+    "parsed": {
+      "matchType": "away",
+      "teams": {
+        "any": {
+          "$teamNamesContain": ["Arsenal"]
+        }
+      },
+      "dateRange": {
+        "$exists": true
+      }
+    }
+  }
+}

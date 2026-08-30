@@ -1,7 +1,7 @@
 {
   "id": "S1-001",
   "scenario": "S1",
-  "modes": ["api"],
+  "modes": ["api", "parse"],
   "description": "Explicit league and date should preserve single-day range and league id.",
   "input": {
     "query": "Premier league matches in London on March 21st"

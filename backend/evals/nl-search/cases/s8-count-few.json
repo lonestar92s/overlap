@@ -1,0 +1,22 @@
+{
+  "id": "S8-002",
+  "scenario": "S8",
+  "modes": ["parse"],
+  "description": "Multi-query: 'a few other matches' should default secondary count to 3.",
+  "input": {
+    "query": "I want to see Bayern Munich play at home, but would also like to see a few other matches within 200 miles over a 10 day period."
+  },
+  "expect": {
+    "isMultiQuery": true,
+    "parsed": {
+      "primary": {
+        "teams": ["Bayern Munich"],
+        "matchType": "home"
+      },
+      "secondary": {
+        "count": 3,
+        "maxDistance": 200
+      }
+    }
+  }
+}

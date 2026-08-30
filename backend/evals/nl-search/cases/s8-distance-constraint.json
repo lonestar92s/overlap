@@ -1,0 +1,21 @@
+{
+  "id": "S8-005",
+  "scenario": "S8",
+  "modes": ["parse"],
+  "description": "Multi-query: distance constraint within 200 miles on secondary matches.",
+  "input": {
+    "query": "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period."
+  },
+  "expect": {
+    "isMultiQuery": true,
+    "parsed": {
+      "secondary": {
+        "count": 2,
+        "maxDistance": 200
+      },
+      "relationship": {
+        "distanceFrom": "primary"
+      }
+    }
+  }
+}

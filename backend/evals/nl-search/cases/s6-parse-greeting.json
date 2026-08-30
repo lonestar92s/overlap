@@ -1,0 +1,23 @@
+{
+  "id": "S6-002",
+  "scenario": "S6",
+  "modes": ["parse"],
+  "description": "Greeting parse should set errorMessage and not extract search slots.",
+  "input": {
+    "query": "hello"
+  },
+  "expect": {
+    "success": false,
+    "parsed": {
+      "errorMessage": {
+        "$exists": true
+      },
+      "location": {
+        "$exists": false
+      },
+      "dateRange": {
+        "$exists": false
+      }
+    }
+  }
+}

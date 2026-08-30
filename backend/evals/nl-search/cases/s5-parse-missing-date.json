@@ -1,0 +1,19 @@
+{
+  "id": "S5-003",
+  "scenario": "S5",
+  "modes": ["parse"],
+  "description": "Parse must not invent a date when user gives league and location only.",
+  "input": {
+    "query": "Premier league matches in London"
+  },
+  "expect": {
+    "parsed": {
+      "leagues": {
+        "$leagueIdsContain": ["39"]
+      },
+      "dateRange": {
+        "$exists": false
+      }
+    }
+  }
+}

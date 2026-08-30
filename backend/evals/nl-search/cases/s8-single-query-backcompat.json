@@ -1,0 +1,22 @@
+{
+  "id": "S8-004",
+  "scenario": "S8",
+  "modes": ["parse", "api"],
+  "description": "Backward compat: standard single query must not be flagged as multi-query.",
+  "input": {
+    "query": "Arsenal matches in London next month"
+  },
+  "expect": {
+    "isMultiQuery": false,
+    "parsed": {
+      "teams": {
+        "any": {
+          "$teamNamesContain": ["Arsenal"]
+        }
+      },
+      "dateRange": {
+        "$exists": true
+      }
+    }
+  }
+}
