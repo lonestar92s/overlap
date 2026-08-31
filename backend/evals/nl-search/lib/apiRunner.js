@@ -4,6 +4,7 @@ require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
 const mongoose = require("mongoose");
 const request = require("supertest");
 const { scoreExpectations } = require("./assertions");
+const { ensureNlSearchEvalUser, getNlSearchAuthHeader } = require("../../../tests/helpers/nlSearchAuth");
 let appInstance = null;
 
 function getApp() {
@@ -50,12 +51,43 @@ async function runApiCase(testCase) {
     };
   }
 
+  try {
+    await ensureNlSearchEvalUser();
+  } catch (error) {
+    return {
+      id: testCase.id,
+      scenario: testCase.scenario,
+      status: "skipped",
+      mode: "api",
+      failures: [],
+      skipReason: `NL search eval user unavailable: ${error.message}`
+    };
+  }
+
+  let authHeader;
+  try {
+    authHeader = getNlSearchAuthHeader();
+  } catch (error) {
+    return {
+      id: testCase.id,
+      scenario: testCase.scenario,
+      status: "skipped",
+      mode: "api",
+      failures: [],
+      skipReason: error.message
+    };
+  }
+
   const startedAt = Date.now();
   try {
-    const response = await request(getApp()).post("/api/search/natural-language").send({
-      query: testCase.input.query,
-      conversationHistory: testCase.input.conversationHistory || []
-    });
+    const response = await request(getApp())
+      .post("/api/search/natural-language")
+      .set("Authorization", authHeader)
+      .send({
+        query: testCase.input.query,
+        source: testCase.input.source || "unknown",
+        conversationHistory: testCase.input.conversationHistory || []
+      });
 
     const body = response.body || {};
     const score = scoreExpectations(

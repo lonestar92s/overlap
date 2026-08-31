@@ -1,10 +1,33 @@
+const { getPersistedAuthToken } = require('./secureAuthStorage');
+
 // Use the same API URL logic as the main API service
 // Override with EXPO_PUBLIC_API_URL environment variable if needed for local testing
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
   'https://friendly-gratitude-production-3f31.up.railway.app/api';
 
-export const processNaturalLanguageQuery = async (query, conversationHistory = []) => {
+const VALID_SOURCES = new Set(['ask_agent_modal', 'messages_screen', 'map_results', 'unknown']);
+
+function normalizeSource(source) {
+  if (typeof source === 'string' && VALID_SOURCES.has(source)) {
+    return source;
+  }
+  return 'unknown';
+}
+
+export const processNaturalLanguageQuery = async (query, conversationHistory = [], options = {}) => {
     try {
+        const token = await getPersistedAuthToken();
+        if (!token) {
+            return {
+                success: false,
+                code: 'AUTH',
+                message: 'Please sign in again to use Ask Agent.',
+                suggestions: ['Log out and log back in', 'Try again after signing in'],
+            };
+        }
+
+        const source = normalizeSource(options.source);
+
         console.log('🤖 Natural Language Service - Sending query:', query);
         console.log('🤖 Natural Language Service - Conversation history length:', conversationHistory.length);
         console.log('🤖 Natural Language Service - API URL:', `${API_BASE_URL}/search/natural-language`);
@@ -13,9 +36,11 @@ export const processNaturalLanguageQuery = async (query, conversationHistory = [
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ 
                 query,
+                source,
                 conversationHistory: conversationHistory.slice(-5) // Only send last 5 messages to avoid token limits
             })
         });
@@ -26,6 +51,15 @@ export const processNaturalLanguageQuery = async (query, conversationHistory = [
         const data = response.ok
             ? await response.json()
             : await response.json().catch(() => ({}));
+
+        if (response.status === 401) {
+            return {
+                success: false,
+                code: 'AUTH',
+                message: 'Your session expired. Please sign in again.',
+                suggestions: ['Log out and log back in'],
+            };
+        }
 
         if (!response.ok) {
             console.error('🤖 Natural Language Service - API Error:', response.status, data);

@@ -60,7 +60,7 @@ async function main() {
     const result = await runOne(testCase);
     results.push(result);
     const icon = result.status === "passed" ? "PASS" : result.status === "failed" ? "FAIL" : "SKIP";
-    console.log(`${icon} ${result.id} (${result.scenario})`);
+    console.log(`${icon} ${result.id} (${result.scenario})${result.failures?.length ? `: ${result.failures.join("; ")}` : ""}`);
   }
 
   if (args.mode === "api") {

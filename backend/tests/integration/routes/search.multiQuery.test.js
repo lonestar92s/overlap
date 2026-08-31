@@ -51,9 +51,11 @@ jest.mock('openai', () => {
 // Mock external APIs
 jest.mock('axios');
 const axios = require('axios');
+const { ensureNlSearchEvalUser, getNlSearchAuthHeader } = require('../../helpers/nlSearchAuth');
 // Use the actual app from app.js
 const app = require('../../../src/app');
 describe('Multi-Query Search API - Integration Tests', () => {
+  let nlAuthHeader;
   beforeAll(async () => {
     // Skip tests if MongoDB is not available (e.g., in CI without service)
     if (!process.env.MONGODB_URI && !process.env.MONGO_URL) {
@@ -66,6 +68,8 @@ describe('Multi-Query Search API - Integration Tests', () => {
           serverSelectionTimeoutMS: 5000
         });
       }
+      await ensureNlSearchEvalUser();
+      nlAuthHeader = getNlSearchAuthHeader();
     } catch (error) {
       return;
     }
@@ -130,6 +134,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
         });
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({
             query: "I want to see Bayern Munich play at home, but would also like to see 2 other matches within 200 miles over a 10 day period. The other matches can be bundesliga 2 or austrian bundesliga"
           });
@@ -181,6 +186,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
         }));
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({
             query: "Arsenal matches in London next month"
           });
@@ -220,6 +226,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
         }));
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({
             query: "asdfghjkl random text"
           });
@@ -233,6 +240,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
       it('should return 400 for missing query', async () => {
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({});
         expect(response.status).toBe(400);
         expect(response.body).toHaveProperty('error');
@@ -265,6 +273,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
         }));
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'hello' });
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(false);
@@ -284,6 +293,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
         }));
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'Arsenal in London next month' });
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(false);
@@ -312,6 +322,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
 
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'Premier league matches in London on March 21st' });
 
         expect(response.status).toBe(200);
@@ -330,6 +341,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
 
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'Premier league matches in London' });
 
         expect(response.status).toBe(200);
@@ -385,6 +397,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
 
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'World cup 2026 matches in June' });
 
         expect(response.status).toBe(200);
@@ -430,6 +443,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
 
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'World cup 2026 matches in June' });
 
         expect(response.status).toBe(200);
@@ -443,6 +457,7 @@ describe('Multi-Query Search API - Integration Tests', () => {
 
         const response = await request(app)
           .post('/api/search/natural-language')
+          .set('Authorization', nlAuthHeader)
           .send({ query: 'Premier league matches on March 21st' });
 
         expect(response.status).toBe(200);

@@ -9,7 +9,7 @@
   "expect": {
     "isMultiQuery": false,
     "parsed": {
-      "matchType": "away",
+      "matchTypes": ["away"],
       "teams": {
         "any": {
           "$teamNamesContain": ["Arsenal"]

@@ -1,52 +1,112 @@
 {
-  "mode": "parse",
-  "generatedAt": "2026-05-27T15:11:59.499Z",
-  "durationMs": 2759,
-  "total": 5,
-  "passed": 1,
-  "failed": 0,
-  "skipped": 4,
-  "passRate": 1,
+  "mode": "api",
+  "generatedAt": "2026-08-30T22:45:49.886Z",
+  "durationMs": 24289,
+  "total": 11,
+  "passed": 2,
+  "failed": 4,
+  "skipped": 5,
+  "passRate": 0.3333333333333333,
   "results": [
     {
       "id": "S1-001",
       "scenario": "S1",
-      "status": "skipped",
-      "mode": "parse",
+      "status": "passed",
+      "mode": "api",
       "failures": [],
-      "skipReason": "Case does not run in parse mode"
+      "durationMs": 5004
     },
     {
       "id": "S5-001",
       "scenario": "S5",
-      "status": "skipped",
-      "mode": "parse",
-      "failures": [],
-      "skipReason": "Case does not run in parse mode"
+      "status": "failed",
+      "mode": "api",
+      "failures": [
+        "success: expected false, got true",
+        "missingFields: expected array",
+        "message missing expected text: [when, date]"
+      ],
+      "durationMs": 6586
     },
     {
       "id": "S5-002",
       "scenario": "S5",
+      "status": "failed",
+      "mode": "api",
+      "failures": [
+        "success: expected false, got true",
+        "missingFields: expected array",
+        "message missing expected text: [where, location]"
+      ],
+      "durationMs": 3540
+    },
+    {
+      "id": "S5-003",
+      "scenario": "S5",
       "status": "skipped",
-      "mode": "parse",
+      "mode": "api",
       "failures": [],
-      "skipReason": "Case does not run in parse mode"
+      "skipReason": "Case does not run in api mode"
     },
     {
       "id": "S6-001",
       "scenario": "S6",
-      "status": "skipped",
-      "mode": "parse",
+      "status": "passed",
+      "mode": "api",
       "failures": [],
-      "skipReason": "Case does not run in parse mode"
+      "durationMs": 1684
+    },
+    {
+      "id": "S6-002",
+      "scenario": "S6",
+      "status": "skipped",
+      "mode": "api",
+      "failures": [],
+      "skipReason": "Case does not run in api mode"
+    },
+    {
+      "id": "S8-003",
+      "scenario": "S8",
+      "status": "skipped",
+      "mode": "api",
+      "failures": [],
+      "skipReason": "Case does not run in api mode"
+    },
+    {
+      "id": "S8-002",
+      "scenario": "S8",
+      "status": "skipped",
+      "mode": "api",
+      "failures": [],
+      "skipReason": "Case does not run in api mode"
+    },
+    {
+      "id": "S8-005",
+      "scenario": "S8",
+      "status": "skipped",
+      "mode": "api",
+      "failures": [],
+      "skipReason": "Case does not run in api mode"
     },
     {
       "id": "S8-001",
       "scenario": "S8",
-      "status": "passed",
-      "mode": "parse",
-      "failures": [],
-      "durationMs": 2757
+      "status": "failed",
+      "mode": "api",
+      "failures": [
+        "isMultiQuery: expected true, got undefined"
+      ],
+      "durationMs": 2648
+    },
+    {
+      "id": "S8-004",
+      "scenario": "S8",
+      "status": "failed",
+      "mode": "api",
+      "failures": [
+        "parsed.teams.any: team names missing expected terms [Arsenal]"
+      ],
+      "durationMs": 3479
     }
   ]
 }

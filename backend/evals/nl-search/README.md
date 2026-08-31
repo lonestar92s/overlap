@@ -45,11 +45,12 @@ Supported expectation operators:
 - `$includesAll`
 - `$leagueIdsContain`
 - `$teamNamesContain`
+- `$oneOf` (value must match one of the listed options; useful for fuzzy LLM outputs like count defaults)
 
 ## Notes
 
 - Parse mode and API mode both require `OPENAI_API_KEY`.
-- API mode also requires MongoDB (`MONGODB_URI`/`MONGO_URL`).
+- API mode also requires MongoDB (`MONGODB_URI`/`MONGO_URL`) and auth (`JWT_SECRET`; creates/uses eval bot user, or set `EVAL_AUTH_TOKEN`).
 - Model overrides are supported via `OPENAI_MODEL`.
 - Cases with `modes: ["parse"]` or `modes: ["api"]` are skipped in the other mode — run both modes for full coverage.
 

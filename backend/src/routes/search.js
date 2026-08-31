@@ -16,6 +16,9 @@ const Venue = require('../models/Venue');
 const { matchesLeagueFilterToken, shouldSkipLeagueFilter } = require('../utils/searchLeagueFilter');
 const { buildPrioritizedCompetitionIds } = require('../utils/competitionPriorityResolver');
 const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/matchItineraryPlanner');
+const { auth, adminAuth } = require('../middleware/auth');
+const { attachNlSearchResponseLogger } = require('../services/nlSearchLogService');
+const NlSearchLog = require('../models/NlSearchLog');
 const router = express.Router();
 // LocationIQ configuration for autocomplete
 const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
@@ -733,6 +736,50 @@ const getMonthNumber = (monthName) => {
     };
     return months[monthName.toLowerCase()] || -1;
 };
+
+const RELATIVE_DATE_PATTERN = /\b(this|next)\s+(weekend|week|month|year)\b/i;
+const RELATIVE_DAY_PATTERN = /\b(today|tomorrow|tonight)\b/i;
+const IN_MONTH_PATTERN = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i;
+const MONTH_YEAR_PATTERN = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+20\d{2}\b/i;
+const CALENDAR_YEAR_PATTERN = /\b20\d{2}\b/;
+
+// True when the user text itself mentions a timeframe (not LLM-inferred defaults).
+function queryHasExplicitDateIntent(query) {
+    const queryLower = (query || '').toLowerCase();
+    if (!queryLower.trim()) return false;
+    if (hasExplicitDateRangeIntent(queryLower)) return true;
+    if (extractSingleDayRangeFromQuery(query)) return true;
+    if (RELATIVE_DATE_PATTERN.test(queryLower)) return true;
+    if (RELATIVE_DAY_PATTERN.test(queryLower)) return true;
+    if (IN_MONTH_PATTERN.test(queryLower)) return true;
+    if (MONTH_YEAR_PATTERN.test(queryLower)) return true;
+    if (CALENDAR_YEAR_PATTERN.test(queryLower)) return true;
+    return false;
+}
+
+function stripInventedParsedDates(query, parsed) {
+    if (!parsed || queryHasExplicitDateIntent(query)) {
+        return parsed;
+    }
+    parsed.dateRange = null;
+    parsed.date = null;
+    return parsed;
+}
+
+// International cups can be searched without a city when league + date are present.
+const LOCATION_OPTIONAL_LEAGUE_IDS = new Set(['1', '2', '3']);
+
+function leaguesRequireExplicitLocation(leagueIds) {
+    if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
+        return true;
+    }
+    return leagueIds.some((id) => !LOCATION_OPTIONAL_LEAGUE_IDS.has(String(id)));
+}
+
+function hasValidSearchLocation(location) {
+    return !!(location?.city && location?.country);
+}
+
 // Simple natural language parser as fallback
 const simpleParseQuery = (query) => {
     const queryLower = query.toLowerCase();
@@ -2727,14 +2774,17 @@ router.get('/debug-db', async (req, res) => {
         });
     }
 });
-// Natural language search endpoint
-router.post('/natural-language', async (req, res) => {
+// Natural language search endpoint (authenticated; responses logged for eval review)
+router.post('/natural-language', auth, async (req, res) => {
+    const startedAt = Date.now();
+    attachNlSearchResponseLogger(req, res, startedAt);
     try {
         const { query, conversationHistory } = req.body;
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
         }
         const parsed = await parseNaturalLanguage(query, conversationHistory);
+        stripInventedParsedDates(query, parsed);
         // Enforce exact single-day date range when user explicitly gives a day (works for both OpenAI and fallback parser)
         const explicitSingleDayRange = extractSingleDayRangeFromQuery(query);
         if (explicitSingleDayRange) {
@@ -2789,10 +2839,13 @@ router.post('/natural-language', async (req, res) => {
         // Guardrails: date is always required; location required only for broad queries.
         const missingFields = [];
         if (!searchParams.startDate || !searchParams.endDate) missingFields.push('date');
+        const hasTeams = parsed.teams?.any && parsed.teams.any.length > 0;
         const requiresLocation =
-            !(parsed.teams?.any && parsed.teams.any.length > 0) &&
-            !(searchParams.leagues && searchParams.leagues.length > 0);
-        if (requiresLocation && (!searchParams.location?.country || !searchParams.location?.city)) {
+            !hasValidSearchLocation(searchParams.location) &&
+            !hasTeams &&
+            (!(searchParams.leagues && searchParams.leagues.length > 0) ||
+                leaguesRequireExplicitLocation(searchParams.leagues));
+        if (requiresLocation) {
             missingFields.push('location');
         }
         if (missingFields.length > 0) {
@@ -3198,6 +3251,34 @@ router.post('/natural-language', async (req, res) => {
         });
     }
 });
+router.get('/nl-logs', adminAuth, async (req, res) => {
+    try {
+        const sinceDays = Math.min(Math.max(parseInt(req.query.sinceDays, 10) || 7, 1), 90);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+        const filter = { createdAt: { $gte: since } };
+
+        if (req.query.success === 'true') filter.success = true;
+        if (req.query.success === 'false') filter.success = false;
+        if (req.query.matchCount === '0') filter.matchCount = 0;
+        if (req.query.source) filter.source = req.query.source;
+
+        const logs = await NlSearchLog.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .select('-__v')
+            .lean();
+
+        res.json({
+            count: logs.length,
+            sinceDays,
+            logs
+        });
+    } catch (error) {
+        console.error('Error fetching NL search logs:', error);
+        res.status(500).json({ error: 'Failed to fetch NL search logs' });
+    }
+});
 router.post('/parse', async (req, res) => {
     try {
         const { query } = req.body;
@@ -3244,3 +3325,7 @@ module.exports.runPlanItinerary = runPlanItinerary;
 module.exports.detectPlanItineraryFromQuery = detectPlanItineraryFromQuery;
 module.exports.weekendAnchorLocalDateFromRange = weekendAnchorLocalDateFromRange;
 module.exports.describePlanItineraryOutcome = describePlanItineraryOutcome;
+module.exports.queryHasExplicitDateIntent = queryHasExplicitDateIntent;
+module.exports.stripInventedParsedDates = stripInventedParsedDates;
+module.exports.leaguesRequireExplicitLocation = leaguesRequireExplicitLocation;
+module.exports.hasValidSearchLocation = hasValidSearchLocation;

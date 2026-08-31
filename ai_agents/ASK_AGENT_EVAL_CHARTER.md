@@ -33,6 +33,7 @@ Every eval answers one decision. Do not add cases without filling in the blank.
 | **Gold parse cases** | Slots extracted correctly (team, home/away, leagues, counts, distance) | `backend/evals/nl-search/cases/*.json` |
 | **Policy rules** | S5 asks for date/location; S6 does not search on greetings; no raw errors to users | API-mode eval cases |
 | **DB / API grounding** | Returned fixture IDs exist; venues and kickoffs match data | API-mode + integration tests (future expansion) |
+| **Production logs** | Real user queries + outcomes | `NlSearchLog` collection + `GET /api/search/nl-logs` |
 | **Human raters** | “Would I use this trip plan?” | Weekly 20-query review (PM) |
 | **Proxy outcomes** (lagging) | Search → map view → trip saved | Product analytics (later) |
 
@@ -72,6 +73,23 @@ Ask Agent cannot ship without these:
 | Before release | Full API regression | `cd backend && npm run eval:nl-search:api` |
 | Weekly | Human spot-check | PM labels 20 live Ask Agent queries (see worksheet below) |
 | After production miss | Add a case | New JSON in `cases/` from the failing query |
+
+### Production query logging (live)
+
+Every authenticated `POST /api/search/natural-language` request is persisted to Mongo as `NlSearchLog`:
+
+- **Retention:** 90 days (TTL index)
+- **Fields:** query, userId, source, success, matchCount, parsedSummary, matchIds, message
+- **Review endpoint (admin):** `GET /api/search/nl-logs?sinceDays=7&success=false&matchCount=0`
+
+Example weekly review:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://<api>/api/search/nl-logs?sinceDays=7&success=false&limit=50"
+```
+
+Promote interesting failures from `logs[]` into `backend/evals/nl-search/cases/*.json`.
 
 ### Ownership
 
@@ -138,4 +156,5 @@ Label 20 live Ask Agent queries each week. Copy this table into your notes tool.
 
 | Date | Change |
 |------|--------|
+| 2026-08-30 | Added production NL search logging (`NlSearchLog`, 90-day retention, admin review endpoint) |
 | 2026-08-30 | Initial charter: four pillars, thresholds, cadence, scenario map |

@@ -10,6 +10,10 @@ import {
   extractSearchParams,
 } from '../../services/naturalLanguageService';
 
+jest.mock('../../services/secureAuthStorage', () => ({
+  getPersistedAuthToken: jest.fn().mockResolvedValue('test-token'),
+}));
+
 describe('naturalLanguageService - Match Planning Agent MVP', () => {
   describe('processNaturalLanguageQuery', () => {
     const originalFetch = global.fetch;
@@ -24,11 +28,20 @@ describe('naturalLanguageService - Match Planning Agent MVP', () => {
         status: 502,
         json: async () => ({ message: 'upstream database connection refused' }),
       });
-      const out = await processNaturalLanguageQuery('Arsenal next month', []);
+      const out = await processNaturalLanguageQuery('Arsenal next month', [], { source: 'ask_agent_modal' });
       expect(out.success).toBe(false);
       expect(out.code).toBe('HTTP_ERROR');
       expect(out.message).toMatch(/couldn't reach the search service/i);
       expect(out.message).not.toMatch(/database/i);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/search/natural-language'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+          body: expect.stringContaining('"source":"ask_agent_modal"'),
+        })
+      );
     });
 
     it('returns structured failure on network error without throwing', async () => {
@@ -37,6 +50,15 @@ describe('naturalLanguageService - Match Planning Agent MVP', () => {
       expect(out.success).toBe(false);
       expect(out.code).toBe('NETWORK');
       expect(out.message).toMatch(/couldn't complete that search/i);
+    });
+
+    it('returns auth failure when no token is available', async () => {
+      const { getPersistedAuthToken } = require('../../services/secureAuthStorage');
+      getPersistedAuthToken.mockResolvedValueOnce(null);
+      const out = await processNaturalLanguageQuery('Arsenal next month', []);
+      expect(out.success).toBe(false);
+      expect(out.code).toBe('AUTH');
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 

@@ -1,5 +1,7 @@
 # Multi-Query Search Test Cases
 
+> **Automated evals:** Runnable cases live in `backend/evals/nl-search/cases/`. See `ASK_AGENT_EVAL_CHARTER.md` for the PM eval framework and ship gates.
+
 ## Overview
 
 This document contains comprehensive test cases for multi-query natural language search functionality. Test cases cover parsing, execution, edge cases, and error handling.

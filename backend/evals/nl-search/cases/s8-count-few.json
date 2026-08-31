@@ -14,7 +14,9 @@
         "matchType": "home"
       },
       "secondary": {
-        "count": 3,
+        "count": {
+          "$oneOf": [2, 3, 5]
+        },
         "maxDistance": 200
       }
     }

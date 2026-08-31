@@ -366,7 +366,7 @@ const SearchScreen = ({ navigation, route }) => {
     setAskAgentFeedbackType('info');
 
     try {
-      const response = await processNaturalLanguageQuery(prompt, []);
+      const response = await processNaturalLanguageQuery(prompt, [], { source: 'ask_agent_modal' });
       const formatted = formatSearchResults(response);
 
       if (!formatted.success) {

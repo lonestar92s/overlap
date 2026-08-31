@@ -107,6 +107,12 @@ function applyOperators(actual, operators, path, failures) {
       failures.push(`${path}: team names missing expected terms [${operators.$teamNamesContain.join(", ")}]`);
     }
   }
+
+  if (operators.$oneOf) {
+    if (!operators.$oneOf.includes(actual)) {
+      failures.push(`${path}: expected one of [${operators.$oneOf.join(", ")}], got ${JSON.stringify(actual)}`);
+    }
+  }
 }
 
 function scoreExpectations(actual, expected = {}) {

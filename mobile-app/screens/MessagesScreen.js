@@ -66,7 +66,7 @@ const MessagesScreen = ({ navigation }) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
       console.log('🚀 MessagesScreen - Starting natural language query...');
-      const response = await processNaturalLanguageQuery(inputText.trim(), messages);
+      const response = await processNaturalLanguageQuery(inputText.trim(), messages, { source: 'messages_screen' });
       console.log('🚀 MessagesScreen - Got response:', response);
       
       const formattedResponse = formatSearchResults(response);

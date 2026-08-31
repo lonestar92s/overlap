@@ -1241,7 +1241,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     setAskAgentFeedbackType('info');
 
     try {
-      const response = await processNaturalLanguageQuery(prompt, []);
+      const response = await processNaturalLanguageQuery(prompt, [], { source: 'map_results' });
       const formatted = formatSearchResults(response);
 
       if (!formatted.success) {

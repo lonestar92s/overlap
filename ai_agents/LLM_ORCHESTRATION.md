@@ -48,7 +48,7 @@ Use this table to agree on behavior before changing prompts. Extend rows as new 
 | S2 | Parse succeeds; **matches found**; user specified **only** location + dates (broad) | Acknowledge count; suggest narrowing by **team or league** | Optional | |
 | S3 | Parse succeeds; **no matches**; filters are plausible | Explain briefly; suggest **wider dates**, **nearby area**, or **other competitions** | Optional | |
 | S4 | Parse succeeds; **no matches**; league/location **inconsistent** | Short explanation + **one** alternate | Optional | |
-| S5 | Missing **date** or **location** (MVP guardrails) | Single clarification request + **example queries** | Optional / template | |
+| S5 | Missing **date** or **location** (MVP guardrails) | Single clarification request + **example queries**. Date must appear in the user text (parser-invented dates are stripped). Location required for domestic league/team searches; optional for international cups (World Cup, UCL, UEL) when date is present. | Optional / template | |
 | S6 | Greeting / no search intent | Brief reply + **example** searches | Optional / template | |
 | S7 | Upstream / internal error | Generic “try again”; **no** raw `error.message` | No | Fixed copy in server. |
 | S8 | Mixed side constraints (e.g. **X at home** and **Y away**) | Return fixtures that satisfy the per-team side constraints; do not collapse to one global `matchType` | Optional (for wording), deterministic filtering | Requires team-scoped side constraints in parse output. |
