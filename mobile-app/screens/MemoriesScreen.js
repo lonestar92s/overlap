@@ -352,7 +352,6 @@ const MemoriesScreen = () => {
     const tabs = [
       { id: 'memories', label: 'Memories' },
       { id: 'visitedStadiums', label: 'Visited Stadiums' },
-      { id: 'previousMatches', label: 'Previous Matches' },
     ];
 
     return (
@@ -525,17 +524,6 @@ const MemoriesScreen = () => {
             </View>
           )
         )}
-
-        {/* Previous Matches Tab Content */}
-        {activeTab === 'previousMatches' && (
-          <View style={styles.emptyState}>
-            <MaterialIcons name="sports-soccer" size={80} color={colors.text.light} />
-            <Text style={styles.emptyTitle}>No Previous Matches</Text>
-            <Text style={styles.emptySubtitle}>
-              Your previous matches will appear here
-            </Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* Photo Viewer Modal */}
@@ -625,14 +613,14 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   tabButton: {
-    paddingHorizontal: spacing.sm,
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: spacing.xs,
   },
   tabButtonActive: {
@@ -642,6 +630,7 @@ const styles = StyleSheet.create({
   tabButtonText: {
     ...typography.caption,
     color: colors.text.primary,
+    textAlign: 'center',
   },
   tabButtonTextActive: {
     fontWeight: '600',
