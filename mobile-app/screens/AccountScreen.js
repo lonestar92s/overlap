@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  FlatList,
   Image,
   Linking,
 } from 'react-native';
@@ -24,7 +23,6 @@ import { getLegalPageUrls } from '../config/legalUrls';
 
 const TABS = [
   { id: 'trips', label: 'Past Trips' },
-  { id: 'memories', label: 'Memories' },
   { id: 'favorites', label: 'Favorites' },
 ];
 
@@ -39,10 +37,6 @@ const AccountScreen = ({ navigation }) => {
 
   const [completedTrips, setCompletedTrips] = useState([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
-
-  const [memories, setMemories] = useState([]);
-  const [loadingMemories, setLoadingMemories] = useState(false);
-  const [memoriesFetched, setMemoriesFetched] = useState(false);
 
   const username = user?.username || user?.email?.split('@')[0] || 'user';
   const displayName = user?.username || user?.email?.split('@')[0] || 'User';
@@ -83,28 +77,6 @@ const AccountScreen = ({ navigation }) => {
     })();
     return () => { mounted = false; };
   }, []);
-
-  // Load memories lazily when tab is first opened
-  useEffect(() => {
-    if (activeTab !== 'memories' || memoriesFetched) return;
-    let mounted = true;
-    (async () => {
-      setLoadingMemories(true);
-      try {
-        const response = await ApiService.getMemories();
-        if (mounted && response.success) {
-          setMemories(response.data || []);
-        }
-      } catch (_) {}
-      finally {
-        if (mounted) {
-          setLoadingMemories(false);
-          setMemoriesFetched(true);
-        }
-      }
-    })();
-    return () => { mounted = false; };
-  }, [activeTab, memoriesFetched]);
 
   const refreshPreferences = async () => {
     try {
@@ -414,31 +386,6 @@ const AccountScreen = ({ navigation }) => {
     );
   };
 
-  const renderMemoryItem = (memory, index) => {
-    const photoUri = memory.photos?.[0]?.url || memory.photo || null;
-    const matchTitle = memory.matchTitle || memory.match?.teams || 'Match memory';
-
-    return (
-      <TouchableOpacity
-        key={memory._id || index}
-        style={styles.memoryCard}
-        onPress={() => navigation.navigate('MemoriesTab')}
-        activeOpacity={0.8}
-        accessibilityLabel={`Memory: ${matchTitle}`}
-        accessibilityRole="button"
-      >
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.memoryPhoto} resizeMode="cover" />
-        ) : (
-          <View style={styles.memoryPhotoPlaceholder}>
-            <MaterialIcons name="sports-soccer" size={iconSizes.md} color={colors.text.light} />
-          </View>
-        )}
-        <Text style={styles.memoryLabel} numberOfLines={2}>{matchTitle}</Text>
-      </TouchableOpacity>
-    );
-  };
-
   const renderFavoriteItem = ({ item, type }) => {
     let name = '';
     let logo = null;
@@ -511,39 +458,6 @@ const AccountScreen = ({ navigation }) => {
       return (
         <View style={styles.tripsList}>
           {completedTrips.map((trip, index) => renderTripCard(trip, index))}
-        </View>
-      );
-    }
-
-    if (activeTab === 'memories') {
-      if (loadingMemories) {
-        return <ActivityIndicator style={styles.loader} color={colors.primary} />;
-      }
-      if (memories.length === 0) {
-        return (
-          <View style={styles.emptyState}>
-            <MaterialIcons name="photo-library" size={iconSizes.xl * 1.5} color={colors.text.light} />
-            <Text style={styles.emptyStateText}>No memories yet</Text>
-            <Text style={styles.emptyStateSubtext}>Your match memories will appear here</Text>
-          </View>
-        );
-      }
-      return (
-        <View>
-          <View style={styles.memoriesGrid}>
-            {memories.slice(0, 6).map((memory, index) => renderMemoryItem(memory, index))}
-          </View>
-          {memories.length > 6 && (
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => navigation.navigate('MemoriesTab')}
-              accessibilityLabel="See all memories"
-              accessibilityRole="button"
-            >
-              <Text style={styles.seeAllText}>See all {memories.length} memories</Text>
-              <MaterialIcons name="chevron-right" size={iconSizes.sm} color={colors.primary} />
-            </TouchableOpacity>
-          )}
         </View>
       );
     }
@@ -802,47 +716,6 @@ const styles = StyleSheet.create({
   tripMetaText: {
     ...typography.caption,
     color: colors.text.light,
-  },
-
-  // Memories grid
-  memoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  memoryCard: {
-    width: '31%',
-    borderRadius: borderRadius.sm,
-    overflow: 'hidden',
-    backgroundColor: colors.cardGrey,
-  },
-  memoryPhoto: {
-    width: '100%',
-    aspectRatio: 1,
-  },
-  memoryPhotoPlaceholder: {
-    width: '100%',
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.cardGrey,
-  },
-  memoryLabel: {
-    ...typography.caption,
-    color: colors.text.secondary,
-    padding: spacing.xs,
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    gap: spacing.xs,
-  },
-  seeAllText: {
-    ...typography.bodySmall,
-    color: colors.primary,
-    fontWeight: '500',
   },
 
   // Favorites
