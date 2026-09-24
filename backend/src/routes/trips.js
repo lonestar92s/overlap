@@ -3,7 +3,7 @@ const { auth, authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const axios = require('axios');
 const https = require('https');
-const { isTripCompleted } = require('../utils/tripUtils');
+const { isTripCompleted, dedupeTripMatches, findTripMatch } = require('../utils/tripUtils');
 const geocodingService = require('../services/geocodingService');
 const { invalidateRecommendedMatchesCache } = require('../utils/cache');
 const recommendationService = require('../services/recommendationService');
@@ -45,6 +45,19 @@ router.get('/', authenticateToken, async (req, res) => {
         }
         const user = await User.findById(req.user.id).select('trips');
         let trips = user.trips;
+        // Clean up duplicate matches from multi-tap saves (persist if needed)
+        let needsDedupeSave = false;
+        for (const trip of trips) {
+            const { changed } = dedupeTripMatches(trip);
+            if (changed) needsDedupeSave = true;
+        }
+        if (needsDedupeSave) {
+            try {
+                await user.save();
+            } catch (dedupeErr) {
+                console.warn('Failed to persist trip match dedupe:', dedupeErr.message);
+            }
+        }
         // Filter by completion status if requested
         const statusFilter = req.query.status; // 'active' | 'completed'
         if (statusFilter === 'completed') {
@@ -88,6 +101,14 @@ router.get('/:id', auth, async (req, res) => {
                 success: false,
                 message: 'Trip not found'
             });
+        }
+        const { changed } = dedupeTripMatches(trip);
+        if (changed) {
+            try {
+                await user.save();
+            } catch (dedupeErr) {
+                console.warn('Failed to persist trip match dedupe:', dedupeErr.message);
+            }
         }
         // Add computed isCompleted field for frontend convenience
         const tripObj = trip.toObject ? trip.toObject() : trip;
@@ -340,23 +361,16 @@ router.delete('/:id', auth, async (req, res) => {
 router.post('/:id/matches', auth, async (req, res) => {
     try {
         const { matchId, homeTeam, awayTeam, league, venue, venueData, date } = req.body;
-        const user = await User.findById(req.user.id);
-        const trip = user.trips.id(req.params.id);
-        if (!trip) {
-            return res.status(404).json({
-                success: false,
-                message: 'Trip not found'
-            });
-        }
-        // Check if match is already in the trip
-        const existingMatch = trip.matches.find(match => match.matchId === matchId);
-        if (existingMatch) {
+        if (matchId == null || matchId === '') {
             return res.status(400).json({
                 success: false,
-                message: 'Match already in trip'
+                message: 'matchId is required'
             });
         }
-        // Try to geocode venue if coordinates are missing
+        // Always store/compare as string to avoid "123" vs 123 duplicates
+        const normalizedMatchId = String(matchId);
+
+        // Geocode before loading the trip for write — avoids holding a stale doc across a slow I/O window
         let finalVenueData = venueData;
         if (venueData && !venueData.coordinates && venueData.name && venueData.city) {
             try {
@@ -371,19 +385,19 @@ router.post('/:id/matches', auth, async (req, res) => {
                         ...venueData,
                         coordinates: coordinates
                     };
-                } else {
                 }
             } catch (error) {
                 console.error(`❌ Error geocoding venue ${venueData.name}:`, error);
             }
         }
+
         const matchToSave = {
-            matchId,
+            matchId: normalizedMatchId,
             homeTeam,
             awayTeam,
             league,
             venue,
-            venueData: finalVenueData || null,  // Save the complete venue object
+            venueData: finalVenueData || null,
             date: new Date(date),
             addedAt: new Date(),
             planning: {
@@ -393,18 +407,94 @@ router.post('/:id/matches', auth, async (req, res) => {
                 notes: ''
             }
         };
-        trip.matches.push(matchToSave);
-        trip.updatedAt = new Date();
-        await user.save();
+
+        // Reject if trip already has this match as string or legacy number
+        const matchIdVariants = [normalizedMatchId];
+        const asNumber = Number(normalizedMatchId);
+        if (Number.isFinite(asNumber) && String(asNumber) === normalizedMatchId) {
+            matchIdVariants.push(asNumber);
+        }
+
+        // Atomic-ish add: only push when the trip does not already contain this matchId
+        const updatedUser = await User.findOneAndUpdate(
+            {
+                _id: req.user.id,
+                trips: {
+                    $elemMatch: {
+                        _id: req.params.id,
+                        matches: {
+                            $not: {
+                                $elemMatch: { matchId: { $in: matchIdVariants } }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $push: { 'trips.$.matches': matchToSave },
+                $set: { 'trips.$.updatedAt': new Date() }
+            },
+            { new: true }
+        );
+
+        let user = updatedUser;
+        let trip = user ? user.trips.id(req.params.id) : null;
+        let alreadyExists = false;
+
+        if (!user) {
+            // Either trip missing, or match already present (including race after concurrent tap)
+            user = await User.findById(req.user.id);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+            trip = user.trips.id(req.params.id);
+            if (!trip) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Trip not found'
+                });
+            }
+            const { changed } = dedupeTripMatches(trip);
+            const existing = findTripMatch(trip, normalizedMatchId);
+            if (existing) {
+                alreadyExists = true;
+                if (changed) {
+                    await user.save();
+                }
+            } else {
+                // Edge case: concurrent miss — push on freshly loaded doc then dedupe
+                trip.matches.push(matchToSave);
+                trip.updatedAt = new Date();
+                dedupeTripMatches(trip);
+                await user.save();
+            }
+        } else {
+            const { changed } = dedupeTripMatches(trip);
+            if (changed) {
+                await user.save();
+            }
+        }
+
+        // Idempotent success when already present (multi-tap should not look like an error)
+        if (alreadyExists) {
+            return res.json({
+                success: true,
+                trip: trip,
+                alreadyExists: true,
+                message: 'Match already in trip'
+            });
+        }
+
         // Regenerate recommendations immediately (adding match affects recommendations)
         try {
             await recommendationService.regenerateTripRecommendations(req.params.id, user, trip, true);
-            // Invalidate home page recommendations cache since trip recommendations changed
-            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            invalidateRecommendedMatchesCache(user.id);
         } catch (regenError) {
             console.error(`❌ Failed to regenerate recommendations for trip ${req.params.id}:`, regenError);
-            // Still invalidate cache even if regeneration fails
-            const deletedCount = invalidateRecommendedMatchesCache(user.id);
+            invalidateRecommendedMatchesCache(user.id);
         }
         // Schedule ticket status notification if not already pending for this trip
         try {
@@ -414,7 +504,6 @@ router.post('/:id/matches', auth, async (req, res) => {
             console.error('Failed to schedule ticket prompt notification:', schedErr);
         }
 
-        const savedMatch = trip.matches[trip.matches.length - 1];
         res.json({
             success: true,
             trip: trip,
@@ -439,7 +528,11 @@ router.delete('/:id/matches/:matchId', auth, async (req, res) => {
                 message: 'Trip not found'
             });
         }
-        trip.matches = trip.matches.filter(match => match.matchId !== req.params.matchId);
+        const targetId = String(req.params.matchId);
+        // Remove all copies (cleans duplicates from multi-tap saves)
+        trip.matches = trip.matches.filter(
+            match => match.matchId == null || String(match.matchId) !== targetId
+        );
         trip.updatedAt = new Date();
         await user.save();
         // Regenerate recommendations immediately (removing match affects recommendations)

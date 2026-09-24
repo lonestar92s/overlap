@@ -873,7 +873,7 @@ class ApiService {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          matchId: matchData.matchId,
+          matchId: matchData.matchId != null ? String(matchData.matchId) : matchData.matchId,
           homeTeam: matchData.homeTeam,
           awayTeam: matchData.awayTeam,
           league: matchData.league,

@@ -459,7 +459,7 @@ export const useRecommendations = (tripId, tripOrOptions = {}, options = {}) => 
       
       // Format match data for the mobile app API
       const formattedMatchData = {
-        matchId: match.id || match.matchId || match.fixture?.id,
+        matchId: String(match.id || match.matchId || match.fixture?.id),
         homeTeam: {
           name: match.teams?.home?.name,
           logo: match.teams?.home?.logo

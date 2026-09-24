@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import ApiService from '../services/api';
 import { normalizeId, normalizeIds, idsEqual, getDocumentId } from '../utils/idNormalizer';
 
@@ -15,6 +15,8 @@ export const useItineraries = () => {
 export const ItineraryProvider = ({ children }) => {
   const [itineraries, setItineraries] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Dedupe concurrent addMatchToItinerary calls (multi-tap Save)
+  const inFlightAddsRef = useRef(new Map());
 
   // Load itineraries from backend API on app start
   useEffect(() => {
@@ -71,45 +73,55 @@ export const ItineraryProvider = ({ children }) => {
 
   // Add a match to an itinerary
   const addMatchToItinerary = async (itineraryId, matchData) => {
-    try {
-      if (__DEV__) {
-        console.log({
-          itineraryId,
-          matchId: matchData.matchId,
-          matchData: JSON.stringify(matchData, null, 2)
-        });
-      }
-      
-      const response = await ApiService.addMatchToTrip(itineraryId, matchData);
-      if (__DEV__) {
-      }
-      
-      if (response.success && response.trip) {
-        const updatedTrip = normalizeId(response.trip);
-        if (__DEV__) {
-        }
-        
-        // Update local state with the updated trip from API
-        setItineraries(prev => {
-          const updated = prev.map(itinerary => 
-            idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
-          );
-          if (__DEV__) {
-          }
-          return updated;
-        });
-        
-        // Invalidate travel times cache since matches changed
-        ApiService.invalidateTravelTimesCache(itineraryId);
-      } else {
-        throw new Error('Failed to add match to trip via API');
-      }
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error adding match to itinerary via API:', error);
-      }
-      throw error;
+    const matchId = matchData?.matchId != null ? String(matchData.matchId) : '';
+    const key = `${String(itineraryId)}:${matchId}`;
+
+    if (inFlightAddsRef.current.has(key)) {
+      return inFlightAddsRef.current.get(key);
     }
+
+    const addPromise = (async () => {
+      try {
+        if (__DEV__) {
+          console.log({
+            itineraryId,
+            matchId,
+            matchData: JSON.stringify(matchData, null, 2)
+          });
+        }
+
+        const payload = { ...matchData, matchId };
+        const response = await ApiService.addMatchToTrip(itineraryId, payload);
+
+        if (response.success && response.trip) {
+          const updatedTrip = normalizeId(response.trip);
+
+          // Update local state with the updated trip from API
+          setItineraries(prev => {
+            const updated = prev.map(itinerary =>
+              idsEqual(itinerary.id || itinerary._id, itineraryId) ? updatedTrip : itinerary
+            );
+            return updated;
+          });
+
+          // Invalidate travel times cache since matches changed
+          ApiService.invalidateTravelTimesCache(itineraryId);
+          return updatedTrip;
+        } else {
+          throw new Error('Failed to add match to trip via API');
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.error('Error adding match to itinerary via API:', error);
+        }
+        throw error;
+      } finally {
+        inFlightAddsRef.current.delete(key);
+      }
+    })();
+
+    inFlightAddsRef.current.set(key, addPromise);
+    return addPromise;
   };
 
   // Update match planning details

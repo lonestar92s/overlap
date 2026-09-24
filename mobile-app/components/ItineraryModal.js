@@ -26,10 +26,13 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newItineraryName, setNewItineraryName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [savingTripId, setSavingTripId] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDates, setSelectedDates] = useState({});
+
+  const isSaving = savingTripId != null;
 
   // Initialize dates from match when modal opens or matchData changes
   useEffect(() => {
@@ -50,7 +53,18 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
     }
   }, [matchData, visible]);
 
+  // Reset save lock when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setSavingTripId(null);
+      setIsCreating(false);
+    }
+  }, [visible]);
+
   const handleSaveToExisting = async (itineraryId) => {
+    if (isSaving || isCreating) return;
+
+    setSavingTripId(itineraryId);
     try {
       const matchInfo = formatMatchInfo();
       await addMatchToItinerary(itineraryId, matchInfo);
@@ -70,10 +84,14 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
       Alert.alert('Error', 'Failed to add match to itinerary');
+    } finally {
+      setSavingTripId(null);
     }
   };
 
   const handleCreateNewItinerary = async () => {
+    if (isSaving || isCreating) return;
+
     setIsCreating(true);
     try {
       const newItinerary = await createItinerary(
@@ -183,7 +201,8 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
 
     
     // Extract the fields that the backend API expects
-    const matchId = matchData.id || matchData.fixture?.id;
+    const rawMatchId = matchData.id || matchData.fixture?.id;
+    const matchId = rawMatchId != null ? String(rawMatchId) : rawMatchId;
     const homeTeamName = matchData.teams?.home?.name || matchData.homeTeam || 'Unknown';
     const awayTeamName = matchData.teams?.away?.name || matchData.awayTeam || 'Unknown';
     const homeTeamLogo = matchData.teams?.home?.logo || '';
@@ -276,11 +295,19 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
             {itineraries.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Save to existing itinerary</Text>
-              {itineraries.map((itinerary) => (
+              {itineraries.map((itinerary) => {
+                const tripId = itinerary.id || itinerary._id;
+                const isThisSaving = savingTripId != null && String(savingTripId) === String(tripId);
+                const rowDisabled = isSaving || isCreating;
+                return (
                 <TouchableOpacity
-                  key={itinerary.id || itinerary._id}
-                  style={styles.itineraryItem}
-                  onPress={() => handleSaveToExisting(itinerary.id || itinerary._id)}
+                  key={tripId}
+                  style={[
+                    styles.itineraryItem,
+                    rowDisabled && styles.itineraryItemDisabled
+                  ]}
+                  onPress={() => handleSaveToExisting(tripId)}
+                  disabled={rowDisabled}
                 >
                   <View style={styles.itineraryInfo}>
                     <Text style={styles.itineraryName}>{itinerary.name}</Text>
@@ -313,9 +340,14 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
                       {itinerary.matches.length} match{itinerary.matches.length !== 1 ? 'es' : ''}
                     </Text>
                   </View>
-                  <Icon name="add" size={24} color="#1976d2" />
+                  {isThisSaving ? (
+                    <ActivityIndicator size="small" color="#1976d2" />
+                  ) : (
+                    <Icon name="add" size={24} color={rowDisabled ? colors.interactive.disabled : "#1976d2"} />
+                  )}
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -391,10 +423,10 @@ const ItineraryModal = ({ visible, onClose, matchData, onSave }) => {
                 <TouchableOpacity
                   style={[
                     styles.saveButton, 
-                    (!newItineraryName.trim() || isCreating) && styles.saveButtonDisabled
+                    (!newItineraryName.trim() || isCreating || isSaving) && styles.saveButtonDisabled
                   ]}
                   onPress={handleCreateNewItinerary}
-                  disabled={!newItineraryName.trim() || isCreating}
+                  disabled={!newItineraryName.trim() || isCreating || isSaving}
                 >
                   {isCreating ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -481,6 +513,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardGrey,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm + spacing.xs,
+  },
+  itineraryItemDisabled: {
+    opacity: 0.6,
   },
   itineraryInfo: {
     flex: 1,

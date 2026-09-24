@@ -38,6 +38,7 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [addingTripId, setAddingTripId] = useState(null);
   const [newTripName, setNewTripName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -45,6 +46,7 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
   useEffect(() => {
     if (open) {
       fetchTrips();
+      setAddingTripId(null);
     }
   }, [open]);
 
@@ -134,8 +136,10 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
   };
 
   const addMatchToTrip = async (tripId) => {
-    if (!match) return;
+    if (!match || addingTripId || creating) return;
 
+    setAddingTripId(tripId);
+    setError('');
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:3001/api/trips/${tripId}/matches`, {
@@ -165,7 +169,7 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
         setTrips(prev => prev.map(trip => 
           trip._id === tripId ? data.trip : trip
         ));
-        setSuccess('Match added to trip!');
+        setSuccess(data.alreadyExists ? 'Match already in trip' : 'Match added to trip!');
         
         // Notify parent that match was added to trip
         if (onMatchAddedToTrip) {
@@ -183,6 +187,8 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
     } catch (error) {
       console.error('Error adding match to trip:', error);
       setError('Failed to add match to trip');
+    } finally {
+      setAddingTripId(null);
     }
   };
 
@@ -303,11 +309,15 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
                   Add to existing trip
                 </Typography>
                 <List sx={{ maxHeight: 200, overflow: 'auto' }}>
-                  {trips.map((trip) => (
+                  {trips.map((trip) => {
+                    const isAdding = addingTripId === trip._id;
+                    const alreadyInTrip = isMatchInTrip(trip);
+                    const rowDisabled = alreadyInTrip || !!addingTripId || creating;
+                    return (
                     <ListItem key={trip._id} disablePadding>
                       <ListItemButton 
                         onClick={() => addMatchToTrip(trip._id)}
-                        disabled={isMatchInTrip(trip)}
+                        disabled={rowDisabled}
                         sx={{
                           border: '1px solid #e0e0e0',
                           borderRadius: 1,
@@ -318,8 +328,10 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
                         }}
                       >
                         <ListItemIcon>
-                          {isMatchInTrip(trip) ? (
+                          {alreadyInTrip ? (
                             <CheckIcon color="success" />
+                          ) : isAdding ? (
+                            <CircularProgress size={20} />
                           ) : (
                             <TripIcon color="action" />
                           )}
@@ -328,7 +340,7 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
                           primary={trip.name}
                           secondary={`${trip.matches.length} match${trip.matches.length !== 1 ? 'es' : ''}`}
                         />
-                        {isMatchInTrip(trip) && (
+                        {alreadyInTrip && (
                           <Chip 
                             label="Added" 
                             size="small" 
@@ -338,7 +350,8 @@ const TripModal = ({ open, onClose, match, onMatchAddedToTrip }) => {
                         )}
                       </ListItemButton>
                     </ListItem>
-                  ))}
+                    );
+                  })}
                 </List>
               </Box>
             )}
