@@ -186,10 +186,10 @@ const MemoriesScreen = () => {
     navigation.navigate('AddMemory');
   }, [navigation]);
 
-  // Navigate to memories map
-  const handleMemoriesMap = useCallback(() => {
+  // Navigate to memories / stadiums map
+  const handleMemoriesMap = useCallback((mode = 'memories') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('MemoriesMap');
+    navigation.navigate('MemoriesMap', { mode });
   }, [navigation]);
 
   // Avatar on Memories is display-only; edit only on Account screen
@@ -467,16 +467,35 @@ const MemoriesScreen = () => {
         {activeTab === 'visitedStadiums' && (
           visitedStadiums.length > 0 ? (
             <View style={styles.visitedStadiumsList}>
+              <TouchableOpacity
+                style={styles.mapEntryButton}
+                onPress={() => handleMemoriesMap('stadiums')}
+                accessibilityLabel="View visited stadiums on map"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="map" size={20} color={colors.onPrimary} />
+                <Text style={styles.mapEntryButtonText}>
+                  View on map
+                  {visitedStadiums.filter((s) => s.coordinates).length > 0
+                    ? ` (${visitedStadiums.filter((s) => s.coordinates).length} with location)`
+                    : ''}
+                </Text>
+              </TouchableOpacity>
+
               {visitedStadiums.map((stadium, index) => (
                 <TouchableOpacity
                   key={`${stadium.venueName}-${stadium.city}-${index}`}
                   style={styles.visitedStadiumItem}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    Alert.alert(
-                      stadium.venueName,
-                      `${stadium.visitCount} visit${stadium.visitCount !== 1 ? 's' : ''}`
-                    );
+                    if (stadium.coordinates) {
+                      handleMemoriesMap('stadiums');
+                    } else {
+                      Alert.alert(
+                        stadium.venueName,
+                        `${stadium.visitCount} visit${stadium.visitCount !== 1 ? 's' : ''}\n\nNo map location yet — pick this stadium from search when editing a memory to place it on the map.`
+                      );
+                    }
                   }}
                   accessibilityLabel={`${stadium.venueName}, ${stadium.visitCount} visits`}
                   accessibilityRole="button"
@@ -486,9 +505,13 @@ const MemoriesScreen = () => {
                     <Text style={styles.visitedStadiumName} numberOfLines={1}>{stadium.venueName}</Text>
                     <Text style={styles.visitedStadiumLocation} numberOfLines={1}>
                       {[stadium.city, stadium.country].filter(Boolean).join(', ') || '—'}
+                      {!stadium.coordinates ? ' · no map pin' : ''}
                     </Text>
                   </View>
                   <Text style={styles.visitedStadiumCount}>{stadium.visitCount}×</Text>
+                  {stadium.coordinates ? (
+                    <MaterialIcons name="place" size={18} color={colors.primary} style={{ marginLeft: spacing.xs }} />
+                  ) : null}
                 </TouchableOpacity>
               ))}
             </View>
@@ -718,6 +741,21 @@ const styles = StyleSheet.create({
   visitedStadiumsList: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
+  },
+  mapEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  mapEntryButtonText: {
+    ...typography.button,
+    color: colors.onPrimary,
   },
   visitedStadiumItem: {
     flexDirection: 'row',

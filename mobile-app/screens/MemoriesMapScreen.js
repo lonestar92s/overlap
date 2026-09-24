@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,259 +6,266 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
-  Dimensions,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Card, Button } from 'react-native-elements';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Platform } from 'react-native';
 import ApiService from '../services/api';
-import { MAP_PROVIDER } from '../utils/mapConfig';
+import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
 
-const { width, height } = Dimensions.get('window');
+const toLatLng = (coordinates) => {
+  if (!coordinates) return null;
+  if (Array.isArray(coordinates) && coordinates.length >= 2) {
+    const lng = Number(coordinates[0]);
+    const lat = Number(coordinates[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng };
+    }
+  }
+  if (typeof coordinates === 'object') {
+    const lat = Number(coordinates.lat ?? coordinates.latitude);
+    const lng = Number(coordinates.lng ?? coordinates.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng };
+    }
+  }
+  return null;
+};
 
+const regionFromPoints = (points) => {
+  if (!points.length) return null;
+  const lats = points.map((p) => p.latitude);
+  const lngs = points.map((p) => p.longitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLng + maxLng) / 2,
+    latitudeDelta: Math.max((maxLat - minLat) * 2.5, 0.2),
+    longitudeDelta: Math.max((maxLng - minLng) * 2.5, 0.2),
+  };
+};
+
+/**
+ * Map of memories or visited stadiums.
+ * route.params.mode: 'memories' (default) | 'stadiums'
+ */
 const MemoriesMapScreen = () => {
   const navigation = useNavigation();
-  const [memories, setMemories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedMemory, setSelectedMemory] = useState(null);
-  const [mapRegion, setMapRegion] = useState(null);
+  const route = useRoute();
+  const mode = route.params?.mode === 'stadiums' ? 'stadiums' : 'memories';
+  const isStadiums = mode === 'stadiums';
 
-  // Fetch memories
-  const fetchMemories = useCallback(async () => {
+  const [loading, setLoading] = useState(true);
+  const [mapRegion, setMapRegion] = useState(null);
+  const [memories, setMemories] = useState([]);
+  const [stadiums, setStadiums] = useState([]);
+  const [selectedMemory, setSelectedMemory] = useState(null);
+  const [selectedStadium, setSelectedStadium] = useState(null);
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ApiService.getMemories();
-      
-      if (response.success) {
-        const memoriesWithCoordinates = response.data.filter(memory => 
-          memory.venue?.coordinates || 
-          (memory.photos && memory.photos.some(photo => photo.coordinates))
-        );
-        
-        setMemories(memoriesWithCoordinates);
-        
-        // Set initial map region if we have coordinates
-        if (memoriesWithCoordinates.length > 0) {
-          const coordinates = memoriesWithCoordinates
-            .map(memory => {
-              if (memory.venue?.coordinates) {
-                return memory.venue.coordinates;
-              }
-              const photoWithCoords = memory.photos?.find(photo => photo.coordinates);
-              return photoWithCoords?.coordinates;
-            })
-            .filter(coord => coord && Array.isArray(coord) && coord.length === 2);
-          
-          if (coordinates.length > 0) {
-            const lats = coordinates.map(coord => coord[1]); // latitude
-            const lngs = coordinates.map(coord => coord[0]); // longitude
-            
-            const minLat = Math.min(...lats);
-            const maxLat = Math.max(...lats);
-            const minLng = Math.min(...lngs);
-            const maxLng = Math.max(...lngs);
-            
-            const centerLat = (minLat + maxLat) / 2;
-            const centerLng = (minLng + maxLng) / 2;
-            const deltaLat = (maxLat - minLat) * 2.5; // Increased padding
-            const deltaLng = (maxLng - minLng) * 2.5; // Increased padding
-            
-            setMapRegion({
-              latitude: centerLat,
-              longitude: centerLng,
-              latitudeDelta: Math.max(deltaLat, 0.2), // Increased minimum
-              longitudeDelta: Math.max(deltaLng, 0.2), // Increased minimum
-            });
-          }
-        }
+      if (!response.success) return;
+
+      if (isStadiums) {
+        const withCoords = (response.visitedStadiums || [])
+          .map((s) => ({ ...s, latLng: toLatLng(s.coordinates) }))
+          .filter((s) => s.latLng);
+        setStadiums(withCoords);
+        setMapRegion(regionFromPoints(withCoords.map((s) => s.latLng)));
+      } else {
+        const withCoords = (response.data || [])
+          .map((memory) => {
+            const venueCoords = toLatLng(memory.venue?.coordinates);
+            const photoCoords = toLatLng(
+              memory.photos?.find((p) => p.coordinates)?.coordinates
+            );
+            const latLng = venueCoords || photoCoords;
+            return latLng ? { ...memory, latLng } : null;
+          })
+          .filter(Boolean);
+        setMemories(withCoords);
+        setMapRegion(regionFromPoints(withCoords.map((m) => m.latLng)));
       }
     } catch (error) {
-      console.error('Error fetching memories:', error);
-      Alert.alert('Error', 'Failed to load memories');
+      console.error('Error loading map data:', error);
+      Alert.alert('Error', 'Failed to load map');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isStadiums]);
 
-  // Load memories on mount
   useEffect(() => {
-    fetchMemories();
-  }, [fetchMemories]);
+    fetchData();
+  }, [fetchData]);
 
-  // Handle marker press
-  const handleMarkerPress = useCallback((memory) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedMemory(memory);
-  }, []);
-
-  // Close memory card
-  const closeMemoryCard = useCallback(() => {
-    setSelectedMemory(null);
-  }, []);
-
-  // Get coordinates for a memory
-  const getMemoryCoordinates = useCallback((memory) => {
-    if (memory.venue?.coordinates && Array.isArray(memory.venue.coordinates)) {
-      return {
-        latitude: memory.venue.coordinates[1],
-        longitude: memory.venue.coordinates[0],
-      };
-    }
-    
-    const photoWithCoords = memory.photos?.find(photo => photo.coordinates);
-    if (photoWithCoords?.coordinates && Array.isArray(photoWithCoords.coordinates)) {
-      return {
-        latitude: photoWithCoords.coordinates.lat || photoWithCoords.coordinates[1],
-        longitude: photoWithCoords.coordinates.lng || photoWithCoords.coordinates[0],
-      };
-    }
-    
-    return null;
-  }, []);
-
-  // Render memory card overlay
-  const renderMemoryCard = useCallback(() => {
-    if (!selectedMemory) return null;
-
-    const hasPhotos = selectedMemory.photos && selectedMemory.photos.length > 0;
-    const firstPhoto = hasPhotos ? selectedMemory.photos[0] : null;
-    
-    return (
-      <View style={styles.memoryCardOverlay}>
-        <Card containerStyle={styles.memoryCard}>
-          {/* Photo Section */}
-          <View style={styles.photoSection}>
-            {hasPhotos ? (
-              <View style={styles.photoContainer}>
-                <Text style={styles.photoCount}>
-                  {selectedMemory.photos.length} photo{selectedMemory.photos.length !== 1 ? 's' : ''}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.noPhotoContainer}>
-                <MaterialIcons name="photo" size={40} color="#ccc" />
-                <Text style={styles.noPhotoText}>No Photos</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Memory Info */}
-          <View style={styles.memoryInfo}>
-            <Text style={styles.teamsText}>
-              {selectedMemory.homeTeam?.name || 'Unknown'} vs {selectedMemory.awayTeam?.name || 'Unknown'}
-            </Text>
-            
-            <Text style={styles.venueText}>
-              {selectedMemory.venue?.name || 'Unknown Venue'}
-            </Text>
-            
-            <Text style={styles.dateText}>
-              {new Date(selectedMemory.date).toLocaleDateString()}
-            </Text>
-            
-            {/* Score Display */}
-            {(selectedMemory.userScore || selectedMemory.apiMatchData?.officialScore) && (
-              <Text style={styles.scoreText}>
-                {selectedMemory.apiMatchData?.officialScore || selectedMemory.userScore}
-              </Text>
-            )}
-            
-            {selectedMemory.competition && (
-              <Text style={styles.competitionText}>{selectedMemory.competition}</Text>
-            )}
-            
-            {selectedMemory.userNotes && (
-              <Text style={styles.notesText} numberOfLines={3}>
-                {selectedMemory.userNotes}
-              </Text>
-            )}
-          </View>
-
-          {/* Close Button */}
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={closeMemoryCard}
-          >
-            <MaterialIcons name="close" size={24} color="#666" />
-          </TouchableOpacity>
-        </Card>
-      </View>
-    );
-  }, [selectedMemory, closeMemoryCard]);
+  const pinCount = isStadiums ? stadiums.length : memories.length;
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading your memories...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>
+            {isStadiums ? 'Loading stadiums…' : 'Loading memories…'}
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.headerButton}
           onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
         >
-          <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
+          <MaterialIcons name="arrow-back" size={iconSizes.md} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Memories Map</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.title}>
+          {isStadiums ? 'Visited Stadiums' : 'Memories Map'}
+        </Text>
+        <View style={styles.headerButton} />
       </View>
 
-      {/* Map */}
       <MapView
         style={styles.map}
-        region={mapRegion}
+        region={mapRegion || undefined}
+        initialRegion={
+          mapRegion || {
+            latitude: 51.5074,
+            longitude: -0.1278,
+            latitudeDelta: 10,
+            longitudeDelta: 10,
+          }
+        }
         onRegionChangeComplete={setMapRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : MapView.PROVIDER_DEFAULT}
+        showsUserLocation
+        showsMyLocationButton
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       >
-        {memories.map((memory, index) => {
-          const coordinates = getMemoryCoordinates(memory);
-          if (!coordinates) return null;
-
-          return (
-            <Marker
-              key={`${memory._id || memory.matchId}-${index}`}
-              coordinate={coordinates}
-              onPress={() => handleMarkerPress(memory)}
-            >
-              <View style={styles.markerContainer}>
-                <MaterialIcons name="sports-soccer" size={24} color="#007AFF" />
-              </View>
-            </Marker>
-          );
-        })}
+        {isStadiums
+          ? stadiums.map((stadium, index) => (
+              <Marker
+                key={`stadium-${stadium.venueName}-${stadium.city}-${index}`}
+                coordinate={stadium.latLng}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedStadium(stadium);
+                  setSelectedMemory(null);
+                }}
+                title={stadium.venueName}
+                description={[stadium.city, stadium.country].filter(Boolean).join(', ')}
+              >
+                <View style={styles.markerContainer}>
+                  <MaterialIcons name="stadium" size={22} color={colors.primary} />
+                </View>
+              </Marker>
+            ))
+          : memories.map((memory, index) => (
+              <Marker
+                key={`memory-${memory._id || memory.matchId}-${index}`}
+                coordinate={memory.latLng}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedMemory(memory);
+                  setSelectedStadium(null);
+                }}
+              >
+                <View style={styles.markerContainer}>
+                  <MaterialIcons name="sports-soccer" size={22} color={colors.primary} />
+                </View>
+              </Marker>
+            ))}
       </MapView>
 
-      {/* Memory Card Overlay */}
-      {renderMemoryCard()}
+      {selectedStadium && (
+        <View style={styles.cardOverlay}>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardClose}
+              onPress={() => setSelectedStadium(null)}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="close" size={iconSizes.md} color={colors.text.secondary} />
+            </TouchableOpacity>
+            <MaterialIcons name="stadium" size={32} color={colors.primary} />
+            <Text style={styles.cardTitle}>{selectedStadium.venueName}</Text>
+            <Text style={styles.cardSubtitle}>
+              {[selectedStadium.city, selectedStadium.country].filter(Boolean).join(', ') || '—'}
+            </Text>
+            <Text style={styles.cardMeta}>
+              {selectedStadium.visitCount} visit{selectedStadium.visitCount !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        </View>
+      )}
 
-      {/* Empty State */}
-      {memories.length === 0 && (
+      {selectedMemory && (
+        <View style={styles.cardOverlay}>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardClose}
+              onPress={() => setSelectedMemory(null)}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="close" size={iconSizes.md} color={colors.text.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.cardTitle}>
+              {selectedMemory.homeTeam?.name || 'Unknown'} vs {selectedMemory.awayTeam?.name || 'Unknown'}
+            </Text>
+            <Text style={styles.cardSubtitle}>
+              {selectedMemory.venue?.name || 'Unknown venue'}
+            </Text>
+            <Text style={styles.cardMeta}>
+              {selectedMemory.date
+                ? new Date(selectedMemory.date).toLocaleDateString()
+                : ''}
+              {selectedMemory.competition ? ` · ${selectedMemory.competition}` : ''}
+            </Text>
+            {(selectedMemory.userScore || selectedMemory.apiMatchData?.officialScore) && (
+              <Text style={styles.cardScore}>
+                {selectedMemory.apiMatchData?.officialScore || selectedMemory.userScore}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {pinCount === 0 && (
         <View style={styles.emptyState}>
-          <MaterialIcons name="map" size={80} color="#ccc" />
-          <Text style={styles.emptyTitle}>No Memories on Map</Text>
-          <Text style={styles.emptySubtitle}>
-            Add memories with location data to see them on the map
-          </Text>
-          <Button
-            title="Add Memory"
-            onPress={() => navigation.navigate('AddMemory')}
-            buttonStyle={styles.emptyStateButton}
-            titleStyle={styles.emptyStateButtonTitle}
+          <MaterialIcons
+            name={isStadiums ? 'stadium' : 'map'}
+            size={72}
+            color={colors.text.light}
           />
+          <Text style={styles.emptyTitle}>
+            {isStadiums ? 'No stadiums on the map yet' : 'No memories on the map yet'}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {isStadiums
+              ? 'Pick a stadium from search when adding a memory (or add a photo with GPS) to place it here.'
+              : 'Add memories with a known stadium or a photo with location to see them here.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => navigation.navigate('AddMemory')}
+            accessibilityRole="button"
+          >
+            <Text style={styles.emptyButtonText}>Add Memory</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -268,193 +275,122 @@ const MemoriesMapScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    paddingBottom: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-  },
-  placeholder: {
-    width: 40,
-  },
-  map: {
-    flex: 1,
-  },
-  markerContainer: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 8,
-    borderWidth: 2,
-    borderColor: '#007AFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  memoryCardOverlay: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    zIndex: 1000,
-  },
-  memoryCard: {
-    borderRadius: 16,
-    padding: 0,
-    margin: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  photoSection: {
-    position: 'relative',
-  },
-  photoContainer: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  photoCount: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  noPhotoContainer: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noPhotoText: {
-    color: '#999',
-    marginTop: 8,
-    fontSize: 14,
-  },
-  memoryInfo: {
-    padding: 16,
-  },
-  teamsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  venueText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  dateText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  scoreText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  competitionText: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  notesText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    lineHeight: 16,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyState: {
-    position: 'absolute',
-    top: '50%',
-    left: 20,
-    right: 20,
-    transform: [{ translateY: -100 }],
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 16,
-    padding: 40,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  emptyStateButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  emptyStateButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    backgroundColor: colors.card,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing.md,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    ...typography.h3,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  map: {
+    flex: 1,
+  },
+  markerContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: spacing.sm,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    ...shadows.small,
+  },
+  cardOverlay: {
+    position: 'absolute',
+    bottom: spacing.lg,
+    left: spacing.lg,
+    right: spacing.lg,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+    ...shadows.medium,
+  },
+  cardClose: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    padding: spacing.xs,
+  },
+  cardTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  cardSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  cardMeta: {
+    ...typography.bodySmall,
+    color: colors.text.light,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  cardScore: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: spacing.sm,
+  },
+  emptyState: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  emptyButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
+  },
+  emptyButtonText: {
+    ...typography.button,
+    color: colors.onPrimary,
   },
 });
 

@@ -407,6 +407,22 @@ router.delete('/:id', auth, async (req, res) => {
  * Each stadium appears once with visitCount = number of memories at that venue.
  * Stadium identity: venue name + city + country (normalized).
  */
+function normalizeCoordinates(raw) {
+  if (!raw) return null;
+  if (Array.isArray(raw) && raw.length >= 2) {
+    const lng = Number(raw[0]);
+    const lat = Number(raw[1]);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+    return null;
+  }
+  if (typeof raw === 'object') {
+    const lat = Number(raw.lat ?? raw.latitude);
+    const lng = Number(raw.lng ?? raw.longitude);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+  }
+  return null;
+}
+
 function deriveVisitedStadiumsFromMemories(memories) {
   const key = (m) => {
     const name = (m.venue?.name || '').trim().toLowerCase();
@@ -418,16 +434,21 @@ function deriveVisitedStadiumsFromMemories(memories) {
   memories.forEach((memory) => {
     if (!memory.venue?.name) return;
     const k = key(memory);
+    const venueCoords = normalizeCoordinates(memory.venue?.coordinates);
+    const photoCoords = normalizeCoordinates(
+      (memory.photos || []).find((p) => p.coordinates)?.coordinates
+    );
+    const coords = venueCoords || photoCoords;
     if (!byKey.has(k)) {
       byKey.set(k, {
         venueName: memory.venue.name.trim(),
         city: (memory.venue.city || '').trim(),
         country: (memory.venue.country || '').trim(),
-        coordinates: memory.venue.coordinates && memory.venue.coordinates.length >= 2
-          ? memory.venue.coordinates
-          : null,
+        coordinates: coords,
         visitCount: 0
       });
+    } else if (!byKey.get(k).coordinates && coords) {
+      byKey.get(k).coordinates = coords;
     }
     byKey.get(k).visitCount += 1;
   });
