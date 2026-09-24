@@ -1,29 +1,36 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
+  Keyboard,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetTextInput,
-  BottomSheetView,
-} from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../styles/designTokens';
 
-const SNAP_POINTS = ['52%', '88%'];
+const WINDOW_HEIGHT = Dimensions.get('window').height;
+const SHEET_HEIGHT_COLLAPSED = Math.round(WINDOW_HEIGHT * 0.58);
+const SHEET_HEIGHT_EXPANDED = Math.round(WINDOW_HEIGHT * 0.88);
 
+/**
+ * Ask Agent overlay.
+ * Uses RN Modal (not @gorhom BottomSheetModal) so it reliably appears above
+ * react-native-maps on the home screen — portals can render under the map.
+ *
+ * Prompt text is edited locally so keystrokes do not re-render the map screen.
+ */
 const AskAgentModal = ({
   visible,
   onClose,
-  prompt,
+  prompt = '',
   onPromptChange,
   onSend,
   loading = false,
@@ -32,8 +39,10 @@ const AskAgentModal = ({
   placeholder = 'Ask anything about this trip...',
   quickPrompts = [],
 }) => {
-  const bottomSheetRef = useRef(null);
   const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [localPrompt, setLocalPrompt] = useState(prompt);
 
   const defaultPrompts = useMemo(
     () => [
@@ -52,182 +61,199 @@ const AskAgentModal = ({
         ? styles.feedbackSuccess
         : styles.feedbackInfo;
 
-  const handleDismiss = useCallback(() => {
-    onClose?.();
-  }, [onClose]);
-
-  // Delay present until after the opening press ends. Presenting immediately
-  // mounts a closeable backdrop under the same finger and dismisses instantly.
+  // Hydrate local draft when the sheet opens (not on every parent keystroke sync).
   useEffect(() => {
-    if (!bottomSheetRef.current) {
+    if (visible) {
+      setLocalPrompt(prompt);
+    }
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional: open-only hydrate
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      setInputFocused(false);
       return undefined;
     }
 
-    let presentTimer = null;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    if (visible) {
-      presentTimer = setTimeout(() => {
-        try {
-          bottomSheetRef.current?.present();
-        } catch (e) {
-          if (__DEV__) {
-            console.error('AskAgentModal present:', e);
-          }
-        }
-      }, 80);
-    } else {
-      try {
-        bottomSheetRef.current.dismiss();
-      } catch (e) {
-        if (__DEV__) {
-          console.error('AskAgentModal dismiss:', e);
-        }
-      }
-    }
+    const onShow = (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    };
+    const onHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
 
     return () => {
-      if (presentTimer) {
-        clearTimeout(presentTimer);
-      }
+      showSub.remove();
+      hideSub.remove();
     };
   }, [visible]);
 
-  const renderBackdrop = useCallback(
-    (props) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={0.35}
-        pressBehavior="close"
-      />
-    ),
-    []
-  );
+  const commitPrompt = (next) => {
+    setLocalPrompt(next);
+  };
 
-  const renderHandle = useCallback(
-    () => (
-      <View style={styles.handleRoot}>
-        <View style={styles.handleBar} />
-        <View style={styles.handleHeader}>
-          <View style={styles.titleWrap}>
-            <MaterialIcons name="auto-awesome" size={20} color={colors.primary} />
-            <Text style={styles.title}>Ask Agent</Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => bottomSheetRef.current?.dismiss()}
-            accessibilityRole="button"
-            accessibilityLabel="Close Ask Agent"
-          >
-            <MaterialIcons name="close" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    ),
-    []
-  );
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onPromptChange?.(localPrompt);
+    onClose?.();
+  };
+
+  const handleSend = () => {
+    onPromptChange?.(localPrompt);
+    onSend?.(localPrompt);
+  };
+
+  const keyboardOpen = keyboardHeight > 0 || inputFocused;
+  const sheetBottom = keyboardHeight;
+  const maxSheetHeight = WINDOW_HEIGHT - sheetBottom - Math.max(insets.top, spacing.md);
+  const preferredHeight = keyboardOpen ? SHEET_HEIGHT_EXPANDED : SHEET_HEIGHT_COLLAPSED;
+  const sheetHeight = Math.min(preferredHeight, maxSheetHeight);
+  const sheetPaddingBottom =
+    keyboardHeight > 0 ? spacing.md : Math.max(spacing.md, insets.bottom);
 
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
-      snapPoints={SNAP_POINTS}
-      enableDynamicSizing={false}
-      enablePanDownToClose
-      enableContentPanningGesture
-      enableHandlePanningGesture
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
-      topInset={insets.top}
-      bottomInset={0}
-      onDismiss={handleDismiss}
-      backgroundStyle={styles.sheetBackground}
-      handleComponent={renderHandle}
-      backdropComponent={renderBackdrop}
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleClose}
+      statusBarTranslucent
     >
-      <BottomSheetView style={styles.sheetColumn}>
-        <BottomSheetScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+      <View style={styles.root}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss Ask Agent"
+        />
+
+        <View
+          style={[
+            styles.sheet,
+            {
+              height: sheetHeight,
+              marginBottom: sheetBottom,
+              paddingBottom: sheetPaddingBottom,
+            },
+          ]}
         >
-          <View style={styles.heroSection}>
-            <Text style={styles.heroTitle}>Hi there</Text>
-            <Text style={styles.heroSubtitle}>Can I help you find matches?</Text>
+          <View style={styles.handleRoot}>
+            <View style={styles.handleBar} />
+            <View style={styles.handleHeader}>
+              <View style={styles.titleWrap}>
+                <MaterialIcons name="auto-awesome" size={20} color={colors.primary} />
+                <Text style={styles.title}>Ask Agent</Text>
+              </View>
+              <TouchableOpacity
+                onPress={handleClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close Ask Agent"
+              >
+                <MaterialIcons name="close" size={20} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
-            horizontal
-            nestedScrollEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickPromptList}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
           >
-            {promptChips.map((chip) => (
-              <TouchableOpacity
-                key={chip}
-                style={styles.quickPromptChip}
-                onPress={() => onPromptChange(chip)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={`Use prompt: ${chip}`}
-              >
-                <Text style={styles.quickPromptText}>{chip}</Text>
-              </TouchableOpacity>
-            ))}
+            <View style={styles.heroSection}>
+              <Text style={styles.heroTitle}>Hi there</Text>
+              <Text style={styles.heroSubtitle}>Can I help you find matches?</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickPromptList}
+              keyboardShouldPersistTaps="handled"
+            >
+              {promptChips.map((chip) => (
+                <TouchableOpacity
+                  key={chip}
+                  style={styles.quickPromptChip}
+                  onPress={() => commitPrompt(chip)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use prompt: ${chip}`}
+                >
+                  <Text style={styles.quickPromptText}>{chip}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {feedbackMessage ? (
+              <Text style={[styles.feedback, toneStyle]}>{feedbackMessage}</Text>
+            ) : null}
           </ScrollView>
 
-          {feedbackMessage ? (
-            <Text style={[styles.feedback, toneStyle]}>{feedbackMessage}</Text>
-          ) : null}
-        </BottomSheetScrollView>
+          <View style={styles.inputDock}>
+            <TextInput
+              value={localPrompt}
+              onChangeText={setLocalPrompt}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              multiline
+              placeholder={placeholder}
+              placeholderTextColor={colors.text.light}
+              style={styles.input}
+              textAlignVertical="top"
+            />
 
-        <View style={[styles.inputDock, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
-          <BottomSheetTextInput
-            value={prompt}
-            onChangeText={onPromptChange}
-            onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
-            multiline
-            placeholder={placeholder}
-            placeholderTextColor={colors.text.light}
-            style={styles.input}
-            textAlignVertical="top"
-          />
-
-          <TouchableOpacity
-            style={[styles.sendButton, (loading || !prompt.trim()) && styles.sendButtonDisabled]}
-            activeOpacity={0.85}
-            onPress={onSend}
-            disabled={loading || !prompt.trim()}
-            accessibilityRole="button"
-            accessibilityLabel="Send Ask Agent message"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <MaterialIcons name="send" size={18} color={colors.white} />
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (loading || !localPrompt.trim()) && styles.sendButtonDisabled,
+              ]}
+              activeOpacity={0.85}
+              onPress={handleSend}
+              disabled={loading || !localPrompt.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Send Ask Agent message"
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <MaterialIcons name="send" size={18} color={colors.white} />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      </BottomSheetView>
-    </BottomSheetModal>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  sheetBackground: {
+  root: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  sheet: {
     backgroundColor: colors.card,
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing.md,
   },
   handleRoot: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.card,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
   },
   handleBar: {
     alignSelf: 'center',
@@ -241,10 +267,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  sheetColumn: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
   },
   scroll: {
     flex: 1,

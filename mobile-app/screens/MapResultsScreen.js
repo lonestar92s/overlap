@@ -1215,25 +1215,24 @@ const MapResultsScreen = ({ navigation, route }) => {
     setSearchModalVisible(false);
   };
 
-  const openAskAgentModal = () => {
+  const openAskAgentModal = useCallback(() => {
     setAskAgentPrompt(mapAskAgentDraft);
     setAskAgentFeedbackMessage('');
     setAskAgentFeedbackType('info');
     setAskAgentModalVisible(true);
-  };
+  }, []);
 
-  const closeAskAgentModal = () => {
-    mapAskAgentDraft = askAgentPrompt;
+  const closeAskAgentModal = useCallback(() => {
     setAskAgentModalVisible(false);
-  };
+  }, []);
 
-  const handleAskAgentPromptChange = (text) => {
+  const handleAskAgentPromptChange = useCallback((text) => {
     mapAskAgentDraft = text;
     setAskAgentPrompt(text);
-  };
+  }, []);
 
-  const handleAskAgentSend = async () => {
-    const prompt = askAgentPrompt.trim();
+  const handleAskAgentSend = useCallback(async (promptText) => {
+    const prompt = (typeof promptText === 'string' ? promptText : askAgentPrompt).trim();
     if (!prompt) return;
 
     setAskAgentLoading(true);
@@ -1284,7 +1283,7 @@ const MapResultsScreen = ({ navigation, route }) => {
     } finally {
       setAskAgentLoading(false);
     }
-  };
+  }, [askAgentPrompt, mapRegion, clearAllFilters]);
 
   const handleSearchUpdate = async (newSearchParams) => {
     // Clear all filters when starting a new search

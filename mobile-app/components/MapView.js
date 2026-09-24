@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef, memo } from 'react';
 import { View, StyleSheet, Alert, TouchableOpacity, Text, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -6,22 +6,24 @@ import { debounce } from 'lodash';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { calculateAdaptiveBounds } from '../utils/adaptiveBounds';
 
+const NOOP = () => {};
+
 const MatchMapView = forwardRef(({
   matches = [],
   recommendedMatches = [],
   homeBases = [],
   initialRegion = null,
-  onRegionChange = () => {},
-  onMarkerPress = () => {},
-  onRecommendedMatchPress = () => {},
-  onHomeBasePress = () => {},
+  onRegionChange = NOOP,
+  onMarkerPress = NOOP,
+  onRecommendedMatchPress = NOOP,
+  onHomeBasePress = NOOP,
   selectedMatchId = null,
   travelTimes = {},
   style = {},
   showLocationButton = true,
   /** Distance from map container bottom to the location FAB’s bottom edge (e.g. above sheet + Ask Agent). */
   locationButtonBottom = 72,
-  onMapPress = () => {},
+  onMapPress = NOOP,
 }, ref) => {
   const mapRef = useRef();
   
@@ -350,9 +352,6 @@ const MatchMapView = forwardRef(({
   // Render match markers with memoization - grouped by venue
   const markers = useMemo(() => {
     if (!matches || matches.length === 0) {
-      if (__DEV__) {
-        console.log('MapView: No matches, clearing all markers');
-      }
       return []; // Return empty array instead of null to prevent crashes
     }
     
@@ -796,5 +795,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MatchMapView;
+export default memo(MatchMapView);
  

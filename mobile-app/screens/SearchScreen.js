@@ -317,13 +317,13 @@ const SearchScreen = ({ navigation, route }) => {
     </TouchableOpacity>
   );
 
-  const handleMarkerPress = (match) => {
+  const handleMarkerPress = useCallback((match) => {
     setSelectedMatch(match);
-  };
+  }, []);
 
-  const handleCloseMatchCard = () => {
+  const handleCloseMatchCard = useCallback(() => {
     setSelectedMatch(null);
-  };
+  }, []);
 
   const handleTripPress = (trip) => {
     // Navigate to trip overview screen in TripsTab, ensuring TripsList is in the stack
@@ -340,25 +340,24 @@ const SearchScreen = ({ navigation, route }) => {
     });
   };
 
-  const openAskAgentModal = () => {
+  const openAskAgentModal = useCallback(() => {
     setAskAgentPrompt(homeAskAgentDraft);
     setAskAgentFeedbackMessage('');
     setAskAgentFeedbackType('info');
     setAskAgentModalVisible(true);
-  };
+  }, []);
 
-  const closeAskAgentModal = () => {
-    homeAskAgentDraft = askAgentPrompt;
+  const closeAskAgentModal = useCallback(() => {
     setAskAgentModalVisible(false);
-  };
+  }, []);
 
-  const handleAskAgentPromptChange = (text) => {
+  const handleAskAgentPromptChange = useCallback((text) => {
     homeAskAgentDraft = text;
     setAskAgentPrompt(text);
-  };
+  }, []);
 
-  const handleAskAgentSend = async () => {
-    const prompt = askAgentPrompt.trim();
+  const handleAskAgentSend = useCallback(async (promptText) => {
+    const prompt = (typeof promptText === 'string' ? promptText : askAgentPrompt).trim();
     if (!prompt) return;
 
     setAskAgentLoading(true);
@@ -414,7 +413,7 @@ const SearchScreen = ({ navigation, route }) => {
     } finally {
       setAskAgentLoading(false);
     }
-  };
+  }, [askAgentPrompt, navigation]);
 
   // Render map-based home screen
   if (FEATURE_FLAGS.enableMapHomeScreen) {
@@ -453,6 +452,14 @@ const SearchScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Countdown overlays the map bottom; Ask Agent FAB stacks above it. */}
+        <View
+          style={[styles.tripCountdownOverlay, { bottom: insets.bottom + spacing.sm }]}
+          pointerEvents="box-none"
+        >
+          <TripCountdownWidget onTripPress={handleTripPress} />
+        </View>
+
         <View
           style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}
           pointerEvents={askAgentModalVisible ? 'none' : 'box-none'}
@@ -468,8 +475,6 @@ const SearchScreen = ({ navigation, route }) => {
             <Text style={styles.askAgentChipText}>Ask Agent</Text>
           </TouchableOpacity>
         </View>
-
-        <TripCountdownWidget onTripPress={handleTripPress} />
 
         {/* Match Card Overlay - shows when a pin is tapped (centered to avoid blocking countdown) */}
         {selectedMatch && (() => {
@@ -720,15 +725,24 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     zIndex: 2,
   },
+  tripCountdownOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    elevation: 4,
+  },
   askAgentFloating: {
     position: 'absolute',
     right: 12,
-    zIndex: 3,
+    zIndex: 10,
+    elevation: 12,
   },
   askAgentFloatingNonMap: {
     position: 'absolute',
     right: 12,
-    zIndex: 3,
+    zIndex: 10,
+    elevation: 12,
   },
   askAgentChip: {
     flexDirection: 'row',
@@ -744,7 +758,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.22,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 12,
   },
   askAgentChipHidden: {
     opacity: 0,

@@ -473,12 +473,7 @@ const MemoriesScreen = () => {
                 accessibilityRole="button"
               >
                 <MaterialIcons name="map" size={20} color={colors.onPrimary} />
-                <Text style={styles.mapEntryButtonText}>
-                  View on map
-                  {visitedStadiums.filter((s) => s.coordinates).length > 0
-                    ? ` (${visitedStadiums.filter((s) => s.coordinates).length} with location)`
-                    : ''}
-                </Text>
+                <Text style={styles.mapEntryButtonText}>View on map</Text>
               </TouchableOpacity>
 
               {visitedStadiums.map((stadium, index) => (
