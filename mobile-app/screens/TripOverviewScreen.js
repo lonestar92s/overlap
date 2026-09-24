@@ -1214,9 +1214,6 @@ const TripOverviewScreen = ({ navigation, route }) => {
               </View>
               <Text style={styles.userName}>{user?.username || user?.email?.split('@')[0] || 'User'}</Text>
             </View>
-            <TouchableOpacity style={styles.followButton}>
-              <Text style={styles.followButtonText}>Follow</Text>
-            </TouchableOpacity>
           </View>
           
           {/* Description - Editable inline (read-only for past trips) */}
@@ -2338,7 +2335,6 @@ const styles = StyleSheet.create({
   },
   userSection: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: spacing.md,
     borderTopWidth: 0.5,
@@ -2365,19 +2361,6 @@ const styles = StyleSheet.create({
   userName: {
     ...typography.body,
     color: 'rgba(0, 0, 0, 0.5)',
-  },
-  followButton: {
-    borderWidth: 1,
-    borderColor: colors.text.primary,
-    borderRadius: borderRadius.xl,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + spacing.xs,
-    minWidth: 66,
-    alignItems: 'center',
-  },
-  followButtonText: {
-    ...typography.caption,
-    color: colors.text.primary,
   },
   tripDescription: {
     ...typography.caption,
