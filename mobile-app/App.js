@@ -218,10 +218,18 @@ function MemoriesStack() {
       <Stack.Screen
         name="AddMemory"
         component={AddMemoryScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
       />
       <Stack.Screen
         name="EditMemory"
         component={EditMemoryScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
       />
       <Stack.Screen
         name="MemoriesMap"

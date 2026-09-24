@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,45 +7,80 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   TextInput,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Button, Card, Input } from 'react-native-elements';
+import { Calendar } from 'react-native-calendars';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import ApiService from '../services/api';
+import EntitySearchField from '../components/EntitySearchField';
+import { colors, spacing, typography, borderRadius, shadows, input, components } from '../styles/designTokens';
+import { formatDateToLocalString, getTodayLocalString } from '../utils/dateUtils';
+
+const toDateOnly = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  return formatDateToLocalString(new Date(value));
+};
 
 const EditMemoryScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { memory } = route.params;
-  
+
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState(memory.photos || []);
-  
-  // Form state - initialize with existing memory data
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
   const [homeTeam, setHomeTeam] = useState({
     name: memory.homeTeam?.name || '',
-    logo: memory.homeTeam?.logo || null
+    logo: memory.homeTeam?.logo || null,
+    apiId: memory.homeTeam?.apiId || null,
   });
   const [awayTeam, setAwayTeam] = useState({
     name: memory.awayTeam?.name || '',
-    logo: memory.awayTeam?.logo || null
+    logo: memory.awayTeam?.logo || null,
+    apiId: memory.awayTeam?.apiId || null,
   });
   const [venue, setVenue] = useState({
     name: memory.venue?.name || '',
     city: memory.venue?.city || '',
-    country: memory.venue?.country || ''
+    country: memory.venue?.country || '',
+    coordinates: memory.venue?.coordinates || null,
   });
   const [competition, setCompetition] = useState(memory.competition || '');
-  const [date, setDate] = useState(memory.date ? new Date(memory.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+  const [venueSuggestion, setVenueSuggestion] = useState(null);
+  const [matchDate, setMatchDate] = useState(toDateOnly(memory.date));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [userScore, setUserScore] = useState(memory.userScore || '');
   const [userNotes, setUserNotes] = useState(memory.userNotes || '');
 
-  // Photo picker
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return 'Select date';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const onDayPress = (day) => {
+    setMatchDate(day.dateString);
+    setShowDatePicker(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const clearDate = () => {
+    setMatchDate(null);
+    setShowDatePicker(false);
+  };
+
+  const getPhotoUri = (photo) => photo.uri || photo.url || null;
+
   const pickImage = useCallback(async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -56,14 +91,14 @@ const EditMemoryScreen = () => {
       });
 
       if (!result.canceled && result.assets) {
-        const newPhotos = result.assets.map(asset => ({
+        const newPhotos = result.assets.map((asset) => ({
           uri: asset.uri,
           type: 'image/jpeg',
           width: asset.width,
           height: asset.height,
         }));
-        
-        setPhotos(prev => [...prev, ...newPhotos]);
+
+        setPhotos((prev) => [...prev, ...newPhotos]);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (error) {
@@ -72,7 +107,6 @@ const EditMemoryScreen = () => {
     }
   }, []);
 
-  // Take photo
   const takePhoto = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -87,14 +121,15 @@ const EditMemoryScreen = () => {
       });
 
       if (!result.canceled && result.assets) {
-        const newPhoto = {
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          width: result.assets[0].width,
-          height: result.assets[0].height,
-        };
-        
-        setPhotos(prev => [...prev, newPhoto]);
+        setPhotos((prev) => [
+          ...prev,
+          {
+            uri: result.assets[0].uri,
+            type: 'image/jpeg',
+            width: result.assets[0].width,
+            height: result.assets[0].height,
+          },
+        ]);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (error) {
@@ -103,25 +138,22 @@ const EditMemoryScreen = () => {
     }
   }, []);
 
-  // Remove photo
   const removePhoto = useCallback((index) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPhotos(prev => prev.filter((_, i) => i !== index));
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Validate form
   const validateForm = useCallback(() => {
     if (photos.length === 0) {
-      Alert.alert('Error', 'At least one photo is required');
+      Alert.alert('Add a photo', 'At least one photo is required to save this memory');
       return false;
     }
     return true;
   }, [photos]);
 
-  // Delete memory
   const handleDelete = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
+
     Alert.alert(
       'Delete Memory',
       'Are you sure you want to delete this memory? This action cannot be undone.',
@@ -134,19 +166,10 @@ const EditMemoryScreen = () => {
             try {
               setLoading(true);
               const response = await ApiService.deleteMemory(memory._id || memory.matchId);
-              
+
               if (response.success) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert(
-                  'Success!',
-                  'Memory deleted successfully',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => navigation.goBack()
-                    }
-                  ]
-                );
+                navigation.goBack();
               }
             } catch (error) {
               console.error('Error deleting memory:', error);
@@ -155,13 +178,12 @@ const EditMemoryScreen = () => {
             } finally {
               setLoading(false);
             }
-          }
-        }
+          },
+        },
       ]
     );
   }, [memory, navigation]);
 
-  // Update memory
   const handleUpdate = useCallback(async () => {
     if (!validateForm()) return;
 
@@ -169,35 +191,50 @@ const EditMemoryScreen = () => {
       setLoading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // Create memory data
       const memoryData = {
-        homeTeam: homeTeam.name.trim() ? homeTeam : { name: 'Unknown Team' },
-        awayTeam: awayTeam.name.trim() ? awayTeam : { name: 'Unknown Team' },
-        venue: venue.name.trim() ? venue : { name: 'Unknown Venue', city: 'Unknown City', country: 'Unknown Country' },
+        homeTeam: homeTeam.name.trim()
+          ? {
+              name: homeTeam.name.trim(),
+              logo: homeTeam.logo || null,
+              ...(homeTeam.apiId ? { apiId: String(homeTeam.apiId) } : {}),
+            }
+          : { name: 'Unknown Team' },
+        awayTeam: awayTeam.name.trim()
+          ? {
+              name: awayTeam.name.trim(),
+              logo: awayTeam.logo || null,
+              ...(awayTeam.apiId ? { apiId: String(awayTeam.apiId) } : {}),
+            }
+          : { name: 'Unknown Team' },
+        venue: venue.name.trim()
+          ? {
+              name: venue.name.trim(),
+              city: venue.city.trim() || '',
+              country: venue.country.trim() || '',
+              ...(Array.isArray(venue.coordinates) && venue.coordinates.length === 2
+                ? { coordinates: venue.coordinates }
+                : {}),
+            }
+          : { name: 'Unknown Venue', city: 'Unknown City', country: 'Unknown Country' },
         competition: competition.trim() || 'Unknown Competition',
-        date: date || new Date().toISOString().split('T')[0],
+        date: matchDate || formatDateToLocalString(new Date()),
         userScore: userScore.trim() || '',
         userNotes: userNotes.trim() || '',
       };
 
-      // Separate existing photos from new photos
-      const existingPhotos = photos.filter(photo => photo.publicId); // Photos already uploaded
-      const newPhotos = photos.filter(photo => !photo.publicId); // New photos to upload
+      const newPhotos = photos.filter((photo) => !photo.publicId);
 
-      const response = await ApiService.updateMemory(memory._id || memory.matchId, memoryData, newPhotos);
-      
+      const response = await ApiService.updateMemory(
+        memory._id || memory.matchId,
+        memoryData,
+        newPhotos
+      );
+
       if (response.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          'Success!',
-          'Memory updated successfully',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack()
-            }
-          ]
-        );
+        Alert.alert('Saved', 'Memory updated successfully', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
       }
     } catch (error) {
       console.error('Error updating memory:', error);
@@ -206,198 +243,400 @@ const EditMemoryScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [validateForm, homeTeam, awayTeam, venue, competition, date, userScore, userNotes, photos, memory, navigation]);
+  }, [
+    validateForm,
+    homeTeam,
+    awayTeam,
+    venue,
+    competition,
+    matchDate,
+    userScore,
+    userNotes,
+    photos,
+    memory,
+    navigation,
+  ]);
 
-  // Render photo grid
-  const renderPhotoGrid = useCallback(() => {
-    if (photos.length === 0) return null;
+  const markedDates = matchDate
+    ? {
+        [matchDate]: {
+          selected: true,
+          selectedColor: colors.primary,
+          selectedTextColor: colors.onPrimary,
+        },
+      }
+    : {};
 
-    return (
-      <View style={styles.photoGrid}>
-        <Text style={styles.sectionTitle}>Photos ({photos.length})</Text>
-        <View style={styles.photosContainer}>
-          {photos.map((photo, index) => (
-            <View key={index} style={styles.photoItem}>
-              <Image 
-                source={{ uri: photo.uri || photo.url }} 
-                style={styles.photoThumbnail} 
-              />
-              <TouchableOpacity
-                style={styles.removePhotoButton}
-                onPress={() => removePhoto(index)}
-              >
-                <MaterialIcons name="close" size={20} color="white" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
-  }, [photos, removePhoto]);
+  const detailsSummary = [
+    homeTeam.name.trim() || awayTeam.name.trim()
+      ? [homeTeam.name.trim(), awayTeam.name.trim()].filter(Boolean).join(' vs ')
+      : null,
+    matchDate ? formatDisplayDate(matchDate) : null,
+    venue.name.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
         <View style={styles.header}>
           <TouchableOpacity
-            style={styles.backButton}
             onPress={() => navigation.goBack()}
-            accessibilityLabel="Go back"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Cancel"
             accessibilityRole="button"
           >
-            <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Edit Memory</Text>
           <TouchableOpacity
-            style={styles.deleteButton}
             onPress={handleDelete}
             disabled={loading}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             accessibilityLabel="Delete memory"
             accessibilityRole="button"
+            style={styles.deleteButton}
           >
-            <MaterialIcons name="delete-outline" size={24} color="#FF3B30" />
+            <MaterialIcons name="delete-outline" size={22} color={colors.error} />
           </TouchableOpacity>
         </View>
 
-        {/* Photo Section */}
-        <Card containerStyle={styles.card}>
-          <Text style={styles.sectionTitle}>Photos</Text>
-          <Text style={styles.sectionSubtitle}>
-            Add or remove photos from your match experience
-          </Text>
-          
-          <View style={styles.photoButtons}>
-            <Button
-              title="Take Photo"
-              icon={
-                <MaterialIcons name="camera-alt" size={20} color="white" style={{ marginRight: 8 }} />
-              }
-              onPress={takePhoto}
-              buttonStyle={styles.photoButton}
-              titleStyle={styles.photoButtonTitle}
-            />
-            
-            <Button
-              title="Choose Photos"
-              icon={
-                <MaterialIcons name="photo-library" size={20} color="white" style={{ marginRight: 8 }} />
-              }
-              onPress={pickImage}
-              buttonStyle={styles.photoButton}
-              titleStyle={styles.photoButtonTitle}
-            />
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.photoSection}>
+            {photos.length === 0 ? (
+              <TouchableOpacity
+                style={styles.photoDropzone}
+                onPress={pickImage}
+                activeOpacity={0.7}
+                accessibilityLabel="Add photos"
+                accessibilityRole="button"
+              >
+                <View style={styles.dropzoneIcon}>
+                  <MaterialIcons name="add-a-photo" size={32} color={colors.primary} />
+                </View>
+                <Text style={styles.dropzoneTitle}>Add photos</Text>
+                <Text style={styles.dropzoneSubtitle}>At least one photo is required</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.photosContainer}>
+                {photos.map((photo, index) => {
+                  const uri = getPhotoUri(photo);
+                  return (
+                    <View key={photo.publicId || uri || `photo-${index}`} style={styles.photoItem}>
+                      {uri ? (
+                        <Image source={{ uri }} style={styles.photoThumbnail} />
+                      ) : (
+                        <View style={[styles.photoThumbnail, styles.photoPlaceholder]}>
+                          <MaterialIcons name="broken-image" size={28} color={colors.text.light} />
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        style={styles.removePhotoButton}
+                        onPress={() => removePhoto(index)}
+                        accessibilityLabel="Remove photo"
+                        accessibilityRole="button"
+                      >
+                        <MaterialIcons name="close" size={16} color={colors.onPrimary} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+                <TouchableOpacity
+                  style={styles.addMorePhoto}
+                  onPress={pickImage}
+                  accessibilityLabel="Add more photos"
+                  accessibilityRole="button"
+                >
+                  <MaterialIcons name="add" size={28} color={colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.photoActions}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={takePhoto}
+                accessibilityLabel="Take photo"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="camera-alt" size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>Camera</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={pickImage}
+                accessibilityLabel="Choose photos"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="photo-library" size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>Library</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {renderPhotoGrid()}
-        </Card>
+          <View style={styles.detailsCard}>
+            <TouchableOpacity
+              style={styles.detailsHeader}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setDetailsExpanded((prev) => !prev);
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel={detailsExpanded ? 'Hide match details' : 'Edit match details'}
+              accessibilityRole="button"
+            >
+              <View style={styles.detailsHeaderText}>
+                <Text style={styles.detailsTitle}>Match details</Text>
+                <Text style={styles.detailsSubtitle} numberOfLines={1}>
+                  {detailsSummary || 'Teams, date, venue, notes'}
+                </Text>
+              </View>
+              <MaterialIcons
+                name={detailsExpanded ? 'expand-less' : 'expand-more'}
+                size={24}
+                color={colors.text.secondary}
+              />
+            </TouchableOpacity>
 
-        {/* Match Details */}
-        <Card containerStyle={styles.card}>
-          <Text style={styles.sectionTitle}>Match Details</Text>
-          
-          <Input
-            label="Home Team"
-            value={homeTeam.name}
-            onChangeText={(text) => setHomeTeam(prev => ({ ...prev, name: text }))}
-            placeholder="e.g., Liverpool"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="Away Team"
-            value={awayTeam.name}
-            onChangeText={(text) => setAwayTeam(prev => ({ ...prev, name: text }))}
-            placeholder="e.g., Manchester United"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="Competition/League"
-            value={competition}
-            onChangeText={setCompetition}
-            placeholder="e.g., Premier League"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="Date"
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="Score"
-            value={userScore}
-            onChangeText={setUserScore}
-            placeholder="e.g., 2-1"
-            containerStyle={styles.inputContainer}
-          />
-        </Card>
+            {detailsExpanded && (
+              <View style={styles.detailsBody}>
+                <EntitySearchField
+                  label="Home team"
+                  value={homeTeam.name}
+                  entityType="team"
+                  placeholder="e.g., Liverpool"
+                  selectedBadge={homeTeam.logo}
+                  accessibilityLabel="Home team name"
+                  onChangeText={(text) => {
+                    setHomeTeam({ name: text, logo: null, apiId: null });
+                    setVenueSuggestion(null);
+                  }}
+                  onSelect={(item) => {
+                    setHomeTeam({
+                      name: item.name,
+                      logo: item.badge || null,
+                      apiId: item.id != null ? String(item.id) : null,
+                    });
+                    if (item.relatedVenue?.name && !venue.name.trim()) {
+                      setVenueSuggestion(item.relatedVenue);
+                    } else {
+                      setVenueSuggestion(null);
+                    }
+                  }}
+                />
 
-        {/* Venue Details */}
-        <Card containerStyle={styles.card}>
-          <Text style={styles.sectionTitle}>Venue</Text>
-          
-          <Input
-            label="Stadium Name"
-            value={venue.name}
-            onChangeText={(text) => setVenue(prev => ({ ...prev, name: text }))}
-            placeholder="e.g., Anfield"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="City"
-            value={venue.city}
-            onChangeText={(text) => setVenue(prev => ({ ...prev, city: text }))}
-            placeholder="e.g., Liverpool"
-            containerStyle={styles.inputContainer}
-          />
-          
-          <Input
-            label="Country"
-            value={venue.country}
-            onChangeText={(text) => setVenue(prev => ({ ...prev, country: text }))}
-            placeholder="e.g., England"
-            containerStyle={styles.inputContainer}
-          />
-        </Card>
+                <EntitySearchField
+                  label="Away team"
+                  value={awayTeam.name}
+                  entityType="team"
+                  placeholder="e.g., Manchester United"
+                  selectedBadge={awayTeam.logo}
+                  accessibilityLabel="Away team name"
+                  onChangeText={(text) => setAwayTeam({ name: text, logo: null, apiId: null })}
+                  onSelect={(item) => {
+                    setAwayTeam({
+                      name: item.name,
+                      logo: item.badge || null,
+                      apiId: item.id != null ? String(item.id) : null,
+                    });
+                  }}
+                />
 
-        {/* Notes */}
-        <Card containerStyle={styles.card}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <TextInput
-            style={styles.notesInput}
-            value={userNotes}
-            onChangeText={setUserNotes}
-            placeholder="Share your match experience, memories, or any special moments..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </Card>
+                <EntitySearchField
+                  label="Competition"
+                  value={competition}
+                  entityType="league"
+                  placeholder="e.g., Premier League"
+                  accessibilityLabel="Competition or league name"
+                  onChangeText={setCompetition}
+                  onSelect={(item) => setCompetition(item.name)}
+                />
 
-        {/* Update Button */}
-        <View style={styles.submitContainer}>
-          <Button
-            title={loading ? 'Updating Memory...' : 'Update Memory'}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Date</Text>
+                  <TouchableOpacity
+                    style={styles.dateButton}
+                    onPress={() => setShowDatePicker((prev) => !prev)}
+                    activeOpacity={0.7}
+                    accessibilityLabel={
+                      matchDate ? `Selected date: ${formatDisplayDate(matchDate)}` : 'Select date'
+                    }
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.text.secondary} />
+                    <Text style={[styles.dateValue, !matchDate && styles.datePlaceholder]}>
+                      {formatDisplayDate(matchDate)}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {matchDate && (
+                    <TouchableOpacity style={styles.clearDateButton} onPress={clearDate}>
+                      <Text style={styles.clearDateText}>Clear date</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {showDatePicker && (
+                    <View style={styles.calendarContainer}>
+                      <Calendar
+                        onDayPress={onDayPress}
+                        markedDates={markedDates}
+                        maxDate={getTodayLocalString()}
+                        theme={{
+                          selectedDayBackgroundColor: colors.primary,
+                          selectedDayTextColor: colors.onPrimary,
+                          todayTextColor: colors.primary,
+                          dayTextColor: colors.text.primary,
+                          textDisabledColor: colors.text.light,
+                          arrowColor: colors.primary,
+                          monthTextColor: colors.text.primary,
+                          textDayFontWeight: '500',
+                          textMonthFontWeight: 'bold',
+                          textDayHeaderFontWeight: '600',
+                        }}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Score</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={userScore}
+                    onChangeText={setUserScore}
+                    placeholder="e.g., 2-1"
+                    placeholderTextColor={colors.text.light}
+                    accessibilityLabel="Match score"
+                  />
+                </View>
+
+                <EntitySearchField
+                  label="Stadium"
+                  value={venue.name}
+                  entityType="venue"
+                  placeholder="e.g., Anfield"
+                  accessibilityLabel="Stadium name"
+                  hint={
+                    venue.city || venue.country
+                      ? `Location: ${[venue.city, venue.country].filter(Boolean).join(', ')}`
+                      : 'City and country fill in when you pick a stadium'
+                  }
+                  onChangeText={(text) => {
+                    setVenue((prev) => ({
+                      ...prev,
+                      name: text,
+                      coordinates: null,
+                    }));
+                    setVenueSuggestion(null);
+                  }}
+                  onSelect={(item) => {
+                    setVenue({
+                      name: item.name,
+                      city: item.city || '',
+                      country: item.country || '',
+                      coordinates: Array.isArray(item.coordinates) ? item.coordinates : null,
+                    });
+                    setVenueSuggestion(null);
+                  }}
+                />
+
+                {venueSuggestion?.name ? (
+                  <TouchableOpacity
+                    style={styles.suggestionBanner}
+                    onPress={() => {
+                      setVenue({
+                        name: venueSuggestion.name,
+                        city: venueSuggestion.city || '',
+                        country: venueSuggestion.country || '',
+                        coordinates: null,
+                      });
+                      setVenueSuggestion(null);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use suggested stadium ${venueSuggestion.name}`}
+                  >
+                    <MaterialIcons name="stadium" size={18} color={colors.primary} />
+                    <Text style={styles.suggestionText}>
+                      Use {venueSuggestion.name}
+                      {venueSuggestion.city ? ` (${venueSuggestion.city})` : ''}?
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, styles.flex]}>
+                    <Text style={styles.label}>City</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={venue.city}
+                      onChangeText={(text) => setVenue((prev) => ({ ...prev, city: text }))}
+                      placeholder="Liverpool"
+                      placeholderTextColor={colors.text.light}
+                      accessibilityLabel="City name"
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, styles.flex]}>
+                    <Text style={styles.label}>Country</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={venue.country}
+                      onChangeText={(text) => setVenue((prev) => ({ ...prev, country: text }))}
+                      placeholder="England"
+                      placeholderTextColor={colors.text.light}
+                      accessibilityLabel="Country name"
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.inputGroup, styles.lastInputGroup]}>
+                  <Text style={styles.label}>Notes</Text>
+                  <TextInput
+                    style={styles.notesInput}
+                    value={userNotes}
+                    onChangeText={setUserNotes}
+                    placeholder="Anything memorable about the day…"
+                    placeholderTextColor={colors.text.light}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    accessibilityLabel="Notes"
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              (loading || photos.length === 0) && styles.saveButtonDisabled,
+            ]}
             onPress={handleUpdate}
-            disabled={loading}
-            buttonStyle={styles.submitButton}
-            titleStyle={styles.submitButtonTitle}
-            icon={
-              loading ? (
-                <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
-              ) : (
-                <MaterialIcons name="save" size="20" color="white" style={{ marginRight: 8 }} />
-              )
-            }
-          />
+            disabled={loading || photos.length === 0}
+            accessibilityLabel={loading ? 'Saving changes' : 'Save changes'}
+            accessibilityRole="button"
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            )}
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -405,114 +644,266 @@ const EditMemoryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
-  scrollView: {
+  flex: {
     flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
   },
-  backButton: {
-    padding: 8,
+  cancelText: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '500',
+    minWidth: 64,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    ...typography.h3,
+    fontWeight: '700',
+    color: colors.text.primary,
   },
   deleteButton: {
-    padding: 8,
-    width: 40,
+    minWidth: 64,
+    alignItems: 'flex-end',
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  photoSection: {
+    marginBottom: spacing.lg,
+  },
+  photoDropzone: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.card,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 180,
   },
-  card: {
-    borderRadius: 16,
-    margin: 20,
-    marginTop: 0,
-    padding: 0,
+  dropzoneIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.status.attendedBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+  dropzoneTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-  },
-  photoButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  photoButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 12,
-    flex: 1,
-  },
-  photoButtonTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  photoGrid: {
-    marginTop: 16,
+  dropzoneSubtitle: {
+    ...typography.bodySmall,
+    color: colors.text.secondary,
   },
   photosContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   photoItem: {
     position: 'relative',
   },
   photoThumbnail: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+    width: 96,
+    height: 96,
+    borderRadius: borderRadius.sm,
+  },
+  photoPlaceholder: {
+    backgroundColor: colors.cardGrey,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   removePhotoButton: {
     position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#FF3B30',
+    top: -6,
+    right: -6,
+    backgroundColor: colors.error,
     borderRadius: 12,
     width: 24,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  inputContainer: {
-    marginBottom: 16,
+  addMorePhoto: {
+    width: 96,
+    height: 96,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  secondaryButton: {
+    ...components.buttonSecondary,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + spacing.xs,
+  },
+  secondaryButtonText: {
+    ...typography.button,
+    color: colors.text.primary,
+    fontSize: 15,
+  },
+  detailsCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    ...shadows.small,
+    overflow: 'hidden',
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  detailsHeaderText: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  detailsTitle: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  detailsSubtitle: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  detailsBody: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderLight,
+  },
+  inputGroup: {
+    marginTop: spacing.md,
+  },
+  lastInputGroup: {
+    marginBottom: spacing.xs,
+  },
+  suggestionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.status.attendancePromptBg,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  suggestionText: {
+    ...typography.bodySmall,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  label: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  input: {
+    ...input,
+    backgroundColor: colors.cardGrey,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.cardGrey,
+    paddingHorizontal: spacing.md,
+    height: 48,
+  },
+  dateValue: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  datePlaceholder: {
+    color: colors.text.light,
+    fontWeight: '400',
+  },
+  clearDateButton: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  clearDateText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  calendarContainer: {
+    marginTop: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    overflow: 'hidden',
   },
   notesInput: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    ...input,
     minHeight: 100,
-    backgroundColor: 'white',
+    textAlignVertical: 'top',
+    backgroundColor: colors.cardGrey,
+    paddingTop: spacing.md,
   },
-  submitContainer: {
-    padding: 20,
-    paddingTop: 0,
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.card,
   },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 16,
+  saveButton: {
+    ...components.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
-  submitButtonTitle: {
-    fontSize: 18,
+  saveButtonDisabled: {
+    backgroundColor: colors.interactive.disabled,
+  },
+  saveButtonText: {
+    ...typography.button,
+    color: colors.onPrimary,
     fontWeight: '600',
   },
 });
