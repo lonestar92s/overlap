@@ -1742,7 +1742,12 @@ const TripOverviewScreen = ({ navigation, route }) => {
                             // Block stale refresh/load callbacks from calling goBack after trip is gone
                             exitedToTripsRef.current = true;
                             await deleteItinerary(itinerary.id || itinerary._id);
+                            // Clear TripOverview from Trips stack (past trips open there with fromAccountTab)
                             navigateToTripsList();
+                            // Past trips live on Account — return there so the list can refetch
+                            if (fromAccountTab || isPastTrip) {
+                              navigation.navigate('AccountTab');
+                            }
                           } catch (error) {
                             exitedToTripsRef.current = false;
                             console.error('Error deleting trip:', error);

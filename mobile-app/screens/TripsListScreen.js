@@ -288,16 +288,6 @@ const TripsListScreen = ({ navigation }) => {
         
         {/* Card Content */}
         <View style={styles.cardContent}>
-          {/* Invite Section - Top Right */}
-          <View style={styles.inviteSection}>
-            <Text style={styles.inviteText}>Invite</Text>
-            {/* Placeholder profile circles for future collaborators */}
-            <View style={styles.profileIconsContainer}>
-              {/* Show 4 placeholder circles when collaborators feature is added */}
-              {/* For now, empty - will be populated with actual user avatars */}
-            </View>
-          </View>
-
           {/* Bottom Overlay with Trip Info - Positioned at bottom */}
           <View style={styles.tripInfoOverlay}>
             <Text style={styles.tripCardTitle} numberOfLines={1}>
@@ -578,28 +568,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 1,
     padding: 0, // We'll position elements absolutely
-  },
-  inviteSection: {
-    position: 'absolute',
-    top: spacing.md + spacing.xs, // 24px from top
-    right: spacing.md, // 16px from right
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  inviteText: {
-    ...typography.caption,
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.inviteBlue, // #B0D0E4
-    marginRight: spacing.sm + spacing.xs, // 13px gap as per Figma
-  },
-  profileIconsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 30,
-    width: 84, // Width for 4 overlapping circles
-    // Placeholder for future collaborators - will show overlapping profile circles
   },
   tripInfoOverlay: {
     position: 'absolute',

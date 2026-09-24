@@ -24,6 +24,17 @@ const getApiBaseUrl = () => {
 const API_BASE_URL = getApiBaseUrl();
 
 const { getPersistedAuthToken } = require('./secureAuthStorage');
+const { File } = require('expo-file-system');
+
+/**
+ * Append a local image URI as an Expo File part.
+ * Expo's fetch rejects the classic RN `{ uri, type, name }` FormData shape
+ * ("Unsupported FormDataPart implementation").
+ */
+const appendLocalFile = (formData, fieldName, uri) => {
+  if (!uri) return;
+  formData.append(fieldName, new File(uri));
+};
 
 // Simple token storage for mobile app
 let authToken = null;
@@ -593,11 +604,7 @@ class ApiService {
   async uploadAvatar(image) {
     const token = await getAuthToken();
     const formData = new FormData();
-    formData.append('avatar', {
-      uri: image.uri,
-      type: image.type || 'image/jpeg',
-      name: image.name || 'avatar.jpg'
-    });
+    appendLocalFile(formData, 'avatar', image.uri);
     const response = await this.fetchWithTimeout(`${this.baseURL}/preferences/profile/avatar`, {
       method: 'POST',
       headers: {
@@ -2264,13 +2271,9 @@ class ApiService {
       formData.append('userScore', memoryData.userScore || '');
       formData.append('userNotes', memoryData.userNotes || '');
       
-      // Add photos
-      photos.forEach((photo, index) => {
-        formData.append('photos', {
-          uri: photo.uri,
-          type: photo.type || 'image/jpeg',
-          name: `photo_${index}.jpg`
-        });
+      // Add photos (Expo File parts — not RN { uri, type, name })
+      photos.forEach((photo) => {
+        appendLocalFile(formData, 'photos', photo.uri);
       });
       
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories`, {
@@ -2280,7 +2283,7 @@ class ApiService {
           // Note: Don't set Content-Type for FormData - let the system set it automatically
         },
         body: formData
-      });
+      }, 90000);
       
       const data = await response.json();
       if (!response.ok) {
@@ -2310,13 +2313,9 @@ class ApiService {
         }
       });
       
-      // Add new photos
-      newPhotos.forEach((photo, index) => {
-        formData.append('photos', {
-          uri: photo.uri,
-          type: photo.type || 'image/jpeg',
-          name: `photo_${index}.jpg`
-        });
+      // Add new photos (Expo File parts — not RN { uri, type, name })
+      newPhotos.forEach((photo) => {
+        appendLocalFile(formData, 'photos', photo.uri);
       });
       
       const response = await this.fetchWithTimeout(`${this.baseURL}/memories/${memoryId}`, {
@@ -2326,7 +2325,7 @@ class ApiService {
           // Note: Don't set Content-Type for FormData - let the system set it automatically
         },
         body: formData
-      });
+      }, 90000);
       
       const data = await response.json();
       if (!response.ok) {

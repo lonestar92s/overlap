@@ -13,6 +13,7 @@ import {
   TextInput,
   Platform,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Button } from 'react-native-elements';
@@ -71,20 +72,22 @@ const AccountScreen = ({ navigation }) => {
     return () => { mounted = false; };
   }, []);
 
-  // Load completed trips
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const response = await ApiService.getTrips('completed');
-        if (mounted && response.success && response.trips) {
-          setCompletedTrips(normalizeIds(response.trips));
-        }
-      } catch (_) {}
-      finally { if (mounted) setLoadingTrips(false); }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  // Reload completed trips whenever Account is focused (e.g. after deleting a past trip)
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const response = await ApiService.getTrips('completed');
+          if (mounted && response.success && response.trips) {
+            setCompletedTrips(normalizeIds(response.trips));
+          }
+        } catch (_) {}
+        finally { if (mounted) setLoadingTrips(false); }
+      })();
+      return () => { mounted = false; };
+    }, [])
+  );
 
   const refreshPreferences = async () => {
     try {
