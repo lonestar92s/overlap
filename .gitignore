@@ -77,3 +77,6 @@ GTM Strategy/
 # Internal planning (not tracked)
 REQUIREMENTS.md
 TEST_PLAN.md
+
+# Claude Code local worktrees
+.claude/
