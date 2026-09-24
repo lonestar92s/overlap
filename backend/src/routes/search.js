@@ -19,6 +19,12 @@ const { weekendRangeFromAnchor, findFeasibleItineraries } = require('../utils/ma
 const { auth, adminAuth } = require('../middleware/auth');
 const { attachNlSearchResponseLogger } = require('../services/nlSearchLogService');
 const NlSearchLog = require('../models/NlSearchLog');
+const {
+    NL_HOUR_MS,
+    NL_DAY_MS,
+    isNlSearchLimitExempt,
+    evaluateNlSearchAdmission
+} = require('../utils/searchCostLimits');
 const router = express.Router();
 // LocationIQ configuration for autocomplete
 const LOCATIONIQ_API_KEY = process.env.LOCATIONIQ_API_KEY;
@@ -2777,12 +2783,48 @@ router.get('/debug-db', async (req, res) => {
 // Natural language search endpoint (authenticated; responses logged for eval review)
 router.post('/natural-language', auth, async (req, res) => {
     const startedAt = Date.now();
-    attachNlSearchResponseLogger(req, res, startedAt);
     try {
-        const { query, conversationHistory } = req.body;
-        if (!query) {
+        const { conversationHistory } = req.body;
+        const rawQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+        if (!rawQuery) {
             return res.status(400).json({ error: 'Query is required' });
         }
+
+        const userId = req.user._id;
+        let hourCount = 0;
+        let dayCount = 0;
+        if (!isNlSearchLimitExempt(userId)) {
+            const now = Date.now();
+            [hourCount, dayCount] = await Promise.all([
+                NlSearchLog.countDocuments({
+                    userId,
+                    createdAt: { $gte: new Date(now - NL_HOUR_MS) }
+                }),
+                NlSearchLog.countDocuments({
+                    userId,
+                    createdAt: { $gte: new Date(now - NL_DAY_MS) }
+                })
+            ]);
+        }
+
+        const admission = evaluateNlSearchAdmission({
+            query: rawQuery,
+            hourCount,
+            dayCount,
+            userId
+        });
+        if (!admission.allowed) {
+            return res.status(200).json({
+                success: false,
+                code: admission.code,
+                message: admission.message,
+                suggestions: admission.suggestions || []
+            });
+        }
+
+        const query = admission.query;
+        req.body.query = query;
+        attachNlSearchResponseLogger(req, res, startedAt);
         const parsed = await parseNaturalLanguage(query, conversationHistory);
         stripInventedParsedDates(query, parsed);
         // Enforce exact single-day date range when user explicitly gives a day (works for both OpenAI and fallback parser)

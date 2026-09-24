@@ -79,6 +79,7 @@ const nlSearchLogSchema = new mongoose.Schema(
 );
 
 nlSearchLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: RETENTION_SECONDS });
+nlSearchLogSchema.index({ userId: 1, createdAt: -1 });
 nlSearchLogSchema.index({ success: 1, createdAt: -1 });
 nlSearchLogSchema.index({ matchCount: 1, createdAt: -1 });
 

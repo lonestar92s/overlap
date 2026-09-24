@@ -825,7 +825,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       }
       // Only show error if this is still a recent request
       if (requestId >= (currentRequestId - 1)) {
-        Alert.alert('Error', 'Failed to search matches');
+        Alert.alert('Error', error.message || 'Failed to search matches');
       }
     } finally {
       // Only clear searching if this is still a recent request
@@ -1965,7 +1965,7 @@ const MapResultsScreen = ({ navigation, route }) => {
       }
     } catch (error) {
       console.error('Error in filter search:', error);
-      Alert.alert('Error', 'Failed to search matches. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to search matches. Please try again.');
     } finally {
       setIsSearching(false);
     }

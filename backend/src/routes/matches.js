@@ -21,6 +21,7 @@ const {
     getDomesticCountriesFromContext,
     normalizeCountryName
 } = require('../utils/searchGeography');
+const { mapSearchDateRangeError, consumeMapSearchMiss } = require('../utils/searchCostLimits');
 const DEBUG_MATCHES_SEARCH = process.env.DEBUG_MATCHES_SEARCH === 'true';
 const MATCHES_API_VENUE_IMAGE_LIMIT = Number(process.env.MATCHES_API_VENUE_IMAGE_LIMIT) || 0;
 // Cache for venue data to avoid repeated API calls
@@ -1032,6 +1033,16 @@ router.get('/search', async (req, res) => {
         const hasCompetitionsOrTeams = (competitions && competitions.trim() !== '') || (teams && teams.trim() !== '');
         const hasTeamMatchup = homeTeam || awayTeam;
         const dateFlexibility = Math.min(3, Math.max(0, parseInt(dateFlexibilityParam, 10) || 0));
+        if (dateFrom && dateTo) {
+            const dateRangeError = mapSearchDateRangeError(dateFrom, dateTo);
+            if (dateRangeError) {
+                return res.status(400).json({
+                    success: false,
+                    code: dateRangeError.code,
+                    message: dateRangeError.message
+                });
+            }
+        }
         if (hasBounds && dateFrom && dateTo && !hasCompetitionsOrTeams && !hasTeamMatchup) {
             // Location-only search: use geographic filtering to find relevant leagues
             // Get user for subscription filtering (optional authentication)
@@ -1289,7 +1300,15 @@ router.get('/search', async (req, res) => {
                     // Return early if cache was valid (not invalidated)
                 }
             }
-            // Cache miss or invalidated - fetch fresh data
+            // Cache miss or invalidated - fetch fresh data. Only these calls spend API-Sports quota.
+            const missLimit = consumeMapSearchMiss(req.ip);
+            if (!missLimit.allowed) {
+                return res.status(429).json({
+                    success: false,
+                    code: missLimit.code,
+                    message: missLimit.message
+                });
+            }
             // Get relevant league IDs using geographic filtering and subscription tier (similar to /leagues/relevant)
             const leagueSelectionStartTime = performance.now();
             const majorLeagueIds = await getRelevantLeagueIds(searchContext, user, {
@@ -1960,6 +1979,14 @@ router.get('/search', async (req, res) => {
             const effectiveFromAgg = addDaysAgg(dateFrom, -dateFlexibility);
             const effectiveToAgg = addDaysAgg(dateTo, dateFlexibility);
             const clampedFromAgg = effectiveFromAgg < todayStrAgg ? todayStrAgg : effectiveFromAgg;
+            const aggregatedMissLimit = consumeMapSearchMiss(req.ip);
+            if (!aggregatedMissLimit.allowed) {
+                return res.status(429).json({
+                    success: false,
+                    code: aggregatedMissLimit.code,
+                    message: aggregatedMissLimit.message
+                });
+            }
             const leagueIds = (competitions ? competitions.split(',') : []).map(v => v.trim()).filter(Boolean);
             const teamIds = (teams ? teams.split(',') : []).map(v => v.trim()).filter(Boolean);
             const bounds = (neLat && neLng && swLat && swLng) ? {
