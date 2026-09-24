@@ -2700,7 +2700,7 @@ router.get('/unified', async (req, res) => {
                 ],
                 isActive: true
             })
-            .select('venueId name city country countryCode image capacity')
+            .select('venueId name city country countryCode image capacity location')
             .limit(10)
             .lean()
         ]);
@@ -2736,7 +2736,10 @@ router.get('/unified', async (req, res) => {
             country: venue.country,
             countryCode: venue.countryCode,
             badge: venue.image || null,
-            capacity: venue.capacity || null
+            capacity: venue.capacity || null,
+            coordinates: Array.isArray(venue.location?.coordinates) && venue.location.coordinates.length === 2
+                ? venue.location.coordinates
+                : null
         }));
         res.json({
             success: true,

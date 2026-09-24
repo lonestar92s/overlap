@@ -7,18 +7,14 @@
     "icon": "./assets/icon.png",
     "scheme": "overlap",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lonestar92s.overlap",
       "infoPlist": {
         "CFBundleDisplayName": "Overlap",
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "NSCameraUsageDescription": "Overlap uses the camera so you can add photos to match memories.",
         "NSPhotoLibraryUsageDescription": "Overlap needs photo access so you can add pictures to memories and your profile.",
         "NSPhotoLibraryAddUsageDescription": "Overlap needs permission to save photos you take for memories.",
@@ -37,7 +33,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.lonestar92s.overlap",
       "intentFilters": [
         {
@@ -49,7 +44,10 @@
               "host": "reset-password"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -75,7 +73,20 @@
           "color": "#1a1a2e",
           "defaultChannel": "trip-planning"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "imageWidth": 200
+        }
+      ],
+      "expo-font"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   SafeAreaView,
   Image,
   Linking,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Button } from 'react-native-elements';
-import { useNavigation } from '@react-navigation/native';
+import { debounce } from 'lodash';
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows, iconSizes } from '../styles/designTokens';
@@ -37,6 +39,12 @@ const AccountScreen = ({ navigation }) => {
 
   const [completedTrips, setCompletedTrips] = useState([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
+
+  const [favQuery, setFavQuery] = useState('');
+  const [favSearchLoading, setFavSearchLoading] = useState(false);
+  const [favSearchResults, setFavSearchResults] = useState({ leagues: [], teams: [], venues: [] });
+  const [togglingFavId, setTogglingFavId] = useState(null);
+  const favSearchInputRef = useRef(null);
 
   const username = user?.username || user?.email?.split('@')[0] || 'user';
   const displayName = user?.username || user?.email?.split('@')[0] || 'User';
@@ -89,6 +97,91 @@ const AccountScreen = ({ navigation }) => {
         favoriteVenuesExpanded: p.favoriteVenuesExpanded || [],
       });
     } catch (_) {}
+  };
+
+  const performFavSearch = useCallback(
+    debounce(async (text) => {
+      if (!text || text.trim().length < 2) {
+        setFavSearchResults({ leagues: [], teams: [], venues: [] });
+        setFavSearchLoading(false);
+        return;
+      }
+      setFavSearchLoading(true);
+      try {
+        const data = await ApiService.searchUnified(text.trim());
+        setFavSearchResults(
+          data?.success
+            ? data.results || { leagues: [], teams: [], venues: [] }
+            : { leagues: [], teams: [], venues: [] }
+        );
+      } catch (_) {
+        setFavSearchResults({ leagues: [], teams: [], venues: [] });
+      } finally {
+        setFavSearchLoading(false);
+      }
+    }, 350),
+    []
+  );
+
+  useEffect(() => {
+    if (favQuery.trim().length >= 2) {
+      setFavSearchLoading(true);
+      performFavSearch(favQuery);
+    } else {
+      performFavSearch.cancel?.();
+      setFavSearchResults({ leagues: [], teams: [], venues: [] });
+      setFavSearchLoading(false);
+    }
+    return () => performFavSearch.cancel?.();
+  }, [favQuery, performFavSearch]);
+
+  const isLeagueFav = (id) => (prefs.favoriteLeagues || []).map(String).includes(String(id));
+  const isTeamFav = (apiId) =>
+    (prefs.favoriteTeams || []).some(
+      (ft) => String(ft.teamId?.apiId ?? ft.teamId) === String(apiId)
+    );
+  const isVenueFav = (id) =>
+    (prefs.favoriteVenues || []).some((v) => String(v.venueId) === String(id));
+
+  const findTeamMongoId = (apiId) => {
+    const ft = (prefs.favoriteTeams || []).find(
+      (t) => String(t.teamId?.apiId ?? t.teamId) === String(apiId)
+    );
+    if (!ft) return null;
+    return ft.teamId?._id || ft.teamId || null;
+  };
+
+  const toggleSearchFavorite = async (type, item) => {
+    const id = String(item.id);
+    const lockKey = `${type}:${id}`;
+    if (togglingFavId === lockKey) return;
+    setTogglingFavId(lockKey);
+    try {
+      if (type === 'league') {
+        if (isLeagueFav(id)) await ApiService.removeFavoriteLeague(id);
+        else await ApiService.addFavoriteLeague(id);
+      } else if (type === 'team') {
+        if (isTeamFav(id)) {
+          const mongoId = findTeamMongoId(id);
+          if (!mongoId) return;
+          await ApiService.removeFavoriteTeamByMongoId(String(mongoId));
+        } else {
+          await ApiService.addFavoriteTeamByApiId(id);
+        }
+      } else if (type === 'venue') {
+        if (isVenueFav(id)) await ApiService.removeFavoriteVenue(id);
+        else await ApiService.addFavoriteVenue(id);
+      }
+      await refreshPreferences();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Could not update favorites.');
+    } finally {
+      setTogglingFavId(null);
+    }
+  };
+
+  const focusFavSearch = () => {
+    favSearchInputRef.current?.focus();
   };
 
   const handleLogout = () => {
@@ -250,6 +343,11 @@ const AccountScreen = ({ navigation }) => {
             { text: 'Privacy Policy', onPress: () => openLegalDoc('privacy') },
           ]);
         },
+      },
+      {
+        text: 'Delete my account',
+        style: 'destructive',
+        onPress: handleDeleteAccount,
       },
     ]);
   };
@@ -441,6 +539,205 @@ const AccountScreen = ({ navigation }) => {
     );
   };
 
+  const renderSearchResultItem = ({ item, type }) => {
+    const isFav =
+      type === 'league' ? isLeagueFav(item.id)
+        : type === 'team' ? isTeamFav(item.id)
+          : isVenueFav(item.id);
+    const lockKey = `${type}:${item.id}`;
+    const busy = togglingFavId === lockKey;
+
+    let subtitle = '';
+    if (type === 'league') {
+      subtitle = item.country || 'League';
+    } else if (type === 'team') {
+      subtitle = item.city
+        ? `${item.city}${item.country ? `, ${item.country}` : ''}`
+        : (item.country || 'Team');
+    } else {
+      subtitle = item.city
+        ? `${item.city}${item.country ? `, ${item.country}` : ''}`
+        : (item.country || 'Venue');
+    }
+
+    const logo = item.badge || item.logo || item.emblem;
+
+    return (
+      <View style={styles.favoriteItem}>
+        <View style={styles.favoriteItemContent}>
+          <View style={styles.itemIconContainer}>
+            {type === 'venue' && !logo ? (
+              <MaterialIcons name="stadium" size={iconSizes.lg} color={colors.text.secondary} />
+            ) : logo ? (
+              <Image source={{ uri: logo }} style={styles.itemIcon} resizeMode="contain" />
+            ) : (
+              <View style={styles.itemIconPlaceholder} />
+            )}
+          </View>
+          <View style={styles.searchResultText}>
+            <Text style={styles.searchResultTitle} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.searchResultSubtitle} numberOfLines={1}>{subtitle}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.starButton}
+          onPress={() => toggleSearchFavorite(type, item)}
+          disabled={busy}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel={isFav ? 'Remove from favorites' : 'Add to favorites'}
+          accessibilityRole="button"
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.warning} />
+          ) : (
+            <MaterialIcons
+              name={isFav ? 'star' : 'star-border'}
+              size={iconSizes.md}
+              color={isFav ? colors.warning : colors.text.light}
+            />
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderEmptyFavoriteSection = (label) => (
+    <TouchableOpacity onPress={focusFavSearch} accessibilityRole="button">
+      <Text style={styles.emptyText}>
+        No favorite {label} yet — tap to search
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderFavSearchBar = () => (
+    <View style={styles.searchInputContainer}>
+      <MaterialIcons name="search" size={iconSizes.md} color={colors.text.secondary} />
+      <TextInput
+        ref={favSearchInputRef}
+        style={styles.searchInput}
+        value={favQuery}
+        onChangeText={setFavQuery}
+        placeholder="Search leagues, teams, venues"
+        placeholderTextColor={colors.text.light}
+        autoCapitalize="words"
+        autoCorrect={false}
+        returnKeyType="search"
+        accessibilityLabel="Search favorites"
+      />
+      {favSearchLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} style={styles.searchLoadingIndicator} />
+      ) : favQuery.length > 0 ? (
+        <TouchableOpacity
+          onPress={() => setFavQuery('')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Clear search"
+          accessibilityRole="button"
+        >
+          <MaterialIcons name="close" size={iconSizes.md} color={colors.text.secondary} />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
+  const renderFavSearchResults = () => {
+    const { leagues, teams, venues } = favSearchResults;
+    const hasResults = leagues.length > 0 || teams.length > 0 || venues.length > 0;
+
+    if (favSearchLoading && !hasResults) {
+      return <ActivityIndicator style={styles.loader} color={colors.primary} />;
+    }
+
+    if (!hasResults) {
+      return (
+        <Text style={styles.emptyText}>
+          No results for “{favQuery.trim()}”
+        </Text>
+      );
+    }
+
+    return (
+      <View>
+        {leagues.length > 0 && (
+          <>
+            <Text style={styles.sectionHeader}>Leagues</Text>
+            {leagues.map((item) => (
+              <View key={`search-league-${item.id}`}>
+                {renderSearchResultItem({ item, type: 'league' })}
+              </View>
+            ))}
+          </>
+        )}
+        {teams.length > 0 && (
+          <>
+            <Text style={styles.sectionHeader}>Teams</Text>
+            {teams.map((item) => (
+              <View key={`search-team-${item.id}`}>
+                {renderSearchResultItem({ item, type: 'team' })}
+              </View>
+            ))}
+          </>
+        )}
+        {venues.length > 0 && (
+          <>
+            <Text style={styles.sectionHeader}>Venues</Text>
+            {venues.map((item) => (
+              <View key={`search-venue-${item.id}`}>
+                {renderSearchResultItem({ item, type: 'venue' })}
+              </View>
+            ))}
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const renderSavedFavorites = () => {
+    const leagues = prefs.favoriteLeaguesExpanded || [];
+    const teams = prefs.favoriteTeams || [];
+    const venues = prefs.favoriteVenuesExpanded || [];
+    const isEmpty = leagues.length === 0 && teams.length === 0 && venues.length === 0;
+
+    if (isEmpty) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialIcons name="star-border" size={iconSizes.xl * 1.5} color={colors.text.light} />
+          <Text style={styles.emptyStateText}>No favorites yet</Text>
+          <Text style={styles.emptyStateSubtext}>
+            Search above to add leagues, teams, and venues. We’ll use them to personalize recommendations.
+          </Text>
+          <TouchableOpacity style={styles.emptySearchCta} onPress={focusFavSearch} accessibilityRole="button">
+            <Text style={styles.emptySearchCtaText}>Start searching</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        <Text style={[styles.sectionHeader, styles.firstSectionHeader]}>Leagues</Text>
+        {leagues.length === 0
+          ? renderEmptyFavoriteSection('leagues')
+          : leagues.map((l, i) => (
+            <View key={`league-${l.id || i}`}>{renderFavoriteItem({ item: l, type: 'league' })}</View>
+          ))}
+
+        <Text style={styles.sectionHeader}>Teams</Text>
+        {teams.length === 0
+          ? renderEmptyFavoriteSection('teams')
+          : teams.map((t, i) => (
+            <View key={`team-${t.teamId?._id || t.teamId || i}`}>{renderFavoriteItem({ item: t, type: 'team' })}</View>
+          ))}
+
+        <Text style={styles.sectionHeader}>Venues</Text>
+        {venues.length === 0
+          ? renderEmptyFavoriteSection('venues')
+          : venues.map((v, i) => (
+            <View key={`venue-${v.venueId || i}`}>{renderFavoriteItem({ item: v, type: 'venue' })}</View>
+          ))}
+      </View>
+    );
+  };
+
   const renderTabContent = () => {
     if (activeTab === 'trips') {
       if (loadingTrips) {
@@ -466,31 +763,11 @@ const AccountScreen = ({ navigation }) => {
       if (loadingPrefs) {
         return <ActivityIndicator style={styles.loader} color={colors.primary} />;
       }
-      const leagues = prefs.favoriteLeaguesExpanded || [];
-      const teams = prefs.favoriteTeams || [];
-      const venues = prefs.favoriteVenuesExpanded || [];
+      const isSearching = favQuery.trim().length >= 2;
       return (
         <View>
-          <Text style={styles.sectionHeader}>Leagues</Text>
-          {leagues.length === 0
-            ? <Text style={styles.emptyText}>No favorite leagues yet</Text>
-            : leagues.map((l, i) => (
-              <View key={`league-${l.id || i}`}>{renderFavoriteItem({ item: l, type: 'league' })}</View>
-            ))}
-
-          <Text style={styles.sectionHeader}>Teams</Text>
-          {teams.length === 0
-            ? <Text style={styles.emptyText}>No favorite teams yet</Text>
-            : teams.map((t, i) => (
-              <View key={`team-${t.teamId?._id || t.teamId || i}`}>{renderFavoriteItem({ item: t, type: 'team' })}</View>
-            ))}
-
-          <Text style={styles.sectionHeader}>Venues</Text>
-          {venues.length === 0
-            ? <Text style={styles.emptyText}>No favorite venues yet</Text>
-            : venues.map((v, i) => (
-              <View key={`venue-${v.venueId || i}`}>{renderFavoriteItem({ item: v, type: 'venue' })}</View>
-            ))}
+          {renderFavSearchBar()}
+          {isSearching ? renderFavSearchResults() : renderSavedFavorites()}
         </View>
       );
     }
@@ -523,15 +800,6 @@ const AccountScreen = ({ navigation }) => {
             onPress={handleLogout}
             buttonStyle={styles.logoutButton}
             titleStyle={styles.logoutButtonTitle}
-          />
-          <Button
-            title="Delete my account"
-            onPress={handleDeleteAccount}
-            disabled={deleteBusy}
-            loading={deleteBusy}
-            type="clear"
-            titleStyle={styles.deleteAccountTitle}
-            buttonStyle={styles.deleteAccountButton}
           />
         </View>
       </ScrollView>
@@ -719,6 +987,56 @@ const styles = StyleSheet.create({
   },
 
   // Favorites
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.cardGrey,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    minHeight: 48,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    ...typography.body,
+    color: colors.text.primary,
+    paddingHorizontal: 0,
+    paddingVertical: Platform.OS === 'android' ? 2 : 4,
+    margin: 0,
+  },
+  searchLoadingIndicator: {
+    marginLeft: spacing.xs,
+  },
+  searchResultText: {
+    flex: 1,
+  },
+  searchResultTitle: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  searchResultSubtitle: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  firstSectionHeader: {
+    marginTop: spacing.sm,
+  },
+  emptySearchCta: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.primary,
+  },
+  emptySearchCtaText: {
+    ...typography.button,
+    color: colors.card,
+  },
   sectionHeader: {
     ...typography.body,
     fontWeight: '700',
@@ -767,6 +1085,10 @@ const styles = StyleSheet.create({
   starButton: {
     padding: spacing.xs,
     marginLeft: spacing.sm,
+    minWidth: 36,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyText: {
     ...typography.bodySmall,
@@ -823,15 +1145,6 @@ const styles = StyleSheet.create({
   logoutButtonTitle: {
     ...typography.button,
     color: colors.card,
-  },
-  deleteAccountButton: {
-    backgroundColor: 'transparent',
-    paddingVertical: spacing.sm,
-  },
-  deleteAccountTitle: {
-    ...typography.button,
-    color: colors.error,
-    textDecorationLine: 'underline',
   },
 });
 

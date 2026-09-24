@@ -10,7 +10,8 @@ Notifications.setNotificationHandler({
     handleNotification: async () => {
         const isForeground = AppState.currentState === 'active';
         return {
-            shouldShowAlert: !isForeground,
+            shouldShowBanner: !isForeground,
+            shouldShowList: !isForeground,
             shouldPlaySound: !isForeground,
             shouldSetBadge: !isForeground,
         };

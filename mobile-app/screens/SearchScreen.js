@@ -453,20 +453,21 @@ const SearchScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        {!askAgentModalVisible ? (
-          <View style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}>
-            <TouchableOpacity
-              style={styles.askAgentChip}
-              onPress={openAskAgentModal}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Ask Agent"
-            >
-              <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
-              <Text style={styles.askAgentChipText}>Ask Agent</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+        <View
+          style={[styles.askAgentFloating, { bottom: homeAskAgentBottom }]}
+          pointerEvents={askAgentModalVisible ? 'none' : 'box-none'}
+        >
+          <TouchableOpacity
+            style={[styles.askAgentChip, askAgentModalVisible && styles.askAgentChipHidden]}
+            onPress={openAskAgentModal}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ask Agent"
+          >
+            <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+            <Text style={styles.askAgentChipText}>Ask Agent</Text>
+          </TouchableOpacity>
+        </View>
 
         <TripCountdownWidget onTripPress={handleTripPress} />
 
@@ -573,20 +574,21 @@ const SearchScreen = ({ navigation, route }) => {
       />
 
 
-      {!askAgentModalVisible ? (
-        <View style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}>
-          <TouchableOpacity
-            style={styles.askAgentChip}
-            onPress={openAskAgentModal}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Ask Agent"
-          >
-            <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
-            <Text style={styles.askAgentChipText}>Ask Agent</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
+      <View
+        style={[styles.askAgentFloatingNonMap, { bottom: nonMapAskAgentBottom }]}
+        pointerEvents={askAgentModalVisible ? 'none' : 'box-none'}
+      >
+        <TouchableOpacity
+          style={[styles.askAgentChip, askAgentModalVisible && styles.askAgentChipHidden]}
+          onPress={openAskAgentModal}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ask Agent"
+        >
+          <MaterialIcons name="auto-awesome" size={18} color={colors.primary} />
+          <Text style={styles.askAgentChipText}>Ask Agent</Text>
+        </TouchableOpacity>
+      </View>
 
       <AskAgentModal
         visible={askAgentModalVisible}
@@ -743,6 +745,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 4,
     elevation: 5,
+  },
+  askAgentChipHidden: {
+    opacity: 0,
   },
   askAgentChipText: {
     ...typography.bodySmall,

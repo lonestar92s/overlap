@@ -2692,28 +2692,31 @@ const MapResultsScreen = ({ navigation, route }) => {
         style={styles.map}
       />
 
-      {/* Ask Agent — bottom-right, above collapsed sheet; location FAB stacked above */}
-      {!askAgentModalVisible ? (
-        <Animated.View
-          style={[
-            styles.floatingAskAgent,
-            { bottom: askAgentBottomOffset, opacity: askAgentOpacity },
-          ]}
-          pointerEvents={shouldHideAskAgent ? 'none' : 'box-none'}
+      {/* Ask Agent — bottom-right, above collapsed sheet; location FAB stacked above.
+          Keep mounted while the modal is open so the opening tap can't fall through
+          to the sheet backdrop and immediately dismiss it. */}
+      <Animated.View
+        style={[
+          styles.floatingAskAgent,
+          {
+            bottom: askAgentBottomOffset,
+            opacity: askAgentModalVisible ? 0 : askAgentOpacity,
+          },
+        ]}
+        pointerEvents={shouldHideAskAgent || askAgentModalVisible ? 'none' : 'box-none'}
+      >
+        <TouchableOpacity
+          style={styles.askAgentChip}
+          onPress={openAskAgentModal}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ask Agent"
+          testID="ask-agent-chip"
         >
-          <TouchableOpacity
-            style={styles.askAgentChip}
-            onPress={openAskAgentModal}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Ask Agent"
-            testID="ask-agent-chip"
-          >
-            <MaterialIcons name="auto-awesome" size={20} color={colors.primary} style={styles.askAgentChipIcon} />
-            <Text style={styles.askAgentChipLabel}>Ask Agent</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      ) : null}
+          <MaterialIcons name="auto-awesome" size={20} color={colors.primary} style={styles.askAgentChipIcon} />
+          <Text style={styles.askAgentChipLabel}>Ask Agent</Text>
+        </TouchableOpacity>
+      </Animated.View>
       
       {/* Floating Search Button - Always visible like Google Maps */}
       {/* User can re-search current area or trigger search after panning to new region */}

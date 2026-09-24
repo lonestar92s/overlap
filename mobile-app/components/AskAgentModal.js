@@ -56,18 +56,25 @@ const AskAgentModal = ({
     onClose?.();
   }, [onClose]);
 
+  // Delay present until after the opening press ends. Presenting immediately
+  // mounts a closeable backdrop under the same finger and dismisses instantly.
   useEffect(() => {
     if (!bottomSheetRef.current) {
-      return;
+      return undefined;
     }
+
+    let presentTimer = null;
+
     if (visible) {
-      try {
-        bottomSheetRef.current.present();
-      } catch (e) {
-        if (__DEV__) {
-          console.error('AskAgentModal present:', e);
+      presentTimer = setTimeout(() => {
+        try {
+          bottomSheetRef.current?.present();
+        } catch (e) {
+          if (__DEV__) {
+            console.error('AskAgentModal present:', e);
+          }
         }
-      }
+      }, 80);
     } else {
       try {
         bottomSheetRef.current.dismiss();
@@ -77,6 +84,12 @@ const AskAgentModal = ({
         }
       }
     }
+
+    return () => {
+      if (presentTimer) {
+        clearTimeout(presentTimer);
+      }
+    };
   }, [visible]);
 
   const renderBackdrop = useCallback(
